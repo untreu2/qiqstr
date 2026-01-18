@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../theme/theme_manager.dart';
 import 'common_buttons.dart';
 
@@ -76,7 +77,8 @@ class AppSnackbar {
     );
   }
 
-  static void success(BuildContext context, String message, {Duration? duration, SnackBarAction? action}) {
+  static void success(BuildContext context, String message,
+      {Duration? duration, SnackBarAction? action}) {
     show(
       context,
       message,
@@ -86,7 +88,8 @@ class AppSnackbar {
     );
   }
 
-  static void error(BuildContext context, String message, {Duration? duration, SnackBarAction? action}) {
+  static void error(BuildContext context, String message,
+      {Duration? duration, SnackBarAction? action}) {
     show(
       context,
       message,
@@ -96,7 +99,8 @@ class AppSnackbar {
     );
   }
 
-  static void info(BuildContext context, String message, {Duration? duration, SnackBarAction? action}) {
+  static void info(BuildContext context, String message,
+      {Duration? duration, SnackBarAction? action}) {
     show(
       context,
       message,
@@ -106,7 +110,8 @@ class AppSnackbar {
     );
   }
 
-  static void warning(BuildContext context, String message, {Duration? duration, SnackBarAction? action}) {
+  static void warning(BuildContext context, String message,
+      {Duration? duration, SnackBarAction? action}) {
     show(
       context,
       message,
@@ -123,8 +128,8 @@ class AppSnackbar {
 
   static AppThemeColors _getColors(BuildContext context) {
     try {
-      final themeManager = Provider.of<ThemeManager>(context, listen: false);
-      return themeManager.colors;
+      final themeState = context.read<ThemeBloc>().state;
+      return themeState.colors;
     } catch (e) {
       return AppThemeColors.dark();
     }

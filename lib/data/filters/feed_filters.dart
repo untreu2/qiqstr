@@ -1,22 +1,78 @@
-import '../../models/note_model.dart';
-
 abstract class BaseFeedFilter {
   String get filterKey;
   
   int get limit => 500;
   
-  List<NoteModel> apply(List<NoteModel> notes);
+  List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events);
   
-  bool accepts(NoteModel note);
+  bool accepts(Map<String, dynamic> event);
   
-  List<NoteModel> sort(List<NoteModel> notes) {
-    notes.sort((a, b) {
-      final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-      final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+  List<Map<String, dynamic>> sort(List<Map<String, dynamic>> events) {
+    events.sort((a, b) {
+      final aIsRepost = _isRepost(a);
+      final bIsRepost = _isRepost(b);
+      final aTime = aIsRepost ? _getRepostTimestamp(a) ?? _getTimestamp(a) : _getTimestamp(a);
+      final bTime = bIsRepost ? _getRepostTimestamp(b) ?? _getTimestamp(b) : _getTimestamp(b);
       final result = bTime.compareTo(aTime);
-      return result == 0 ? a.id.compareTo(b.id) : result;
+      return result == 0 ? _getEventId(a).compareTo(_getEventId(b)) : result;
     });
-    return notes;
+    return events;
+  }
+
+  bool _isRepost(Map<String, dynamic> event) {
+    return event['kind'] == 6;
+  }
+
+  DateTime _getTimestamp(Map<String, dynamic> event) {
+    final createdAt = event['created_at'] as int? ?? 0;
+    return DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+  }
+
+  DateTime? _getRepostTimestamp(Map<String, dynamic> event) {
+    if (!_isRepost(event)) return null;
+    return _getTimestamp(event);
+  }
+
+  String _getEventId(Map<String, dynamic> event) {
+    return event['id'] as String? ?? '';
+  }
+
+  String _getAuthor(Map<String, dynamic> event) {
+    final author = event['author'] as String?;
+    if (author != null && author.isNotEmpty) {
+      return author;
+    }
+    return event['pubkey'] as String? ?? '';
+  }
+
+  String? _getRepostedBy(Map<String, dynamic> event) {
+    if (!_isRepost(event)) return null;
+    return _getAuthor(event);
+  }
+
+  bool _isReply(Map<String, dynamic> event) {
+    final isReply = event['isReply'] as bool?;
+    if (isReply != null) {
+      return isReply;
+    }
+    final tags = event['tags'] as List<dynamic>? ?? [];
+    for (final tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<String> _getTTags(Map<String, dynamic> event) {
+    final tags = event['tags'] as List<dynamic>? ?? [];
+    final result = <String>[];
+    for (final tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == 't' && tag.length > 1) {
+        result.add(tag[1].toString());
+      }
+    }
+    return result;
   }
 }
 
@@ -35,18 +91,21 @@ class HomeFeedFilter extends BaseFeedFilter {
   String get filterKey => '$currentUserNpub-home-${followedUsers.length}';
   
   @override
-  bool accepts(NoteModel note) {
-    if (note.isRepost) {
-      if (!followedUsers.contains(note.repostedBy)) {
+  bool accepts(Map<String, dynamic> event) {
+    final isRepost = _isRepost(event);
+    if (isRepost) {
+      final repostedBy = _getRepostedBy(event);
+      if (repostedBy == null || !followedUsers.contains(repostedBy)) {
         return false;
       }
     } else {
-      if (!followedUsers.contains(note.author)) {
+      final author = _getAuthor(event);
+      if (!followedUsers.contains(author)) {
         return false;
       }
     }
     
-    if (!showReplies && note.isReply && !note.isRepost) {
+    if (!showReplies && _isReply(event) && !isRepost) {
       return false;
     }
     
@@ -54,8 +113,8 @@ class HomeFeedFilter extends BaseFeedFilter {
   }
   
   @override
-  List<NoteModel> apply(List<NoteModel> notes) {
-    final filtered = notes.where(accepts).toList();
+  List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
+    final filtered = events.where(accepts).toList();
     return sort(filtered);
   }
 }
@@ -78,18 +137,21 @@ class ProfileFeedFilter extends BaseFeedFilter {
   int get limit => 200;
   
   @override
-  bool accepts(NoteModel note) {
-    if (note.isRepost) {
-      if (note.repostedBy != targetUserNpub) {
+  bool accepts(Map<String, dynamic> event) {
+    final isRepost = _isRepost(event);
+    if (isRepost) {
+      final repostedBy = _getRepostedBy(event);
+      if (repostedBy != targetUserNpub) {
         return false;
       }
     } else {
-      if (note.author != targetUserNpub) {
+      final author = _getAuthor(event);
+      if (author != targetUserNpub) {
         return false;
       }
     }
     
-    if (!showReplies && note.isReply && !note.isRepost) {
+    if (!showReplies && _isReply(event) && !isRepost) {
       return false;
     }
     
@@ -97,8 +159,8 @@ class ProfileFeedFilter extends BaseFeedFilter {
   }
   
   @override
-  List<NoteModel> apply(List<NoteModel> notes) {
-    final filtered = notes.where(accepts).toList();
+  List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
+    final filtered = events.where(accepts).toList();
     return sort(filtered);
   }
 }
@@ -119,16 +181,17 @@ class ProfileRepliesFilter extends BaseFeedFilter {
   int get limit => 200;
   
   @override
-  bool accepts(NoteModel note) {
-    if (note.isRepost) {
+  bool accepts(Map<String, dynamic> event) {
+    if (_isRepost(event)) {
       return false;
     }
     
-    if (note.author != targetUserNpub) {
+    final author = _getAuthor(event);
+    if (author != targetUserNpub) {
       return false;
     }
     
-    if (!note.isReply) {
+    if (!_isReply(event)) {
       return false;
     }
     
@@ -136,8 +199,8 @@ class ProfileRepliesFilter extends BaseFeedFilter {
   }
   
   @override
-  List<NoteModel> apply(List<NoteModel> notes) {
-    final filtered = notes.where(accepts).toList();
+  List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
+    final filtered = events.where(accepts).toList();
     return sort(filtered);
   }
 }
@@ -158,14 +221,15 @@ class HashtagFilter extends BaseFeedFilter {
   int get limit => 100;
   
   @override
-  bool accepts(NoteModel note) {
+  bool accepts(Map<String, dynamic> event) {
     final targetHashtag = hashtag.toLowerCase();
     
-    if (note.tTags.isNotEmpty) {
-      return note.tTags.contains(targetHashtag);
+    final tTags = _getTTags(event);
+    if (tTags.isNotEmpty) {
+      return tTags.any((tag) => tag.toLowerCase() == targetHashtag);
     }
     
-    final content = note.content.toLowerCase();
+    final content = (event['content'] as String? ?? '').toLowerCase();
     final hashtagRegex = RegExp(r'#(\w+)');
     final matches = hashtagRegex.allMatches(content);
     
@@ -180,8 +244,8 @@ class HashtagFilter extends BaseFeedFilter {
   }
   
   @override
-  List<NoteModel> apply(List<NoteModel> notes) {
-    final filtered = notes.where(accepts).toList();
+  List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
+    final filtered = events.where(accepts).toList();
     return sort(filtered);
   }
 }
@@ -202,8 +266,9 @@ class GlobalFeedFilter extends BaseFeedFilter {
   int get limit => 100;
   
   @override
-  bool accepts(NoteModel note) {
-    if (!showReplies && note.isReply && !note.isRepost) {
+  bool accepts(Map<String, dynamic> event) {
+    final isRepost = _isRepost(event);
+    if (!showReplies && _isReply(event) && !isRepost) {
       return false;
     }
     
@@ -211,8 +276,8 @@ class GlobalFeedFilter extends BaseFeedFilter {
   }
   
   @override
-  List<NoteModel> apply(List<NoteModel> notes) {
-    final filtered = notes.where(accepts).toList();
+  List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
+    final filtered = events.where(accepts).toList();
     return sort(filtered);
   }
 }

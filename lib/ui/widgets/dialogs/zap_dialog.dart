@@ -6,8 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:ndk/ndk.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../../../models/note_model.dart';
-import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
@@ -23,8 +21,8 @@ import '../common/custom_input_field.dart';
 
 Future<bool> _payZapWithWallet(
   BuildContext context,
-  UserModel user,
-  NoteModel note,
+  Map<String, dynamic> user,
+  Map<String, dynamic> note,
   int sats,
   String comment,
 ) async {
@@ -48,11 +46,12 @@ Future<bool> _payZapWithWallet(
       throw Exception('Private key not found.');
     }
 
-    if (!user.lud16.contains('@')) {
+    final lud16 = user['lud16'] as String? ?? '';
+    if (!lud16.contains('@')) {
       throw Exception('Invalid lightning address format.');
     }
 
-    final parts = user.lud16.split('@');
+    final parts = lud16.split('@');
     if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
       throw Exception('Invalid lightning address format.');
     }
@@ -84,16 +83,15 @@ Future<bool> _payZapWithWallet(
       throw Exception('No relays available for zap.');
     }
 
-    String recipientPubkeyHex = user.pubkeyHex;
-    if (user.pubkeyHex.startsWith('npub1')) {
+    final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
+    String recipientPubkeyHex = userPubkeyHex;
+    if (userPubkeyHex.startsWith('npub1')) {
       try {
-        final keyData = Nip19.decode(user.pubkeyHex);
+        final keyData = Nip19.decode(userPubkeyHex);
         recipientPubkeyHex = keyData;
       } catch (e) {
         if (kDebugMode) {
-          if (kDebugMode) {
-            print('[ZapDialog] Error converting npub to hex: $e');
-          }
+          print('[ZapDialog] Error converting npub to hex: $e');
         }
       }
     }
@@ -108,10 +106,11 @@ Future<bool> _payZapWithWallet(
       tags.add(['lnurl', lnurlBech32]);
     }
 
-    if (note.id.isNotEmpty) {
-      tags.add(['e', note.id]);
+    final noteId = note['id'] as String? ?? '';
+    if (noteId.isNotEmpty) {
+      tags.add(['e', noteId]);
       if (kDebugMode) {
-        print('[ZapDialog] Added note reference to zap: ${note.id}');
+        print('[ZapDialog] Added note reference to zap: $noteId');
       }
     }
 
@@ -150,8 +149,9 @@ Future<bool> _payZapWithWallet(
 
     // Payment successful! Show success immediately
     if (context.mounted) {
+      final userName = user['name'] as String? ?? 'User';
       AppSnackbar.hide(context);
-      AppSnackbar.success(context, 'Zapped $sats sats to ${user.name}!', duration: const Duration(seconds: 2));
+      AppSnackbar.success(context, 'Zapped $sats sats to $userName!', duration: const Duration(seconds: 2));
     }
 
     // Publish Nostr events in the background without affecting success status
@@ -171,7 +171,7 @@ Future<void> _publishZapEventsAsync(
   Nip01Event zapRequest,
   String invoice,
   String recipientPubkeyHex,
-  NoteModel note,
+  Map<String, dynamic> note,
   String comment,
   String privateKey,
   int sats,
@@ -179,12 +179,13 @@ Future<void> _publishZapEventsAsync(
 ) async {
   try {
     final webSocketManager = WebSocketManager.instance;
+    final noteId = note['id'] as String? ?? '';
 
     final serializedZapRequest = NostrService.serializeEvent(zapRequest);
     await webSocketManager.priorityBroadcast(serializedZapRequest);
 
     if (kDebugMode) {
-      print('[ZapDialog] Zap request event (kind 9734) published for note: ${note.id}');
+      print('[ZapDialog] Zap request event (kind 9734) published for note: $noteId');
     }
 
     final publicKey = Bip340.getPublicKey(privateKey);
@@ -195,7 +196,7 @@ Future<void> _publishZapEventsAsync(
         ['bolt11', invoice],
         ['description', jsonEncode(NostrService.eventToJson(zapRequest))],
         ['p', recipientPubkeyHex],
-        ['e', note.id],
+        ['e', noteId],
       ],
       content: comment,
     );
@@ -205,14 +206,16 @@ Future<void> _publishZapEventsAsync(
     await webSocketManager.priorityBroadcast(serializedZapEvent);
 
     if (kDebugMode) {
-      print('[ZapDialog] Zap event (kind 9735) published for note: ${note.id}');
+      print('[ZapDialog] Zap event (kind 9735) published for note: $noteId');
     }
 
     // Mark this zap event as user-published to prevent self-processing
     final nostrDataService = AppDI.get<DataService>();
     nostrDataService.markZapAsUserPublished(zapEvent.id);
     if (kDebugMode) {
-      print('[ZapDialog] Zap amount: $sats sats, preimage: ${paymentResult.data?.preimage}');
+      final paymentData = paymentResult.data as Map<String, dynamic>?;
+      final preimage = paymentData?['preimage'] as String?;
+      print('[ZapDialog] Zap amount: $sats sats, preimage: $preimage');
     }
   } catch (e) {
     if (kDebugMode) {
@@ -223,35 +226,43 @@ Future<void> _publishZapEventsAsync(
 
 Future<void> _processZapPayment(
   BuildContext context,
-  NoteModel note,
+  Map<String, dynamic> note,
   int sats,
   String comment,
 ) async {
   try {
     final userRepository = AppDI.get<UserRepository>();
-    final userResult = await userRepository.getUserProfile(note.author);
+    final noteAuthor = note['author'] as String? ?? '';
+    final userResult = await userRepository.getUserProfile(noteAuthor);
 
     await userResult.fold(
       (user) async {
-        if (user.lud16.isEmpty) {
-          AppSnackbar.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
+        final lud16 = user['lud16'] as String? ?? '';
+        if (lud16.isEmpty) {
+          if (context.mounted) {
+            AppSnackbar.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
+          }
           return;
         }
 
         await _payZapWithWallet(context, user, note, sats, comment);
       },
       (error) {
-        AppSnackbar.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
+        if (context.mounted) {
+          AppSnackbar.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
+        }
       },
     );
   } catch (e) {
-    AppSnackbar.error(context, 'Failed to process zap: $e', duration: const Duration(seconds: 1));
+    if (context.mounted) {
+      AppSnackbar.error(context, 'Failed to process zap: $e', duration: const Duration(seconds: 1));
+    }
   }
 }
 
 Future<void> processZapDirectly(
   BuildContext context,
-  NoteModel note,
+  Map<String, dynamic> note,
   int sats,
 ) async {
   await _processZapPayment(context, note, sats, '');
@@ -259,7 +270,7 @@ Future<void> processZapDirectly(
 
 Future<Map<String, dynamic>> showZapDialog({
   required BuildContext context,
-  required NoteModel note,
+  required Map<String, dynamic> note,
 }) async {
   final amountController = TextEditingController(text: '21');
   final noteController = TextEditingController();

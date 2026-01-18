@@ -1,21 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../../models/note_model.dart';
-import '../../../models/user_model.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
 
 class NoteListWidget extends StatefulWidget {
-  final List<NoteModel> notes;
+  final List<Map<String, dynamic>> notes;
   final String? currentUserNpub;
-  final ValueNotifier<List<NoteModel>> notesNotifier;
-  final Map<String, UserModel> profiles;
+  final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
+  final Map<String, Map<String, dynamic>> profiles;
   final bool isLoading;
   final bool canLoadMore;
   final VoidCallback? onLoadMore;
   final String? errorMessage;
   final VoidCallback? onRetry;
+  final VoidCallback? onEmptyRefresh;
   final ScrollController? scrollController;
   final dynamic notesListProvider;
 
@@ -30,6 +29,7 @@ class NoteListWidget extends StatefulWidget {
     this.onLoadMore,
     this.errorMessage,
     this.onRetry,
+    this.onEmptyRefresh,
     this.scrollController,
     this.notesListProvider,
   });
@@ -40,17 +40,41 @@ class NoteListWidget extends StatefulWidget {
 
 class _NoteListWidgetState extends State<NoteListWidget> {
   bool _hasTriggeredLoadMore = false;
+  bool _hasTriggeredEmptyRefresh = false;
   Timer? _updateTimer;
 
   @override
   void initState() {
     super.initState();
     widget.scrollController?.addListener(_onScroll);
+    _checkAndTriggerEmptyRefresh();
   }
 
   @override
   void didUpdateWidget(NoteListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.notes.length != widget.notes.length || 
+        oldWidget.isLoading != widget.isLoading) {
+      if (widget.notes.isNotEmpty) {
+        _hasTriggeredEmptyRefresh = false;
+      } else {
+        _checkAndTriggerEmptyRefresh();
+      }
+    }
+  }
+
+  void _checkAndTriggerEmptyRefresh() {
+    if (widget.notes.isEmpty && 
+        !widget.isLoading && 
+        !_hasTriggeredEmptyRefresh && 
+        widget.onEmptyRefresh != null) {
+      _hasTriggeredEmptyRefresh = true;
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && widget.notes.isEmpty && !widget.isLoading) {
+          widget.onEmptyRefresh?.call();
+        }
+      });
+    }
   }
 
   @override
@@ -107,6 +131,12 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
 
     if (widget.notes.isEmpty) {
+      _checkAndTriggerEmptyRefresh();
+      if (widget.isLoading) {
+        return const SliverToBoxAdapter(
+          child: _LoadingState(),
+        );
+      }
       return const SliverToBoxAdapter(
         child: _EmptyState(),
       );
@@ -125,10 +155,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 }
 
 class _NoteListContent extends StatelessWidget {
-  final List<NoteModel> notes;
+  final List<Map<String, dynamic>> notes;
   final String currentUserNpub;
-  final ValueNotifier<List<NoteModel>> notesNotifier;
-  final Map<String, UserModel> profiles;
+  final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
+  final Map<String, Map<String, dynamic>> profiles;
   final dynamic notesListProvider;
   final bool canLoadMore;
   final bool isLoading;
@@ -153,11 +183,12 @@ class _NoteListContent extends StatelessWidget {
           }
 
           final note = notes[index];
+          final noteId = note['id'] as String? ?? '';
 
           return RepaintBoundary(
-            key: ValueKey('note_boundary_${note.id}'),
+            key: ValueKey('note_boundary_$noteId'),
             child: _NoteItemWidget(
-              key: ValueKey('note_item_${note.id}'),
+              key: ValueKey('note_item_$noteId'),
               note: note,
               currentUserNpub: currentUserNpub,
               notesNotifier: notesNotifier,
@@ -177,10 +208,10 @@ class _NoteListContent extends StatelessWidget {
 }
 
 class _NoteItemWidget extends StatefulWidget {
-  final NoteModel note;
+  final Map<String, dynamic> note;
   final String currentUserNpub;
-  final ValueNotifier<List<NoteModel>> notesNotifier;
-  final Map<String, UserModel> profiles;
+  final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
+  final Map<String, Map<String, dynamic>> profiles;
   final dynamic notesListProvider;
   final bool showSeparator;
 

@@ -1,8 +1,6 @@
 import 'dart:async';
 import '../../core/base/result.dart';
 import 'logging_service.dart';
-import '../../models/note_model.dart';
-import '../../models/user_model.dart';
 import '../repositories/note_repository.dart';
 import '../repositories/user_repository.dart';
 import 'user_batch_fetcher.dart';
@@ -41,7 +39,7 @@ class FeedLoadParams {
 }
 
 class FeedLoadResult {
-  final List<NoteModel> notes;
+  final List<Map<String, dynamic>> notes;
   final bool hasMore;
   final String? error;
 
@@ -69,12 +67,14 @@ class FeedLoaderService {
 
   Future<FeedLoadResult> loadFeed(FeedLoadParams params) async {
     try {
-      Result<List<NoteModel>> result;
+      Result<List<Map<String, dynamic>>> result;
 
       switch (params.type) {
         case FeedType.feed:
-          if (params.currentUserNpub == null || params.currentUserNpub!.isEmpty) {
-            return const FeedLoadResult(notes: [], error: 'Current user npub is required for feed');
+          if (params.currentUserNpub == null ||
+              params.currentUserNpub!.isEmpty) {
+            return const FeedLoadResult(
+                notes: [], error: 'Current user npub is required for feed');
           }
           result = await _noteRepository.getFeedNotesFromFollowList(
             currentUserNpub: params.currentUserNpub!,
@@ -87,7 +87,9 @@ class FeedLoaderService {
 
         case FeedType.profile:
           if (params.targetUserNpub == null || params.targetUserNpub!.isEmpty) {
-            return const FeedLoadResult(notes: [], error: 'Target user npub is required for profile feed');
+            return const FeedLoadResult(
+                notes: [],
+                error: 'Target user npub is required for profile feed');
           }
           result = await _noteRepository.getProfileNotes(
             authorNpub: params.targetUserNpub!,
@@ -100,7 +102,8 @@ class FeedLoaderService {
 
         case FeedType.hashtag:
           if (params.hashtag == null || params.hashtag!.isEmpty) {
-            return const FeedLoadResult(notes: [], error: 'Hashtag is required for hashtag feed');
+            return const FeedLoadResult(
+                notes: [], error: 'Hashtag is required for hashtag feed');
           }
           result = await _noteRepository.getHashtagNotes(
             hashtag: params.hashtag!,
@@ -118,9 +121,9 @@ class FeedLoaderService {
           }
 
           final processedNotes = _processNotes(notes);
-          
+
           _fetchInteractionsForNotes(processedNotes);
-          
+
           return FeedLoadResult(
             notes: processedNotes,
             hasMore: notes.length >= params.limit,
@@ -137,35 +140,45 @@ class FeedLoaderService {
       return const FeedLoadResult(notes: []);
     } catch (e) {
       _logger.error('Failed to load feed', 'FeedLoaderService', e);
-      return FeedLoadResult(notes: [], error: 'Failed to load feed: ${e.toString()}');
+      return FeedLoadResult(
+          notes: [], error: 'Failed to load feed: ${e.toString()}');
     }
   }
 
-  void _fetchInteractionsForNotes(List<NoteModel> notes) {
+  void _fetchInteractionsForNotes(List<Map<String, dynamic>> notes) {
     try {
-      final noteIds = notes.map((note) {
-        if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
-          return note.rootId!;
-        }
-        return note.id;
-      }).toSet().toList();
+      final noteIds = notes
+          .map((note) {
+            final isRepost = note['isRepost'] as bool? ?? false;
+            final rootId = note['rootId'] as String?;
+            if (isRepost && rootId != null && rootId.isNotEmpty) {
+              return rootId;
+            }
+            return note['id'] as String? ?? '';
+          })
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
 
       if (noteIds.isEmpty) return;
 
-      _noteRepository.nostrDataService.fetchInteractionsForNotesBatchWithEOSE(noteIds);
+      _noteRepository.nostrDataService
+          .fetchInteractionsForNotesBatchWithEOSE(noteIds);
     } catch (e) {
-      _logger.error('Error fetching interactions for notes', 'FeedLoaderService', e);
+      _logger.error(
+          'Error fetching interactions for notes', 'FeedLoaderService', e);
     }
   }
 
-  List<NoteModel> _processNotes(List<NoteModel> notes) {
+  List<Map<String, dynamic>> _processNotes(List<Map<String, dynamic>> notes) {
     if (notes.isEmpty) return notes;
-    
+
     final seenIds = <String>{};
-    final deduplicatedNotes = <NoteModel>[];
+    final deduplicatedNotes = <Map<String, dynamic>>[];
 
     for (final note in notes) {
-      if (seenIds.add(note.id)) {
+      final noteId = note['id'] as String? ?? '';
+      if (noteId.isNotEmpty && seenIds.add(noteId)) {
         deduplicatedNotes.add(note);
       }
     }
@@ -173,17 +186,29 @@ class FeedLoaderService {
     return deduplicatedNotes;
   }
 
-  List<NoteModel> sortNotes(List<NoteModel> notes, FeedSortMode sortMode) {
+  List<Map<String, dynamic>> sortNotes(
+      List<Map<String, dynamic>> notes, FeedSortMode sortMode) {
     if (notes.length <= 1) return notes;
 
-    final sortedNotes = List<NoteModel>.from(notes);
+    final sortedNotes = List<Map<String, dynamic>>.from(notes);
 
     if (sortMode == FeedSortMode.mostInteracted) {
       final scoreCache = <String, int>{};
-      int getScore(NoteModel note) {
+      int getScore(Map<String, dynamic> note) {
+        final noteId = note['id'] as String? ?? '';
+        if (noteId.isEmpty) return 0;
         return scoreCache.putIfAbsent(
-          note.id,
-          () => note.reactionCount + note.repostCount + note.replyCount + (note.zapAmount ~/ 1000),
+          noteId,
+          () {
+            final reactionCount = note['reactionCount'] as int? ?? 0;
+            final repostCount = note['repostCount'] as int? ?? 0;
+            final replyCount = note['replyCount'] as int? ?? 0;
+            final zapAmount = note['zapAmount'] as int? ?? 0;
+            return reactionCount +
+                repostCount +
+                replyCount +
+                (zapAmount ~/ 1000);
+          },
         );
       }
 
@@ -192,29 +217,38 @@ class FeedLoaderService {
         final scoreB = getScore(b);
 
         if (scoreA == scoreB) {
-          return b.timestamp.compareTo(a.timestamp);
+          final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+          final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+          return bTime.compareTo(aTime);
         }
 
         return scoreB.compareTo(scoreA);
       });
     } else {
-      sortedNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      sortedNotes.sort((a, b) {
+        final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+        final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+        return bTime.compareTo(aTime);
+      });
     }
 
     return sortedNotes;
   }
 
-  List<NoteModel> filterProfileNotes(List<NoteModel> notes) {
+  List<Map<String, dynamic>> filterProfileNotes(
+      List<Map<String, dynamic>> notes) {
     return notes.where((note) {
-      if (!note.isReply && !note.isRepost) {
+      final isReply = note['isReply'] as bool? ?? false;
+      final isRepost = note['isRepost'] as bool? ?? false;
+      if (!isReply && !isRepost) {
         return true;
       }
 
-      if (note.isRepost) {
+      if (isRepost) {
         return true;
       }
 
-      if (note.isReply && !note.isRepost) {
+      if (isReply && !isRepost) {
         return false;
       }
 
@@ -222,25 +256,30 @@ class FeedLoaderService {
     }).toList();
   }
 
-  Set<String> _extractAuthorIds(List<NoteModel> notes) {
+  Set<String> _extractAuthorIds(List<Map<String, dynamic>> notes) {
     final authorIds = <String>{};
     for (final note in notes) {
-      authorIds.add(note.author);
-      if (note.repostedBy != null) {
-        authorIds.add(note.repostedBy!);
+      final author = note['author'] as String? ?? '';
+      if (author.isNotEmpty) {
+        authorIds.add(author);
+      }
+      final repostedBy = note['repostedBy'] as String?;
+      if (repostedBy != null && repostedBy.isNotEmpty) {
+        authorIds.add(repostedBy);
       }
     }
     return authorIds;
   }
 
-  void preloadCachedUserProfilesSync(
-    List<NoteModel> notes,
-    Map<String, UserModel> profiles,
-    Function(Map<String, UserModel>) onProfilesUpdated,
-  ) {
+  Future<void> preloadCachedUserProfilesSync(
+    List<Map<String, dynamic>> notes,
+    Map<String, Map<String, dynamic>> profiles,
+    Function(Map<String, Map<String, dynamic>>) onProfilesUpdated,
+  ) async {
     try {
       final authorIds = _extractAuthorIds(notes);
-      final missingIds = authorIds.where((id) => !profiles.containsKey(id)).toList();
+      final missingIds =
+          authorIds.where((id) => !profiles.containsKey(id)).toList();
 
       if (missingIds.isEmpty) {
         return;
@@ -248,7 +287,7 @@ class FeedLoaderService {
 
       bool hasUpdates = false;
       for (final authorId in missingIds) {
-        final cachedUser = _userRepository.getCachedUserSync(authorId);
+        final cachedUser = await _userRepository.getCachedUser(authorId);
         if (cachedUser != null) {
           profiles[authorId] = cachedUser;
           hasUpdates = true;
@@ -259,18 +298,20 @@ class FeedLoaderService {
         onProfilesUpdated(profiles);
       }
     } catch (e) {
-      _logger.error('Error preloading cached user profiles', 'FeedLoaderService', e);
+      _logger.error(
+          'Error preloading cached user profiles', 'FeedLoaderService', e);
     }
   }
 
   Future<void> preloadCachedUserProfiles(
-    List<NoteModel> notes,
-    Map<String, UserModel> profiles,
-    Function(Map<String, UserModel>) onProfilesUpdated,
+    List<Map<String, dynamic>> notes,
+    Map<String, Map<String, dynamic>> profiles,
+    Function(Map<String, Map<String, dynamic>>) onProfilesUpdated,
   ) async {
     try {
       final authorIds = _extractAuthorIds(notes);
-      final missingAuthorIds = authorIds.where((id) => !profiles.containsKey(id)).toList();
+      final missingAuthorIds =
+          authorIds.where((id) => !profiles.containsKey(id)).toList();
 
       if (missingAuthorIds.isEmpty) {
         return;
@@ -296,46 +337,54 @@ class FeedLoaderService {
         onProfilesUpdated(profiles);
       }
     } catch (e) {
-      _logger.error('Error preloading cached user profiles', 'FeedLoaderService', e);
+      _logger.error(
+          'Error preloading cached user profiles', 'FeedLoaderService', e);
     }
   }
 
   void loadProfilesAndInteractionsForNotes(
-    List<NoteModel> notes,
-    Map<String, UserModel> profiles,
-    Function(Map<String, UserModel>) onProfilesUpdated,
+    List<Map<String, dynamic>> notes,
+    Map<String, Map<String, dynamic>> profiles,
+    Function(Map<String, Map<String, dynamic>>) onProfilesUpdated,
   ) {
     _fetchInteractionsForNotes(notes);
     preloadCachedUserProfilesSync(notes, profiles, onProfilesUpdated);
-    loadUserProfilesForNotes(notes, profiles, onProfilesUpdated).catchError((e) {
+    loadUserProfilesForNotes(notes, profiles, onProfilesUpdated)
+        .catchError((e) {
       _logger.error('Error loading user profiles', 'FeedLoaderService', e);
     });
   }
 
   Future<void> loadUserProfilesForNotes(
-    List<NoteModel> notes,
-    Map<String, UserModel> profiles,
-    Function(Map<String, UserModel>) onProfilesUpdated,
+    List<Map<String, dynamic>> notes,
+    Map<String, Map<String, dynamic>> profiles,
+    Function(Map<String, Map<String, dynamic>>) onProfilesUpdated,
   ) async {
     try {
       final authorIds = _extractAuthorIds(notes);
       final missingAuthorIds = <String>[];
-      
-      bool hasSyncUpdates = false;
+
+      bool hasCacheUpdates = false;
       for (final id in authorIds) {
         final cachedProfile = profiles[id];
-        if (cachedProfile == null || cachedProfile.profileImage.isEmpty) {
-          final syncCached = _userRepository.getCachedUserSync(id);
-          if (syncCached != null && syncCached.profileImage.isNotEmpty) {
-            profiles[id] = syncCached;
-            hasSyncUpdates = true;
+        final profileImage = cachedProfile?['profileImage'] as String? ?? '';
+        if (cachedProfile == null || profileImage.isEmpty) {
+          final cached = await _userRepository.getCachedUser(id);
+          if (cached != null) {
+            final cachedProfileImage = cached['profileImage'] as String? ?? '';
+            if (cachedProfileImage.isNotEmpty) {
+              profiles[id] = cached;
+              hasCacheUpdates = true;
+            } else {
+              missingAuthorIds.add(id);
+            }
           } else {
             missingAuthorIds.add(id);
           }
         }
       }
 
-      if (hasSyncUpdates) {
+      if (hasCacheUpdates) {
         onProfilesUpdated(profiles);
       }
 
@@ -352,25 +401,30 @@ class FeedLoaderService {
       for (final entry in fetchedProfiles.entries) {
         entry.value.fold(
           (user) {
-            if (!profiles.containsKey(entry.key) || profiles[entry.key]!.profileImage.isEmpty) {
+            final existingProfile = profiles[entry.key];
+            final existingImage =
+                existingProfile?['profileImage'] as String? ?? '';
+            if (!profiles.containsKey(entry.key) || existingImage.isEmpty) {
               profiles[entry.key] = user;
               hasUpdates = true;
             }
           },
           (error) {
             if (!profiles.containsKey(entry.key)) {
-              profiles[entry.key] = UserModel.create(
-                pubkeyHex: entry.key,
-                name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
-                about: '',
-                profileImage: '',
-                banner: '',
-                website: '',
-                nip05: '',
-                lud16: '',
-                updatedAt: DateTime.now(),
-                nip05Verified: false,
-              );
+              profiles[entry.key] = <String, dynamic>{
+                'pubkeyHex': entry.key,
+                'name': entry.key.length > 8
+                    ? entry.key.substring(0, 8)
+                    : entry.key,
+                'about': '',
+                'profileImage': '',
+                'banner': '',
+                'website': '',
+                'nip05': '',
+                'lud16': '',
+                'updatedAt': DateTime.now(),
+                'nip05Verified': false,
+              };
               hasUpdates = true;
             }
           },
@@ -385,7 +439,7 @@ class FeedLoaderService {
     }
   }
 
-  Stream<List<NoteModel>> getNotesStream(FeedType type) {
+  Stream<List<Map<String, dynamic>>> getNotesStream(FeedType type) {
     switch (type) {
       case FeedType.feed:
         return _noteRepository.realTimeNotesStream;
@@ -395,9 +449,9 @@ class FeedLoaderService {
     }
   }
 
-  List<NoteModel> mergeNotesWithUpdates(
-    List<NoteModel> currentNotes,
-    List<NoteModel> updatedNotes,
+  List<Map<String, dynamic>> mergeNotesWithUpdates(
+    List<Map<String, dynamic>> currentNotes,
+    List<Map<String, dynamic>> updatedNotes,
     FeedSortMode sortMode,
   ) {
     if (currentNotes.isEmpty) {
@@ -409,48 +463,96 @@ class FeedLoaderService {
     }
 
     if (updatedNotes.length < currentNotes.length * 0.3) {
-      final currentNoteIds = currentNotes.map((n) => n.id).toSet();
-      final newNotes = updatedNotes.where((n) => !currentNoteIds.contains(n.id)).toList();
-      
+      final currentNoteIds = currentNotes
+          .map((n) => n['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      final newNotes = updatedNotes.where((n) {
+        final noteId = n['id'] as String? ?? '';
+        return noteId.isNotEmpty && !currentNoteIds.contains(noteId);
+      }).toList();
+
       if (newNotes.isNotEmpty) {
-        final updatedNoteMap = {for (var n in updatedNotes) n.id: n};
-        final mergedNotes = currentNotes.map((note) => updatedNoteMap[note.id] ?? note).toList();
+        final updatedNoteMap = <String, Map<String, dynamic>>{};
+        for (var n in updatedNotes) {
+          final noteId = n['id'] as String? ?? '';
+          if (noteId.isNotEmpty) {
+            updatedNoteMap[noteId] = n;
+          }
+        }
+        final mergedNotes = currentNotes.map((note) {
+          final noteId = note['id'] as String? ?? '';
+          return updatedNoteMap[noteId] ?? note;
+        }).toList();
         mergedNotes.addAll(newNotes);
         return sortNotes(mergedNotes, sortMode);
       }
-      
-      final updatedNoteMap = {for (var n in updatedNotes) n.id: n};
-      final mergedNotes = currentNotes.map((note) => updatedNoteMap[note.id] ?? note).toList();
+
+      final updatedNoteMap = <String, Map<String, dynamic>>{};
+      for (var n in updatedNotes) {
+        final noteId = n['id'] as String? ?? '';
+        if (noteId.isNotEmpty) {
+          updatedNoteMap[noteId] = n;
+        }
+      }
+      final mergedNotes = currentNotes.map((note) {
+        final noteId = note['id'] as String? ?? '';
+        return updatedNoteMap[noteId] ?? note;
+      }).toList();
       return mergedNotes;
     }
 
-    final noteIds = updatedNotes.map((n) => n.id).toSet();
-    final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+    final noteIds = updatedNotes
+        .map((n) => n['id'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final currentNoteIds = currentNotes
+        .map((n) => n['id'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
 
     final removedNoteIds = currentNoteIds.difference(noteIds);
-    final updatedNoteList = updatedNotes.where((n) => currentNoteIds.contains(n.id)).toList();
-    final newerNotes = updatedNotes.where((n) => !currentNoteIds.contains(n.id)).toList();
+    final updatedNoteList = updatedNotes.where((n) {
+      final noteId = n['id'] as String? ?? '';
+      return noteId.isNotEmpty && currentNoteIds.contains(noteId);
+    }).toList();
+    final newerNotes = updatedNotes.where((n) {
+      final noteId = n['id'] as String? ?? '';
+      return noteId.isNotEmpty && !currentNoteIds.contains(noteId);
+    }).toList();
 
     final hasRemovals = removedNoteIds.isNotEmpty;
     final hasUpdates = updatedNoteList.isNotEmpty;
     final hasNewNotes = newerNotes.isNotEmpty;
 
     if (hasRemovals && noteIds.length >= currentNoteIds.length * 0.7) {
-      final filteredCurrentNotes = List<NoteModel>.from(
-        currentNotes.where((n) => !removedNoteIds.contains(n.id)),
+      final filteredCurrentNotes = List<Map<String, dynamic>>.from(
+        currentNotes.where((n) {
+          final noteId = n['id'] as String? ?? '';
+          return noteId.isNotEmpty && !removedNoteIds.contains(noteId);
+        }),
       );
 
       for (final updatedNote in updatedNoteList) {
-        final index = filteredCurrentNotes.indexWhere((n) => n.id == updatedNote.id);
+        final updatedNoteId = updatedNote['id'] as String? ?? '';
+        if (updatedNoteId.isEmpty) continue;
+        final index = filteredCurrentNotes
+            .indexWhere((n) => (n['id'] as String? ?? '') == updatedNoteId);
         if (index != -1) {
           filteredCurrentNotes[index] = updatedNote;
         }
       }
 
       if (newerNotes.isNotEmpty) {
-        final latestTimestamp = filteredCurrentNotes.isNotEmpty ? filteredCurrentNotes.first.timestamp : DateTime.now();
-        final timestampNewerNotes = List<NoteModel>.from(
-          newerNotes.where((n) => n.timestamp.isAfter(latestTimestamp)),
+        final latestTimestamp = filteredCurrentNotes.isNotEmpty
+            ? (filteredCurrentNotes.first['timestamp'] as DateTime? ??
+                DateTime.now())
+            : DateTime.now();
+        final timestampNewerNotes = List<Map<String, dynamic>>.from(
+          newerNotes.where((n) {
+            final noteTime = n['timestamp'] as DateTime?;
+            return noteTime != null && noteTime.isAfter(latestTimestamp);
+          }),
         );
 
         if (timestampNewerNotes.isNotEmpty) {
@@ -462,20 +564,30 @@ class FeedLoaderService {
     }
 
     if (hasUpdates || hasNewNotes) {
-      final filteredCurrentNotes = List<NoteModel>.from(currentNotes);
+      final filteredCurrentNotes =
+          List<Map<String, dynamic>>.from(currentNotes);
 
       if (hasUpdates) {
         for (final updatedNote in updatedNoteList) {
-          final index = filteredCurrentNotes.indexWhere((n) => n.id == updatedNote.id);
+          final updatedNoteId = updatedNote['id'] as String? ?? '';
+          if (updatedNoteId.isEmpty) continue;
+          final index = filteredCurrentNotes
+              .indexWhere((n) => (n['id'] as String? ?? '') == updatedNoteId);
           if (index != -1) {
             filteredCurrentNotes[index] = updatedNote;
           }
         }
       }
 
-      final currentNoteIds = filteredCurrentNotes.map((n) => n.id).toSet();
-      final notesToAdd = newerNotes.where((n) => !currentNoteIds.contains(n.id)).toList();
-      
+      final currentNoteIdsSet = filteredCurrentNotes
+          .map((n) => n['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      final notesToAdd = newerNotes.where((n) {
+        final noteId = n['id'] as String? ?? '';
+        return noteId.isNotEmpty && !currentNoteIdsSet.contains(noteId);
+      }).toList();
+
       if (notesToAdd.isNotEmpty) {
         filteredCurrentNotes.addAll(notesToAdd);
         return sortNotes(filteredCurrentNotes, sortMode);
@@ -489,25 +601,37 @@ class FeedLoaderService {
     return currentNotes;
   }
 
-  List<NoteModel> mergeProfileNotesWithUpdates(
-    List<NoteModel> currentNotes,
-    List<NoteModel> updatedNotes,
+  List<Map<String, dynamic>> mergeProfileNotesWithUpdates(
+    List<Map<String, dynamic>> currentNotes,
+    List<Map<String, dynamic>> updatedNotes,
   ) {
     if (currentNotes.isEmpty) {
       return filterProfileNotes(updatedNotes);
     }
 
-    final updatedNoteIds = updatedNotes.map((n) => n.id).toSet();
-    final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+    final updatedNoteIds = updatedNotes
+        .map((n) => n['id'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final currentNoteIds = currentNotes
+        .map((n) => n['id'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
 
     final removedNoteIds = currentNoteIds.difference(updatedNoteIds);
 
     if (removedNoteIds.isNotEmpty) {
-      final filteredNotes = currentNotes.where((note) => !removedNoteIds.contains(note.id)).toList();
+      final filteredNotes = currentNotes.where((note) {
+        final noteId = note['id'] as String? ?? '';
+        return noteId.isNotEmpty && !removedNoteIds.contains(noteId);
+      }).toList();
 
       for (final updatedNote in updatedNotes) {
-        if (currentNoteIds.contains(updatedNote.id)) {
-          final index = filteredNotes.indexWhere((n) => n.id == updatedNote.id);
+        final updatedNoteId = updatedNote['id'] as String? ?? '';
+        if (updatedNoteId.isNotEmpty &&
+            currentNoteIds.contains(updatedNoteId)) {
+          final index = filteredNotes
+              .indexWhere((n) => (n['id'] as String? ?? '') == updatedNoteId);
           if (index != -1) {
             filteredNotes[index] = updatedNote;
           }
@@ -519,14 +643,26 @@ class FeedLoaderService {
 
     bool hasUpdates = false;
     for (final updatedNote in updatedNotes) {
-      if (currentNoteIds.contains(updatedNote.id)) {
-        final index = currentNotes.indexWhere((n) => n.id == updatedNote.id);
+      final updatedNoteId = updatedNote['id'] as String? ?? '';
+      if (updatedNoteId.isNotEmpty && currentNoteIds.contains(updatedNoteId)) {
+        final index = currentNotes
+            .indexWhere((n) => (n['id'] as String? ?? '') == updatedNoteId);
         if (index != -1) {
           final existingNote = currentNotes[index];
-          if (existingNote.reactionCount != updatedNote.reactionCount ||
-              existingNote.repostCount != updatedNote.repostCount ||
-              existingNote.replyCount != updatedNote.replyCount ||
-              existingNote.zapAmount != updatedNote.zapAmount) {
+          final existingReactionCount =
+              existingNote['reactionCount'] as int? ?? 0;
+          final existingRepostCount = existingNote['repostCount'] as int? ?? 0;
+          final existingReplyCount = existingNote['replyCount'] as int? ?? 0;
+          final existingZapAmount = existingNote['zapAmount'] as int? ?? 0;
+          final updatedReactionCount =
+              updatedNote['reactionCount'] as int? ?? 0;
+          final updatedRepostCount = updatedNote['repostCount'] as int? ?? 0;
+          final updatedReplyCount = updatedNote['replyCount'] as int? ?? 0;
+          final updatedZapAmount = updatedNote['zapAmount'] as int? ?? 0;
+          if (existingReactionCount != updatedReactionCount ||
+              existingRepostCount != updatedRepostCount ||
+              existingReplyCount != updatedReplyCount ||
+              existingZapAmount != updatedZapAmount) {
             hasUpdates = true;
             break;
           }
@@ -535,10 +671,13 @@ class FeedLoaderService {
     }
 
     if (hasUpdates) {
-      final updatedNotesList = List<NoteModel>.from(currentNotes);
+      final updatedNotesList = List<Map<String, dynamic>>.from(currentNotes);
       for (final updatedNote in updatedNotes) {
-        if (currentNoteIds.contains(updatedNote.id)) {
-          final index = updatedNotesList.indexWhere((n) => n.id == updatedNote.id);
+        final updatedNoteId = updatedNote['id'] as String? ?? '';
+        if (updatedNoteId.isNotEmpty &&
+            currentNoteIds.contains(updatedNoteId)) {
+          final index = updatedNotesList
+              .indexWhere((n) => (n['id'] as String? ?? '') == updatedNoteId);
           if (index != -1) {
             updatedNotesList[index] = updatedNote;
           }

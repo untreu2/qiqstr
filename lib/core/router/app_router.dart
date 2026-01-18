@@ -25,8 +25,6 @@ import '../../ui/screens/dm/dm_chat_page.dart';
 import '../../ui/screens/wallet/wallet_page.dart';
 import '../../ui/screens/notification/notification_page.dart';
 import '../../ui/screens/explore/explore_page.dart';
-import '../../models/user_model.dart';
-import '../../models/note_model.dart';
 import '../../core/di/app_di.dart';
 import '../../data/services/auth_service.dart';
 
@@ -119,20 +117,7 @@ class AppRouter {
                       } else {
                         pubkeyHex = '';
                       }
-                      final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
-                      final user = UserModel.create(
-                        pubkeyHex: pubkeyHex,
-                        name: displayName,
-                        about: '',
-                        profileImage: '',
-                        banner: '',
-                        website: '',
-                        nip05: '',
-                        lud16: '',
-                        updatedAt: DateTime.now(),
-                        nip05Verified: false,
-                      );
-                      return ProfilePage(user: user);
+                      return ProfilePage(pubkeyHex: pubkeyHex);
                     },
                   ),
                   GoRoute(
@@ -151,30 +136,39 @@ class AppRouter {
                     path: 'note-statistics',
                     name: 'feed-note-statistics',
                     builder: (context, state) {
-                      final note = state.extra as NoteModel?;
-                      if (note == null) {
+                      final queryNoteId = state.uri.queryParameters['noteId'];
+                      final extra = state.extra;
+                      String noteId = '';
+                      if (queryNoteId != null && queryNoteId.isNotEmpty) {
+                        noteId = queryNoteId;
+                      } else if (extra is String) {
+                        noteId = extra;
+                      } else if (extra is Map<String, dynamic>) {
+                        noteId = extra['id']?.toString() ?? '';
+                      }
+                      if (noteId.isEmpty) {
                         return const Scaffold(
                           body: Center(child: Text('Note not found')),
                         );
                       }
-                      return NoteStatisticsPage(note: note);
+                      return NoteStatisticsPage(noteId: noteId);
                     },
                   ),
                   GoRoute(
                     path: 'following',
                     name: 'feed-following',
                     builder: (context, state) {
-                      final user = state.extra as UserModel?;
-                      if (user == null) {
-                        final npub = state.uri.queryParameters['npub'] ?? '';
-                        final pubkeyHex = state.uri.queryParameters['pubkeyHex'] ?? npub;
-                        final defaultUser = UserModel.create(
-                          pubkeyHex: pubkeyHex,
-                          name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
-                        );
-                        return FollowingPage(user: defaultUser);
+                      final npub = state.uri.queryParameters['npub'] ?? '';
+                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                      if (pubkeyHex.startsWith('npub1')) {
+                        try {
+                          pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                        } catch (e) {
+                          pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                        }
                       }
-                      return FollowingPage(user: user);
+                      return FollowingPage(pubkeyHex: pubkeyHex);
                     },
                   ),
                   GoRoute(
@@ -238,50 +232,46 @@ class AppRouter {
                       } else {
                         pubkeyHex = '';
                       }
-                      final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
-                      final user = UserModel.create(
-                        pubkeyHex: pubkeyHex,
-                        name: displayName,
-                        about: '',
-                        profileImage: '',
-                        banner: '',
-                        website: '',
-                        nip05: '',
-                        lud16: '',
-                        updatedAt: DateTime.now(),
-                        nip05Verified: false,
-                      );
-                      return ProfilePage(user: user);
+                      return ProfilePage(pubkeyHex: pubkeyHex);
                     },
                   ),
                   GoRoute(
                     path: 'note-statistics',
                     name: 'dm-note-statistics',
                     builder: (context, state) {
-                      final note = state.extra as NoteModel?;
-                      if (note == null) {
+                      final queryNoteId = state.uri.queryParameters['noteId'];
+                      final extra = state.extra;
+                      String noteId = '';
+                      if (queryNoteId != null && queryNoteId.isNotEmpty) {
+                        noteId = queryNoteId;
+                      } else if (extra is String) {
+                        noteId = extra;
+                      } else if (extra is Map<String, dynamic>) {
+                        noteId = extra['id']?.toString() ?? '';
+                      }
+                      if (noteId.isEmpty) {
                         return const Scaffold(
                           body: Center(child: Text('Note not found')),
                         );
                       }
-                      return NoteStatisticsPage(note: note);
+                      return NoteStatisticsPage(noteId: noteId);
                     },
                   ),
                   GoRoute(
                     path: 'following',
                     name: 'dm-following',
                     builder: (context, state) {
-                      final user = state.extra as UserModel?;
-                      if (user == null) {
-                        final npub = state.uri.queryParameters['npub'] ?? '';
-                        final pubkeyHex = state.uri.queryParameters['pubkeyHex'] ?? npub;
-                        final defaultUser = UserModel.create(
-                          pubkeyHex: pubkeyHex,
-                          name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
-                        );
-                        return FollowingPage(user: defaultUser);
+                      final npub = state.uri.queryParameters['npub'] ?? '';
+                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                      if (pubkeyHex.startsWith('npub1')) {
+                        try {
+                          pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                        } catch (e) {
+                          pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                        }
                       }
-                      return FollowingPage(user: user);
+                      return FollowingPage(pubkeyHex: pubkeyHex);
                     },
                   ),
                 ],
@@ -333,20 +323,7 @@ class AppRouter {
                       } else {
                         pubkeyHex = '';
                       }
-                      final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
-                      final user = UserModel.create(
-                        pubkeyHex: pubkeyHex,
-                        name: displayName,
-                        about: '',
-                        profileImage: '',
-                        banner: '',
-                        website: '',
-                        nip05: '',
-                        lud16: '',
-                        updatedAt: DateTime.now(),
-                        nip05Verified: false,
-                      );
-                      return ProfilePage(user: user);
+                      return ProfilePage(pubkeyHex: pubkeyHex);
                     },
                   ),
                   GoRoute(
@@ -365,30 +342,39 @@ class AppRouter {
                     path: 'note-statistics',
                     name: 'notifications-note-statistics',
                     builder: (context, state) {
-                      final note = state.extra as NoteModel?;
-                      if (note == null) {
+                      final queryNoteId = state.uri.queryParameters['noteId'];
+                      final extra = state.extra;
+                      String noteId = '';
+                      if (queryNoteId != null && queryNoteId.isNotEmpty) {
+                        noteId = queryNoteId;
+                      } else if (extra is String) {
+                        noteId = extra;
+                      } else if (extra is Map<String, dynamic>) {
+                        noteId = extra['id']?.toString() ?? '';
+                      }
+                      if (noteId.isEmpty) {
                         return const Scaffold(
                           body: Center(child: Text('Note not found')),
                         );
                       }
-                      return NoteStatisticsPage(note: note);
+                      return NoteStatisticsPage(noteId: noteId);
                     },
                   ),
                   GoRoute(
                     path: 'following',
                     name: 'notifications-following',
                     builder: (context, state) {
-                      final user = state.extra as UserModel?;
-                      if (user == null) {
-                        final npub = state.uri.queryParameters['npub'] ?? '';
-                        final pubkeyHex = state.uri.queryParameters['pubkeyHex'] ?? npub;
-                        final defaultUser = UserModel.create(
-                          pubkeyHex: pubkeyHex,
-                          name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
-                        );
-                        return FollowingPage(user: defaultUser);
+                      final npub = state.uri.queryParameters['npub'] ?? '';
+                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                      if (pubkeyHex.startsWith('npub1')) {
+                        try {
+                          pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                        } catch (e) {
+                          pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                        }
                       }
-                      return FollowingPage(user: user);
+                      return FollowingPage(pubkeyHex: pubkeyHex);
                     },
                   ),
                 ],
@@ -426,20 +412,7 @@ class AppRouter {
           } else {
             pubkeyHex = '';
           }
-          final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
-          final user = UserModel.create(
-            pubkeyHex: pubkeyHex,
-            name: displayName,
-            about: '',
-            profileImage: '',
-            banner: '',
-            website: '',
-            nip05: '',
-            lud16: '',
-            updatedAt: DateTime.now(),
-            nip05Verified: false,
-          );
-          return ProfilePage(user: user);
+          return ProfilePage(pubkeyHex: pubkeyHex);
         },
       ),
       GoRoute(
@@ -458,30 +431,39 @@ class AppRouter {
         path: '/note-statistics',
         name: 'note-statistics',
         builder: (context, state) {
-          final note = state.extra as NoteModel?;
-          if (note == null) {
+          final queryNoteId = state.uri.queryParameters['noteId'];
+          final extra = state.extra;
+          String noteId = '';
+          if (queryNoteId != null && queryNoteId.isNotEmpty) {
+            noteId = queryNoteId;
+          } else if (extra is String) {
+            noteId = extra;
+          } else if (extra is Map<String, dynamic>) {
+            noteId = extra['id']?.toString() ?? '';
+          }
+          if (noteId.isEmpty) {
             return const Scaffold(
               body: Center(child: Text('Note not found')),
             );
           }
-          return NoteStatisticsPage(note: note);
+          return NoteStatisticsPage(noteId: noteId);
         },
       ),
       GoRoute(
         path: '/following',
         name: 'following',
         builder: (context, state) {
-          final user = state.extra as UserModel?;
-          if (user == null) {
-            final npub = state.uri.queryParameters['npub'] ?? '';
-            final pubkeyHex = state.uri.queryParameters['pubkeyHex'] ?? npub;
-            final defaultUser = UserModel.create(
-              pubkeyHex: pubkeyHex,
-              name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
-            );
-            return FollowingPage(user: defaultUser);
+          final npub = state.uri.queryParameters['npub'] ?? '';
+          final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+          String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+          if (pubkeyHex.startsWith('npub1')) {
+            try {
+              pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+            } catch (e) {
+              pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+            }
           }
-          return FollowingPage(user: user);
+          return FollowingPage(pubkeyHex: pubkeyHex);
         },
       ),
       GoRoute(
@@ -541,26 +523,25 @@ class AppRouter {
     final authService = AppDI.get<AuthService>();
     final isAuthResult = await authService.isAuthenticated();
     final isAuthenticated = isAuthResult.isSuccess && isAuthResult.data == true;
-    
+
     final isLoginRoute = state.matchedLocation == '/login';
     final isKeysInfoRoute = state.matchedLocation == '/keys-info';
     final isProfileSetupRoute = state.matchedLocation == '/profile-setup';
     final isSuggestedFollowsRoute = state.matchedLocation == '/suggested-follows';
-    
+
     final isAuthFlow = isLoginRoute || isKeysInfoRoute || isProfileSetupRoute || isSuggestedFollowsRoute;
-    
+
     if (!isAuthenticated && !isAuthFlow) {
       return '/login';
     }
-    
+
     if (isAuthenticated && isLoginRoute) {
       final npubResult = await authService.getCurrentUserNpub();
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
         return '/home/feed?npub=${Uri.encodeComponent(npubResult.data!)}';
       }
     }
-    
+
     return null;
   }
 }
-

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../widgets/common/snackbar_widget.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/theme/theme_event.dart';
+import '../../../presentation/blocs/theme/theme_state.dart';
 
 class PaymentsPage extends StatefulWidget {
   const PaymentsPage({super.key});
@@ -22,8 +25,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
   @override
   void initState() {
     super.initState();
-    final themeManager = Provider.of<ThemeManager>(context, listen: false);
-    _savedAmount = themeManager.defaultZapAmount;
+    final themeState = context.read<ThemeBloc>().state;
+    _savedAmount = themeState.defaultZapAmount;
     _amountController = TextEditingController(text: _savedAmount.toString());
   }
 
@@ -35,8 +38,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
         return Scaffold(
           backgroundColor: context.colors.background,
           body: Stack(
@@ -47,7 +50,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                   children: [
                     _buildHeader(context),
                     const SizedBox(height: 16),
-                    _buildPaymentsSection(context, themeManager),
+                    _buildPaymentsSection(context, themeState),
                     const SizedBox(height: 150),
                   ],
                 ),
@@ -72,15 +75,15 @@ class _PaymentsPageState extends State<PaymentsPage> {
     );
   }
 
-  Widget _buildPaymentsSection(BuildContext context, ThemeManager themeManager) {
+  Widget _buildPaymentsSection(BuildContext context, ThemeState themeState) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _buildOneTapZapToggleItem(context, themeManager),
+          _buildOneTapZapToggleItem(context, themeState),
           const SizedBox(height: 8),
-          if (themeManager.oneTapZap) ...[
-            _buildAmountInputItem(context, themeManager),
+          if (themeState.oneTapZap) ...[
+            _buildAmountInputItem(context, themeState),
             const SizedBox(height: 8),
           ],
           const SizedBox(height: 32),
@@ -89,9 +92,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
     );
   }
 
-  Widget _buildOneTapZapToggleItem(BuildContext context, ThemeManager themeManager) {
+  Widget _buildOneTapZapToggleItem(
+      BuildContext context, ThemeState themeState) {
     return GestureDetector(
-      onTap: () => themeManager.setOneTapZap(!themeManager.oneTapZap),
+      onTap: () =>
+          context.read<ThemeBloc>().add(OneTapZapSet(!themeState.oneTapZap)),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
@@ -118,8 +123,9 @@ class _PaymentsPageState extends State<PaymentsPage> {
               ),
             ),
             Switch(
-              value: themeManager.oneTapZap,
-              onChanged: (value) => themeManager.setOneTapZap(value),
+              value: themeState.oneTapZap,
+              onChanged: (value) =>
+                  context.read<ThemeBloc>().add(OneTapZapSet(value)),
               activeThumbColor: context.colors.accent,
               inactiveThumbColor: context.colors.textSecondary,
               inactiveTrackColor: context.colors.border,
@@ -131,7 +137,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
     );
   }
 
-  Widget _buildAmountInputItem(BuildContext context, ThemeManager themeManager) {
+  Widget _buildAmountInputItem(BuildContext context, ThemeState themeState) {
     final currentAmount = int.tryParse(_amountController.text.trim()) ?? 0;
     final hasChanges = currentAmount != _savedAmount && currentAmount > 0;
 
@@ -194,20 +200,27 @@ class _PaymentsPageState extends State<PaymentsPage> {
                   icon: Icon(
                     CarbonIcons.checkmark,
                     size: 24,
-                    color: hasChanges ? context.colors.accent : context.colors.textSecondary,
+                    color: hasChanges
+                        ? context.colors.accent
+                        : context.colors.textSecondary,
                   ),
                   onPressed: hasChanges
                       ? () {
-                          final amount = int.tryParse(_amountController.text.trim());
+                          final amount =
+                              int.tryParse(_amountController.text.trim());
                           if (amount != null && amount > 0) {
-                            themeManager.setDefaultZapAmount(amount);
+                            context
+                                .read<ThemeBloc>()
+                                .add(DefaultZapAmountSet(amount));
                             setState(() {
                               _savedAmount = amount;
                               _isEditing = false;
                             });
-                            AppSnackbar.success(context, 'Amount saved successfully');
+                            AppSnackbar.success(
+                                context, 'Amount saved successfully');
                           } else {
-                            AppSnackbar.error(context, 'Please enter a valid amount');
+                            AppSnackbar.error(
+                                context, 'Please enter a valid amount');
                           }
                         }
                       : null,
@@ -234,4 +247,3 @@ class _PaymentsPageState extends State<PaymentsPage> {
     );
   }
 }
-

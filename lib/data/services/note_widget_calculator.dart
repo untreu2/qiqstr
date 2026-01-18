@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import '../../models/note_model.dart';
 import '../../models/note_widget_metrics.dart';
+import '../../utils/string_optimizer.dart';
 
 class NoteWidgetCalculator {
   static final NoteWidgetCalculator instance = NoteWidgetCalculator._();
@@ -45,11 +45,12 @@ class NoteWidgetCalculator {
   }
 
   static NoteWidgetMetrics calculateMetrics(
-    NoteModel note, {
+    Map<String, dynamic> note, {
     double screenWidth = _defaultScreenWidth,
     bool isExpandedMode = false,
   }) {
-    final parsedContent = note.parsedContentLazy;
+    final content = note['content'] as String? ?? '';
+    final parsedContent = stringOptimizer.parseContentOptimized(content);
     final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final mediaUrls = (parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     final linkUrls = (parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
@@ -95,8 +96,9 @@ class NoteWidgetCalculator {
 
     final mediaAspectRatio = _calculateMediaAspectRatio(imageUrls, videoUrls);
 
+    final noteId = note['id'] as String? ?? '';
     return NoteWidgetMetrics(
-      noteId: note.id,
+      noteId: noteId,
       estimatedHeight: estimatedHeight,
       shouldTruncate: shouldTruncate,
       truncatedContent: truncatedContent,
@@ -261,14 +263,17 @@ class NoteWidgetCalculator {
     }
   }
 
-  static double _calculateHeaderHeight(NoteModel note, bool isExpandedMode) {
+  static double _calculateHeaderHeight(Map<String, dynamic> note, bool isExpandedMode) {
     double height = _headerPadding * 2;
 
-    if (note.isRepost && note.repostedBy != null) {
+    final isRepost = note['isRepost'] as bool? ?? false;
+    final repostedBy = note['repostedBy'] as String?;
+    if (isRepost && repostedBy != null && repostedBy.isNotEmpty) {
       height += 24.0;
     }
 
-    if (note.isReply) {
+    final isReply = note['isReply'] as bool? ?? false;
+    if (isReply) {
       height += 20.0;
     }
 
@@ -299,8 +304,8 @@ class NoteWidgetCalculator {
     return null;
   }
 
-  static void updateNoteWithMetrics(NoteModel note, NoteWidgetMetrics metrics) {
-    note.estimatedHeight = metrics.estimatedHeight;
+  static void updateNoteWithMetrics(Map<String, dynamic> note, NoteWidgetMetrics metrics) {
+    note['estimatedHeight'] = metrics.estimatedHeight;
   }
 }
 

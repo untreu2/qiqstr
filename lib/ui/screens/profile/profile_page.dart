@@ -3,21 +3,23 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
-import '../../../models/user_model.dart';
-import '../../../models/note_model.dart';
 import '../../widgets/user/profile_info_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/profile_viewmodel.dart';
+import '../../../presentation/blocs/profile/profile_bloc.dart';
+import '../../../presentation/blocs/profile/profile_event.dart';
+import '../../../presentation/blocs/profile/profile_state.dart';
+import '../../../data/services/user_cache_service.dart';
+import '../../../data/services/auth_service.dart';
 import 'dart:async';
-import '../../../core/ui/ui_state_builder.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ProfilePage extends StatefulWidget {
-  final UserModel user;
+  final String pubkeyHex;
 
-  const ProfilePage({super.key, required this.user});
+  const ProfilePage({super.key, required this.pubkeyHex});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -25,35 +27,29 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   late ScrollController _scrollController;
-  late ProfileViewModel _profileViewModel;
 
-  final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
-  late final Map<String, UserModel> _profiles;
+  final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier = ValueNotifier([]);
   final ValueNotifier<bool> _showUsernameBubbleNotifier = ValueNotifier<bool>(false);
   Timer? _scrollDebounceTimer;
-
-  StreamSubscription<Map<String, UserModel>>? _profilesSubscription;
+  bool _hasCheckedCache = false;
+  bool _shouldRefresh = false;
 
   @override
   void initState() {
     super.initState();
-    _profiles = <String, UserModel>{};
     _scrollController = ScrollController()..addListener(_scrollListener);
+    _checkCacheAndScheduleRefresh();
+  }
 
-    _profileViewModel = AppDI.get<ProfileViewModel>();
-    _profileViewModel.initialize();
+  Future<void> _checkCacheAndScheduleRefresh() async {
+    if (_hasCheckedCache) return;
+    _hasCheckedCache = true;
 
-    _profiles[widget.user.npub] = widget.user;
+    final isCached = await UserCacheService.instance.contains(widget.pubkeyHex);
 
-    _profilesSubscription = _profileViewModel.profilesStream.listen((updatedProfiles) {
-      if (mounted) {
-        setState(() {
-          _profiles.addAll(updatedProfiles);
-        });
-      }
-    });
-
-    _profileViewModel.initializeWithUser(widget.user.npub);
+    if (!isCached) {
+      _shouldRefresh = true;
+    }
   }
 
   void _scrollListener() {
@@ -73,95 +69,150 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void dispose() {
     _scrollDebounceTimer?.cancel();
-    _profilesSubscription?.cancel();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _notesNotifier.dispose();
     _showUsernameBubbleNotifier.dispose();
-    _profileViewModel.dispose();
     super.dispose();
-  }
-
-  void _onRetry() {
-    _profileViewModel.onRetry();
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: Stack(
-        children: [
-          _buildContent(context),
-          AnimatedBuilder(
-            animation: _profileViewModel,
-            builder: (context, child) {
-              final currentUser = _profileViewModel.currentProfile ?? widget.user;
-              return TopActionBarWidget(
-                topOffset: 6,
-                onBackPressed: () => context.pop(),
-                centerBubble: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colors.avatarPlaceholder,
-                        image: currentUser.profileImage.isNotEmpty
-                            ? DecorationImage(
-                                image: CachedNetworkImageProvider(currentUser.profileImage),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
-                      ),
-                      child: currentUser.profileImage.isEmpty
-                          ? Icon(
-                              Icons.person,
-                              size: 14,
-                              color: colors.textSecondary,
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      currentUser.name.isNotEmpty 
-                          ? currentUser.name 
-                          : (currentUser.nip05.isNotEmpty 
-                              ? currentUser.nip05.split('@').first 
-                              : 'Anonymous'),
-                      style: TextStyle(
-                        color: colors.background,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                centerBubbleVisibility: _showUsernameBubbleNotifier,
-                onCenterBubbleTap: () {
-                  _scrollController.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                },
-                onSharePressed: () => _handleShare(context),
+    return BlocProvider<ProfileBloc>(
+      create: (context) {
+        final bloc = AppDI.get<ProfileBloc>();
+        final authService = AppDI.get<AuthService>();
+        final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
+        if (npub.isNotEmpty) {
+          bloc.add(ProfileLoadRequested(npub));
+        }
+        return bloc;
+      },
+      child: BlocListener<ProfileBloc, ProfileState>(
+        listener: (context, state) {
+          if (_shouldRefresh && state is ProfileLoaded) {
+            if (state.notes.isEmpty) {
+              _shouldRefresh = false;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Future.delayed(const Duration(milliseconds: 800), () {
+                  if (mounted && context.mounted) {
+                    final bloc = context.read<ProfileBloc>();
+                    final currentState = bloc.state;
+                    if (currentState is ProfileLoaded) {
+                      bloc.add(const ProfileRefreshed());
+                    }
+                  }
+                });
+              });
+            } else {
+              _shouldRefresh = false;
+            }
+          }
+        },
+        child: BlocBuilder<ProfileBloc, ProfileState>(
+          builder: (context, state) {
+            if (state is! ProfileLoaded) {
+              if (state is ProfileLoading) {
+                return Scaffold(
+                  backgroundColor: colors.background,
+                  body: const Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (state is ProfileError) {
+                return Scaffold(
+                  backgroundColor: colors.background,
+                  body: Center(child: Text('Error: ${state.message}')),
+                );
+              }
+              return Scaffold(
+                backgroundColor: colors.background,
+                body: const Center(child: CircularProgressIndicator()),
               );
-            },
-          ),
-        ],
+            }
+            final currentUser = state.user;
+            
+            return Scaffold(
+              backgroundColor: colors.background,
+              body: Stack(
+              children: [
+                _buildContent(context, state),
+                TopActionBarWidget(
+                  topOffset: 6,
+                  onBackPressed: () => context.pop(),
+                  centerBubble: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: colors.avatarPlaceholder,
+                          image: () {
+                            final profileImage = currentUser['profileImage'] as String? ?? '';
+                            return profileImage.isNotEmpty
+                                ? DecorationImage(
+                                    image: CachedNetworkImageProvider(profileImage),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null;
+                          }(),
+                        ),
+                        child: () {
+                          final profileImage = currentUser['profileImage'] as String? ?? '';
+                          return profileImage.isEmpty
+                              ? Icon(
+                                  Icons.person,
+                                  size: 14,
+                                  color: colors.textSecondary,
+                                )
+                              : null;
+                        }(),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        () {
+                          final name = currentUser['name'] as String? ?? '';
+                          final nip05 = currentUser['nip05'] as String? ?? '';
+                          return name.isNotEmpty 
+                              ? name 
+                              : (nip05.isNotEmpty 
+                                  ? nip05.split('@').first 
+                                  : 'Anonymous');
+                        }(),
+                        style: TextStyle(
+                          color: colors.background,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  centerBubbleVisibility: _showUsernameBubbleNotifier,
+                  onCenterBubbleTap: () {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  onSharePressed: () => _handleShare(context),
+                ),
+              ],
+            ),
+          );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildContent(BuildContext context) {
+  Widget _buildContent(BuildContext context, ProfileState state) {
     return RefreshIndicator(
       onRefresh: () async {
-        _profileViewModel.onRetry();
+        context.read<ProfileBloc>().add(const ProfileRefreshed());
         await Future.delayed(const Duration(milliseconds: 500));
       },
       child: CustomScrollView(
@@ -172,129 +223,119 @@ class _ProfilePageState extends State<ProfilePage> {
         cacheExtent: 1200,
         slivers: [
           SliverToBoxAdapter(
-            child: AnimatedBuilder(
-              animation: _profileViewModel,
-              builder: (context, child) {
-                return UIStateBuilder<UserModel>(
-                  state: _profileViewModel.profileState,
-                  builder: (context, loadedUser) {
-                    return ProfileInfoWidget(
-                      key: ValueKey(loadedUser.pubkeyHex),
-                      user: loadedUser,
-                      onNavigateToProfile: (npub) {
-                        context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
-                      },
-                    );
-                  },
-                  loading: () => ProfileInfoWidget(
-                    key: ValueKey(widget.user.pubkeyHex),
-                    user: widget.user,
-                    onNavigateToProfile: (npub) {
-                      context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
-                    },
-                  ),
-                  error: (error) => ProfileInfoWidget(
-                    key: ValueKey(widget.user.pubkeyHex),
-                    user: widget.user,
-                    onNavigateToProfile: (npub) {
-                      context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
-                    },
-                  ),
-                  empty: (message) => ProfileInfoWidget(
-                    key: ValueKey(widget.user.pubkeyHex),
-                    user: widget.user,
-                    onNavigateToProfile: (npub) {
-                      context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
-                    },
-                  ),
-                );
-              },
-            ),
+            child: _buildProfileInfo(context, state),
           ),
-          _buildProfileNotes(context),
+          _buildProfileNotes(context, state),
         ],
       ),
     );
   }
 
-  Widget _buildProfileNotes(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _profileViewModel,
-      builder: (context, child) {
-        return SliverUIStateBuilder<List<NoteModel>>(
-          state: _profileViewModel.profileNotesState,
-          builder: (context, notes) {
-            _notesNotifier.value = notes;
-
-            return widgets.NoteListWidget(
-              notes: notes,
-              currentUserNpub: _profileViewModel.currentUserNpub,
-              notesNotifier: _notesNotifier,
-              profiles: _profiles,
-              isLoading: _profileViewModel.isLoadingMore,
-              canLoadMore: _profileViewModel.canLoadMoreProfileNotes,
-              onLoadMore: _profileViewModel.loadMoreProfileNotes,
-              scrollController: _scrollController,
-            );
-          },
-          loading: () => const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32.0),
-              child: CircularProgressIndicator(),
-            ),
-          ),
-          error: (error) => Center(
-            child: Padding(
-              padding: EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 48,
-                    color: context.colors.error,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading notes',
-                    style: TextStyle(
-                      color: context.colors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    error,
-                    style: TextStyle(color: context.colors.textSecondary),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  PrimaryButton(
-                    label: 'Retry',
-                    onPressed: _onRetry,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          empty: (message) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Text(
-                message ?? 'No notes from this user yet',
-                style: TextStyle(color: context.colors.textSecondary),
-              ),
-            ),
-          ),
-        );
+  Widget _buildProfileInfo(BuildContext context, ProfileState state) {
+    if (state is! ProfileLoaded) {
+      return const SizedBox.shrink();
+    }
+    final user = state.user;
+    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    return ProfileInfoWidget(
+      key: ValueKey(pubkeyHex),
+      user: user,
+      onNavigateToProfile: (npub) {
+        context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
       },
+    );
+  }
+
+  Widget _buildProfileNotes(BuildContext context, ProfileState state) {
+    if (state is ProfileLoaded) {
+      _notesNotifier.value = state.notes;
+
+      return widgets.NoteListWidget(
+        notes: state.notes,
+        currentUserNpub: state.currentUserNpub,
+        notesNotifier: _notesNotifier,
+        profiles: state.profiles,
+        isLoading: state.isLoadingMore,
+        canLoadMore: state.canLoadMore,
+        onLoadMore: () {
+          context.read<ProfileBloc>().add(const ProfileLoadMoreNotesRequested());
+        },
+        onEmptyRefresh: () {
+          if (state.currentProfileNpub.isNotEmpty) {
+            context.read<ProfileBloc>().add(ProfileNotesLoaded(state.currentProfileNpub));
+          }
+        },
+        scrollController: _scrollController,
+      );
+    }
+
+    if (state is ProfileLoading) {
+      return const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(32.0),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
+    if (state is ProfileError) {
+      return SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: context.colors.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading notes',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  state.message,
+                  style: TextStyle(color: context.colors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                PrimaryButton(
+                  label: 'Retry',
+                  onPressed: () {
+                    context.read<ProfileBloc>().add(const ProfileRefreshed());
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return const SliverToBoxAdapter(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text('No notes from this user yet'),
+        ),
+      ),
     );
   }
 
   Future<void> _handleShare(BuildContext context) async {
     try {
-      final npub = widget.user.npub;
+      final authService = AppDI.get<AuthService>();
+      final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
       final nostrLink = 'nostr:$npub';
       
       final box = context.findRenderObject() as RenderBox?;

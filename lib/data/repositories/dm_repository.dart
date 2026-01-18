@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../core/base/result.dart';
-import '../../models/dm_message_model.dart';
 import '../services/dm_service.dart';
 import '../services/user_batch_fetcher.dart';
 import '../services/auth_service.dart';
@@ -12,11 +11,13 @@ class DmRepository {
   final UserRepository _userRepository;
   final AuthService _authService;
 
-  List<DmConversationModel>? _lastResult;
+  List<Map<String, dynamic>>? _lastResult;
 
-  final StreamController<List<DmConversationModel>> _conversationsController = StreamController<List<DmConversationModel>>.broadcast();
+  final StreamController<List<Map<String, dynamic>>> _conversationsController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
 
-  Stream<List<DmConversationModel>> get conversationsStream => _conversationsController.stream;
+  Stream<List<Map<String, dynamic>>> get conversationsStream =>
+      _conversationsController.stream;
 
   DmRepository({
     required DmService dmService,
@@ -26,19 +27,21 @@ class DmRepository {
         _userRepository = userRepository,
         _authService = authService;
 
-  List<DmConversationModel>? get cachedConversations => _lastResult;
+  List<Map<String, dynamic>>? get cachedConversations => _lastResult;
 
   void dispose() {
     _conversationsController.close();
   }
 
-  Future<Result<List<DmConversationModel>>> getConversations({bool forceRefresh = false}) async {
+  Future<Result<List<Map<String, dynamic>>>> getConversations(
+      {bool forceRefresh = false}) async {
     if (!forceRefresh && _lastResult != null) {
       _enrichConversationsInBackground(_lastResult!);
       return Result.success(_lastResult!);
     }
 
-    final result = await _dmService.getConversations(forceRefresh: forceRefresh);
+    final result =
+        await _dmService.getConversations(forceRefresh: forceRefresh);
 
     if (result.isError) {
       return Result.error(result.error!);
@@ -52,19 +55,24 @@ class DmRepository {
 
     for (var i = 0; i < conversations.length; i++) {
       final conversation = conversations[i];
-      final npub = _authService.hexToNpub(conversation.otherUserPubkeyHex) ?? conversation.otherUserPubkeyHex;
+      final otherUserPubkeyHex =
+          conversation['otherUserPubkeyHex'] as String? ?? '';
+      final npub =
+          _authService.hexToNpub(otherUserPubkeyHex) ?? otherUserPubkeyHex;
 
-      final cachedUser = _userRepository.getCachedUserSync(npub);
+      final cachedUser = await _userRepository.getCachedUser(npub);
 
       if (cachedUser != null) {
-        conversations[i] = conversation.copyWith(
-          otherUserName: cachedUser.name.isNotEmpty ? cachedUser.name : npub.substring(0, 12),
-          otherUserProfileImage: cachedUser.profileImage,
-        );
+        final userName = cachedUser['name'] as String? ?? '';
+        final userProfileImage = cachedUser['profileImage'] as String? ?? '';
+        conversations[i] = Map<String, dynamic>.from(conversation)
+          ..['otherUserName'] = userName.isNotEmpty
+              ? userName
+              : (npub.length > 12 ? npub.substring(0, 12) : npub)
+          ..['otherUserProfileImage'] = userProfileImage;
       } else {
-        conversations[i] = conversation.copyWith(
-          otherUserName: npub.substring(0, 12),
-        );
+        conversations[i] = Map<String, dynamic>.from(conversation)
+          ..['otherUserName'] = npub.length > 12 ? npub.substring(0, 12) : npub;
       }
     }
 
@@ -75,37 +83,52 @@ class DmRepository {
     return Result.success(conversations);
   }
 
-  Future<void> _enrichConversationsInBackground(List<DmConversationModel> conversations) async {
+  Future<void> _enrichConversationsInBackground(
+      List<Map<String, dynamic>> conversations) async {
     try {
       final npubsToFetch = <String>[];
 
       for (final conversation in conversations) {
-        final npub = _authService.hexToNpub(conversation.otherUserPubkeyHex) ?? conversation.otherUserPubkeyHex;
+        final otherUserPubkeyHex =
+            conversation['otherUserPubkeyHex'] as String? ?? '';
+        final npub =
+            _authService.hexToNpub(otherUserPubkeyHex) ?? otherUserPubkeyHex;
 
-        final cachedUser = _userRepository.getCachedUserSync(npub);
-        if (cachedUser == null || cachedUser.name.isEmpty || cachedUser.name.length <= 12) {
+        final cachedUser = await _userRepository.getCachedUser(npub);
+        final cachedUserName = cachedUser?['name'] as String? ?? '';
+        if (cachedUser == null ||
+            cachedUserName.isEmpty ||
+            cachedUserName.length <= 12) {
           npubsToFetch.add(npub);
         }
       }
 
       if (npubsToFetch.isEmpty) return;
 
-      final profiles = await _userRepository.getUserProfiles(npubsToFetch, priority: FetchPriority.high);
+      final profiles = await _userRepository.getUserProfiles(npubsToFetch,
+          priority: FetchPriority.high);
 
       bool hasUpdates = false;
       for (var i = 0; i < conversations.length; i++) {
         final conversation = conversations[i];
-        final npub = _authService.hexToNpub(conversation.otherUserPubkeyHex) ?? conversation.otherUserPubkeyHex;
+        final otherUserPubkeyHex =
+            conversation['otherUserPubkeyHex'] as String? ?? '';
+        final npub =
+            _authService.hexToNpub(otherUserPubkeyHex) ?? otherUserPubkeyHex;
 
         final profileResult = profiles[npub];
         if (profileResult != null) {
           profileResult.fold(
             (user) {
-              if (user.name.isNotEmpty && user.name != conversation.otherUserName) {
-                conversations[i] = conversation.copyWith(
-                  otherUserName: user.name,
-                  otherUserProfileImage: user.profileImage,
-                );
+              final currentName =
+                  conversation['otherUserName'] as String? ?? '';
+              final userName = (user as dynamic)?.name as String? ?? '';
+              final userProfileImage =
+                  (user as dynamic)?.profileImage as String? ?? '';
+              if (userName.isNotEmpty && userName != currentName) {
+                conversations[i] = Map<String, dynamic>.from(conversation)
+                  ..['otherUserName'] = userName
+                  ..['otherUserProfileImage'] = userProfileImage;
                 hasUpdates = true;
               }
             },
@@ -122,16 +145,18 @@ class DmRepository {
     }
   }
 
-  Future<Result<List<DmMessageModel>>> getMessages(String otherUserPubkeyHex) async {
+  Future<Result<List<Map<String, dynamic>>>> getMessages(
+      String otherUserPubkeyHex) async {
     return await _dmService.getMessages(otherUserPubkeyHex);
   }
 
-  Future<Result<void>> sendMessage(String recipientPubkeyHex, String content) async {
+  Future<Result<void>> sendMessage(
+      String recipientPubkeyHex, String content) async {
     return await _dmService.sendMessage(recipientPubkeyHex, content);
   }
 
-  Stream<List<DmMessageModel>> subscribeToMessages(String otherUserPubkeyHex) {
+  Stream<List<Map<String, dynamic>>> subscribeToMessages(
+      String otherUserPubkeyHex) {
     return _dmService.subscribeToMessages(otherUserPubkeyHex);
   }
 }
-

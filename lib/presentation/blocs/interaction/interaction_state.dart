@@ -1,0 +1,60 @@
+import '../../../core/bloc/base/base_state.dart';
+
+abstract class InteractionState extends BaseState {
+  const InteractionState();
+}
+
+class InteractionInitial extends InteractionState {
+  const InteractionInitial();
+}
+
+class InteractionLoaded extends InteractionState {
+  final int reactionCount;
+  final int repostCount;
+  final int replyCount;
+  final int zapAmount;
+  final bool hasReacted;
+  final bool hasReposted;
+  final bool hasZapped;
+
+  const InteractionLoaded({
+    this.reactionCount = 0,
+    this.repostCount = 0,
+    this.replyCount = 0,
+    this.zapAmount = 0,
+    this.hasReacted = false,
+    this.hasReposted = false,
+    this.hasZapped = false,
+  });
+
+  InteractionLoaded copyWith({
+    int? reactionCount,
+    int? repostCount,
+    int? replyCount,
+    int? zapAmount,
+    bool? hasReacted,
+    bool? hasReposted,
+    bool? hasZapped,
+  }) {
+    return InteractionLoaded(
+      reactionCount: reactionCount ?? this.reactionCount,
+      repostCount: repostCount ?? this.repostCount,
+      replyCount: replyCount ?? this.replyCount,
+      zapAmount: zapAmount ?? this.zapAmount,
+      hasReacted: hasReacted ?? this.hasReacted,
+      hasReposted: hasReposted ?? this.hasReposted,
+      hasZapped: hasZapped ?? this.hasZapped,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        reactionCount,
+        repostCount,
+        replyCount,
+        zapAmount,
+        hasReacted,
+        hasReposted,
+        hasZapped,
+      ];
+}

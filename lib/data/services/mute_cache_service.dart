@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'package:flutter/foundation.dart';
 import 'isar_database_service.dart';
 
 class CachedMuteEntry {
@@ -27,7 +28,8 @@ class CachedMuteEntry {
 
 class MuteCacheService {
   static MuteCacheService? _instance;
-  static MuteCacheService get instance => _instance ??= MuteCacheService._internal();
+  static MuteCacheService get instance =>
+      _instance ??= MuteCacheService._internal();
 
   MuteCacheService._internal() {
     _initializeIsar();
@@ -58,6 +60,12 @@ class MuteCacheService {
     }
   }
 
+  Future<void> _ensureInitialized() async {
+    if (!_isIsarInitialized) {
+      await _initializeIsar();
+    }
+  }
+
   Future<List<String>?> get(String userPubkeyHex) async {
     final memoryEntry = _memoryCache[userPubkeyHex];
 
@@ -74,6 +82,8 @@ class MuteCacheService {
       }
     }
 
+    await _ensureInitialized();
+
     if (_isIsarInitialized) {
       try {
         final muteData = await _isarService.getMuteList(userPubkeyHex);
@@ -82,6 +92,7 @@ class MuteCacheService {
           return muteData;
         }
       } catch (e) {
+        debugPrint('[MuteCacheService] Error reading from Isar: $e');
       }
     }
 
@@ -108,7 +119,8 @@ class MuteCacheService {
     return List<String>.from(entry.muteList);
   }
 
-  void _putInMemory(String userPubkeyHex, List<String> muteList, {Duration? ttl}) {
+  void _putInMemory(String userPubkeyHex, List<String> muteList,
+      {Duration? ttl}) {
     final now = DateTime.now();
     final expiresAt = now.add(ttl ?? defaultTTL);
 
@@ -132,14 +144,18 @@ class MuteCacheService {
     _memoryCache[userPubkeyHex] = entry;
   }
 
-  Future<void> put(String userPubkeyHex, List<String> muteList, {Duration? ttl}) async {
+  Future<void> put(String userPubkeyHex, List<String> muteList,
+      {Duration? ttl}) async {
     _memoryCache.remove(userPubkeyHex);
     _putInMemory(userPubkeyHex, muteList, ttl: ttl);
+
+    await _ensureInitialized();
 
     if (_isIsarInitialized) {
       try {
         await _isarService.saveMuteList(userPubkeyHex, muteList);
       } catch (e) {
+        debugPrint('[MuteCacheService] Error saving to Isar: $e');
       }
     }
   }
@@ -177,7 +193,8 @@ class MuteCacheService {
     }
   }
 
-  Future<Map<String, List<String>>> batchGet(List<String> userPubkeyHexList) async {
+  Future<Map<String, List<String>>> batchGet(
+      List<String> userPubkeyHexList) async {
     final result = <String, List<String>>{};
     final missingKeys = <String>[];
 
@@ -192,20 +209,23 @@ class MuteCacheService {
 
     if (missingKeys.isNotEmpty && _isIsarInitialized) {
       try {
-        final persistentMuteLists = await _isarService.getMuteLists(missingKeys);
+        final persistentMuteLists =
+            await _isarService.getMuteLists(missingKeys);
 
         for (final entry in persistentMuteLists.entries) {
           _putInMemory(entry.key, entry.value);
           result[entry.key] = entry.value;
         }
       } catch (e) {
+        // Silently handle error - cache miss is acceptable
       }
     }
 
     return result;
   }
 
-  Future<void> batchPut(Map<String, List<String>> muteLists, {Duration? ttl}) async {
+  Future<void> batchPut(Map<String, List<String>> muteLists,
+      {Duration? ttl}) async {
     for (final entry in muteLists.entries) {
       _putInMemory(entry.key, entry.value, ttl: ttl);
     }
@@ -214,6 +234,7 @@ class MuteCacheService {
       try {
         await _isarService.saveMuteLists(muteLists);
       } catch (e) {
+        // Silently handle error - cache miss is acceptable
       }
     }
   }
@@ -275,7 +296,7 @@ class MuteCacheService {
     _isCleanupRunning = true;
     _runCleanupLoop();
   }
-  
+
   Future<void> _runCleanupLoop() async {
     while (_isCleanupRunning) {
       await Future.delayed(cleanupInterval);
@@ -308,4 +329,3 @@ class MuteCacheService {
     }
   }
 }
-

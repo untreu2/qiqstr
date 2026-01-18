@@ -1,55 +1,24 @@
 import 'dart:async';
-import 'dart:collection';
 import 'package:flutter/foundation.dart';
-import '../../models/user_model.dart';
 import 'isar_database_service.dart';
-
-class CachedUserEntry {
-  final UserModel user;
-  final DateTime cachedAt;
-  final DateTime expiresAt;
-  int accessCount;
-  DateTime lastAccessedAt;
-
-  CachedUserEntry({
-    required this.user,
-    required this.cachedAt,
-    required this.expiresAt,
-    this.accessCount = 1,
-    required this.lastAccessedAt,
-  });
-
-  bool get isExpired => DateTime.now().isAfter(expiresAt);
-
-  void recordAccess() {
-    accessCount++;
-    lastAccessedAt = DateTime.now();
-  }
-}
 
 class UserCacheService {
   static UserCacheService? _instance;
-  static UserCacheService get instance => _instance ??= UserCacheService._internal();
+  static UserCacheService get instance =>
+      _instance ??= UserCacheService._internal();
 
   UserCacheService._internal() {
     _initializeIsar();
   }
 
-  static const int maxCacheSize = 5000;
-  static const Duration defaultTTL = Duration(minutes: 30);
   static const Duration persistentTTL = Duration(days: 7);
-
-  final LinkedHashMap<String, CachedUserEntry> _memoryCache = LinkedHashMap();
 
   final IsarDatabaseService _isarService = IsarDatabaseService.instance;
 
-  final Map<String, Completer<UserModel?>> _pendingRequests = {};
+  final Map<String, Completer<Map<String, dynamic>?>> _pendingRequests = {};
 
-  int _l1CacheHits = 0;
-  int _l2CacheHits = 0;
+  int _cacheHits = 0;
   int _cacheMisses = 0;
-  int _cacheEvictions = 0;
-  int _cacheExpiries = 0;
   int _deduplicatedRequests = 0;
   int _persistentWrites = 0;
   int _persistentReads = 0;
@@ -57,127 +26,67 @@ class UserCacheService {
   bool _isIsarInitialized = false;
 
   IsarDatabaseService get isarService => _isarService;
-  LinkedHashMap<String, CachedUserEntry> get memoryCache => _memoryCache;
 
   Future<void> _initializeIsar() async {
     try {
       await _isarService.initialize();
       _isIsarInitialized = true;
-      debugPrint('[UserCacheService] Isar persistent cache initialized');
+      debugPrint('[UserCacheService] Isar cache initialized');
     } catch (e) {
       debugPrint('[UserCacheService] Error initializing Isar: $e');
       _isIsarInitialized = false;
     }
   }
 
-  Future<UserModel?> get(String pubkeyHex) async {
-    final memoryEntry = _memoryCache[pubkeyHex];
-
-    if (memoryEntry != null) {
-      memoryEntry.recordAccess();
-
-      if (_memoryCache.length > 1 && _memoryCache.keys.last != pubkeyHex) {
-        _memoryCache.remove(pubkeyHex);
-        _memoryCache[pubkeyHex] = memoryEntry;
-      }
-
-      _l1CacheHits++;
-      debugPrint('[UserCacheService] L1 Cache HIT: ${memoryEntry.user.name}');
-      return memoryEntry.user;
+  Future<Map<String, dynamic>?> get(String pubkeyHex) async {
+    if (!_isIsarInitialized) {
+      _cacheMisses++;
+      return null;
     }
 
-    if (_isIsarInitialized) {
-      try {
-        final profileData = await _isarService.getUserProfile(pubkeyHex);
-        if (profileData != null) {
-          _l2CacheHits++;
-          _persistentReads++;
+    try {
+      final profileData = await _isarService.getUserProfile(pubkeyHex);
+      if (profileData != null) {
+        _cacheHits++;
+        _persistentReads++;
 
-          final user = UserModel.fromCachedProfile(pubkeyHex, profileData);
-          _putInMemory(user);
-
-          debugPrint('[UserCacheService] L2 Cache HIT (promoted to L1): ${user.name}');
-          return user;
-        }
-      } catch (e) {
-        debugPrint('[UserCacheService] Error reading from L2 cache: $e');
+        final user = _createUserFromProfileData(pubkeyHex, profileData);
+        return user;
       }
+    } catch (e) {
+      debugPrint('[UserCacheService] Error reading from cache: $e');
     }
 
     _cacheMisses++;
     return null;
   }
 
-  UserModel? getSync(String pubkeyHex) {
-    final entry = _memoryCache[pubkeyHex];
+  Future<void> put(Map<String, dynamic> user, {Duration? ttl}) async {
+    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
 
-    if (entry == null) {
-      return null;
-    }
-
-    entry.recordAccess();
-    
-    if (_memoryCache.length > 1 && _memoryCache.keys.last != pubkeyHex) {
-      _memoryCache.remove(pubkeyHex);
-      _memoryCache[pubkeyHex] = entry;
-    }
-
-    _l1CacheHits++;
-    return entry.user;
-  }
-
-  void _putInMemory(UserModel user, {Duration? ttl}) {
-    final now = DateTime.now();
-    final expiresAt = now.add(ttl ?? defaultTTL);
-
-    final entry = CachedUserEntry(
-      user: user,
-      cachedAt: now,
-      expiresAt: expiresAt,
-      lastAccessedAt: now,
-    );
-
-    if (_memoryCache.containsKey(user.pubkeyHex)) {
-      _memoryCache.remove(user.pubkeyHex);
-      _memoryCache[user.pubkeyHex] = entry;
-      return;
-    }
-
-    if (_memoryCache.length >= maxCacheSize) {
-      _evictLRU();
-    }
-
-    _memoryCache[user.pubkeyHex] = entry;
-  }
-
-  Future<void> put(UserModel user, {Duration? ttl}) async {
-    _memoryCache.remove(user.pubkeyHex);
-    _putInMemory(user, ttl: ttl);
-
-    if (_isIsarInitialized) {
+    if (_isIsarInitialized && pubkeyHex.isNotEmpty) {
       try {
-        final profileData = {
-          'name': user.name,
-          'about': user.about,
-          'nip05': user.nip05,
-          'banner': user.banner,
-          'profileImage': user.profileImage,
-          'lud16': user.lud16,
-          'website': user.website,
-          'nip05Verified': user.nip05Verified.toString(),
+        final profileData = <String, String>{
+          'name': user['name'] as String? ?? '',
+          'about': user['about'] as String? ?? '',
+          'nip05': user['nip05'] as String? ?? '',
+          'banner': user['banner'] as String? ?? '',
+          'profileImage': user['profileImage'] as String? ?? '',
+          'lud16': user['lud16'] as String? ?? '',
+          'website': user['website'] as String? ?? '',
+          'nip05Verified': (user['nip05Verified'] as bool? ?? false).toString(),
         };
-        await _isarService.saveUserProfile(user.pubkeyHex, profileData);
+        await _isarService.saveUserProfile(pubkeyHex, profileData);
         _persistentWrites++;
-        debugPrint('[UserCacheService] Profile cache updated: ${user.name}');
       } catch (e) {
-        debugPrint('[UserCacheService] Error writing to persistent cache: $e');
+        debugPrint('[UserCacheService] Error writing to cache: $e');
       }
     }
   }
 
-  Future<UserModel?> getOrFetch(
+  Future<Map<String, dynamic>?> getOrFetch(
     String pubkeyHex,
-    Future<UserModel?> Function() fetcher,
+    Future<Map<String, dynamic>?> Function() fetcher,
   ) async {
     final cached = await get(pubkeyHex);
     if (cached != null) {
@@ -186,11 +95,10 @@ class UserCacheService {
 
     if (_pendingRequests.containsKey(pubkeyHex)) {
       _deduplicatedRequests++;
-      debugPrint('[UserCacheService] Deduplicating request for: $pubkeyHex');
       return await _pendingRequests[pubkeyHex]!.future;
     }
 
-    final completer = Completer<UserModel?>();
+    final completer = Completer<Map<String, dynamic>?>();
     _pendingRequests[pubkeyHex] = completer;
 
     try {
@@ -211,129 +119,100 @@ class UserCacheService {
     }
   }
 
-  Future<Map<String, UserModel>> batchGet(List<String> pubkeyHexList) async {
-    final result = <String, UserModel>{};
-    final missingKeys = <String>[];
+  Future<Map<String, Map<String, dynamic>>> batchGet(
+      List<String> pubkeyHexList) async {
+    final result = <String, Map<String, dynamic>>{};
 
-    for (final pubkeyHex in pubkeyHexList) {
-      final user = getSync(pubkeyHex);
-      if (user != null) {
-        result[pubkeyHex] = user;
-      } else {
-        missingKeys.add(pubkeyHex);
-      }
+    if (!_isIsarInitialized || pubkeyHexList.isEmpty) {
+      return result;
     }
 
-    if (missingKeys.isNotEmpty && _isIsarInitialized) {
-      try {
-        final persistentProfiles = await _isarService.getUserProfiles(missingKeys);
+    try {
+      final persistentProfiles =
+          await _isarService.getUserProfiles(pubkeyHexList);
 
-        for (final entry in persistentProfiles.entries) {
-          _l2CacheHits++;
-          _persistentReads++;
+      for (final entry in persistentProfiles.entries) {
+        _cacheHits++;
+        _persistentReads++;
 
-          final user = UserModel.fromCachedProfile(entry.key, entry.value);
-          _putInMemory(user);
-          result[entry.key] = user;
-        }
-      } catch (e) {
-        debugPrint('[UserCacheService] Error batch reading from L2 cache: $e');
+        final user = _createUserFromProfileData(entry.key, entry.value);
+        result[entry.key] = user;
       }
+    } catch (e) {
+      debugPrint('[UserCacheService] Error batch reading from cache: $e');
     }
 
     return result;
   }
 
-  Future<void> batchPut(List<UserModel> users, {Duration? ttl}) async {
-    for (final user in users) {
-      _putInMemory(user, ttl: ttl);
+  Future<void> batchPut(List<Map<String, dynamic>> users,
+      {Duration? ttl}) async {
+    if (!_isIsarInitialized || users.isEmpty) {
+      return;
     }
 
-    if (_isIsarInitialized && users.isNotEmpty) {
-      try {
-        final profilesMap = <String, Map<String, String>>{};
+    try {
+      final profilesMap = <String, Map<String, String>>{};
 
-        for (final user in users) {
-          profilesMap[user.pubkeyHex] = {
-            'name': user.name,
-            'about': user.about,
-            'nip05': user.nip05,
-            'banner': user.banner,
-            'profileImage': user.profileImage,
-            'lud16': user.lud16,
-            'website': user.website,
-            'nip05Verified': user.nip05Verified.toString(),
+      for (final user in users) {
+        final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+        if (pubkeyHex.isNotEmpty) {
+          profilesMap[pubkeyHex] = {
+            'name': user['name'] as String? ?? '',
+            'about': user['about'] as String? ?? '',
+            'nip05': user['nip05'] as String? ?? '',
+            'banner': user['banner'] as String? ?? '',
+            'profileImage': user['profileImage'] as String? ?? '',
+            'lud16': user['lud16'] as String? ?? '',
+            'website': user['website'] as String? ?? '',
+            'nip05Verified':
+                (user['nip05Verified'] as bool? ?? false).toString(),
           };
         }
-
-        await _isarService.saveUserProfiles(profilesMap);
-        _persistentWrites += users.length;
-      } catch (e) {
-        debugPrint('[UserCacheService] Error batch writing to persistent cache: $e');
       }
+
+      await _isarService.saveUserProfiles(profilesMap);
+      _persistentWrites += users.length;
+    } catch (e) {
+      debugPrint('[UserCacheService] Error batch writing to cache: $e');
     }
   }
 
   Future<bool> contains(String pubkeyHex) async {
-    final entry = _memoryCache[pubkeyHex];
-    if (entry != null) {
-      return true;
+    if (!_isIsarInitialized) {
+      return false;
     }
 
-    if (_isIsarInitialized) {
-      return await _isarService.hasUserProfile(pubkeyHex);
-    }
-
-    return false;
+    return await _isarService.hasUserProfile(pubkeyHex);
   }
 
-  Future<void> invalidate(String pubkeyHex) async {
-    _memoryCache.remove(pubkeyHex);
-  }
+  Future<void> invalidate(String pubkeyHex) async {}
 
   Future<void> clear() async {
-    _memoryCache.clear();
     _pendingRequests.clear();
-
     _resetStats();
   }
 
-  void _evictLRU() {
-    if (_memoryCache.isEmpty) return;
-
-    final firstKey = _memoryCache.keys.first;
-    _memoryCache.remove(firstKey);
-    _cacheEvictions++;
-  }
-
   Future<Map<String, dynamic>> getStats() async {
-    final totalHits = _l1CacheHits + _l2CacheHits;
-    final totalRequests = totalHits + _cacheMisses;
-    final hitRate = totalRequests > 0 ? (totalHits / totalRequests * 100).toStringAsFixed(1) : '0.0';
-    final l1HitRate = totalRequests > 0 ? (_l1CacheHits / totalRequests * 100).toStringAsFixed(1) : '0.0';
-    final l2HitRate = totalRequests > 0 ? (_l2CacheHits / totalRequests * 100).toStringAsFixed(1) : '0.0';
+    final totalRequests = _cacheHits + _cacheMisses;
+    final hitRate = totalRequests > 0
+        ? (_cacheHits / totalRequests * 100).toStringAsFixed(1)
+        : '0.0';
 
-    int? persistentCount;
+    int? cacheCount;
     if (_isIsarInitialized) {
-      persistentCount = await _isarService.getUserProfileCount();
+      cacheCount = await _isarService.getUserProfileCount();
     }
 
     return {
-      'l1CacheSize': _memoryCache.length,
-      'l1MaxSize': maxCacheSize,
-      'l1CacheHits': _l1CacheHits,
-      'l1HitRate': '$l1HitRate%',
-      'l2Initialized': _isIsarInitialized,
-      'l2CacheSize': persistentCount,
-      'l2CacheHits': _l2CacheHits,
-      'l2HitRate': '$l2HitRate%',
+      'initialized': _isIsarInitialized,
+      'cacheSize': cacheCount,
+      'cacheHits': _cacheHits,
+      'hitRate': '$hitRate%',
+      'cacheMisses': _cacheMisses,
       'persistentWrites': _persistentWrites,
       'persistentReads': _persistentReads,
-      'cacheMisses': _cacheMisses,
-      'cacheEvictions': _cacheEvictions,
-      'cacheExpiries': _cacheExpiries,
       'deduplicatedRequests': _deduplicatedRequests,
-      'overallHitRate': '$hitRate%',
       'pendingRequests': _pendingRequests.length,
       'totalRequests': totalRequests,
     };
@@ -341,42 +220,48 @@ class UserCacheService {
 
   Future<void> printStats() async {
     final stats = await getStats();
-    debugPrint('\n=== UserCacheService Statistics (2-Tier) ===');
-    debugPrint('--- L1 Cache (Memory) ---');
-    debugPrint('  Size: ${stats['l1CacheSize']}/${stats['l1MaxSize']}');
-    debugPrint('  Hits: ${stats['l1CacheHits']} (${stats['l1HitRate']})');
-    debugPrint('--- L2 Cache (Persistent) ---');
-    debugPrint('  Initialized: ${stats['l2Initialized']}');
-    debugPrint('  Size: ${stats['l2CacheSize']}');
-    debugPrint('  Hits: ${stats['l2CacheHits']} (${stats['l2HitRate']})');
+    debugPrint('\n=== UserCacheService Statistics ===');
+    debugPrint('  Initialized: ${stats['initialized']}');
+    debugPrint('  Size: ${stats['cacheSize']}');
+    debugPrint('  Hits: ${stats['cacheHits']} (${stats['hitRate']})');
+    debugPrint('  Misses: ${stats['cacheMisses']}');
     debugPrint('  Reads: ${stats['persistentReads']}');
     debugPrint('  Writes: ${stats['persistentWrites']}');
-    debugPrint('--- Overall ---');
-    debugPrint('  Hit Rate: ${stats['overallHitRate']}');
-    debugPrint('  Misses: ${stats['cacheMisses']}');
-    debugPrint('  Evictions: ${stats['cacheEvictions']}');
     debugPrint('  Deduplicated: ${stats['deduplicatedRequests']}');
     debugPrint('  Pending: ${stats['pendingRequests']}');
-    debugPrint('==========================================\n');
+    debugPrint('====================================\n');
   }
 
   void _resetStats() {
-    _l1CacheHits = 0;
-    _l2CacheHits = 0;
+    _cacheHits = 0;
     _cacheMisses = 0;
-    _cacheEvictions = 0;
-    _cacheExpiries = 0;
     _deduplicatedRequests = 0;
     _persistentWrites = 0;
     _persistentReads = 0;
   }
 
   Future<void> dispose() async {
-    _memoryCache.clear();
     _pendingRequests.clear();
 
     if (_isIsarInitialized) {
       await _isarService.close();
     }
+  }
+
+  Map<String, dynamic> _createUserFromProfileData(
+      String pubkeyHex, Map<String, String> profileData) {
+    return {
+      'pubkeyHex': pubkeyHex,
+      'name': profileData['name'] ?? '',
+      'about': profileData['about'] ?? '',
+      'profileImage': profileData['profileImage'] ?? '',
+      'banner': profileData['banner'] ?? '',
+      'website': profileData['website'] ?? '',
+      'nip05': profileData['nip05'] ?? '',
+      'lud16': profileData['lud16'] ?? '',
+      'updatedAt': DateTime.now(),
+      'nip05Verified': profileData['nip05Verified'] == 'true',
+      'followerCount': 0,
+    };
   }
 }

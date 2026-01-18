@@ -1,25 +1,33 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../models/user_model.dart';
-import '../../models/following_model.dart';
-import '../../models/mute_model.dart';
+import '../../models/event_model.dart';
 
 class IsarDatabaseService {
   static IsarDatabaseService? _instance;
-  static IsarDatabaseService get instance => _instance ??= IsarDatabaseService._internal();
+  static IsarDatabaseService get instance =>
+      _instance ??= IsarDatabaseService._internal();
 
   IsarDatabaseService._internal();
 
   Isar? _isar;
   bool _isInitialized = false;
-  final Completer<void> _initCompleter = Completer<void>();
+  bool _isInitializing = false;
+  Completer<void> _initCompleter = Completer<void>();
 
   Future<Isar> get isar async {
-    if (!_isInitialized) {
-      await initialize();
+    if (_isInitialized) {
+      return _isar!;
     }
+
+    if (_isInitializing) {
+      await _initCompleter.future;
+      return _isar!;
+    }
+
+    await initialize();
     return _isar!;
   }
 
@@ -27,7 +35,12 @@ class IsarDatabaseService {
 
   Future<void> initialize() async {
     if (_isInitialized) return;
-    if (_initCompleter.isCompleted) return;
+    if (_isInitializing) {
+      await _initCompleter.future;
+      return;
+    }
+
+    _isInitializing = true;
 
     try {
       debugPrint('[IsarDatabaseService] Initializing Isar database...');
@@ -35,21 +48,24 @@ class IsarDatabaseService {
       final dir = await getApplicationDocumentsDirectory();
 
       _isar = await Isar.open(
-        [UserModelSchema, FollowingModelSchema, MuteModelSchema],
+        [EventModelSchema],
         directory: dir.path,
         name: 'qiqstr_db',
         inspector: kDebugMode,
       );
 
       _isInitialized = true;
+      _isInitializing = false;
       _initCompleter.complete();
 
-      debugPrint('[IsarDatabaseService]  Isar database initialized successfully');
+      debugPrint(
+          '[IsarDatabaseService] Isar database initialized successfully');
       debugPrint('[IsarDatabaseService] Database path: ${dir.path}');
-      debugPrint('[IsarDatabaseService] User profiles in cache: ${await getUserProfileCount()}');
     } catch (e) {
-      debugPrint('[IsarDatabaseService]  Error initializing Isar: $e');
+      _isInitializing = false;
+      debugPrint('[IsarDatabaseService] Error initializing Isar: $e');
       _initCompleter.completeError(e);
+      _initCompleter = Completer<void>();
       rethrow;
     }
   }
@@ -58,222 +74,20 @@ class IsarDatabaseService {
     await _initCompleter.future;
   }
 
-  Future<void> saveUserProfile(String pubkeyHex, Map<String, String> profileData) async {
-    try {
-      final db = await isar;
-      
-      // Get existing user to preserve followerCount if not updating it
-      final existingUser = await db.userModels.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
-      
-      final userModel = UserModel.fromUserModel(pubkeyHex, profileData);
-      
-      // Preserve followerCount if it exists and is not being updated
-      if (existingUser != null && existingUser.followerCount != null && profileData['followerCount'] == null) {
-        userModel.followerCount = existingUser.followerCount;
-      }
-
-      await db.writeTxn(() async {
-        await db.userModels.put(userModel);
-      });
-
-      debugPrint('[IsarDatabaseService]  Saved profile: ${profileData['name']} ($pubkeyHex)');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error saving user profile: $e');
-    }
-  }
-
-  Future<void> saveUserProfiles(Map<String, Map<String, String>> profiles) async {
-    try {
-      final db = await isar;
-      
-      // Get existing users to preserve followerCount
-      final pubkeyHexList = profiles.keys.toList();
-      final existingUsers = await db.userModels
-          .where()
-          .anyOf(pubkeyHexList, (q, String pubkeyHex) => q.pubkeyHexEqualTo(pubkeyHex))
-          .findAll();
-      final existingUsersMap = {for (var u in existingUsers) u.pubkeyHex: u};
-      
-      final userModels = profiles.entries.map((entry) {
-        final userModel = UserModel.fromUserModel(entry.key, entry.value);
-        // Preserve followerCount if it exists and is not being updated
-        final existingUser = existingUsersMap[entry.key];
-        if (existingUser != null && existingUser.followerCount != null && entry.value['followerCount'] == null) {
-          userModel.followerCount = existingUser.followerCount;
-        }
-        return userModel;
-      }).toList();
-
-      await db.writeTxn(() async {
-        await db.userModels.putAll(userModels);
-      });
-
-      debugPrint('[IsarDatabaseService]  Batch saved ${userModels.length} profiles');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error batch saving profiles: $e');
-    }
-  }
-
-  Future<Map<String, String>?> getUserProfile(String pubkeyHex) async {
-    try {
-      final db = await isar;
-      final user = await db.userModels.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
-
-      if (user != null) {
-        debugPrint('[IsarDatabaseService]  Retrieved profile from Isar: ${user.name}');
-        return user.toProfileData();
-      }
-
-      return null;
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error getting user profile: $e');
-      return null;
-    }
-  }
-
-  Future<Map<String, Map<String, String>>> getUserProfiles(List<String> pubkeyHexList) async {
-    try {
-      if (pubkeyHexList.isEmpty) return {};
-
-      final db = await isar;
-      final results = <String, Map<String, String>>{};
-
-      final userModels = await db.userModels
-          .where()
-          .anyOf(pubkeyHexList, (q, String pubkeyHex) => q.pubkeyHexEqualTo(pubkeyHex))
-          .findAll();
-
-      for (final model in userModels) {
-        results[model.pubkeyHex] = model.toProfileData();
-      }
-
-      debugPrint('[IsarDatabaseService]  Batch retrieved ${results.length}/${pubkeyHexList.length} profiles from Isar');
-      return results;
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error batch getting profiles: $e');
-      return {};
-    }
-  }
-
-  Future<bool> hasUserProfile(String pubkeyHex) async {
-    try {
-      final db = await isar;
-      final count = await db.userModels.where().pubkeyHexEqualTo(pubkeyHex).count();
-      return count > 0;
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error checking profile existence: $e');
-      return false;
-    }
-  }
-
-  Future<void> updateFollowerCount(String pubkeyHex, int followerCount) async {
-    try {
-      if (followerCount == 0) {
-        // Don't update if count is 0
-        return;
-      }
-
-      final db = await isar;
-      final user = await db.userModels.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
-
-      if (user != null) {
-        await db.writeTxn(() async {
-          user.followerCount = followerCount;
-          await db.userModels.put(user);
-        });
-        debugPrint('[IsarDatabaseService] Updated follower count for $pubkeyHex: $followerCount');
-      } else {
-        debugPrint('[IsarDatabaseService] User not found for follower count update: $pubkeyHex');
-      }
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error updating follower count: $e');
-    }
-  }
-
-  Future<List<UserModel>> getAllUserProfiles() async {
-    try {
-      final db = await isar;
-      return await db.userModels.where().findAll();
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error getting all profiles: $e');
-      return [];
-    }
-  }
-
-  Future<List<UserModel>> searchUsersByName(String query, {int limit = 50}) async {
-    try {
-      if (query.isEmpty) return [];
-
-      final db = await isar;
-      final lowerQuery = query.toLowerCase();
-
-      final allProfiles = await db.userModels.where().findAll();
-
-      final matchingProfiles = allProfiles
-          .where((profile) {
-            final nameLower = profile.name.toLowerCase();
-            final nip05Lower = profile.nip05.toLowerCase();
-
-            return nameLower.contains(lowerQuery) || nip05Lower.contains(lowerQuery);
-          })
-          .take(limit)
-          .toList();
-
-      debugPrint('[IsarDatabaseService]  Found ${matchingProfiles.length} profiles matching "$query"');
-      return matchingProfiles;
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error searching profiles by name: $e');
-      return [];
-    }
-  }
-
-  Future<List<UserModel>> getRandomUsersWithImages({int limit = 50}) async {
-    try {
-      final db = await isar;
-
-      final allProfiles = await db.userModels.where().findAll();
-      final completeProfiles = allProfiles
-          .where((profile) =>
-              profile.profileImage.isNotEmpty &&
-              profile.name != 'Anonymous' &&
-              profile.name.isNotEmpty &&
-              (profile.about.isNotEmpty || profile.nip05.isNotEmpty))
-          .toList();
-
-      if (completeProfiles.isEmpty) {
-        debugPrint('[IsarDatabaseService] No complete profiles found');
-        return [];
-      }
-
-      completeProfiles.shuffle();
-      final randomProfiles = completeProfiles.take(limit).toList();
-
-      debugPrint('[IsarDatabaseService]  Retrieved ${randomProfiles.length} random complete profiles');
-      return randomProfiles;
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error getting random profiles: $e');
-      return [];
-    }
-  }
-
-  Future<int> getUserProfileCount() async {
-    try {
-      final db = await isar;
-      return await db.userModels.count();
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error getting profile count: $e');
-      return 0;
+  Future<void> close() async {
+    if (_isar != null && _isar!.isOpen) {
+      await _isar!.close();
+      _isInitialized = false;
+      debugPrint('[IsarDatabaseService] Database closed');
     }
   }
 
   Future<Map<String, dynamic>> getStatistics() async {
     try {
       final db = await isar;
-      final totalProfiles = await db.userModels.count();
       final dbSize = await db.getSize();
 
       return {
-        'totalProfiles': totalProfiles,
         'databaseSize': '${(dbSize / 1024 / 1024).toStringAsFixed(2)} MB',
         'databaseSizeBytes': dbSize,
         'isInitialized': _isInitialized,
@@ -296,108 +110,186 @@ class IsarDatabaseService {
     debugPrint('===============================\n');
   }
 
-  Stream<UserModel?> watchUserProfile(String pubkeyHex) async* {
-    final db = await isar;
-    yield* db.userModels
-        .where()
-        .pubkeyHexEqualTo(pubkeyHex)
-        .watch(fireImmediately: true)
-        .map((users) => users.isEmpty ? null : users.first);
-  }
-
-  Stream<List<UserModel>> watchAllUserProfiles() async* {
-    final db = await isar;
-    yield* db.userModels.where().watch(fireImmediately: true);
-  }
-
-  Future<void> close() async {
-    if (_isar != null && _isar!.isOpen) {
-      await _isar!.close();
-      _isInitialized = false;
-      debugPrint('[IsarDatabaseService] Database closed');
-    }
-  }
-
-  Future<void> saveFollowingList(String userPubkeyHex, List<String> followingPubkeys) async {
-    try {
-      final db = await isar;
-      final followingModel = FollowingModel.fromFollowingModel(userPubkeyHex, followingPubkeys);
-
-      await db.writeTxn(() async {
-        await db.followingModels.put(followingModel);
-      });
-
-      debugPrint('[IsarDatabaseService] Saved following list: ${followingPubkeys.length} following for $userPubkeyHex');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error saving following list: $e');
-    }
-  }
-
-  Future<void> saveFollowingLists(Map<String, List<String>> followingLists) async {
-    try {
-      final db = await isar;
-      final followingModels = followingLists.entries.map((entry) {
-        return FollowingModel.fromFollowingModel(entry.key, entry.value);
-      }).toList();
-
-      await db.writeTxn(() async {
-        await db.followingModels.putAll(followingModels);
-      });
-
-      debugPrint('[IsarDatabaseService] Batch saved ${followingModels.length} following lists');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error batch saving following lists: $e');
-    }
+  static void reset() {
+    _instance?._isar?.close();
+    _instance = null;
   }
 
   Future<List<String>?> getFollowingList(String userPubkeyHex) async {
     try {
       final db = await isar;
-      final followingModel = await db.followingModels.where().userPubkeyHexEqualTo(userPubkeyHex).findFirst();
+      final kind3Events = await db.eventModels
+          .filter()
+          .pubkeyEqualTo(userPubkeyHex)
+          .kindEqualTo(3)
+          .sortByCreatedAtDesc()
+          .findFirst();
 
-      if (followingModel != null) {
-        debugPrint('[IsarDatabaseService] Retrieved following list from Isar: ${followingModel.followingPubkeys.length} following');
-        return followingModel.toFollowingList();
+      if (kind3Events == null) {
+        return null;
       }
 
-      return null;
+      final tags = kind3Events.getTags();
+      final followingList = <String>[];
+
+      for (final tag in tags) {
+        if (tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
+          final pubkey = tag[1];
+          if (pubkey.isNotEmpty) {
+            followingList.add(pubkey);
+          }
+        }
+      }
+
+      return followingList.isEmpty ? null : followingList;
     } catch (e) {
       debugPrint('[IsarDatabaseService] Error getting following list: $e');
       return null;
     }
   }
 
-  Future<Map<String, List<String>>> getFollowingLists(List<String> userPubkeyHexList) async {
+  Future<void> saveFollowingList(
+      String userPubkeyHex, List<String> followingList) async {
     try {
       final db = await isar;
-      final results = <String, List<String>>{};
 
-      if (userPubkeyHexList.isEmpty) return results;
+      final tags = followingList.map((pubkey) => ['p', pubkey]).toList();
+      final tagsSerialized = tags.map((tag) => jsonEncode(tag)).toList();
 
-      final followingModels = await db.followingModels
-          .where()
-          .anyOf(userPubkeyHexList, (q, String userPubkeyHex) => q.userPubkeyHexEqualTo(userPubkeyHex))
-          .findAll();
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final eventId = 'following_list_$userPubkeyHex';
 
-      for (final model in followingModels) {
-        results[model.userPubkeyHex] = model.toFollowingList();
-      }
+      final eventData = {
+        'id': eventId,
+        'pubkey': userPubkeyHex,
+        'kind': 3,
+        'created_at': now,
+        'content': '',
+        'tags': tags,
+        'sig': '',
+      };
 
-      debugPrint('[IsarDatabaseService] Batch retrieved ${results.length}/${userPubkeyHexList.length} following lists from Isar');
-      return results;
+      await db.writeTxn(() async {
+        final existing =
+            await db.eventModels.where().eventIdEqualTo(eventId).findFirst();
+
+        final eventModel = existing ?? EventModel();
+        eventModel.eventId = eventId;
+        eventModel.pubkey = userPubkeyHex;
+        eventModel.kind = 3;
+        eventModel.createdAt = now;
+        eventModel.content = '';
+        eventModel.tags = tagsSerialized;
+        eventModel.sig = '';
+        eventModel.rawEvent = jsonEncode(eventData);
+        eventModel.cachedAt = DateTime.now();
+
+        await db.eventModels.put(eventModel);
+      });
     } catch (e) {
-      debugPrint('[IsarDatabaseService] Error batch getting following lists: $e');
-      return {};
+      debugPrint('[IsarDatabaseService] Error saving following list: $e');
+    }
+  }
+
+  Future<Map<String, List<String>>> getFollowingLists(
+      List<String> userPubkeyHexList) async {
+    final result = <String, List<String>>{};
+
+    try {
+      final db = await isar;
+
+      for (final userPubkeyHex in userPubkeyHexList) {
+        final kind3Event = await db.eventModels
+            .filter()
+            .pubkeyEqualTo(userPubkeyHex)
+            .kindEqualTo(3)
+            .sortByCreatedAtDesc()
+            .findFirst();
+
+        if (kind3Event != null) {
+          final tags = kind3Event.getTags();
+          final followingList = <String>[];
+
+          for (final tag in tags) {
+            if (tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
+              final pubkey = tag[1];
+              if (pubkey.isNotEmpty) {
+                followingList.add(pubkey);
+              }
+            }
+          }
+
+          if (followingList.isNotEmpty) {
+            result[userPubkeyHex] = followingList;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error getting following lists: $e');
+    }
+
+    return result;
+  }
+
+  Future<void> saveFollowingLists(
+      Map<String, List<String>> followingLists) async {
+    try {
+      final db = await isar;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      await db.writeTxn(() async {
+        for (final entry in followingLists.entries) {
+          final userPubkeyHex = entry.key;
+          final followingList = entry.value;
+
+          final tags = followingList.map((pubkey) => ['p', pubkey]).toList();
+          final tagsSerialized = tags.map((tag) => jsonEncode(tag)).toList();
+
+          final eventId = 'following_list_$userPubkeyHex';
+
+          final eventData = {
+            'id': eventId,
+            'pubkey': userPubkeyHex,
+            'kind': 3,
+            'created_at': now,
+            'content': '',
+            'tags': tags,
+            'sig': '',
+          };
+
+          final existing =
+              await db.eventModels.where().eventIdEqualTo(eventId).findFirst();
+
+          final eventModel = existing ?? EventModel();
+          eventModel.eventId = eventId;
+          eventModel.pubkey = userPubkeyHex;
+          eventModel.kind = 3;
+          eventModel.createdAt = now;
+          eventModel.content = '';
+          eventModel.tags = tagsSerialized;
+          eventModel.sig = '';
+          eventModel.rawEvent = jsonEncode(eventData);
+          eventModel.cachedAt = DateTime.now();
+
+          await db.eventModels.put(eventModel);
+        }
+      });
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error saving following lists: $e');
     }
   }
 
   Future<bool> hasFollowingList(String userPubkeyHex) async {
     try {
       final db = await isar;
-      final count = await db.followingModels.where().userPubkeyHexEqualTo(userPubkeyHex).count();
-      return count > 0;
+      final exists = await db.eventModels
+          .filter()
+          .pubkeyEqualTo(userPubkeyHex)
+          .kindEqualTo(3)
+          .isEmpty();
+      return !exists;
     } catch (e) {
-      debugPrint('[IsarDatabaseService] Error checking following list existence: $e');
+      debugPrint('[IsarDatabaseService] Error checking following list: $e');
       return false;
     }
   }
@@ -406,56 +298,14 @@ class IsarDatabaseService {
     try {
       final db = await isar;
       await db.writeTxn(() async {
-        await db.followingModels.deleteByUserPubkeyHex(userPubkeyHex);
+        await db.eventModels
+            .filter()
+            .pubkeyEqualTo(userPubkeyHex)
+            .kindEqualTo(3)
+            .deleteAll();
       });
-      debugPrint('[IsarDatabaseService] Deleted following list: $userPubkeyHex');
     } catch (e) {
       debugPrint('[IsarDatabaseService] Error deleting following list: $e');
-    }
-  }
-
-  Future<List<FollowingModel>> getAllFollowingLists() async {
-    try {
-      final db = await isar;
-      return await db.followingModels.where().findAll();
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error getting all following lists: $e');
-      return [];
-    }
-  }
-
-  Future<int> getFollowingListCount() async {
-    try {
-      final db = await isar;
-      return await db.followingModels.count();
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error getting following list count: $e');
-      return 0;
-    }
-  }
-
-  Future<int> cleanupExpiredFollowingLists({Duration ttl = const Duration(days: 3)}) async {
-    try {
-      final db = await isar;
-      final cutoffDate = DateTime.now().subtract(ttl);
-
-      final expiredFollowingLists = await db.followingModels.filter().cachedAtLessThan(cutoffDate).findAll();
-
-      if (expiredFollowingLists.isEmpty) {
-        return 0;
-      }
-
-      await db.writeTxn(() async {
-        for (final followingList in expiredFollowingLists) {
-          await db.followingModels.delete(followingList.id);
-        }
-      });
-
-      debugPrint('[IsarDatabaseService] Cleaned up ${expiredFollowingLists.length} expired following lists');
-      return expiredFollowingLists.length;
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error cleaning up expired following lists: $e');
-      return 0;
     }
   }
 
@@ -463,108 +313,187 @@ class IsarDatabaseService {
     try {
       final db = await isar;
       await db.writeTxn(() async {
-        await db.followingModels.clear();
+        await db.eventModels.filter().kindEqualTo(3).deleteAll();
       });
-      debugPrint('[IsarDatabaseService] Cleared all following lists');
     } catch (e) {
-      debugPrint('[IsarDatabaseService] Error clearing following lists: $e');
-    }
-  }
-
-  Stream<FollowingModel?> watchFollowingList(String userPubkeyHex) async* {
-    final db = await isar;
-    yield* db.followingModels
-        .where()
-        .userPubkeyHexEqualTo(userPubkeyHex)
-        .watch(fireImmediately: true)
-        .map((followingLists) => followingLists.isEmpty ? null : followingLists.first);
-  }
-
-  Stream<List<FollowingModel>> watchAllFollowingLists() async* {
-    final db = await isar;
-    yield* db.followingModels.where().watch(fireImmediately: true);
-  }
-
-  Future<void> saveMuteList(String userPubkeyHex, List<String> mutedPubkeys) async {
-    try {
-      final db = await isar;
-      final muteModel = MuteModel.fromMuteModel(userPubkeyHex, mutedPubkeys);
-
-      await db.writeTxn(() async {
-        await db.muteModels.put(muteModel);
-      });
-
-      debugPrint('[IsarDatabaseService] Saved mute list: ${mutedPubkeys.length} muted for $userPubkeyHex');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error saving mute list: $e');
-    }
-  }
-
-  Future<void> saveMuteLists(Map<String, List<String>> muteLists) async {
-    try {
-      final db = await isar;
-      final muteModels = muteLists.entries.map((entry) {
-        return MuteModel.fromMuteModel(entry.key, entry.value);
-      }).toList();
-
-      await db.writeTxn(() async {
-        await db.muteModels.putAll(muteModels);
-      });
-
-      debugPrint('[IsarDatabaseService] Batch saved ${muteModels.length} mute lists');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error batch saving mute lists: $e');
+      debugPrint(
+          '[IsarDatabaseService] Error clearing all following lists: $e');
     }
   }
 
   Future<List<String>?> getMuteList(String userPubkeyHex) async {
     try {
       final db = await isar;
-      final muteModel = await db.muteModels.where().userPubkeyHexEqualTo(userPubkeyHex).findFirst();
+      final muteEvent = await db.eventModels
+          .filter()
+          .pubkeyEqualTo(userPubkeyHex)
+          .kindEqualTo(10000)
+          .sortByCreatedAtDesc()
+          .findFirst();
 
-      if (muteModel != null) {
-        debugPrint('[IsarDatabaseService] Retrieved mute list from Isar: ${muteModel.mutedPubkeys.length} muted');
-        return muteModel.toMuteList();
+      if (muteEvent == null) {
+        return null;
       }
 
-      return null;
+      final tags = muteEvent.getTags();
+      final muteList = <String>[];
+
+      for (final tag in tags) {
+        if (tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
+          final pubkey = tag[1];
+          if (pubkey.isNotEmpty) {
+            muteList.add(pubkey);
+          }
+        }
+      }
+
+      return muteList.isEmpty ? null : muteList;
     } catch (e) {
       debugPrint('[IsarDatabaseService] Error getting mute list: $e');
       return null;
     }
   }
 
-  Future<Map<String, List<String>>> getMuteLists(List<String> userPubkeyHexList) async {
+  Future<void> saveMuteList(String userPubkeyHex, List<String> muteList) async {
     try {
       final db = await isar;
-      final results = <String, List<String>>{};
 
-      if (userPubkeyHexList.isEmpty) return results;
+      final tags = muteList.map((pubkey) => ['p', pubkey]).toList();
+      final tagsSerialized = tags.map((tag) => jsonEncode(tag)).toList();
 
-      final muteModels = await db.muteModels
-          .where()
-          .anyOf(userPubkeyHexList, (q, String userPubkeyHex) => q.userPubkeyHexEqualTo(userPubkeyHex))
-          .findAll();
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final eventId = 'mute_list_$userPubkeyHex';
 
-      for (final model in muteModels) {
-        results[model.userPubkeyHex] = model.toMuteList();
-      }
+      final eventData = {
+        'id': eventId,
+        'pubkey': userPubkeyHex,
+        'kind': 10000,
+        'created_at': now,
+        'content': '',
+        'tags': tags,
+        'sig': '',
+      };
 
-      debugPrint('[IsarDatabaseService] Batch retrieved ${results.length}/${userPubkeyHexList.length} mute lists from Isar');
-      return results;
+      await db.writeTxn(() async {
+        final existing =
+            await db.eventModels.where().eventIdEqualTo(eventId).findFirst();
+
+        final eventModel = existing ?? EventModel();
+        eventModel.eventId = eventId;
+        eventModel.pubkey = userPubkeyHex;
+        eventModel.kind = 10000;
+        eventModel.createdAt = now;
+        eventModel.content = '';
+        eventModel.tags = tagsSerialized;
+        eventModel.sig = '';
+        eventModel.rawEvent = jsonEncode(eventData);
+        eventModel.cachedAt = DateTime.now();
+
+        await db.eventModels.put(eventModel);
+      });
     } catch (e) {
-      debugPrint('[IsarDatabaseService] Error batch getting mute lists: $e');
-      return {};
+      debugPrint('[IsarDatabaseService] Error saving mute list: $e');
+    }
+  }
+
+  Future<Map<String, List<String>>> getMuteLists(
+      List<String> userPubkeyHexList) async {
+    final result = <String, List<String>>{};
+
+    try {
+      final db = await isar;
+
+      for (final userPubkeyHex in userPubkeyHexList) {
+        final muteEvent = await db.eventModels
+            .filter()
+            .pubkeyEqualTo(userPubkeyHex)
+            .kindEqualTo(10000)
+            .sortByCreatedAtDesc()
+            .findFirst();
+
+        if (muteEvent != null) {
+          final tags = muteEvent.getTags();
+          final muteList = <String>[];
+
+          for (final tag in tags) {
+            if (tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
+              final pubkey = tag[1];
+              if (pubkey.isNotEmpty) {
+                muteList.add(pubkey);
+              }
+            }
+          }
+
+          if (muteList.isNotEmpty) {
+            result[userPubkeyHex] = muteList;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error getting mute lists: $e');
+    }
+
+    return result;
+  }
+
+  Future<void> saveMuteLists(Map<String, List<String>> muteLists) async {
+    try {
+      final db = await isar;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      await db.writeTxn(() async {
+        for (final entry in muteLists.entries) {
+          final userPubkeyHex = entry.key;
+          final muteList = entry.value;
+
+          final tags = muteList.map((pubkey) => ['p', pubkey]).toList();
+          final tagsSerialized = tags.map((tag) => jsonEncode(tag)).toList();
+
+          final eventId = 'mute_list_$userPubkeyHex';
+
+          final eventData = {
+            'id': eventId,
+            'pubkey': userPubkeyHex,
+            'kind': 10000,
+            'created_at': now,
+            'content': '',
+            'tags': tags,
+            'sig': '',
+          };
+
+          final existing =
+              await db.eventModels.where().eventIdEqualTo(eventId).findFirst();
+
+          final eventModel = existing ?? EventModel();
+          eventModel.eventId = eventId;
+          eventModel.pubkey = userPubkeyHex;
+          eventModel.kind = 10000;
+          eventModel.createdAt = now;
+          eventModel.content = '';
+          eventModel.tags = tagsSerialized;
+          eventModel.sig = '';
+          eventModel.rawEvent = jsonEncode(eventData);
+          eventModel.cachedAt = DateTime.now();
+
+          await db.eventModels.put(eventModel);
+        }
+      });
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error saving mute lists: $e');
     }
   }
 
   Future<bool> hasMuteList(String userPubkeyHex) async {
     try {
       final db = await isar;
-      final count = await db.muteModels.where().userPubkeyHexEqualTo(userPubkeyHex).count();
-      return count > 0;
+      final exists = await db.eventModels
+          .filter()
+          .pubkeyEqualTo(userPubkeyHex)
+          .kindEqualTo(10000)
+          .isEmpty();
+      return !exists;
     } catch (e) {
-      debugPrint('[IsarDatabaseService] Error checking mute list existence: $e');
+      debugPrint('[IsarDatabaseService] Error checking mute list: $e');
       return false;
     }
   }
@@ -573,9 +502,12 @@ class IsarDatabaseService {
     try {
       final db = await isar;
       await db.writeTxn(() async {
-        await db.muteModels.deleteByUserPubkeyHex(userPubkeyHex);
+        await db.eventModels
+            .filter()
+            .pubkeyEqualTo(userPubkeyHex)
+            .kindEqualTo(10000)
+            .deleteAll();
       });
-      debugPrint('[IsarDatabaseService] Deleted mute list: $userPubkeyHex');
     } catch (e) {
       debugPrint('[IsarDatabaseService] Error deleting mute list: $e');
     }
@@ -585,41 +517,321 @@ class IsarDatabaseService {
     try {
       final db = await isar;
       await db.writeTxn(() async {
-        await db.muteModels.clear();
+        await db.eventModels.filter().kindEqualTo(10000).deleteAll();
       });
-      debugPrint('[IsarDatabaseService] Cleared all mute lists');
     } catch (e) {
-      debugPrint('[IsarDatabaseService] Error clearing mute lists: $e');
+      debugPrint('[IsarDatabaseService] Error clearing all mute lists: $e');
     }
   }
 
-  Future<int> cleanupExpiredMuteLists({Duration ttl = const Duration(days: 3)}) async {
+  Future<Map<String, String>?> getUserProfile(String pubkeyHex) async {
     try {
       final db = await isar;
-      final cutoffDate = DateTime.now().subtract(ttl);
+      final profileEvent = await db.eventModels
+          .filter()
+          .pubkeyEqualTo(pubkeyHex)
+          .kindEqualTo(0)
+          .sortByCreatedAtDesc()
+          .findFirst();
 
-      final expiredMuteLists = await db.muteModels.filter().cachedAtLessThan(cutoffDate).findAll();
-
-      if (expiredMuteLists.isEmpty) {
-        return 0;
+      if (profileEvent == null) {
+        return null;
       }
 
-      await db.writeTxn(() async {
-        for (final muteList in expiredMuteLists) {
-          await db.muteModels.delete(muteList.id);
+      final content = profileEvent.content;
+      if (content.isEmpty) {
+        return null;
+      }
+
+      try {
+        final parsedContent = jsonDecode(content) as Map<String, dynamic>;
+        final profileData = <String, String>{};
+
+        parsedContent.forEach((key, value) {
+          final keyStr = key.toString();
+          if (keyStr == 'picture') {
+            profileData['profileImage'] = value?.toString() ?? '';
+          } else {
+            profileData[keyStr] = value?.toString() ?? '';
+          }
+        });
+
+        return profileData;
+      } catch (e) {
+        debugPrint('[IsarDatabaseService] Error parsing profile content: $e');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error getting user profile: $e');
+      return null;
+    }
+  }
+
+  Future<void> saveUserProfile(
+      String pubkeyHex, Map<String, String> profileData) async {
+    try {
+      final db = await isar;
+
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final eventId = 'profile_$pubkeyHex';
+
+      final contentMap = <String, dynamic>{};
+      profileData.forEach((key, value) {
+        if (key == 'profileImage') {
+          contentMap['picture'] = value;
+        } else {
+          contentMap[key] = value;
         }
       });
 
-      debugPrint('[IsarDatabaseService] Cleaned up ${expiredMuteLists.length} expired mute lists');
-      return expiredMuteLists.length;
+      final eventData = {
+        'id': eventId,
+        'pubkey': pubkeyHex,
+        'kind': 0,
+        'created_at': now,
+        'content': jsonEncode(contentMap),
+        'tags': [],
+        'sig': '',
+      };
+
+      await db.writeTxn(() async {
+        final existing =
+            await db.eventModels.where().eventIdEqualTo(eventId).findFirst();
+
+        final eventModel = existing ?? EventModel();
+        eventModel.eventId = eventId;
+        eventModel.pubkey = pubkeyHex;
+        eventModel.kind = 0;
+        eventModel.createdAt = now;
+        eventModel.content = jsonEncode(contentMap);
+        eventModel.tags = [];
+        eventModel.sig = '';
+        eventModel.rawEvent = jsonEncode(eventData);
+        eventModel.cachedAt = DateTime.now();
+
+        await db.eventModels.put(eventModel);
+      });
     } catch (e) {
-      debugPrint('[IsarDatabaseService] Error cleaning up expired mute lists: $e');
+      debugPrint('[IsarDatabaseService] Error saving user profile: $e');
+    }
+  }
+
+  Future<Map<String, Map<String, String>>> getUserProfiles(
+      List<String> pubkeyHexList) async {
+    final result = <String, Map<String, String>>{};
+
+    try {
+      final db = await isar;
+
+      for (final pubkeyHex in pubkeyHexList) {
+        final profileEvent = await db.eventModels
+            .filter()
+            .pubkeyEqualTo(pubkeyHex)
+            .kindEqualTo(0)
+            .sortByCreatedAtDesc()
+            .findFirst();
+
+        if (profileEvent != null) {
+          final content = profileEvent.content;
+          if (content.isNotEmpty) {
+            try {
+              final parsedContent = jsonDecode(content) as Map<String, dynamic>;
+              final profileData = <String, String>{};
+
+              parsedContent.forEach((key, value) {
+                final keyStr = key.toString();
+                if (keyStr == 'picture') {
+                  profileData['profileImage'] = value?.toString() ?? '';
+                } else {
+                  profileData[keyStr] = value?.toString() ?? '';
+                }
+              });
+
+              if (profileData.isNotEmpty) {
+                result[pubkeyHex] = profileData;
+              }
+            } catch (e) {
+              debugPrint(
+                  '[IsarDatabaseService] Error parsing profile content for $pubkeyHex: $e');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error getting user profiles: $e');
+    }
+
+    return result;
+  }
+
+  Future<void> saveUserProfiles(
+      Map<String, Map<String, String>> profiles) async {
+    try {
+      final db = await isar;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      await db.writeTxn(() async {
+        for (final entry in profiles.entries) {
+          final pubkeyHex = entry.key;
+          final profileData = entry.value;
+
+          final eventId = 'profile_$pubkeyHex';
+
+          final contentMap = <String, dynamic>{};
+          profileData.forEach((key, value) {
+            if (key == 'profileImage') {
+              contentMap['picture'] = value;
+            } else {
+              contentMap[key] = value;
+            }
+          });
+
+          final eventData = {
+            'id': eventId,
+            'pubkey': pubkeyHex,
+            'kind': 0,
+            'created_at': now,
+            'content': jsonEncode(contentMap),
+            'tags': [],
+            'sig': '',
+          };
+
+          final existing =
+              await db.eventModels.where().eventIdEqualTo(eventId).findFirst();
+
+          final eventModel = existing ?? EventModel();
+          eventModel.eventId = eventId;
+          eventModel.pubkey = pubkeyHex;
+          eventModel.kind = 0;
+          eventModel.createdAt = now;
+          eventModel.content = jsonEncode(contentMap);
+          eventModel.tags = [];
+          eventModel.sig = '';
+          eventModel.rawEvent = jsonEncode(eventData);
+          eventModel.cachedAt = DateTime.now();
+
+          await db.eventModels.put(eventModel);
+        }
+      });
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error saving user profiles: $e');
+    }
+  }
+
+  Future<bool> hasUserProfile(String pubkeyHex) async {
+    try {
+      final db = await isar;
+      final exists = await db.eventModels
+          .filter()
+          .pubkeyEqualTo(pubkeyHex)
+          .kindEqualTo(0)
+          .isEmpty();
+      return !exists;
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error checking user profile: $e');
+      return false;
+    }
+  }
+
+  Future<int> getUserProfileCount() async {
+    try {
+      final db = await isar;
+      final count = await db.eventModels.filter().kindEqualTo(0).count();
+      return count;
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error getting user profile count: $e');
       return 0;
     }
   }
 
-  static void reset() {
-    _instance?._isar?.close();
-    _instance = null;
+  Future<List<Map<String, String>>> searchUserProfiles(String query,
+      {int limit = 50}) async {
+    try {
+      final db = await isar;
+      final queryLower = query.toLowerCase();
+      final allProfiles =
+          await db.eventModels.filter().kindEqualTo(0).findAll();
+
+      final matchingProfiles = <Map<String, String>>[];
+
+      for (final profileEvent in allProfiles) {
+        if (matchingProfiles.length >= limit) break;
+
+        final content = profileEvent.content;
+        if (content.isEmpty) continue;
+
+        try {
+          final parsedContent = jsonDecode(content) as Map<String, dynamic>;
+          final name = (parsedContent['name'] as String? ?? '').toLowerCase();
+
+          if (name.contains(queryLower)) {
+            final profileData = <String, String>{};
+            parsedContent.forEach((key, value) {
+              final keyStr = key.toString();
+              if (keyStr == 'picture') {
+                profileData['profileImage'] = value?.toString() ?? '';
+              } else {
+                profileData[keyStr] = value?.toString() ?? '';
+              }
+            });
+            profileData['pubkeyHex'] = profileEvent.pubkey;
+            matchingProfiles.add(profileData);
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      return matchingProfiles;
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error searching user profiles: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, String>>> getRandomUsersWithImages(
+      {int limit = 50}) async {
+    try {
+      final db = await isar;
+      final allProfiles =
+          await db.eventModels.filter().kindEqualTo(0).findAll();
+
+      final profilesWithImages = <Map<String, String>>[];
+
+      for (final profileEvent in allProfiles) {
+        if (profilesWithImages.length >= limit) break;
+
+        final content = profileEvent.content;
+        if (content.isEmpty) continue;
+
+        try {
+          final parsedContent = jsonDecode(content) as Map<String, dynamic>;
+          final picture = parsedContent['picture'] as String?;
+
+          if (picture != null && picture.isNotEmpty) {
+            final profileData = <String, String>{};
+            parsedContent.forEach((key, value) {
+              final keyStr = key.toString();
+              if (keyStr == 'picture') {
+                profileData['profileImage'] = value?.toString() ?? '';
+              } else {
+                profileData[keyStr] = value?.toString() ?? '';
+              }
+            });
+            profileData['pubkeyHex'] = profileEvent.pubkey;
+            profilesWithImages.add(profileData);
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      profilesWithImages.shuffle();
+      return profilesWithImages.take(limit).toList();
+    } catch (e) {
+      debugPrint(
+          '[IsarDatabaseService] Error getting random users with images: $e');
+      return [];
+    }
   }
 }

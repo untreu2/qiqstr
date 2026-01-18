@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:ndk/ndk.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/dialogs/copy_key_warning_dialog.dart';
-import 'package:provider/provider.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/theme/theme_state.dart';
 
 class KeysPage extends StatefulWidget {
   const KeysPage({super.key});
@@ -75,14 +77,15 @@ class _KeysPageState extends State<KeysPage> {
         context: context,
         keyType: keyType == 'nsec' ? 'Private Key (nsec)' : 'Seed Phrase',
       );
-      
+
       if (!shouldCopy || !mounted) return;
     }
 
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
 
-    AppSnackbar.success(context, '${keyType.toUpperCase()} copied to clipboard!');
+    AppSnackbar.success(
+        context, '${keyType.toUpperCase()} copied to clipboard!');
 
     setState(() => _copiedKeyType = keyType);
 
@@ -93,7 +96,8 @@ class _KeysPageState extends State<KeysPage> {
     });
   }
 
-  Widget _buildKeyTitle(BuildContext context, String title, {String? description}) {
+  Widget _buildKeyTitle(BuildContext context, String title,
+      {String? description}) {
     return Padding(
       padding: const EdgeInsets.only(left: 33, right: 16, bottom: 8),
       child: Column(
@@ -123,7 +127,8 @@ class _KeysPageState extends State<KeysPage> {
     );
   }
 
-  Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
+  Widget _buildKeyDisplayCard(BuildContext context, String title, String value,
+      String keyType, bool isCopied) {
     final isMasked = keyType == 'mnemonic' || keyType == 'nsec';
     final displayValue = isMasked ? '•' * 48 : value;
 
@@ -172,7 +177,9 @@ class _KeysPageState extends State<KeysPage> {
                     padding: const EdgeInsets.all(8),
                     child: Icon(
                       isCopied ? Icons.check : Icons.content_copy,
-                      color: isCopied ? context.colors.success : context.colors.iconSecondary,
+                      color: isCopied
+                          ? context.colors.success
+                          : context.colors.iconSecondary,
                       size: 20,
                     ),
                   ),
@@ -223,8 +230,8 @@ class _KeysPageState extends State<KeysPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
         return Scaffold(
           backgroundColor: context.colors.background,
           body: _buildBody(context),

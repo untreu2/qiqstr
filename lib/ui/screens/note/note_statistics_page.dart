@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
-import '../../../models/note_model.dart';
-import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/note_statistics_viewmodel.dart';
+import '../../../presentation/blocs/note_statistics/note_statistics_bloc.dart';
+import '../../../presentation/blocs/note_statistics/note_statistics_event.dart';
+import '../../../presentation/blocs/note_statistics/note_statistics_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
-  final NoteModel note;
+  final String noteId;
 
   const NoteStatisticsPage({
     super.key,
-    required this.note,
+    required this.noteId,
   });
 
   @override
@@ -23,19 +23,12 @@ class NoteStatisticsPage extends StatefulWidget {
 }
 
 class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
-  late final NoteStatisticsViewModel _viewModel;
   late ScrollController _scrollController;
   final ValueNotifier<bool> _showInteractionsBubble = ValueNotifier(false);
 
   @override
   void initState() {
     super.initState();
-    _viewModel = NoteStatisticsViewModel(
-      userRepository: AppDI.get(),
-      dataService: AppDI.get(),
-      note: widget.note,
-    );
-    _viewModel.addListener(_onViewModelChanged);
     _scrollController = ScrollController()..addListener(_scrollListener);
   }
 
@@ -50,38 +43,32 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
 
   @override
   void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
     _scrollController.dispose();
     _showInteractionsBubble.dispose();
     super.dispose();
   }
 
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _navigateToProfile(String npub) async {
+  void _navigateToProfile(String npub, Map<String, dynamic>? user) {
     try {
-      if (mounted) {
-        debugPrint('[NoteStatisticsPage] Navigating to profile: $npub');
+      if (!mounted) return;
 
-        final user = await _viewModel.getUser(npub);
+      final userNpubValue = user?['npub'];
+      final userNpub = userNpubValue is String ? userNpubValue : (userNpubValue?.toString() ?? npub);
+      
+      final userPubkeyHexValue = user?['pubkeyHex'];
+      final userPubkeyHex = userPubkeyHexValue is String ? userPubkeyHexValue : (userPubkeyHexValue?.toString() ?? '');
 
-        if (mounted) {
-          final currentLocation = GoRouterState.of(context).matchedLocation;
-          if (currentLocation.startsWith('/home/feed')) {
-            context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-          } else if (currentLocation.startsWith('/home/notifications')) {
-            context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-          } else if (currentLocation.startsWith('/home/dm')) {
-            context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-          } else {
-            context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-          }
-        }
+      if (!mounted) return;
+
+      final currentLocation = GoRouterState.of(context).matchedLocation;
+      if (currentLocation.startsWith('/home/feed')) {
+        context.push('/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+      } else if (currentLocation.startsWith('/home/notifications')) {
+        context.push('/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+      } else if (currentLocation.startsWith('/home/dm')) {
+        context.push('/home/dm/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+      } else {
+        context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
       }
     } catch (e) {
       debugPrint('[NoteStatisticsPage] Navigate to profile error: $e');
@@ -92,15 +79,41 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     required String npub,
     required String content,
     int? zapAmount,
+    Map<String, dynamic>? user,
   }) {
-    return FutureBuilder<UserModel>(
-      future: _viewModel.getUser(npub),
-      builder: (_, snapshot) {
-        final user = snapshot.data;
-        
-        if (user == null) {
-          return const SizedBox.shrink();
-        }
+    if (user == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            _buildAvatar(context, ''),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                npub.length > 8 ? '${npub.substring(0, 8)}...' : npub,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final userProfileImageValue = user['profileImage'];
+    final userProfileImage = userProfileImageValue is String ? userProfileImageValue : (userProfileImageValue?.toString() ?? '');
+    
+    final userNameValue = user['name'];
+    final userName = userNameValue is String ? userNameValue : (userNameValue?.toString() ?? '');
+    
+    final userNip05Value = user['nip05'];
+    final userNip05 = userNip05Value is String ? userNip05Value : (userNip05Value?.toString() ?? '');
+    
+    final userNip05VerifiedValue = user['nip05Verified'];
+    final userNip05Verified = userNip05VerifiedValue is bool ? userNip05VerifiedValue : (userNip05VerifiedValue == true || userNip05VerifiedValue == 'true');
 
         Widget? trailing;
         if (zapAmount != null || content.isNotEmpty) {
@@ -134,13 +147,13 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
           );
         }
 
-        return GestureDetector(
-          onTap: () => _navigateToProfile(npub),
+    return GestureDetector(
+      onTap: () => _navigateToProfile(npub, user),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
-                _buildAvatar(context, user.profileImage),
+                _buildAvatar(context, userProfileImage),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Row(
@@ -152,7 +165,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                           children: [
                             Flexible(
                               child: Text(
-                                user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
+                                userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
                                 style: TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w600,
@@ -161,7 +174,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                            if (userNip05.isNotEmpty && userNip05Verified) ...[
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.verified,
@@ -184,8 +197,6 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
             ),
           ),
         );
-      },
-    );
   }
 
   Widget _buildAvatar(BuildContext context, String imageUrl) {
@@ -244,93 +255,126 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<NoteStatisticsViewModel>.value(
-      value: _viewModel,
-      child: Consumer<NoteStatisticsViewModel>(
-        builder: (context, viewModel, child) {
-          if (!viewModel.isInitialized) {
+    return BlocProvider<NoteStatisticsBloc>(
+      create: (context) {
+        final bloc = NoteStatisticsBloc(
+          userRepository: AppDI.get(),
+          dataService: AppDI.get(),
+          noteId: widget.noteId,
+        );
+        bloc.add(NoteStatisticsInitialized(noteId: widget.noteId));
+        return bloc;
+      },
+      child: BlocBuilder<NoteStatisticsBloc, NoteStatisticsState>(
+        builder: (context, state) {
+          if (state is NoteStatisticsLoading || state is NoteStatisticsInitial) {
             return Scaffold(
               backgroundColor: context.colors.background,
               body: const Center(child: CircularProgressIndicator()),
             );
           }
 
-          final cachedInteractions = viewModel.cachedInteractions!;
+          if (state is! NoteStatisticsLoaded) {
+            return Scaffold(
+              backgroundColor: context.colors.background,
+              body: const Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          final interactions = state.interactions;
+          final users = state.users;
 
           final interactionWidgets = <Widget>[];
-          for (int i = 0; i < cachedInteractions.length; i++) {
-            final interaction = cachedInteractions[i];
-          interactionWidgets.add(
-            _buildEntry(
-              npub: interaction['npub'],
-              content: interaction['content'],
-              zapAmount: interaction['zapAmount'],
-            ),
-          );
-          if (i < cachedInteractions.length - 1) {
-            interactionWidgets.add(const _UserSeparator());
+          for (int i = 0; i < interactions.length; i++) {
+            final interaction = interactions[i];
+            
+            final npubValue = interaction['npub'];
+            final npub = npubValue is String ? npubValue : (npubValue?.toString() ?? '');
+            
+            if (npub.isEmpty) {
+              continue;
+            }
+            
+            final contentValue = interaction['content'];
+            final content = contentValue is String ? contentValue : (contentValue?.toString() ?? '');
+            
+            final zapAmountValue = interaction['zapAmount'];
+            final zapAmount = zapAmountValue is int ? zapAmountValue : (zapAmountValue is num ? zapAmountValue.toInt() : null);
+            
+            final user = users[npub];
+            
+            interactionWidgets.add(
+              _buildEntry(
+                npub: npub,
+                content: content,
+                zapAmount: zapAmount,
+                user: user,
+              ),
+            );
+            if (i < interactions.length - 1) {
+              interactionWidgets.add(const _UserSeparator());
+            }
           }
-        }
 
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
-            children: [
-              CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
-                  ),
-                  SliverToBoxAdapter(
-                    child: _buildHeader(context),
-                  ),
-                  SliverToBoxAdapter(
-                    child: interactionWidgets.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 32),
-                              child: Text(
-                                'No interactions yet.',
-                                style: TextStyle(color: context.colors.textTertiary),
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: Stack(
+              children: [
+                CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                    ),
+                    SliverToBoxAdapter(
+                      child: _buildHeader(context),
+                    ),
+                    SliverToBoxAdapter(
+                      child: interactionWidgets.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 32),
+                                child: Text(
+                                  'No interactions yet.',
+                                  style: TextStyle(color: context.colors.textTertiary),
+                                ),
                               ),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => interactionWidgets[index],
-                      childCount: interactionWidgets.length,
-                      addAutomaticKeepAlives: true,
-                      addRepaintBoundaries: false,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => interactionWidgets[index],
+                        childCount: interactionWidgets.length,
+                        addAutomaticKeepAlives: true,
+                        addRepaintBoundaries: false,
+                      ),
+                    ),
+                  ],
+                ),
+                TopActionBarWidget(
+                  onBackPressed: () => context.pop(),
+                  centerBubble: Text(
+                    'Interactions',
+                    style: TextStyle(
+                      color: context.colors.background,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
-              ),
-              TopActionBarWidget(
-                onBackPressed: () => context.pop(),
-                centerBubble: Text(
-                  'Interactions',
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  centerBubbleVisibility: _showInteractionsBubble,
+                  onCenterBubbleTap: () {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  showShareButton: false,
                 ),
-                centerBubbleVisibility: _showInteractionsBubble,
-                onCenterBubbleTap: () {
-                  _scrollController.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                },
-                showShareButton: false,
-          ),
-        ],
-      ),
-    );
+              ],
+            ),
+          );
         },
       ),
     );

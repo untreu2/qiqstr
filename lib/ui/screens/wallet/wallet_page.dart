@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../models/wallet_model.dart';
-import '../../../presentation/providers/viewmodel_provider.dart';
-import '../../../presentation/viewmodels/wallet_viewmodel.dart';
+import '../../../presentation/blocs/wallet/wallet_bloc.dart';
+import '../../../presentation/blocs/wallet/wallet_event.dart';
+import '../../../presentation/blocs/wallet/wallet_state.dart';
+import '../../../data/repositories/wallet_repository.dart';
+import '../../../core/di/app_di.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/dialogs/receive_dialog.dart';
 import '../../widgets/dialogs/send_dialog.dart';
@@ -16,7 +18,8 @@ class WalletPage extends StatefulWidget {
   State<WalletPage> createState() => _WalletPageState();
 }
 
-class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMixin {
+class _WalletPageState extends State<WalletPage>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -40,7 +43,8 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildConnectionBottomBar(BuildContext context, WalletViewModel viewModel) {
+  Widget _buildConnectionBottomBar(BuildContext context, WalletState state) {
+    final isLoading = state is WalletLoading;
     return Positioned(
       left: 0,
       right: 0,
@@ -63,7 +67,13 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
           bottom: MediaQuery.of(context).padding.bottom + 12,
         ),
         child: GestureDetector(
-          onTap: viewModel.isConnecting ? null : () => viewModel.connectWithNostr(),
+          onTap: isLoading
+              ? null
+              : () {
+                  context
+                      .read<WalletBloc>()
+                      .add(const WalletAutoConnectRequested());
+                },
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -72,13 +82,14 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
               color: context.colors.textPrimary,
               borderRadius: BorderRadius.circular(40),
             ),
-            child: viewModel.isConnecting
+            child: isLoading
                 ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          context.colors.background),
                     ),
                   )
                 : Text(
@@ -132,7 +143,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildBalanceSection(BuildContext context, WalletViewModel viewModel) {
+  Widget _buildBalanceSection(BuildContext context, WalletLoaded state) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
       child: Column(
@@ -144,7 +155,14 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Text(
-                viewModel.balance != null ? viewModel.balance!.balance.toString() : '0',
+                () {
+                  final balance = state.balance;
+                  if (balance != null) {
+                    final balanceValue = balance['balance'] as num?;
+                    return balanceValue?.toString() ?? '0';
+                  }
+                  return '0';
+                }(),
                 style: TextStyle(
                   fontSize: 72,
                   fontWeight: FontWeight.w600,
@@ -168,8 +186,8 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildTransactionsSliver(BuildContext context, WalletViewModel viewModel) {
-    if (viewModel.isLoadingTransactions) {
+  Widget _buildTransactionsSliver(BuildContext context, WalletLoaded state) {
+    if (state.isLoadingTransactions) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: Center(
@@ -178,14 +196,15 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       );
     }
 
-    if (viewModel.transactions == null || viewModel.transactions!.isEmpty) {
+    if (state.transactions == null || state.transactions!.isEmpty) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.receipt_long, color: context.colors.textTertiary, size: 48),
+              Icon(Icons.receipt_long,
+                  color: context.colors.textTertiary, size: 48),
               const SizedBox(height: 12),
               Text(
                 'No transactions yet',
@@ -200,7 +219,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       );
     }
 
-    final recentTransactions = viewModel.transactions!.take(6).toList();
+    final recentTransactions = state.transactions!.take(6).toList();
 
     return SliverPadding(
       padding: const EdgeInsets.only(bottom: 100),
@@ -215,8 +234,9 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildTransactionTile(BuildContext context, CoinosPayment tx) {
-    final isIncoming = tx.isIncoming;
+  Widget _buildTransactionTile(BuildContext context, Map<String, dynamic> tx) {
+    final isIncoming = tx['isIncoming'] as bool? ?? false;
+    final amount = tx['amount'] as num? ?? 0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -238,19 +258,19 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-                  isIncoming ? 'Received' : 'Sent',
-                  style: TextStyle(
-                    color: context.colors.textPrimary,
-                    fontWeight: FontWeight.w600,
+              isIncoming ? 'Received' : 'Sent',
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontWeight: FontWeight.w600,
                 fontSize: 17,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 6),
           Text(
-            '${isIncoming ? '+' : '-'}${tx.amount.abs()} sats',
+            '${isIncoming ? '+' : '-'}${amount.abs()} sats',
             style: TextStyle(
               color: context.colors.textPrimary,
               fontWeight: FontWeight.w600,
@@ -262,7 +282,8 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  void _showReceiveDialog(WalletViewModel viewModel) {
+  void _showReceiveDialog(BuildContext context, WalletLoaded state) {
+    final walletRepository = AppDI.get<WalletRepository>();
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -272,13 +293,14 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => ReceiveDialog(
-        walletRepository: viewModel.walletRepository,
-        lud16: viewModel.getCoinosLud16(),
+        walletRepository: walletRepository,
+        lud16: state.user?['lud16'] as String? ?? '',
       ),
     );
   }
 
-  void _showSendDialog(WalletViewModel viewModel) {
+  void _showSendDialog(BuildContext context, WalletLoaded state) {
+    final walletRepository = AppDI.get<WalletRepository>();
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -288,15 +310,15 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => SendDialog(
-        walletRepository: viewModel.walletRepository,
-        onPaymentSuccess: () => viewModel.onPaymentSuccess(),
+        walletRepository: walletRepository,
+        onPaymentSuccess: () {
+          context.read<WalletBloc>().add(const WalletBalanceRequested());
+        },
       ),
     );
   }
 
-  Widget _buildError(BuildContext context, WalletViewModel viewModel) {
-    if (viewModel.error == null) return const SizedBox.shrink();
-
+  Widget _buildError(BuildContext context, WalletError state) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Container(
@@ -312,7 +334,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                viewModel.error!,
+                state.message,
                 style: TextStyle(
                   color: Colors.red,
                   fontSize: 14,
@@ -328,131 +350,148 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return ViewModelProvider.walletConsumer(
-      builder: (context, viewModel, child) {
-        return Consumer<ThemeManager>(
-          builder: (context, themeManager, child) {
+    return BlocProvider<WalletBloc>.value(
+      value: AppDI.get<WalletBloc>(),
+      child: BlocBuilder<WalletBloc, WalletState>(
+        builder: (context, state) {
+          if (state is! WalletLoaded) {
             return Scaffold(
               backgroundColor: context.colors.background,
-              body: Stack(
-                children: [
-                  CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: _buildHeader(context),
+              body: const Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: Stack(
+              children: [
+                CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _buildHeader(context),
+                    ),
+                    if (state.user == null) ...[
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmptyWalletState(context),
                       ),
-                      if (viewModel.user == null) ...[
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: _buildEmptyWalletState(context),
-                        ),
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: 80),
-                        ),
-                      ] else ...[
-                        SliverToBoxAdapter(
-                          child: _buildBalanceSection(context, viewModel),
-                        ),
-                        _buildTransactionsSliver(context, viewModel),
-                      ],
-                      if (viewModel.error != null)
-                        SliverToBoxAdapter(
-                          child: _buildError(context, viewModel),
-                        ),
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: 80),
+                      ),
+                    ] else ...[
+                      SliverToBoxAdapter(
+                        child: _buildBalanceSection(context, state),
+                      ),
+                      _buildTransactionsSliver(context, state),
                     ],
-                  ),
-                  if (viewModel.user == null) _buildConnectionBottomBar(context, viewModel),
-                  if (viewModel.user != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: context.colors.surface,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, -2),
-                        ),
-                      ],
-                    ),
-                    padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      top: 12,
-                      bottom: MediaQuery.of(context).padding.bottom + 12,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => _showReceiveDialog(viewModel),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: context.colors.textPrimary,
-                                borderRadius: BorderRadius.circular(40),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.arrow_downward, size: 20, color: context.colors.background),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Receive',
-                                    style: TextStyle(
-                                      color: context.colors.background,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => _showSendDialog(viewModel),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: context.colors.textPrimary,
-                                borderRadius: BorderRadius.circular(40),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.arrow_upward, size: 20, color: context.colors.background),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Send',
-                                    style: TextStyle(
-                                      color: context.colors.background,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    if (state is WalletError)
+                      SliverToBoxAdapter(
+                        child: _buildError(context, state as WalletError),
+                      ),
+                  ],
                 ),
-            ],
-          ),
-        );
-          },
-        );
-      },
+                if (state.user == null)
+                  _buildConnectionBottomBar(context, state),
+                if (state.user != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: context.colors.surface,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, -2),
+                          ),
+                        ],
+                      ),
+                      padding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 12,
+                        bottom: MediaQuery.of(context).padding.bottom + 12,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                _showReceiveDialog(context, state);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12, horizontal: 20),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: context.colors.textPrimary,
+                                  borderRadius: BorderRadius.circular(40),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.arrow_downward,
+                                        size: 20,
+                                        color: context.colors.background),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Receive',
+                                      style: TextStyle(
+                                        color: context.colors.background,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                _showSendDialog(context, state);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12, horizontal: 20),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: context.colors.textPrimary,
+                                  borderRadius: BorderRadius.circular(40),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.arrow_upward,
+                                        size: 20,
+                                        color: context.colors.background),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Send',
+                                      style: TextStyle(
+                                        color: context.colors.background,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

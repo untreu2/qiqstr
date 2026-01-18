@@ -5,16 +5,16 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/note/focused_note_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../theme/theme_manager.dart';
-import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/providers/viewmodel_provider.dart';
-import '../../../presentation/viewmodels/thread_viewmodel.dart';
+import '../../../presentation/blocs/thread/thread_bloc.dart';
+import '../../../presentation/blocs/thread/thread_event.dart';
+import '../../../presentation/blocs/thread/thread_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'share_note.dart';
 
 class ThreadPage extends StatefulWidget {
@@ -35,7 +35,6 @@ class _ThreadPageState extends State<ThreadPage> {
   late ScrollController _scrollController;
   final Map<String, GlobalKey> _noteKeys = {};
   String? _currentFocusedNoteId;
-  ThreadViewModel? _viewModel;
 
   int _visibleRepliesCount = 3;
   static const int _repliesPerPage = 5;
@@ -44,12 +43,12 @@ class _ThreadPageState extends State<ThreadPage> {
 
   bool _isRefreshing = false;
   Timer? _cacheCheckTimer;
-  bool _cacheTimerStarted = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _currentFocusedNoteId = widget.focusedNoteId;
   }
 
   @override
@@ -59,22 +58,18 @@ class _ThreadPageState extends State<ThreadPage> {
     super.dispose();
   }
 
-
-
-
   @override
   Widget build(BuildContext context) {
-    return ViewModelBuilder<ThreadViewModel>(
-      create: () {
-        final vm = AppDI.get<ThreadViewModel>();
-        _currentFocusedNoteId = widget.focusedNoteId;
+    return BlocProvider<ThreadBloc>(
+      create: (context) {
+        final bloc = AppDI.get<ThreadBloc>();
         Future.microtask(() {
           if (mounted) {
-            vm.initializeWithThread(
+            bloc.add(ThreadLoadRequested(
               rootNoteId: widget.rootNoteId,
               focusedNoteId: widget.focusedNoteId,
-            );
-            
+            ));
+
             if (widget.focusedNoteId != null) {
               Future.delayed(const Duration(milliseconds: 300), () {
                 if (mounted) {
@@ -82,77 +77,100 @@ class _ThreadPageState extends State<ThreadPage> {
                 }
               });
             }
-            Future.delayed(const Duration(seconds: 1), () {
-              if (mounted) {
-                vm.checkRepliesFromCache();
-              }
-            });
           }
         });
-        return vm;
+        return bloc;
       },
-      builder: (context, viewModel) {
-        _viewModel = viewModel;
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
-            children: [
-              _buildContent(context, viewModel),
-              TopActionBarWidget(
-                onBackPressed: () => context.pop(),
-                centerBubble: Text(
-                  'Thread',
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+      child: BlocBuilder<ThreadBloc, ThreadState>(
+        buildWhen: (previous, current) {
+          if (previous is ThreadLoaded && current is ThreadLoaded) {
+            final prevRootNoteId = previous.rootNote['id'] as String? ?? '';
+            final currRootNoteId = current.rootNote['id'] as String? ?? '';
+            return previous.replies.length != current.replies.length ||
+                prevRootNoteId != currRootNoteId ||
+                previous.focusedNoteId != current.focusedNoteId;
+          }
+          return previous.runtimeType != current.runtimeType;
+        },
+        builder: (context, state) {
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: Stack(
+              children: [
+                _buildContent(context, state),
+                TopActionBarWidget(
+                  onBackPressed: () => context.pop(),
+                  centerBubble: Text(
+                    'Thread',
+                    style: TextStyle(
+                      color: context.colors.background,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
+                  onCenterBubbleTap: () {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  onSharePressed: () => _handleShare(context, state),
                 ),
-                onCenterBubbleTap: () {
-                  _scrollController.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                },
-                onSharePressed: () => _handleShare(context, viewModel),
-              ),
-            ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, ThreadState state) {
+    if (state is ThreadLoaded) {
+      return _buildThreadContent(context, state);
+    }
+
+    if (state is ThreadLoading) {
+      return _buildLoadingState(context);
+    }
+
+    if (state is ThreadError) {
+      return _buildErrorState(context, state.message);
+    }
+
+    return _buildLoadingState(context);
+  }
+
+  Widget _buildLoadingState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: context.colors.primary),
+          const SizedBox(height: 16),
+          Text(
+            'Loading thread...',
+            style: TextStyle(color: context.colors.textSecondary),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _buildContent(BuildContext context, ThreadViewModel viewModel) {
-    return UIStateBuilder<NoteModel>(
-      state: viewModel.rootNoteState,
-      builder: (context, rootNote) {
-        return _buildThreadContent(context, viewModel, rootNote);
-      },
-      loading: () => _buildThreadContent(context, viewModel, null),
-      error: (message) => _buildErrorState(context, message, viewModel),
-      empty: (message) => _buildNotFoundState(context, viewModel),
-    );
-  }
-
-  Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel? rootNote) {
-    NoteModel? displayNote = rootNote;
-    final focusedNoteId = _currentFocusedNoteId ?? widget.focusedNoteId;
+  Widget _buildThreadContent(BuildContext context, ThreadLoaded state) {
+    Map<String, dynamic>? displayNote = state.rootNote;
+    final focusedNoteId = _currentFocusedNoteId ?? state.focusedNoteId;
     if (focusedNoteId != null) {
-      final focusedNoteState = viewModel.focusedNoteState;
-      if (focusedNoteState.isLoaded && focusedNoteState.data != null) {
-        displayNote = focusedNoteState.data;
-      } else if (rootNote != null) {
-        final threadStructure = viewModel.threadStructureState.data;
-        if (threadStructure != null) {
-          displayNote = threadStructure.getNote(focusedNoteId) ?? rootNote;
-        }
+      if (state.focusedNote != null) {
+        displayNote = state.focusedNote;
+      } else {
+        displayNote =
+            state.threadStructure.getNote(focusedNoteId) ?? state.rootNote;
       }
     }
 
     return RefreshIndicator(
-      onRefresh: () => _debouncedRefresh(viewModel),
+      onRefresh: () => _debouncedRefresh(context),
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
@@ -161,15 +179,15 @@ class _ThreadPageState extends State<ThreadPage> {
           ),
           if (displayNote != null) ...[
             SliverToBoxAdapter(
-              child: _buildContextNote(context, viewModel, displayNote),
+              child: _buildContextNote(context, state, displayNote),
             ),
             SliverToBoxAdapter(
-              child: _buildMainNote(context, viewModel, displayNote),
+              child: _buildMainNote(context, state, displayNote),
             ),
             SliverToBoxAdapter(
-              child: _buildReplyInputSection(context, viewModel),
+              child: _buildReplyInputSection(context, state),
             ),
-            _buildThreadRepliesSliver(context, viewModel, displayNote),
+            _buildThreadRepliesSliver(context, state, displayNote),
           ] else ...[
             SliverFillRemaining(
               hasScrollBody: false,
@@ -199,58 +217,89 @@ class _ThreadPageState extends State<ThreadPage> {
             ),
           ],
           SliverToBoxAdapter(
-            child: SizedBox(height: MediaQuery.of(context).padding.bottom + 120),
+            child:
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 120),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildContextNote(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
-    final threadStructure = viewModel.threadStructureState.data;
-    if (threadStructure == null) return const SizedBox.shrink();
-    
-    if (displayNote.id == threadStructure.rootNote.id) {
+  Widget _buildContextNote(BuildContext context, ThreadLoaded state,
+      Map<String, dynamic> displayNote) {
+    final threadStructure = state.threadStructure;
+    final displayNoteId = displayNote['id'] as String? ?? '';
+    final rootNoteId = threadStructure.rootNote['id'] as String? ?? '';
+
+    if (displayNoteId == rootNoteId) {
       return const SizedBox.shrink();
     }
-    
-    final parentChain = threadStructure.getParentChain(displayNote.id);
+
+    final parentChain = _getParentChain(threadStructure, displayNoteId);
     if (parentChain.isEmpty) return const SizedBox.shrink();
 
     return Column(
       children: parentChain.map((parentNote) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: _buildSimpleNoteWidget(context, parentNote, viewModel, isSmallView: true),
+          child: _buildSimpleNoteWidget(context, parentNote, state,
+              isSmallView: true),
         );
       }).toList(),
     );
   }
 
-  Widget _buildMainNote(BuildContext context, ThreadViewModel viewModel, NoteModel note) {
-    if (note.isRepost) {
+  List<Map<String, dynamic>> _getParentChain(
+      ThreadStructure structure, String noteId) {
+    final List<Map<String, dynamic>> chain = [];
+    Map<String, dynamic>? currentNote = structure.getNote(noteId);
+    final rootNoteId = structure.rootNote['id'] as String? ?? '';
+
+    while (currentNote != null) {
+      final currentNoteId = currentNote['id'] as String? ?? '';
+      if (currentNoteId == rootNoteId) {
+        break;
+      }
+      final parentId = currentNote['parentId'] as String? ?? rootNoteId;
+      if (parentId == rootNoteId) {
+        break;
+      }
+      final parent = structure.getNote(parentId);
+      if (parent == null) break;
+      chain.insert(0, parent);
+      currentNote = parent;
+    }
+
+    return chain;
+  }
+
+  Widget _buildMainNote(
+      BuildContext context, ThreadLoaded state, Map<String, dynamic> note) {
+    final isRepost = note['isRepost'] as bool? ?? false;
+    if (isRepost) {
       return const SizedBox.shrink();
     }
 
-    final focusedNoteId = _currentFocusedNoteId ?? widget.focusedNoteId;
-    final noteKey = _getNoteKey(note.id);
-    final isFocused = focusedNoteId == note.id;
+    final focusedNoteId = _currentFocusedNoteId ?? state.focusedNoteId;
+    final noteId = note['id'] as String? ?? '';
+    final noteKey = _getNoteKey(noteId);
+    final isFocused = focusedNoteId == noteId;
 
     return Container(
       key: isFocused ? noteKey : null,
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: FocusedNoteWidget(
         note: note,
-        currentUserNpub: viewModel.currentUserNpub,
-        notesNotifier: ValueNotifier<List<NoteModel>>([]),
-        profiles: viewModel.userProfiles,
+        currentUserNpub: state.currentUserNpub,
+        notesNotifier: ValueNotifier<List<Map<String, dynamic>>>([]),
+        profiles: state.userProfiles,
         notesListProvider: null,
         isSelectable: true,
       ),
     );
   }
 
-  Widget _buildReplyInputSection(BuildContext context, ThreadViewModel viewModel) {
+  Widget _buildReplyInputSection(BuildContext context, ThreadLoaded state) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: GestureDetector(
@@ -275,29 +324,36 @@ class _ThreadPageState extends State<ThreadPage> {
                   color: context.colors.primary.withValues(alpha: 0.1),
                 ),
                 child: ClipOval(
-                  child: viewModel.currentUser?.profileImage.isNotEmpty == true
-                      ? CachedNetworkImage(
-                          imageUrl: viewModel.currentUser!.profileImage,
-                          fit: BoxFit.cover,
-                          fadeInDuration: Duration.zero,
-                          fadeOutDuration: Duration.zero,
-                          maxHeightDiskCache: 80,
-                          maxWidthDiskCache: 80,
-                          memCacheWidth: 80,
-                          memCacheHeight: 80,
-                          errorWidget: (context, url, error) {
-                            return Icon(
+                  child: Builder(
+                    builder: (context) {
+                      final currentUser = state.currentUser;
+                      final profileImage =
+                          currentUser?['profileImage'] as String? ?? '';
+                      return profileImage.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: profileImage,
+                              fit: BoxFit.cover,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              maxHeightDiskCache: 80,
+                              maxWidthDiskCache: 80,
+                              memCacheWidth: 80,
+                              memCacheHeight: 80,
+                              errorWidget: (context, url, error) {
+                                return Icon(
+                                  Icons.person,
+                                  size: 24,
+                                  color: context.colors.primary,
+                                );
+                              },
+                            )
+                          : Icon(
                               Icons.person,
                               size: 24,
                               color: context.colors.primary,
                             );
-                          },
-                        )
-                      : Icon(
-                          Icons.person,
-                          size: 24,
-                          color: context.colors.primary,
-                        ),
+                    },
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -324,153 +380,94 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Widget _buildThreadRepliesSliver(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
-    return UIStateBuilder<List<NoteModel>>(
-      state: viewModel.repliesState,
-      builder: (context, replies) {
-        final threadStructureState = viewModel.threadStructureState;
+  Widget _buildThreadRepliesSliver(BuildContext context, ThreadLoaded state,
+      Map<String, dynamic> displayNote) {
+    final threadStructure = state.threadStructure;
+    final displayNoteId = displayNote['id'] as String? ?? '';
 
-        if (threadStructureState.isLoading) {
-          return SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.all(32),
-              child: Center(
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(color: context.colors.primary),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Building thread structure...',
-                      style: TextStyle(color: context.colors.textSecondary),
-                    ),
-                  ],
-                ),
+    final allDirectReplies = threadStructure.getChildren(displayNoteId);
+    final directReplies = <Map<String, dynamic>>[];
+    for (final reply in allDirectReplies) {
+      final isRepost = reply['isRepost'] as bool? ?? false;
+      if (!isRepost) {
+        directReplies.add(reply);
+      }
+    }
+
+    final currentUserNpub = state.currentUserNpub;
+    directReplies.sort((a, b) {
+      final aAuthor = a['author'] as String? ?? '';
+      final bAuthor = b['author'] as String? ?? '';
+      final aIsUserReply = aAuthor == currentUserNpub;
+      final bIsUserReply = bAuthor == currentUserNpub;
+
+      if (aIsUserReply && !bIsUserReply) return -1;
+      if (!aIsUserReply && bIsUserReply) return 1;
+
+      final aTimestamp = a['timestamp'] as DateTime? ?? DateTime(0);
+      final bTimestamp = b['timestamp'] as DateTime? ?? DateTime(0);
+      return aTimestamp.compareTo(bTimestamp);
+    });
+
+    if (directReplies.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Text(
+              'No replies yet',
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 16,
               ),
-            ),
-          );
-        }
-
-        final threadStructure = threadStructureState.data;
-        if (threadStructure == null) {
-          return const SliverToBoxAdapter(child: SizedBox.shrink());
-        }
-
-        final allDirectReplies = threadStructure.getChildren(displayNote.id);
-        final directReplies = <NoteModel>[];
-        for (final reply in allDirectReplies) {
-          if (!reply.isRepost) {
-            directReplies.add(reply);
-          }
-        }
-        
-        final currentUserNpub = viewModel.currentUserNpub;
-        directReplies.sort((a, b) {
-          final aIsUserReply = a.author == currentUserNpub;
-          final bIsUserReply = b.author == currentUserNpub;
-          
-          if (aIsUserReply && !bIsUserReply) return -1;
-          if (!aIsUserReply && bIsUserReply) return 1;
-          
-          return a.timestamp.compareTo(b.timestamp);
-        });
-
-        _ensureCacheTimerStarted(viewModel);
-
-        if (directReplies.isEmpty) {
-          return SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Text(
-                  'No replies yet',
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-
-        final maxVisible = math.min(_visibleRepliesCount, _maxInitialReplies);
-        final visibleReplies = directReplies.take(maxVisible).toList();
-        final hasMoreReplies = directReplies.length > maxVisible;
-
-        return SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              if (index < visibleReplies.length) {
-                final reply = visibleReplies[index];
-                final showSeparator = index < visibleReplies.length - 1;
-                return Column(
-                  key: ValueKey('reply_${reply.id}'),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildThreadReply(
-                      context,
-                      viewModel,
-                      reply,
-                      threadStructure,
-                      0,
-                    ),
-                    if (showSeparator) _buildNoteSeparator(context),
-                  ],
-                );
-              } else if (index == visibleReplies.length && hasMoreReplies) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
-                  child: _buildLoadMoreButton(context, directReplies.length),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-            childCount: visibleReplies.length + (hasMoreReplies ? 1 : 0),
-            addAutomaticKeepAlives: false,
-            addRepaintBoundaries: true,
-          ),
-        );
-      },
-      loading: () => SliverToBoxAdapter(
-        child: Container(
-          padding: const EdgeInsets.all(32),
-          child: Center(
-            child: Column(
-              children: [
-                CircularProgressIndicator(color: context.colors.primary),
-                const SizedBox(height: 16),
-                Text(
-                  'Loading replies...',
-                  style: TextStyle(color: context.colors.textSecondary),
-                ),
-              ],
             ),
           ),
         ),
-      ),
-      empty: (message) {
-        _ensureCacheTimerStarted(viewModel);
-        return SliverToBoxAdapter(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Text(
-                'No replies yet',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 16,
+      );
+    }
+
+    final maxVisible = math.min(_visibleRepliesCount, _maxInitialReplies);
+    final visibleReplies = directReplies.take(maxVisible).toList();
+    final hasMoreReplies = directReplies.length > maxVisible;
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index < visibleReplies.length) {
+            final reply = visibleReplies[index];
+            final showSeparator = index < visibleReplies.length - 1;
+            return Column(
+              key: ValueKey('reply_${reply['id'] as String? ?? ''}'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildThreadReply(
+                  context,
+                  state,
+                  reply,
+                  threadStructure,
+                  0,
                 ),
-              ),
-            ),
-          ),
-        );
-      },
+                if (showSeparator) _buildNoteSeparator(context),
+              ],
+            );
+          } else if (index == visibleReplies.length && hasMoreReplies) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+              child: _buildLoadMoreButton(context, directReplies.length),
+            );
+          }
+          return const SizedBox.shrink();
+        },
+        childCount: visibleReplies.length + (hasMoreReplies ? 1 : 0),
+        addAutomaticKeepAlives: false,
+        addRepaintBoundaries: true,
+      ),
     );
   }
 
   Widget _buildLoadMoreButton(BuildContext context, int totalReplies) {
     return Center(
-        child: GestureDetector(
+      child: GestureDetector(
         onTap: () {
           setState(() {
             _visibleRepliesCount = math.min(
@@ -496,8 +493,8 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildThreadReply(
     BuildContext context,
-    ThreadViewModel viewModel,
-    NoteModel reply,
+    ThreadLoaded state,
+    Map<String, dynamic> reply,
     ThreadStructure threadStructure,
     int depth,
   ) {
@@ -505,32 +502,38 @@ class _ThreadPageState extends State<ThreadPage> {
     const int maxDepth = 1;
     final double currentIndent = depth * baseIndentWidth;
 
-    final focusedNoteId = _currentFocusedNoteId ?? widget.focusedNoteId;
-    final isFocused = reply.id == focusedNoteId;
-    final noteKey = _getNoteKey(reply.id);
-    final allNestedReplies = threadStructure.getChildren(reply.id);
-    final nestedReplies = <NoteModel>[];
+    final focusedNoteId = _currentFocusedNoteId ?? state.focusedNoteId;
+    final replyId = reply['id'] as String? ?? '';
+    final isFocused = replyId == focusedNoteId;
+    final noteKey = _getNoteKey(replyId);
+    final allNestedReplies = threadStructure.getChildren(replyId);
+    final nestedReplies = <Map<String, dynamic>>[];
     for (final nestedReply in allNestedReplies) {
-      if (!nestedReply.isRepost) {
+      final isRepost = nestedReply['isRepost'] as bool? ?? false;
+      if (!isRepost) {
         nestedReplies.add(nestedReply);
       }
     }
-    
-    final currentUserNpub = viewModel.currentUserNpub;
+
+    final currentUserNpub = state.currentUserNpub;
     nestedReplies.sort((a, b) {
-      final aIsUserReply = a.author == currentUserNpub;
-      final bIsUserReply = b.author == currentUserNpub;
-      
+      final aAuthor = a['author'] as String? ?? '';
+      final bAuthor = b['author'] as String? ?? '';
+      final aIsUserReply = aAuthor == currentUserNpub;
+      final bIsUserReply = bAuthor == currentUserNpub;
+
       if (aIsUserReply && !bIsUserReply) return -1;
       if (!aIsUserReply && bIsUserReply) return 1;
-      
-      return a.timestamp.compareTo(b.timestamp);
+
+      final aTimestamp = a['timestamp'] as DateTime? ?? DateTime(0);
+      final bTimestamp = b['timestamp'] as DateTime? ?? DateTime(0);
+      return aTimestamp.compareTo(bTimestamp);
     });
-    
+
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
     return Container(
-      key: ValueKey('reply_${reply.id}_$depth'),
+      key: ValueKey('reply_${replyId}_$depth'),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -543,7 +546,7 @@ class _ThreadPageState extends State<ThreadPage> {
               children: [
                 _buildEnhancedNoteWidget(
                   context,
-                  viewModel,
+                  state,
                   reply,
                   depth,
                 ),
@@ -551,7 +554,7 @@ class _ThreadPageState extends State<ThreadPage> {
                   ...nestedReplies.take(_maxNestedReplies).map(
                         (nestedReply) => _buildThreadReply(
                           context,
-                          viewModel,
+                          state,
                           nestedReply,
                           threadStructure,
                           depth + 1,
@@ -598,49 +601,53 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildEnhancedNoteWidget(
     BuildContext context,
-    ThreadViewModel viewModel,
-    NoteModel note,
+    ThreadLoaded state,
+    Map<String, dynamic> note,
     int depth,
   ) {
+    final noteId = note['id'] as String? ?? '';
     return RepaintBoundary(
       child: NoteWidget(
-        key: ValueKey('note_${note.id}'),
+        key: ValueKey('note_$noteId'),
         note: note,
-        currentUserNpub: viewModel.currentUserNpub,
-        notesNotifier: ValueNotifier<List<NoteModel>>([]),
-        profiles: viewModel.userProfiles,
+        currentUserNpub: state.currentUserNpub,
+        notesNotifier: ValueNotifier<List<Map<String, dynamic>>>([]),
+        profiles: state.userProfiles,
         containerColor: Colors.transparent,
         isSmallView: depth > 0,
         scrollController: _scrollController,
         isVisible: true,
-        onNoteTap: _handleNoteTap,
+        onNoteTap: (noteId, rootId) =>
+            _handleNoteTap(noteId, rootId, state.threadStructure),
       ),
     );
   }
 
   Widget _buildSimpleNoteWidget(
     BuildContext context,
-    NoteModel note,
-    ThreadViewModel viewModel, {
+    Map<String, dynamic> note,
+    ThreadLoaded state, {
     bool isSmallView = false,
   }) {
+    final noteId = note['id'] as String? ?? '';
     return RepaintBoundary(
       child: NoteWidget(
-        key: ValueKey('simple_${note.id}'),
+        key: ValueKey('simple_$noteId'),
         note: note,
-        currentUserNpub: viewModel.currentUserNpub,
-        notesNotifier: ValueNotifier<List<NoteModel>>([]),
-        profiles: viewModel.userProfiles,
+        currentUserNpub: state.currentUserNpub,
+        notesNotifier: ValueNotifier<List<Map<String, dynamic>>>([]),
+        profiles: state.userProfiles,
         containerColor: context.colors.background,
         isSmallView: isSmallView,
         scrollController: _scrollController,
         isVisible: true,
-        onNoteTap: _handleNoteTap,
+        onNoteTap: (noteId, rootId) =>
+            _handleNoteTap(noteId, rootId, state.threadStructure),
       ),
     );
   }
 
-  Widget _buildErrorState(BuildContext context, String message, ThreadViewModel viewModel) {
+  Widget _buildErrorState(BuildContext context, String message) {
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -673,7 +680,9 @@ class _ThreadPageState extends State<ThreadPage> {
                 const SizedBox(height: 24),
                 PrimaryButton(
                   label: 'Retry',
-                  onPressed: () => viewModel.loadThreadCommand.execute(),
+                  onPressed: () {
+                    context.read<ThreadBloc>().add(const ThreadRefreshed());
+                  },
                   backgroundColor: context.colors.accent,
                   foregroundColor: Colors.white,
                 ),
@@ -685,76 +694,36 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Widget _buildNotFoundState(BuildContext context, ThreadViewModel viewModel) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          SizedBox(height: MediaQuery.of(context).size.height * 0.2),
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.search_off,
-                  size: 64,
-                  color: context.colors.textSecondary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Note not found',
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    'The note may have been deleted or is not available',
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                PrimaryButton(
-                  label: 'Retry',
-                  onPressed: () => viewModel.loadThreadCommand.execute(),
-                  backgroundColor: context.colors.accent,
-                  foregroundColor: Colors.white,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _handleNoteTap(String noteId, String? rootId) {
-    final viewModel = _viewModel;
-    if (viewModel == null) return;
-    
-    final threadStructure = viewModel.threadStructureState.data;
-    
+  void _handleNoteTap(String noteId, String? rootId,
+      [ThreadStructure? threadStructure]) {
     String targetRootId = rootId ?? widget.rootNoteId;
     String? targetFocusedId;
-    
-    final note = threadStructure?.getNote(noteId);
-    if (note != null) {
-      if (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) {
-        targetRootId = note.rootId!;
-        targetFocusedId = noteId;
-      } else if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
-        targetRootId = note.rootId!;
-        targetFocusedId = null;
+
+    if (threadStructure != null) {
+      final note = threadStructure.getNote(noteId);
+      if (note != null) {
+        final isReply = note['isReply'] as bool? ?? false;
+        final noteRootId = note['rootId'] as String?;
+        final isRepost = note['isRepost'] as bool? ?? false;
+
+        if (isReply && noteRootId != null && noteRootId.isNotEmpty) {
+          targetRootId = noteRootId;
+          targetFocusedId = noteId;
+        } else if (isRepost && noteRootId != null && noteRootId.isNotEmpty) {
+          targetRootId = noteRootId;
+          targetFocusedId = null;
+        } else {
+          targetRootId = noteId;
+          targetFocusedId = null;
+        }
       } else {
-        targetRootId = noteId;
-        targetFocusedId = null;
+        if (rootId != null && rootId != widget.rootNoteId) {
+          targetRootId = rootId;
+          targetFocusedId = noteId;
+        } else {
+          targetRootId = noteId;
+          targetFocusedId = null;
+        }
       }
     } else {
       if (rootId != null && rootId != widget.rootNoteId) {
@@ -765,14 +734,17 @@ class _ThreadPageState extends State<ThreadPage> {
         targetFocusedId = null;
       }
     }
-    
+
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
+      context.push(
+          '/home/feed/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
+      context.push(
+          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
     } else {
-      context.push('/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
+      context.push(
+          '/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
     }
   }
 
@@ -818,7 +790,7 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  Future<void> _debouncedRefresh(ThreadViewModel viewModel) async {
+  Future<void> _debouncedRefresh(BuildContext context) async {
     if (_isRefreshing) return;
 
     setState(() {
@@ -826,7 +798,7 @@ class _ThreadPageState extends State<ThreadPage> {
     });
 
     try {
-      await viewModel.refreshThreadCommand.execute();
+      context.read<ThreadBloc>().add(const ThreadRefreshed());
     } finally {
       if (mounted) {
         setState(() {
@@ -835,25 +807,6 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
   }
-
-  void _ensureCacheTimerStarted(ThreadViewModel viewModel) {
-    if (_cacheTimerStarted) return;
-    _cacheTimerStarted = true;
-    
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      
-      _cacheCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-        if (!mounted) {
-          timer.cancel();
-          _cacheCheckTimer = null;
-          return;
-        }
-        viewModel.checkRepliesFromCache();
-      });
-    });
-  }
-
 
   Widget _buildNoteSeparator(BuildContext context) {
     return SizedBox(
@@ -869,27 +822,27 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Future<void> _handleShare(BuildContext context, ThreadViewModel viewModel) async {
-    final rootNote = viewModel.rootNoteState.data;
+  Future<void> _handleShare(BuildContext context, ThreadState state) async {
+    final rootNote = state is ThreadLoaded ? state.rootNote : null;
     if (rootNote == null) return;
 
     try {
+      final rootNoteId = rootNote['id'] as String? ?? '';
       String noteId;
-      if (rootNote.id.startsWith('note1')) {
-        noteId = rootNote.id;
+      if (rootNoteId.startsWith('note1')) {
+        noteId = rootNoteId;
       } else {
-        noteId = encodeBasicBech32(rootNote.id, 'note');
+        noteId = encodeBasicBech32(rootNoteId, 'note');
       }
-      
+
       final nostrLink = 'nostr:$noteId';
-      
+
       final box = context.findRenderObject() as RenderBox?;
       await SharePlus.instance.share(
         ShareParams(
           text: nostrLink,
-          sharePositionOrigin: box != null 
-              ? box.localToGlobal(Offset.zero) & box.size 
-              : null,
+          sharePositionOrigin:
+              box != null ? box.localToGlobal(Offset.zero) & box.size : null,
         ),
       );
     } catch (e) {

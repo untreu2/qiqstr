@@ -8,7 +8,8 @@ import '../repositories/user_repository.dart';
 import 'lifecycle_manager.dart';
 
 class MemoryTrimmingService {
-  static final MemoryTrimmingService _instance = MemoryTrimmingService._internal();
+  static final MemoryTrimmingService _instance =
+      MemoryTrimmingService._internal();
   factory MemoryTrimmingService() => _instance;
   MemoryTrimmingService._internal();
 
@@ -24,13 +25,13 @@ class MemoryTrimmingService {
 
   void startPeriodicTrimming() {
     if (_isRunning) return;
-    
+
     _isRunning = true;
-    
+
     Future.delayed(const Duration(seconds: 30), () {
       trimMemory();
     });
-    
+
     _runTrimmingLoop();
     LifecycleManager().addOnResumeCallback(_onAppResumed);
   }
@@ -38,14 +39,14 @@ class MemoryTrimmingService {
   Future<void> _runTrimmingLoop() async {
     while (_isRunning) {
       await Future.delayed(trimmingInterval);
-      
+
       if (!_isRunning) break;
-      
+
       if (!LifecycleManager().isAppInForeground) {
         debugPrint('[MemoryTrimming] Skipping trim - app in background');
         continue;
       }
-      
+
       if (kDebugMode) {
         debugPrint('[MemoryTrimming] Starting periodic memory trim');
       }
@@ -83,8 +84,9 @@ class MemoryTrimmingService {
 
       _lastTrimTime = DateTime.now();
       final duration = _lastTrimTime!.difference(startTime);
-      
-      debugPrint('[MemoryTrimming] Memory trim completed in ${duration.inMilliseconds}ms');
+
+      debugPrint(
+          '[MemoryTrimming] Memory trim completed in ${duration.inMilliseconds}ms');
     } catch (e) {
       debugPrint('[MemoryTrimming] Error during memory trim: $e');
     } finally {
@@ -94,11 +96,13 @@ class MemoryTrimmingService {
 
   Future<void> _pruneOldCachedData() async {
     try {
-      debugPrint('[MemoryTrimming] Pruning old cached notes and limiting cache size');
-      
+      debugPrint(
+          '[MemoryTrimming] Pruning old cached notes and limiting cache size');
+
       final noteRepository = AppDI.get<NoteRepository>();
-      
-      final pruneResult = await noteRepository.pruneOldNotes(noteRetentionPeriod);
+
+      final pruneResult =
+          await noteRepository.pruneOldNotes(noteRetentionPeriod);
       pruneResult.fold(
         (removedCount) {
           if (removedCount > 0) {
@@ -108,16 +112,17 @@ class MemoryTrimmingService {
         (error) => debugPrint('[MemoryTrimming] Error pruning notes: $error'),
       );
 
-      final limitResult = await noteRepository.pruneCacheToLimit(maxCachedNotes);
+      final limitResult =
+          await noteRepository.pruneCacheToLimit(maxCachedNotes);
       limitResult.fold(
         (removedCount) {
           if (removedCount > 0) {
-            debugPrint('[MemoryTrimming] Removed $removedCount notes to stay under limit');
+            debugPrint(
+                '[MemoryTrimming] Removed $removedCount notes to stay under limit');
           }
         },
         (error) => debugPrint('[MemoryTrimming] Error limiting cache: $error'),
       );
-      
     } catch (e) {
       debugPrint('[MemoryTrimming] Error pruning old data: $e');
     }
@@ -126,19 +131,21 @@ class MemoryTrimmingService {
   Future<void> _cleanupImageCache() async {
     try {
       debugPrint('[MemoryTrimming] Cleaning up image cache');
-      
+
       final PaintingBinding binding = PaintingBinding.instance;
       final imageCache = binding.imageCache;
-      
+
       final currentSize = imageCache.currentSizeBytes;
       final maxSize = imageCache.maximumSizeBytes;
-      
+
       if (currentSize > (maxSize * 0.8)) {
-        debugPrint('[MemoryTrimming] Image cache is ${(currentSize / maxSize * 100).toStringAsFixed(1)}% full, clearing');
+        debugPrint(
+            '[MemoryTrimming] Image cache is ${(currentSize / maxSize * 100).toStringAsFixed(1)}% full, clearing');
         imageCache.clear();
         imageCache.clearLiveImages();
       } else {
-        debugPrint('[MemoryTrimming] Image cache size: ${(currentSize / (1024 * 1024)).toStringAsFixed(2)}MB / ${(maxSize / (1024 * 1024)).toStringAsFixed(2)}MB');
+        debugPrint(
+            '[MemoryTrimming] Image cache size: ${(currentSize / (1024 * 1024)).toStringAsFixed(2)}MB / ${(maxSize / (1024 * 1024)).toStringAsFixed(2)}MB');
       }
     } catch (e) {
       debugPrint('[MemoryTrimming] Error cleaning image cache: $e');
@@ -147,42 +154,33 @@ class MemoryTrimmingService {
 
   Future<void> _pruneUserCache() async {
     try {
-      debugPrint('[MemoryTrimming] Pruning least recently used user profiles');
-      
       final userRepository = AppDI.get<UserRepository>();
-      
-      final cacheSize = userRepository.getCachedUserCount();
-      if (cacheSize > maxCachedUsers) {
-        final toRemove = cacheSize - maxCachedUsers;
-        debugPrint('[MemoryTrimming] User cache has $cacheSize users, removing $toRemove least recent');
-        
-        await userRepository.pruneLeastRecentlyUsed(maxCachedUsers);
-      } else {
-        debugPrint('[MemoryTrimming] User cache size: $cacheSize / $maxCachedUsers');
-      }
-      
+      final cacheSize = await userRepository.getCachedUserCount();
+      debugPrint('[MemoryTrimming] User cache size: $cacheSize profiles');
     } catch (e) {
-      debugPrint('[MemoryTrimming] Error pruning user cache: $e');
+      debugPrint('[MemoryTrimming] Error checking user cache: $e');
     }
   }
 
   Future<void> _pruneNotificationCache() async {
     try {
       final cutoffTime = DateTime.now().subtract(notificationRetentionPeriod);
-      debugPrint('[MemoryTrimming] Pruning notifications older than $cutoffTime');
-      
+      debugPrint(
+          '[MemoryTrimming] Pruning notifications older than $cutoffTime');
+
       final notificationRepository = AppDI.get<NotificationRepository>();
-      final pruned = await notificationRepository.pruneOldNotifications(notificationRetentionPeriod);
-      
+      final pruned = await notificationRepository
+          .pruneOldNotifications(notificationRetentionPeriod);
+
       pruned.fold(
         (count) {
           if (count > 0) {
             debugPrint('[MemoryTrimming] Removed $count old notifications');
           }
         },
-        (error) => debugPrint('[MemoryTrimming] Error pruning notifications: $error'),
+        (error) =>
+            debugPrint('[MemoryTrimming] Error pruning notifications: $error'),
       );
-      
     } catch (e) {
       debugPrint('[MemoryTrimming] Error pruning notifications: $e');
     }
@@ -195,4 +193,3 @@ class MemoryTrimmingService {
   DateTime? get lastTrimTime => _lastTrimTime;
   bool get isTrimmingMemory => _isTrimmingMemory;
 }
-

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
 import '../../theme/theme_manager.dart';
-import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/quote_widget_viewmodel.dart';
+import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
+import '../../../presentation/blocs/quote_widget/quote_widget_event.dart';
+import '../../../presentation/blocs/quote_widget/quote_widget_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'note_content_widget.dart';
 
 class QuoteWidget extends StatelessWidget {
@@ -20,41 +21,46 @@ class QuoteWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<QuoteWidgetViewModel>(
-      create: (_) => QuoteWidgetViewModel(
-        noteRepository: AppDI.get(),
-        userRepository: AppDI.get(),
-        bech32: bech32,
-      ),
-      child: Consumer<QuoteWidgetViewModel>(
-        builder: (context, viewModel, child) {
-          if (viewModel.isLoading) {
-            return Container(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.colors.border, width: 1),
-              ),
-              child: const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+    return BlocProvider<QuoteWidgetBloc>(
+      create: (context) {
+        final bloc = QuoteWidgetBloc(
+          noteRepository: AppDI.get(),
+          userRepository: AppDI.get(),
+          bech32: bech32,
+        );
+        bloc.add(QuoteWidgetLoadRequested(bech32: bech32));
+        return bloc;
+      },
+      child: BlocBuilder<QuoteWidgetBloc, QuoteWidgetState>(
+        builder: (context, state) {
+          return switch (state) {
+            QuoteWidgetLoading() => Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.colors.border, width: 1),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 ),
               ),
-            );
-          }
-
-          if (viewModel.hasError || viewModel.note == null) {
-            return const SizedBox.shrink();
-          }
-
-          return _QuoteContent(
-            viewModel: viewModel,
-            shortMode: shortMode,
-          );
+            QuoteWidgetError() => const SizedBox.shrink(),
+            QuoteWidgetLoaded(:final note, :final user, :final formattedTime, :final parsedContent, :final shouldTruncate) => _QuoteContent(
+                note: note,
+                user: user,
+                formattedTime: formattedTime,
+                parsedContent: parsedContent,
+                shouldTruncate: shouldTruncate,
+                shortMode: shortMode,
+              ),
+            _ => const SizedBox.shrink(),
+          };
         },
       ),
     );
@@ -62,41 +68,48 @@ class QuoteWidget extends StatelessWidget {
 }
 
 class _QuoteContent extends StatelessWidget {
-  final QuoteWidgetViewModel viewModel;
+  final Map<String, dynamic> note;
+  final Map<String, dynamic>? user;
+  final String? formattedTime;
+  final Map<String, dynamic>? parsedContent;
+  final bool shouldTruncate;
   final bool shortMode;
 
   const _QuoteContent({
-    required this.viewModel,
+    required this.note,
+    this.user,
+    this.formattedTime,
+    this.parsedContent,
+    this.shouldTruncate = false,
     required this.shortMode,
   });
 
   void _navigateToThread(BuildContext context) {
-    final note = viewModel.note;
-    if (note == null) return;
-
+    final noteId = note['id'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(note.id)}');
+      context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(note.id)}');
+      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
     } else {
-      context.push('/thread?rootNoteId=${Uri.encodeComponent(note.id)}');
+      context.push('/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
     }
   }
 
   void _navigateToProfile(BuildContext context) {
-    final user = viewModel.user;
     if (user == null) return;
 
+    final userNpub = user!['npub'] as String? ?? '';
+    final userPubkeyHex = user!['pubkeyHex'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+      context.push('/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+      context.push('/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     } else if (currentLocation.startsWith('/home/dm')) {
-      context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+      context.push('/home/dm/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     } else {
-      context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+      context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     }
   }
 
@@ -112,38 +125,40 @@ class _QuoteContent extends StatelessWidget {
     context.push('$basePath/profile?npub=${Uri.encodeComponent(npub)}');
   }
 
-  UserModel _createFallbackUser(String npub) {
+  Map<String, dynamic> _createFallbackUser(String npub) {
     final shortName = npub.length > 8 ? npub.substring(0, 8) : npub;
-    return UserModel.create(
-      pubkeyHex: npub,
-      name: shortName,
-      about: '',
-      profileImage: '',
-      banner: '',
-      website: '',
-      nip05: '',
-      lud16: '',
-      updatedAt: DateTime.now(),
-      nip05Verified: false,
-    );
+    return {
+      'pubkeyHex': npub,
+      'name': shortName,
+      'about': '',
+      'profileImage': '',
+      'banner': '',
+      'website': '',
+      'nip05': '',
+      'lud16': '',
+      'updatedAt': DateTime.now(),
+      'nip05Verified': false,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final note = viewModel.note!;
-    final user = viewModel.user ?? _createFallbackUser(note.author);
-    final parsedContent = viewModel.parsedContent ?? {
-      'textParts': [{'type': 'text', 'text': note.content}],
+    final noteAuthor = note['author'] as String? ?? '';
+    final noteContent = note['content'] as String? ?? '';
+    final noteId = note['id'] as String? ?? '';
+    final displayUser = user ?? _createFallbackUser(noteAuthor);
+    final displayParsedContent = parsedContent ?? {
+      'textParts': [{'type': 'text', 'text': noteContent}],
       'mediaUrls': <String>[],
       'linkUrls': <String>[],
       'quoteIds': <String>[],
     };
 
-    Map<String, dynamic> contentToShow = parsedContent;
+    Map<String, dynamic> contentToShow = displayParsedContent;
     if (shortMode) {
-      contentToShow = _createShortModeContent(parsedContent);
-    } else if (viewModel.shouldTruncate) {
-      contentToShow = _createTruncatedContent(parsedContent, note.id);
+      contentToShow = _createShortModeContent(displayParsedContent);
+    } else if (shouldTruncate) {
+      contentToShow = _createTruncatedContent(displayParsedContent, noteId);
     }
 
     return GestureDetector(
@@ -160,15 +175,15 @@ class _QuoteContent extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHeader(context, user),
-            if (_hasContent(parsedContent))
+            _buildHeader(context, displayUser),
+            if (_hasContent(displayParsedContent))
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: NoteContentWidget(
-                  noteId: note.id,
+                  noteId: noteId,
                   parsedContent: contentToShow,
                   onNavigateToMentionProfile: (npub) => _navigateToMentionProfile(context, npub),
-                  onShowMoreTap: viewModel.shouldTruncate ? (String noteId) => _navigateToThread(context) : null,
+                  onShowMoreTap: shouldTruncate ? (String noteId) => _navigateToThread(context) : null,
                   shortMode: shortMode,
                 ),
               ),
@@ -178,7 +193,9 @@ class _QuoteContent extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, UserModel user) {
+  Widget _buildHeader(BuildContext context, Map<String, dynamic> user) {
+    final userProfileImage = user['profileImage'] as String? ?? '';
+    final userName = user['name'] as String? ?? '';
     return Row(
       children: [
         GestureDetector(
@@ -187,9 +204,9 @@ class _QuoteContent extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundColor: user.profileImage.isNotEmpty ? context.colors.surfaceTransparent : context.colors.secondary,
-                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                child: user.profileImage.isEmpty
+                backgroundColor: userProfileImage.isNotEmpty ? context.colors.surfaceTransparent : context.colors.secondary,
+                backgroundImage: userProfileImage.isNotEmpty ? CachedNetworkImageProvider(userProfileImage) : null,
+                child: userProfileImage.isEmpty
                     ? Icon(
                         Icons.person,
                         size: 14,
@@ -199,7 +216,7 @@ class _QuoteContent extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
+                userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -211,9 +228,9 @@ class _QuoteContent extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        if (viewModel.formattedTime != null)
+        if (formattedTime != null)
           Text(
-            viewModel.formattedTime!,
+            formattedTime!,
             style: TextStyle(
               fontSize: 12,
               color: context.colors.textSecondary,

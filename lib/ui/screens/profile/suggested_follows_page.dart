@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
-import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/suggested_follows_viewmodel.dart';
-import '../../../presentation/providers/viewmodel_provider.dart';
+import '../../../presentation/blocs/suggested_follows/suggested_follows_bloc.dart';
+import '../../../presentation/blocs/suggested_follows/suggested_follows_event.dart';
+import '../../../presentation/blocs/suggested_follows/suggested_follows_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class SuggestedFollowsPage extends StatelessWidget {
   final String npub;
@@ -21,74 +21,79 @@ class SuggestedFollowsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ViewModelBuilder<SuggestedFollowsViewModel>(
-      create: () => SuggestedFollowsViewModel(
-        userRepository: AppDI.get(),
-        authRepository: AppDI.get(),
-        nostrDataService: AppDI.get(),
-      ),
-      builder: (context, viewModel) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: UIStateBuilder<List<UserModel>>(
-            state: viewModel.suggestedUsersState,
-            builder: (context, users) => _buildContent(context, viewModel, users),
-            loading: () => Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: context.colors.primary),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Loading suggested users...',
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            error: (error) => Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 64, color: context.colors.error),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Failed to load suggested users',
-                    style: TextStyle(color: context.colors.error, fontSize: 18),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    error,
-                    style: TextStyle(color: context.colors.textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  PrimaryButton(
-                    label: 'Retry',
-                    onPressed: () => viewModel.loadSuggestedUsers(),
-                    size: ButtonSize.large,
-                  ),
-                ],
-              ),
-            ),
-            empty: (message) => Center(
-              child: Text(
-                message ?? 'No suggested users available at the moment.',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ),
-        );
+    return BlocProvider<SuggestedFollowsBloc>(
+      create: (context) {
+        final bloc = AppDI.get<SuggestedFollowsBloc>();
+        bloc.add(const SuggestedFollowsLoadRequested());
+        return bloc;
       },
+      child: BlocBuilder<SuggestedFollowsBloc, SuggestedFollowsState>(
+        builder: (context, state) {
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: switch (state) {
+              SuggestedFollowsLoading() => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: context.colors.primary),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Loading suggested users...',
+                        style: TextStyle(
+                          color: context.colors.textSecondary,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              SuggestedFollowsError(:final message) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: context.colors.error),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Failed to load suggested users',
+                        style: TextStyle(color: context.colors.error, fontSize: 18),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        message,
+                        style: TextStyle(color: context.colors.textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      PrimaryButton(
+                        label: 'Retry',
+                        onPressed: () {
+                          context.read<SuggestedFollowsBloc>().add(const SuggestedFollowsLoadRequested());
+                        },
+                        size: ButtonSize.large,
+                      ),
+                    ],
+                  ),
+                ),
+              SuggestedFollowsLoaded(:final suggestedUsers) => suggestedUsers.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No suggested users available at the moment.',
+                        style: TextStyle(
+                          color: context.colors.textSecondary,
+                          fontSize: 16,
+                        ),
+                      ),
+                    )
+                  : _buildContent(context, state),
+              _ => const SizedBox(),
+            },
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildContent(BuildContext context, SuggestedFollowsViewModel viewModel, List<UserModel> users) {
+  Widget _buildContent(BuildContext context, SuggestedFollowsLoaded state) {
     return Column(
       children: [
         Expanded(
@@ -98,14 +103,14 @@ class SuggestedFollowsPage extends StatelessWidget {
               children: [
                 _buildHeader(context),
                 const SizedBox(height: 16),
-                ...users.asMap().entries.map((entry) {
+                ...state.suggestedUsers.asMap().entries.map((entry) {
                   final index = entry.key;
                   final user = entry.value;
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildUserItem(context, user, viewModel),
-                      if (index < users.length - 1) const _UserSeparator(),
+                      _buildUserItem(context, user, state),
+                      if (index < state.suggestedUsers.length - 1) const _UserSeparator(),
                     ],
                   );
                 }),
@@ -114,7 +119,7 @@ class SuggestedFollowsPage extends StatelessWidget {
             ),
           ),
         ),
-        _buildBottomSection(context, viewModel),
+        _buildBottomSection(context, state),
       ],
     );
   }
@@ -131,23 +136,30 @@ class SuggestedFollowsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildUserItem(BuildContext context, UserModel user, SuggestedFollowsViewModel viewModel) {
-    final isSelected = viewModel.selectedUsers.contains(user.npub);
+  Widget _buildUserItem(BuildContext context, Map<String, dynamic> user, SuggestedFollowsLoaded state) {
+    final userNpub = user['npub'] as String? ?? '';
+    final isSelected = state.selectedUsers.contains(userNpub);
+    final profileImage = user['profileImage'] as String? ?? '';
+    final userName = user['name'] as String? ?? '';
+    final nip05 = user['nip05'] as String? ?? '';
+    final nip05Verified = user['nip05Verified'] as bool? ?? false;
     
     return GestureDetector(
-      onTap: () => viewModel.toggleUserSelection(user.npub),
+      onTap: () {
+        context.read<SuggestedFollowsBloc>().add(SuggestedFollowsUserToggled(userNpub));
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            _buildAvatar(context, user.profileImage),
+            _buildAvatar(context, profileImage),
             const SizedBox(width: 12),
             Expanded(
               child: Row(
                 children: [
                   Flexible(
                     child: Text(
-                      user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
+                      userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -156,7 +168,7 @@ class SuggestedFollowsPage extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                  if (nip05.isNotEmpty && nip05Verified) ...[
                     const SizedBox(width: 4),
                     Icon(
                       Icons.verified,
@@ -241,7 +253,7 @@ class SuggestedFollowsPage extends StatelessWidget {
   }
 
 
-  Widget _buildBottomSection(BuildContext context, SuggestedFollowsViewModel viewModel) {
+  Widget _buildBottomSection(BuildContext context, SuggestedFollowsLoaded state) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
       decoration: BoxDecoration(
@@ -249,20 +261,21 @@ class SuggestedFollowsPage extends StatelessWidget {
       ),
       child: SizedBox(
         width: double.infinity,
-        child: _buildContinueButton(context, viewModel),
+        child: _buildContinueButton(context, state),
       ),
     );
   }
 
-  Widget _buildContinueButton(BuildContext context, SuggestedFollowsViewModel viewModel) {
-    final hasMinimumSelection = viewModel.selectedUsers.length >= 3;
-    final isDisabled = viewModel.isProcessing || !hasMinimumSelection;
+  Widget _buildContinueButton(BuildContext context, SuggestedFollowsLoaded state) {
+    final hasMinimumSelection = state.selectedUsers.length >= 3;
+    final isDisabled = state.isProcessing || !hasMinimumSelection;
 
     return GestureDetector(
       onTap: isDisabled
           ? null
           : () async {
-              await _continueToHome(context, viewModel);
+              context.read<SuggestedFollowsBloc>().add(const SuggestedFollowsFollowSelectedRequested());
+              _navigateToHome(context);
             },
       child: Container(
         width: double.infinity,
@@ -271,7 +284,7 @@ class SuggestedFollowsPage extends StatelessWidget {
           color: isDisabled ? context.colors.textPrimary.withValues(alpha: 0.3) : context.colors.textPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
-        child: viewModel.isProcessing
+        child: state.isProcessing
             ? Center(
                 child: SizedBox(
                   height: 20,
@@ -294,11 +307,6 @@ class SuggestedFollowsPage extends StatelessWidget {
               ),
       ),
     );
-  }
-
-  Future<void> _continueToHome(BuildContext context, SuggestedFollowsViewModel viewModel) async {
-    viewModel.followSelectedUsers();
-    _navigateToHome(context);
   }
 
   void _navigateToHome(BuildContext context) {

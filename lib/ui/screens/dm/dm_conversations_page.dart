@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/theme_manager.dart';
-import '../../../core/ui/ui_state_builder.dart';
-import '../../../presentation/providers/viewmodel_provider.dart';
-import '../../../presentation/viewmodels/dm_viewmodel.dart';
-import '../../../models/dm_message_model.dart';
+import '../../../presentation/blocs/dm/dm_bloc.dart';
+import '../../../presentation/blocs/dm/dm_event.dart' as dm_events;
+import '../../../presentation/blocs/dm/dm_state.dart';
+import '../../../core/di/app_di.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/title_widget.dart';
 import '../search/users_search_page.dart';
 
@@ -27,169 +27,190 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return ViewModelProvider.dm(
-      builder: (context, viewModel) {
+    return BlocProvider<DmBloc>(
+      create: (context) {
+        final bloc = AppDI.get<DmBloc>();
         if (!_isInitialized) {
           _isInitialized = true;
           Future.microtask(() {
             if (mounted) {
-              viewModel.loadConversations();
+              bloc.add(const dm_events.DmConversationsLoadRequested());
             }
           });
         }
-
-        return Consumer<DmViewModel>(
-          builder: (context, vm, child) {
-            return _buildConversationList(context, vm);
-          },
-        );
+        return bloc;
       },
+      child: BlocBuilder<DmBloc, DmState>(
+        builder: (context, state) {
+          return _buildConversationList(context, state);
+        },
+      ),
     );
   }
 
-  Widget _buildConversationList(BuildContext context, DmViewModel viewModel) {
+  Widget _buildConversationList(BuildContext context, DmState state) {
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          UIStateBuilder<List<DmConversationModel>>(
-            state: viewModel.conversationsState,
-            builder: (context, conversations) {
-              if (conversations.isEmpty) {
-                return CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: TitleWidget(
-                        title: 'Messages',
-                        fontSize: 32,
-                        useTopPadding: true,
-                        padding: EdgeInsets.fromLTRB(
-                          16,
-                          MediaQuery.of(context).padding.top + 70,
-                          16,
-                          0,
+          switch (state) {
+            DmConversationsLoaded(:final conversations) => conversations.isEmpty
+                ? CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: TitleWidget(
+                          title: 'Messages',
+                          fontSize: 32,
+                          useTopPadding: true,
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            MediaQuery.of(context).padding.top + 70,
+                            16,
+                            0,
+                          ),
                         ),
                       ),
-                    ),
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _buildEmptyState(context),
-                    ),
-                  ],
-                );
-              }
-              return RefreshIndicator(
-                onRefresh: () async {
-                  await viewModel.refreshConversations();
-                },
-                color: context.colors.textPrimary,
-                child: CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: TitleWidget(
-                        title: 'Messages',
-                        fontSize: 32,
-                        useTopPadding: true,
-                        padding: EdgeInsets.fromLTRB(
-                          16,
-                          MediaQuery.of(context).padding.top + 70,
-                          16,
-                          0,
-                        ),
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmptyState(context),
                       ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      sliver: SliverList.separated(
-                        itemCount: conversations.length,
-                        itemBuilder: (context, index) {
-                          return _buildConversationTile(
-                            context,
-                            conversations[index],
-                            viewModel,
-                          );
-                        },
-                        separatorBuilder: (_, __) => const _ConversationSeparator(),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-            loading: () => CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: TitleWidget(
-                    title: 'Messages',
-                    fontSize: 32,
-                    useTopPadding: true,
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      MediaQuery.of(context).padding.top + 70,
-                      16,
-                      0,
-                    ),
-                  ),
-                ),
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-              ],
-            ),
-            error: (error) => CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: TitleWidget(
-                    title: 'Messages',
-                    fontSize: 32,
-                    useTopPadding: true,
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      MediaQuery.of(context).padding.top + 70,
-                      16,
-                      0,
-                    ),
-                  ),
-                ),
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Error loading conversations',
-                          style: TextStyle(color: context.colors.textSecondary),
+                    ],
+                  )
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      context.read<DmBloc>().add(const dm_events.DmConversationsLoadRequested());
+                    },
+                    color: context.colors.textPrimary,
+                    child: CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: TitleWidget(
+                            title: 'Messages',
+                            fontSize: 32,
+                            useTopPadding: true,
+                            padding: EdgeInsets.fromLTRB(
+                              16,
+                              MediaQuery.of(context).padding.top + 70,
+                              16,
+                              0,
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () => viewModel.loadConversations(),
-                          child: const Text('Retry'),
+                        SliverPadding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          sliver: SliverList.separated(
+                            itemCount: conversations.length,
+                            itemBuilder: (context, index) {
+                              return _buildConversationTile(
+                                context,
+                                conversations[index],
+                              );
+                            },
+                            separatorBuilder: (_, __) => const _ConversationSeparator(),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          _buildTopBar(context, viewModel),
+            DmLoading() => CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: TitleWidget(
+                      title: 'Messages',
+                      fontSize: 32,
+                      useTopPadding: true,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        MediaQuery.of(context).padding.top + 70,
+                        16,
+                        0,
+                      ),
+                    ),
+                  ),
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                ],
+              ),
+            DmError() => CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: TitleWidget(
+                      title: 'Messages',
+                      fontSize: 32,
+                      useTopPadding: true,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        MediaQuery.of(context).padding.top + 70,
+                        16,
+                        0,
+                      ),
+                    ),
+                  ),
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Error loading conversations',
+                            style: TextStyle(color: context.colors.textSecondary),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              context.read<DmBloc>().add(const dm_events.DmConversationsLoadRequested());
+                            },
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            _ => CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: TitleWidget(
+                      title: 'Messages',
+                      fontSize: 32,
+                      useTopPadding: true,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        MediaQuery.of(context).padding.top + 70,
+                        16,
+                        0,
+                      ),
+                    ),
+                  ),
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                ],
+              ),
+          },
+          _buildTopBar(context),
         ],
       ),
     );
   }
 
-  Widget _buildTopBar(BuildContext context, DmViewModel viewModel) {
+  Widget _buildTopBar(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
 
     return Positioned(
       top: topPadding + 25,
       right: 16,
       child: GestureDetector(
-        onTap: () => _showUserSearchDialog(context, viewModel),
+        onTap: () => _showUserSearchDialog(context),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
@@ -222,13 +243,21 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
 
   Widget _buildConversationTile(
     BuildContext context,
-    DmConversationModel conversation,
-    DmViewModel viewModel,
+    Map<String, dynamic> conversation,
   ) {
+    final otherUserPubkeyHex = conversation['otherUserPubkeyHex'] as String? ?? '';
+    final otherUserProfileImage = conversation['otherUserProfileImage'] as String?;
+    final displayName = conversation['displayName'] as String? ?? '';
+    final lastMessageTime = conversation['lastMessageTime'] as DateTime?;
+    final lastMessage = conversation['lastMessage'] as Map<String, dynamic>?;
+    final lastMessageContent = lastMessage?['content'] as String? ?? '';
+
     return RepaintBoundary(
       child: InkWell(
         onTap: () {
-          context.push('/home/dm/chat?pubkeyHex=${Uri.encodeComponent(conversation.otherUserPubkeyHex)}');
+          if (otherUserPubkeyHex.isNotEmpty) {
+            context.push('/home/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
+          }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -240,10 +269,10 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
               CircleAvatar(
                 radius: 26,
                 backgroundColor: context.colors.border,
-                backgroundImage: conversation.otherUserProfileImage != null && conversation.otherUserProfileImage!.isNotEmpty
-                    ? CachedNetworkImageProvider(conversation.otherUserProfileImage!)
+                backgroundImage: otherUserProfileImage != null && otherUserProfileImage.isNotEmpty
+                    ? CachedNetworkImageProvider(otherUserProfileImage)
                     : null,
-                child: conversation.otherUserProfileImage == null || conversation.otherUserProfileImage!.isEmpty
+                child: otherUserProfileImage == null || otherUserProfileImage.isEmpty
                     ? Icon(
                         CarbonIcons.user,
                         color: context.colors.textSecondary,
@@ -260,7 +289,7 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
                       children: [
                         Expanded(
                           child: Text(
-                            conversation.displayName,
+                            displayName,
                             style: TextStyle(
                               color: context.colors.textPrimary,
                               fontSize: 16,
@@ -271,11 +300,11 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (conversation.lastMessageTime != null)
+                        if (lastMessageTime != null)
                           Padding(
                             padding: const EdgeInsets.only(left: 8),
                             child: Text(
-                              _formatTime(conversation.lastMessageTime!),
+                              _formatTime(lastMessageTime),
                               style: TextStyle(
                                 color: context.colors.textSecondary,
                                 fontSize: 12,
@@ -284,9 +313,9 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
                           ),
                       ],
                     ),
-                    if (conversation.lastMessage != null) ...[
+                    if (lastMessageContent.isNotEmpty) ...[
                       Text(
-                        conversation.lastMessage!.content,
+                        lastMessageContent,
                         style: TextStyle(
                           color: context.colors.textSecondary,
                           fontSize: 14,
@@ -355,7 +384,7 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
     }
   }
 
-  void _showUserSearchDialog(BuildContext context, DmViewModel viewModel) {
+  void _showUserSearchDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -363,7 +392,10 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
       backgroundColor: Colors.transparent,
       builder: (context) => UserSearchPage(
         onUserSelected: (user) {
-          context.push('/home/dm/chat?pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+          if (pubkeyHex.isNotEmpty) {
+            context.push('/home/dm/chat?pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+          }
         },
       ),
     );

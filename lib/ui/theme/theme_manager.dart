@@ -1,153 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/theme/theme_state.dart';
 import 'colors.dart';
-
-class ThemeManager extends ChangeNotifier {
-  static const String _themeKey = 'theme_mode';
-  static const String _expandedNoteModeKey = 'expanded_note_mode';
-  static const String _bottomNavOrderKey = 'bottom_nav_order';
-  static const String _oneTapZapKey = 'one_tap_zap';
-  static const String _defaultZapAmountKey = 'default_zap_amount';
-  bool? _isDarkMode;
-  bool _isExpandedNoteMode = false;
-  List<int> _bottomNavOrder = [0, 1, 2, 3];
-  bool _oneTapZap = false;
-  int _defaultZapAmount = 21;
-
-  bool get isDarkMode {
-    if (_isDarkMode != null) {
-      return _isDarkMode!;
-    }
-    final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    return brightness == Brightness.dark;
-  }
-
-  bool get isSystemTheme => _isDarkMode == null;
-  bool get isExpandedNoteMode => _isExpandedNoteMode;
-  List<int> get bottomNavOrder => List.unmodifiable(_bottomNavOrder);
-  bool get oneTapZap => _oneTapZap;
-  int get defaultZapAmount => _defaultZapAmount;
-
-  ThemeManager() {
-    _loadTheme();
-    _loadExpandedNoteMode();
-    _loadBottomNavOrder();
-    _loadOneTapZap();
-    _loadDefaultZapAmount();
-  }
-
-  Future<void> _loadTheme() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey(_themeKey)) {
-      _isDarkMode = prefs.getBool(_themeKey);
-    } else {
-      _isDarkMode = null;
-    }
-    notifyListeners();
-  }
-
-  Future<void> _loadExpandedNoteMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    _isExpandedNoteMode = prefs.getBool(_expandedNoteModeKey) ?? false;
-    notifyListeners();
-  }
-
-  Future<void> toggleTheme() async {
-    if (_isDarkMode == null) {
-      final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      _isDarkMode = brightness == Brightness.light;
-    } else {
-      _isDarkMode = !_isDarkMode!;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_themeKey, _isDarkMode!);
-    notifyListeners();
-  }
-
-  Future<void> setTheme(bool isDark) async {
-    if (_isDarkMode != isDark) {
-      _isDarkMode = isDark;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_themeKey, _isDarkMode!);
-      notifyListeners();
-    }
-  }
-
-  Future<void> setSystemTheme() async {
-    _isDarkMode = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_themeKey);
-    notifyListeners();
-  }
-
-  Future<void> toggleExpandedNoteMode() async {
-    _isExpandedNoteMode = !_isExpandedNoteMode;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_expandedNoteModeKey, _isExpandedNoteMode);
-    notifyListeners();
-  }
-
-  Future<void> setExpandedNoteMode(bool isExpanded) async {
-    if (_isExpandedNoteMode != isExpanded) {
-      _isExpandedNoteMode = isExpanded;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_expandedNoteModeKey, _isExpandedNoteMode);
-      notifyListeners();
-    }
-  }
-
-  Future<void> _loadBottomNavOrder() async {
-    final prefs = await SharedPreferences.getInstance();
-    final orderList = prefs.getStringList(_bottomNavOrderKey);
-    if (orderList != null && orderList.length == 4) {
-      _bottomNavOrder = orderList.map((e) => int.parse(e)).toList();
-      notifyListeners();
-    }
-  }
-
-  Future<void> setBottomNavOrder(List<int> order) async {
-    if (order.length == 4 && order.toSet().length == 4) {
-      _bottomNavOrder = List.from(order);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_bottomNavOrderKey, order.map((e) => e.toString()).toList());
-      notifyListeners();
-    }
-  }
-
-  Future<void> _loadOneTapZap() async {
-    final prefs = await SharedPreferences.getInstance();
-    _oneTapZap = prefs.getBool(_oneTapZapKey) ?? false;
-    notifyListeners();
-  }
-
-  Future<void> setOneTapZap(bool enabled) async {
-    if (_oneTapZap != enabled) {
-      _oneTapZap = enabled;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_oneTapZapKey, _oneTapZap);
-      notifyListeners();
-    }
-  }
-
-  Future<void> _loadDefaultZapAmount() async {
-    final prefs = await SharedPreferences.getInstance();
-    _defaultZapAmount = prefs.getInt(_defaultZapAmountKey) ?? 21;
-    notifyListeners();
-  }
-
-  Future<void> setDefaultZapAmount(int amount) async {
-    if (amount > 0 && _defaultZapAmount != amount) {
-      _defaultZapAmount = amount;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_defaultZapAmountKey, _defaultZapAmount);
-      notifyListeners();
-    }
-  }
-
-  AppThemeColors get colors => isDarkMode ? AppThemeColors.dark() : AppThemeColors.light();
-}
 
 class AppThemeColors {
   final Color accent;
@@ -280,16 +135,16 @@ class AppThemeColors {
 extension ThemeExtension on BuildContext {
   AppThemeColors get colors {
     try {
-      final themeManager = Provider.of<ThemeManager>(this, listen: false);
-      return themeManager.colors;
+      final themeState = read<ThemeBloc>().state;
+      return themeState.colors;
     } catch (e) {
       return AppThemeColors.dark();
     }
   }
 
-  ThemeManager? get themeManager {
+  ThemeState? get themeState {
     try {
-      return Provider.of<ThemeManager>(this, listen: false);
+      return read<ThemeBloc>().state;
     } catch (e) {
       return null;
     }

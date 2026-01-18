@@ -8,8 +8,8 @@ import 'package:ndk/ndk.dart';
 import 'package:ndk/entities.dart';
 import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'dart:typed_data';
-import '../../../models/note_model.dart';
 import 'time_service.dart';
+import '../../utils/string_optimizer.dart';
 
 class CachedMediaInfo {
   final String url;
@@ -101,11 +101,14 @@ class MediaService {
     }
   }
 
-  void cacheMediaFromNotes(List<NoteModel> notes, {int priority = 1}) {
+  void cacheMediaFromNotes(List<Map<String, dynamic>> notes, {int priority = 1}) {
     final mediaUrls = <String>[];
 
     for (final note in notes) {
-      final parsedContent = note.parsedContentLazy;
+      final content = note['content'] as String? ?? '';
+      if (content.isEmpty) continue;
+      
+      final parsedContent = stringOptimizer.parseContentOptimized(content);
       final mediaUrlsFromContent = parsedContent['mediaUrls'] as List<dynamic>? ?? [];
 
       for (final url in mediaUrlsFromContent) {
@@ -349,7 +352,7 @@ class MediaService {
     cacheMediaUrls(urls, priority: 3);
   }
 
-  void preloadVisibleNoteImages(List<NoteModel> visibleNotes) {
+  void preloadVisibleNoteImages(List<Map<String, dynamic>> visibleNotes) {
     cacheMediaFromNotes(visibleNotes, priority: 2);
   }
 

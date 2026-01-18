@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../models/note_model.dart';
-import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
+import '../../../utils/string_optimizer.dart';
 import '../../theme/theme_manager.dart';
 import 'note_content_widget.dart';
 import 'interaction_bar_widget.dart';
 
 class FocusedNoteWidget extends StatefulWidget {
-  final NoteModel note;
+  final Map<String, dynamic> note;
   final String currentUserNpub;
-  final ValueNotifier<List<NoteModel>> notesNotifier;
-  final Map<String, UserModel> profiles;
+  final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
+  final Map<String, Map<String, dynamic>> profiles;
   final dynamic notesListProvider;
   final bool isSelectable;
 
@@ -48,6 +47,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
   late final Map<String, dynamic> _parsedContent;
 
   final ValueNotifier<_FocusedNoteState> _stateNotifier = ValueNotifier(_FocusedNoteState.initial());
+  final Map<String, Map<String, dynamic>> _locallyLoadedProfiles = {};
 
   bool _isDisposed = false;
   bool _isInitialized = false;
@@ -65,18 +65,18 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
   }
 
   void _precomputeImmutableData() {
-    _noteId = widget.note.id;
-    _authorId = widget.note.author;
-    _reposterId = widget.note.repostedBy;
-    _parentId = widget.note.parentId;
-    _isReply = widget.note.isReply;
-    _isRepost = widget.note.isRepost;
-    _timestamp = widget.note.timestamp;
-    _content = widget.note.content;
+    _noteId = widget.note['id'] as String? ?? '';
+    _authorId = widget.note['author'] as String? ?? '';
+    _reposterId = widget.note['repostedBy'] as String?;
+    _parentId = widget.note['parentId'] as String?;
+    _isReply = widget.note['isReply'] as bool? ?? false;
+    _isRepost = widget.note['isRepost'] as bool? ?? false;
+    _timestamp = widget.note['timestamp'] as DateTime? ?? DateTime.now();
+    _content = widget.note['content'] as String? ?? '';
     _widgetKey = '${_noteId}_${_authorId}_focused';
 
     try {
-      _parsedContent = widget.note.parsedContentLazy;
+      _parsedContent = stringOptimizer.parseContentOptimized(_content);
     } catch (e) {
       debugPrint('[FocusedNoteWidget] ParseContent error: $e');
       _parsedContent = {
@@ -138,36 +138,38 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
     try {
       final currentState = _stateNotifier.value;
 
-      UserModel? authorUser = widget.profiles[_authorId];
-      UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
+      Map<String, dynamic>? authorUser = widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
+      Map<String, dynamic>? reposterUser = _reposterId != null 
+          ? (widget.profiles[_reposterId] ?? _locallyLoadedProfiles[_reposterId])
+          : null;
 
-      authorUser ??= UserModel.create(
-        pubkeyHex: _authorId,
-        name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
-        about: '',
-        profileImage: '',
-        banner: '',
-        website: '',
-        nip05: '',
-        lud16: '',
-        updatedAt: DateTime.now(),
-        nip05Verified: false,
-      );
+      authorUser ??= {
+        'pubkeyHex': _authorId,
+        'name': _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
+        'about': '',
+        'profileImage': '',
+        'banner': '',
+        'website': '',
+        'nip05': '',
+        'lud16': '',
+        'updatedAt': DateTime.now(),
+        'nip05Verified': false,
+      };
 
       if (_reposterId != null && reposterUser == null) {
         final reposterId = _reposterId;
-        reposterUser = UserModel.create(
-          pubkeyHex: reposterId,
-          name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
-          about: '',
-          profileImage: '',
-          banner: '',
-          website: '',
-          nip05: '',
-          lud16: '',
-          updatedAt: DateTime.now(),
-          nip05Verified: false,
-        );
+        reposterUser = {
+          'pubkeyHex': reposterId,
+          'name': reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
+          'about': '',
+          'profileImage': '',
+          'banner': '',
+          'website': '',
+          'nip05': '',
+          'lud16': '',
+          'updatedAt': DateTime.now(),
+          'nip05Verified': false,
+        };
       }
 
       final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
@@ -195,8 +197,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
         final reposterPreloaded = _reposterId != null ? widget.notesListProvider.getPreloadedUser(_reposterId) : null;
 
         if (authorPreloaded != null &&
-            authorPreloaded.name != 'Anonymous' &&
-            (_reposterId == null || (reposterPreloaded != null && reposterPreloaded.name != 'Anonymous'))) {
+            (authorPreloaded['name'] as String? ?? '') != 'Anonymous' &&
+            (_reposterId == null || (reposterPreloaded != null && (reposterPreloaded['name'] as String? ?? '') != 'Anonymous'))) {
           return;
         }
       }
@@ -206,7 +208,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
       authorResult.fold(
         (user) {
           if (mounted && !_isDisposed) {
-            widget.profiles[_authorId] = user;
+            _locallyLoadedProfiles[_authorId] = user;
             _updateUserData();
           }
         },
@@ -220,7 +222,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
         reposterResult.fold(
           (user) {
             if (mounted && !_isDisposed) {
-              widget.profiles[reposterId] = user;
+              _locallyLoadedProfiles[reposterId] = user;
               _updateUserData();
             }
           },
@@ -263,29 +265,32 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
       if (mounted && !_isDisposed) {
         debugPrint('[FocusedNoteWidget] Attempting to navigate to profile: $npub');
 
-        final user = widget.profiles[npub] ??
-            UserModel.create(
-              pubkeyHex: npub,
-              name: npub.length > 8 ? npub.substring(0, 8) : npub,
-              about: '',
-              profileImage: '',
-              banner: '',
-              website: '',
-              nip05: '',
-              lud16: '',
-              updatedAt: DateTime.now(),
-              nip05Verified: false,
-            );
+        final user = widget.profiles[npub] ?? 
+            _locallyLoadedProfiles[npub] ??
+            {
+              'pubkeyHex': npub,
+              'name': npub.length > 8 ? npub.substring(0, 8) : npub,
+              'about': '',
+              'profileImage': '',
+              'banner': '',
+              'website': '',
+              'nip05': '',
+              'lud16': '',
+              'updatedAt': DateTime.now(),
+              'nip05Verified': false,
+            };
 
+        final userNpub = user['npub'] as String? ?? npub;
+        final userPubkeyHex = user['pubkeyHex'] as String? ?? npub;
         final currentLocation = GoRouterState.of(context).matchedLocation;
         if (currentLocation.startsWith('/home/feed')) {
-          context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          context.push('/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
         } else if (currentLocation.startsWith('/home/notifications')) {
-          context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          context.push('/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
         } else if (currentLocation.startsWith('/home/dm')) {
-          context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          context.push('/home/dm/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
         } else {
-          context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
         }
       }
     } catch (e) {
@@ -304,8 +309,9 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
   }
 
   String _getInteractionNoteId() {
-    if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
-      return widget.note.rootId!;
+    final rootId = widget.note['rootId'] as String?;
+    if (_isRepost && rootId != null && rootId.isNotEmpty) {
+      return rootId;
     }
     return _noteId;
   }
@@ -352,7 +358,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                     onMentionTap: _navigateToMentionProfile,
                     notesListProvider: widget.notesListProvider,
                     noteId: _noteId,
-                    authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
+                    authorProfileImageUrl: _stateNotifier.value.authorUser?['profileImage'] as String?,
                     authorId: _authorId,
                     isSelectable: widget.isSelectable,
                   ),
@@ -395,8 +401,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
 }
 
 class _FocusedNoteState {
-  final UserModel? authorUser;
-  final UserModel? reposterUser;
+  final Map<String, dynamic>? authorUser;
+  final Map<String, dynamic>? reposterUser;
   final String? replyText;
 
   const _FocusedNoteState({
@@ -513,9 +519,9 @@ class _FocusedProfileSection extends StatelessWidget {
                 GestureDetector(
                   onTap: onAuthorTap,
                   child: _getCachedAvatar(
-                    state.authorUser?.profileImage ?? '',
+                    state.authorUser?['profileImage'] as String? ?? '',
                     21,
-                    '${widgetKey}_author_${state.authorUser?.profileImage.hashCode ?? 0}',
+                    '${widgetKey}_author_${(state.authorUser?['profileImage'] as String? ?? '').hashCode}',
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -525,9 +531,14 @@ class _FocusedProfileSection extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          state.authorUser?.name.isNotEmpty == true
-                              ? state.authorUser!.name
-                              : (state.authorUser?.npub.substring(0, 8) ?? 'Anonymous'),
+                          () {
+                            final name = state.authorUser?['name'] as String? ?? '';
+                            if (name.isNotEmpty) {
+                              return name;
+                            }
+                            final npub = state.authorUser?['npub'] as String? ?? '';
+                            return npub.length > 8 ? npub.substring(0, 8) : (npub.isEmpty ? 'Anonymous' : npub);
+                          }(),
                           style: TextStyle(
                             fontSize: 16,
                             color: colors.textPrimary,

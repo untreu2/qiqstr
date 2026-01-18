@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/theme/theme_event.dart';
+import '../../../presentation/blocs/theme/theme_state.dart';
 
 class DisplayPage extends StatefulWidget {
   const DisplayPage({super.key});
@@ -16,8 +19,8 @@ class DisplayPage extends StatefulWidget {
 class _DisplayPageState extends State<DisplayPage> {
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
         return Scaffold(
           backgroundColor: context.colors.background,
           body: Stack(
@@ -28,7 +31,7 @@ class _DisplayPageState extends State<DisplayPage> {
                   children: [
                     _buildHeader(context),
                     const SizedBox(height: 16),
-                    _buildDisplaySection(context, themeManager),
+                    _buildDisplaySection(context, themeState),
                     const SizedBox(height: 150),
                   ],
                 ),
@@ -53,25 +56,27 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 
-  Widget _buildDisplaySection(BuildContext context, ThemeManager themeManager) {
+  Widget _buildDisplaySection(BuildContext context, ThemeState themeState) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _buildExpandedNoteModeToggleItem(context, themeManager),
+          _buildExpandedNoteModeToggleItem(context, themeState),
           const SizedBox(height: 8),
-          _buildThemeToggleItem(context, themeManager),
+          _buildThemeToggleItem(context, themeState),
           const SizedBox(height: 8),
-          _buildBottomNavOrderSection(context, themeManager),
+          _buildBottomNavOrderSection(context, themeState),
           const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _buildExpandedNoteModeToggleItem(BuildContext context, ThemeManager themeManager) {
+  Widget _buildExpandedNoteModeToggleItem(
+      BuildContext context, ThemeState themeState) {
     return GestureDetector(
-      onTap: () => themeManager.toggleExpandedNoteMode(),
+      onTap: () =>
+          context.read<ThemeBloc>().add(const ExpandedNoteModeToggled()),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
@@ -82,14 +87,18 @@ class _DisplayPageState extends State<DisplayPage> {
         child: Row(
           children: [
             Icon(
-              themeManager.isExpandedNoteMode ? CarbonIcons.expand_all : CarbonIcons.collapse_all,
+              themeState.isExpandedNoteMode
+                  ? CarbonIcons.expand_all
+                  : CarbonIcons.collapse_all,
               size: 22,
               color: context.colors.textPrimary,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                themeManager.isExpandedNoteMode ? 'Expanded Notes' : 'Normal Notes',
+                themeState.isExpandedNoteMode
+                    ? 'Expanded Notes'
+                    : 'Normal Notes',
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: 17,
@@ -98,8 +107,10 @@ class _DisplayPageState extends State<DisplayPage> {
               ),
             ),
             Switch(
-              value: themeManager.isExpandedNoteMode,
-              onChanged: (value) => themeManager.toggleExpandedNoteMode(),
+              value: themeState.isExpandedNoteMode,
+              onChanged: (value) => context
+                  .read<ThemeBloc>()
+                  .add(const ExpandedNoteModeToggled()),
               activeThumbColor: context.colors.accent,
               inactiveThumbColor: context.colors.textSecondary,
               inactiveTrackColor: context.colors.border,
@@ -111,9 +122,9 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 
-  Widget _buildThemeToggleItem(BuildContext context, ThemeManager themeManager) {
+  Widget _buildThemeToggleItem(BuildContext context, ThemeState themeState) {
     return GestureDetector(
-      onTap: () => themeManager.toggleTheme(),
+      onTap: () => context.read<ThemeBloc>().add(const ThemeToggled()),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
@@ -124,14 +135,14 @@ class _DisplayPageState extends State<DisplayPage> {
         child: Row(
           children: [
             Icon(
-              themeManager.isDarkMode ? CarbonIcons.asleep : CarbonIcons.light,
+              themeState.isDarkMode ? CarbonIcons.asleep : CarbonIcons.light,
               size: 22,
               color: context.colors.textPrimary,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                themeManager.isDarkMode ? 'Dark Mode' : 'Light Mode',
+                themeState.isDarkMode ? 'Dark Mode' : 'Light Mode',
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: 17,
@@ -140,8 +151,9 @@ class _DisplayPageState extends State<DisplayPage> {
               ),
             ),
             Switch(
-              value: themeManager.isDarkMode,
-              onChanged: (value) => themeManager.toggleTheme(),
+              value: themeState.isDarkMode,
+              onChanged: (value) =>
+                  context.read<ThemeBloc>().add(const ThemeToggled()),
               activeThumbColor: context.colors.accent,
               inactiveThumbColor: context.colors.textSecondary,
               inactiveTrackColor: context.colors.border,
@@ -153,7 +165,8 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 
-  Widget _buildBottomNavOrderSection(BuildContext context, ThemeManager themeManager) {
+  Widget _buildBottomNavOrderSection(
+      BuildContext context, ThemeState themeState) {
     final navItems = [
       {'index': 0, 'name': 'Home', 'icon': 'assets/house.svg'},
       {'index': 1, 'name': 'Search', 'icon': 'assets/chat.svg'},
@@ -161,7 +174,7 @@ class _DisplayPageState extends State<DisplayPage> {
       {'index': 3, 'name': 'Notifications', 'icon': 'assets/bell.svg'},
     ];
 
-    final currentOrder = themeManager.bottomNavOrder;
+    final currentOrder = themeState.bottomNavOrder;
     final orderedItems = currentOrder.map((index) => navItems[index]).toList();
 
     return Container(
@@ -236,7 +249,9 @@ class _DisplayPageState extends State<DisplayPage> {
                         final newPos = newOrder.indexOf(originalIndex);
                         newOrder.removeAt(oldPos);
                         newOrder.insert(newPos, draggedIndex);
-                        themeManager.setBottomNavOrder(newOrder);
+                        context
+                            .read<ThemeBloc>()
+                            .add(BottomNavOrderSet(newOrder));
                       }
                     },
                     builder: (context, candidateData, rejectedData) {

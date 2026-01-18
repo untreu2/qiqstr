@@ -1,17 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/base/result.dart';
-import '../../models/note_model.dart';
-import '../../models/user_model.dart';
-import '../../models/notification_model.dart';
-import '../../models/reaction_model.dart';
-import '../../models/zap_model.dart';
 import 'nostr_service.dart';
 import 'relay_service.dart';
 import 'time_service.dart';
@@ -21,6 +15,9 @@ import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
 import 'primal_cache_service.dart';
+import 'event_cache_service.dart';
+import 'event_converter_service.dart';
+import 'event_kind_router_service.dart';
 
 class DataService {
   final AuthService _authService;
@@ -28,18 +25,25 @@ class DataService {
   final UserCacheService _userCacheService = UserCacheService.instance;
   final FollowCacheService _followCacheService = FollowCacheService.instance;
   final MuteCacheService _muteCacheService = MuteCacheService.instance;
+  final EventCacheService _eventCacheService = EventCacheService.instance;
+  final EventConverterService _eventConverter = EventConverterService.instance;
+  final EventKindRouterService _kindRouter = EventKindRouterService.instance;
 
-  final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
-  final StreamController<List<UserModel>> _usersController = StreamController<List<UserModel>>.broadcast();
-  final StreamController<List<NotificationModel>> _notificationsController = StreamController<List<NotificationModel>>.broadcast();
-  final StreamController<String> _noteDeletedController = StreamController<String>.broadcast();
+  final StreamController<List<Map<String, dynamic>>> _notesController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+  final StreamController<List<Map<String, dynamic>>> _usersController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+  final StreamController<List<Map<String, dynamic>>> _notificationsController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+  final StreamController<String> _noteDeletedController =
+      StreamController<String>.broadcast();
 
-  final Map<String, NoteModel> _noteCache = {};
+  final Map<String, Map<String, dynamic>> _noteCache = {};
   final Map<String, CachedProfile> _profileCache = {};
-  final Map<String, List<NotificationModel>> _notificationCache = {};
-  final Map<String, List<ReactionModel>> _reactionsMap = {};
-  final Map<String, List<ZapModel>> _zapsMap = {};
-  final Map<String, List<ReactionModel>> _repostsMap = {};
+  final Map<String, List<Map<String, dynamic>>> _notificationCache = {};
+  final Map<String, List<Map<String, dynamic>>> _reactionsMap = {};
+  final Map<String, List<Map<String, dynamic>>> _zapsMap = {};
+  final Map<String, List<Map<String, dynamic>>> _repostsMap = {};
   final Set<String> _eventIds = {};
   final Set<String> _processedZapIds = {};
   final Set<String> _userPublishedZapIds = {};
@@ -75,6 +79,8 @@ class DataService {
   static const int _maxRelayQueriesPerSecond = 3;
   DateTime _lastRelayQueryTime = DateTime(2000);
 
+  final Map<String, int> _muteEventTimestamps = {};
+
   DataService({
     required AuthService authService,
     WebSocketManager? relayManager,
@@ -84,9 +90,10 @@ class DataService {
     _startCacheCleanup();
   }
 
-  Stream<List<NoteModel>> get notesStream => _notesController.stream;
-  Stream<List<UserModel>> get usersStream => _usersController.stream;
-  Stream<List<NotificationModel>> get notificationsStream => _notificationsController.stream;
+  Stream<List<Map<String, dynamic>>> get notesStream => _notesController.stream;
+  Stream<List<Map<String, dynamic>>> get usersStream => _usersController.stream;
+  Stream<List<Map<String, dynamic>>> get notificationsStream =>
+      _notificationsController.stream;
   Stream<String> get noteDeletedStream => _noteDeletedController.stream;
 
   AuthService get authService => _authService;
@@ -126,7 +133,10 @@ class DataService {
 
   String? _getTagValue(List<dynamic> tags, String tagType, {int index = 1}) {
     for (final tag in tags) {
-      if (tag is List && tag.isNotEmpty && tag[0] == tagType && tag.length > index) {
+      if (tag is List &&
+          tag.isNotEmpty &&
+          tag[0] == tagType &&
+          tag.length > index) {
         return tag[index] as String?;
       }
     }
@@ -152,7 +162,7 @@ class DataService {
 
     for (final tag in tags) {
       if (tag is! List || tag.isEmpty) continue;
-      
+
       final tagType = tag[0] as String?;
       if (tagType == null || tag.length < 2) continue;
 
@@ -185,6 +195,7 @@ class DataService {
   Future<void> _ensureRelayConnection([String? serviceId]) async {
     if (_relayManager.activeSockets.isEmpty) {
       try {
+        await _preloadMuteListToMemory();
         await _relayManager.connectRelays(
           [],
           onEvent: _handleRelayEvent,
@@ -230,16 +241,32 @@ class DataService {
   }
 
   void _setupRelayEventHandling() {
-    _relayManager.connectRelays(
-      [],
-      onEvent: _handleRelayEvent,
-      onDisconnected: _handleRelayDisconnection,
-      serviceId: 'nostr_data_service',
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _preloadMuteListToMemory();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _relayManager.connectRelays(
+        [],
+        onEvent: _handleRelayEvent,
+        onDisconnected: _handleRelayDisconnection,
+        serviceId: 'nostr_data_service',
+      );
+
       _initializeFollowListCache();
     });
+  }
+
+  Future<void> _preloadMuteListToMemory() async {
+    try {
+      final currentUser = await _authService.getCurrentUserNpub();
+      if (currentUser.isSuccess && currentUser.data != null) {
+        _currentUserNpub = currentUser.data!;
+        final currentUserHex =
+            _authService.npubToHex(currentUser.data!) ?? currentUser.data!;
+        await _muteCacheService.get(currentUserHex);
+      }
+    } catch (e) {
+      debugPrint('[DataService] Error preloading mute list: $e');
+    }
   }
 
   Future<void> _initializeFollowListCache() async {
@@ -247,12 +274,14 @@ class DataService {
       final currentUser = await _authService.getCurrentUserNpub();
       if (currentUser.isSuccess && currentUser.data != null) {
         _currentUserNpub = currentUser.data!;
-        final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
+        final currentUserHex =
+            _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
 
         final cachedFollowing = await _followCacheService.get(currentUserHex);
         final cachedMuted = await _muteCacheService.get(currentUserHex);
 
-        final hasValidFollowing = cachedFollowing != null && cachedFollowing.isNotEmpty;
+        final hasValidFollowing =
+            cachedFollowing != null && cachedFollowing.isNotEmpty;
         final hasValidMuted = cachedMuted != null && cachedMuted.isNotEmpty;
 
         if (hasValidMuted) {
@@ -277,47 +306,65 @@ class DataService {
         }
 
         await _fetchFeedNotesFromFollowList();
-      } else {
+        unawaited(_fetchAndCacheNotifications(currentUserHex));
       }
     } catch (e) {
       try {
         await _fetchFeedNotesFromFollowList();
-      } catch (feedError) {
-      }
+      } catch (feedError) {}
     }
   }
 
   Future<void> _fetchFeedNotesFromFollowList() async {
     try {
       final currentUser = await _authService.getCurrentUserNpub();
-      if (currentUser.isSuccess && currentUser.data != null && currentUser.data!.isNotEmpty) {
+      if (currentUser.isSuccess &&
+          currentUser.data != null &&
+          currentUser.data!.isNotEmpty) {
         final currentUserNpub = currentUser.data!;
         final currentUserHex = _authService.npubToHex(currentUserNpub);
-        
+
         if (currentUserHex == null) {
           return;
         }
 
         final followList = await _followCacheService.get(currentUserHex);
-        
+
         if (followList == null || followList.isEmpty) {
           return;
         }
 
         final targetAuthors = List<String>.from(followList);
         targetAuthors.add(currentUserHex);
-        
-        final filter = NostrService.createNotesFilter(
-          authors: targetAuthors,
-          kinds: [1, 6],
+
+        final cached = await _eventCacheService.getEventsByAuthorsAndKinds(
+          targetAuthors,
+          [1, 6],
           limit: 30,
         );
 
-        final request = NostrService.createRequest(filter);
-        await _relayManager.broadcast(NostrService.serializeRequest(request));
+        if (cached.isNotEmpty) {
+          for (final event in cached) {
+            await processEventFromCache(event.toEventData());
+          }
+        }
+
+        unawaited(_refreshFeedNotes(targetAuthors));
       }
-    } catch (e) {
-    }
+    } catch (e) {}
+  }
+
+  Future<void> _refreshFeedNotes(List<String> targetAuthors) async {
+    try {
+      final filter = NostrService.createNotesFilter(
+        authors: targetAuthors,
+        kinds: [1, 6],
+        limit: 30,
+      );
+
+      final request = NostrService.createRequest(filter);
+      await _relayManager.broadcast(NostrService.serializeRequest(request));
+    } catch (e) {}
   }
 
   Future<void> _fetchAndUpdateUserLists(String currentUserHex) async {
@@ -334,15 +381,56 @@ class DataService {
           _cleanMutedNotesFromCache(result['muted']!);
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<Map<String, dynamic>> _fetchUserListsCombined(String pubkeyHex) async {
     final following = <String>{};
     final muted = <String>{};
-    final processedEventIds = <String>{};
     Map<String, dynamic>? userProfile;
+
+    final cachedProfile =
+        await _eventCacheService.getLatestByAuthorAndKind(pubkeyHex, 0);
+    final cachedFollowing =
+        await _eventCacheService.getLatestByAuthorAndKind(pubkeyHex, 3);
+    final cachedMuted =
+        await _eventCacheService.getLatestByAuthorAndKind(pubkeyHex, 10000);
+
+    if (cachedProfile != null) {
+      final eventData = cachedProfile.toEventData();
+      final content = eventData['content'] as String? ?? '';
+      if (content.isNotEmpty) {
+        try {
+          userProfile = jsonDecode(content) as Map<String, dynamic>;
+          userProfile['pubkey'] = pubkeyHex;
+          userProfile['created_at'] = eventData['created_at'];
+          _processProfileEvent(eventData);
+        } catch (_) {}
+      }
+    }
+
+    if (cachedFollowing != null) {
+      final eventData = cachedFollowing.toEventData();
+      following
+          .addAll(_extractPTags(eventData['tags'] as List<dynamic>? ?? []));
+    }
+
+    if (cachedMuted != null) {
+      final eventData = cachedMuted.toEventData();
+      muted.addAll(_extractPTags(eventData['tags'] as List<dynamic>? ?? []));
+    }
+
+    unawaited(_refreshUserLists(pubkeyHex));
+
+    return {
+      'following': following.toList(),
+      'muted': muted.toList(),
+      'profile': userProfile,
+    };
+  }
+
+  Future<void> _refreshUserLists(String pubkeyHex) async {
+    final processedEventIds = <String>{};
 
     final filter = {
       'authors': [pubkeyHex],
@@ -362,45 +450,22 @@ class DataService {
           final eventKind = eventData['kind'] as int;
           final eventAuthor = eventData['pubkey'] as String;
 
-          if (eventAuthor == pubkeyHex && !processedEventIds.contains(eventId)) {
+          if (eventAuthor == pubkeyHex &&
+              !processedEventIds.contains(eventId)) {
             processedEventIds.add(eventId);
 
             if (eventKind == 0) {
-              final content = eventData['content'] as String;
-              if (content.isNotEmpty && userProfile == null) {
-                try {
-                  userProfile = jsonDecode(content) as Map<String, dynamic>;
-                  userProfile!['pubkey'] = pubkeyHex;
-                  userProfile!['created_at'] = eventData['created_at'];
-                } catch (_) {}
-              }
+              _processProfileEvent(eventData);
             } else if (eventKind == 3) {
-              following.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
+              _processFollowEvent(eventData);
             } else if (eventKind == 10000) {
-              muted.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
+              _processMuteEvent(eventData);
             }
           }
         } catch (_) {}
       },
     );
-
-    if (userProfile != null) {
-      final createdAt = userProfile!['created_at'] as int? ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
-      _processProfileEvent({
-        'pubkey': pubkeyHex,
-        'content': jsonEncode(userProfile),
-        'created_at': createdAt,
-        'kind': 0,
-      });
-    }
-
-    return {
-      'following': following.toList(),
-      'muted': muted.toList(),
-      'profile': userProfile,
-    };
   }
-
 
   Future<void> _handleRelayEvent(List<dynamic> decoded, String relayUrl) async {
     try {
@@ -439,24 +504,57 @@ class DataService {
     _eventQueue.clear();
 
     Future.microtask(() async {
+      final eventsToCache = <Map<String, dynamic>>[];
+      final relayUrls = <String>{};
+
+      for (final item in batch) {
+        final eventData = item['eventData'] as Map<String, dynamic>;
+        final relayUrl = item['relayUrl'] as String?;
+        eventsToCache.add(eventData);
+        if (relayUrl != null) {
+          relayUrls.add(relayUrl);
+        }
+      }
+
+      if (eventsToCache.isNotEmpty) {
+        final relayUrl = relayUrls.length == 1 ? relayUrls.first : null;
+        await _eventCacheService.saveEvents(eventsToCache, relayUrl: relayUrl);
+      }
+
       await Future.wait(
-        batch.map((eventData) => 
-          _processNostrEvent(eventData['eventData'] as Map<String, dynamic>)
-            .catchError((e) => null)
-        ),
+        batch.map((eventData) =>
+            _processNostrEvent(eventData['eventData'] as Map<String, dynamic>)
+                .catchError((e) => null)),
         eagerError: false,
       );
       _scheduleUIUpdate();
     });
   }
 
-  Future<void> _processNostrEvent(Map<String, dynamic> eventData) async {
+  Future<void> processEventFromCache(Map<String, dynamic> eventData) async {
+    await _processNostrEvent(eventData, skipCache: true);
+  }
+
+  Future<void> _processNostrEvent(Map<String, dynamic> eventData,
+      {bool skipCache = false}) async {
     try {
       final eventId = eventData['id'] as String? ?? '';
       if (eventId.isEmpty) return;
 
       if (_eventProcessingLock[eventId] == true) return;
       _eventProcessingLock[eventId] = true;
+
+      if (!skipCache) {
+        final alreadyProcessed = await _eventCacheService.hasEvent(eventId);
+        if (alreadyProcessed && _eventIds.contains(eventId)) {
+          _eventProcessingLock.remove(eventId);
+          return;
+        }
+
+        if (!alreadyProcessed) {
+          await _eventCacheService.saveEvent(eventData);
+        }
+      }
 
       final kind = eventData['kind'] as int;
       final eventAuthor = eventData['pubkey'] as String? ?? '';
@@ -465,36 +563,24 @@ class DataService {
         _processNotificationFast(eventData, kind, eventAuthor);
       }
 
-      switch (kind) {
-        case 0:
-          _processProfileEvent(eventData);
-          break;
-        case 1:
-          await _processKind1Event(eventData);
-          break;
-        case 3:
-          await _processFollowEvent(eventData);
-          break;
-        case 5:
-          await _processDeletionEvent(eventData);
-          break;
-        case 6:
-          await _processRepostEvent(eventData);
-          break;
-        case 7:
-          _processReactionEvent(eventData);
-          break;
-        case 10000:
-          await _processMuteEvent(eventData);
-          break;
-        case 9735:
-          _processZapEvent(eventData);
-          break;
-      }
+      final processors = <int, EventProcessor>{
+        EventKindRouterService.kindProfile: (data) async =>
+            _processProfileEvent(data),
+        EventKindRouterService.kindNote: (data) => _processKind1Event(data),
+        EventKindRouterService.kindFollow: (data) => _processFollowEvent(data),
+        EventKindRouterService.kindDeletion: (data) =>
+            _processDeletionEvent(data),
+        EventKindRouterService.kindRepost: (data) => _processRepostEvent(data),
+        EventKindRouterService.kindReaction: (data) async =>
+            _processReactionEvent(data),
+        EventKindRouterService.kindMute: (data) => _processMuteEvent(data),
+        EventKindRouterService.kindZap: (data) async => _processZapEvent(data),
+      };
+
+      await _kindRouter.routeByKind(eventData, processors);
 
       _eventProcessingLock.remove(eventId);
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _processProfileEvent(Map<String, dynamic> eventData) {
@@ -505,7 +591,8 @@ class DataService {
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
       final cachedProfile = _profileCache[pubkey];
-      if (cachedProfile != null && timestamp.isBefore(cachedProfile.fetchedAt)) {
+      if (cachedProfile != null &&
+          timestamp.isBefore(cachedProfile.fetchedAt)) {
         return;
       }
 
@@ -521,11 +608,14 @@ class DataService {
 
         _verifyAndCacheProfile(pubkey, profileData, timestamp, nip05);
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  Future<void> _verifyAndCacheProfile(String pubkey, Map<String, dynamic> profileData, DateTime timestamp, String nip05) async {
+  Future<void> _verifyAndCacheProfile(
+      String pubkey,
+      Map<String, dynamic> profileData,
+      DateTime timestamp,
+      String nip05) async {
     final dataToCache = {
       'name': profileData['name'] as String? ?? 'Anonymous',
       'profileImage': profileData['picture'] as String? ?? '',
@@ -541,28 +631,27 @@ class DataService {
     _profileCache[pubkey] = CachedProfile(dataToCache, timestamp);
     _cleanupCacheIfNeeded();
 
-    final user = UserModel.create(
-      pubkeyHex: pubkey,
-      name: dataToCache['name']!,
-      about: dataToCache['about']!,
-      profileImage: dataToCache['profileImage']!,
-      banner: dataToCache['banner']!,
-      website: dataToCache['website']!,
-      nip05: dataToCache['nip05']!,
-      lud16: dataToCache['lud16']!,
-      updatedAt: timestamp,
-      nip05Verified: false,
-    );
+    final user = <String, dynamic>{
+      'pubkeyHex': pubkey,
+      'name': dataToCache['name'] ?? '',
+      'about': dataToCache['about'] ?? '',
+      'profileImage': dataToCache['profileImage'] ?? '',
+      'banner': dataToCache['banner'] ?? '',
+      'website': dataToCache['website'] ?? '',
+      'nip05': dataToCache['nip05'] ?? '',
+      'lud16': dataToCache['lud16'] ?? '',
+      'updatedAt': timestamp,
+      'nip05Verified': false,
+    };
 
-      try {
-        await _userCacheService.invalidate(pubkey);
-        await _userCacheService.put(user);
-      } catch (e) {
-      }
+    try {
+      await _userCacheService.invalidate(pubkey);
+      await _userCacheService.put(user);
+    } catch (e) {}
 
-      if (!_usersController.isClosed) {
-        _usersController.add(_getUsersList());
-      }
+    if (!_usersController.isClosed) {
+      _usersController.add(_getUsersList());
+    }
   }
 
   Future<void> _processKind1Event(Map<String, dynamic> eventData) async {
@@ -596,18 +685,17 @@ class DataService {
       } else {
         await _processNoteEvent(eventData);
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _processNoteEvent(Map<String, dynamic> eventData) async {
     try {
       final id = eventData['id'] as String;
-      
+
       if (_eventIds.contains(id)) return;
 
       final pubkey = eventData['pubkey'] as String;
-      
+
       final currentUserHex = _authService.npubToHex(_currentUserNpub);
       if (currentUserHex != null) {
         final mutedList = _muteCacheService.getSync(currentUserHex);
@@ -632,38 +720,61 @@ class DataService {
       final parsedTags = _parseTags(tags);
       final isReply = parsedTags.rootId != null;
 
-      final note = NoteModel(
-        id: id,
-        content: content,
-        author: authorNpub,
-        timestamp: timestamp,
-        isReply: isReply,
-        isRepost: false,
-        rootId: parsedTags.rootId,
-        parentId: parsedTags.parentId,
-        repostedBy: null,
-        reactionCount: _reactionsMap[id]?.length ?? 0,
-        replyCount: 0,
-        repostCount: _repostsMap[id]?.length ?? 0,
-        zapAmount: _zapsMap[id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0,
-        rawWs: jsonEncode(eventData),
-        eTags: parsedTags.eTags,
-        pTags: parsedTags.pTags,
-        tTags: parsedTags.tTags,
-      );
+      final zapAmount = _zapsMap[id]?.fold<int>(0, (sum, zap) {
+            final amount = zap['amount'] as int? ?? 0;
+            return sum + amount;
+          }) ??
+          0;
+
+      final note = <String, dynamic>{
+        'id': id,
+        'content': content,
+        'author': authorNpub,
+        'timestamp': timestamp,
+        'isReply': isReply,
+        'isRepost': false,
+        'rootId': parsedTags.rootId,
+        'parentId': parsedTags.parentId,
+        'repostedBy': null,
+        'reactionCount': _reactionsMap[id]?.length ?? 0,
+        'replyCount': 0,
+        'repostCount': _repostsMap[id]?.length ?? 0,
+        'zapAmount': zapAmount,
+        'rawWs': jsonEncode(eventData),
+        'eTags': parsedTags.eTags,
+        'pTags': parsedTags.pTags,
+        'tTags': parsedTags.tTags,
+        'replies': <Map<String, dynamic>>[],
+      };
 
       _addNoteToCache(note);
 
       if (isReply) {
         if (parsedTags.parentId != null) {
-          _noteCache[parsedTags.parentId]?.addReply(note);
+          final parentNote = _noteCache[parsedTags.parentId];
+          if (parentNote != null) {
+            final replies =
+                parentNote['replies'] as List<Map<String, dynamic>>? ?? [];
+            replies.add(note);
+            parentNote['replies'] = replies;
+            final replyCount = (parentNote['replyCount'] as int? ?? 0) + 1;
+            parentNote['replyCount'] = replyCount;
+          }
         }
-        if (parsedTags.rootId != null && parsedTags.rootId != parsedTags.parentId) {
-          _noteCache[parsedTags.rootId]?.addReply(note);
+        if (parsedTags.rootId != null &&
+            parsedTags.rootId != parsedTags.parentId) {
+          final rootNote = _noteCache[parsedTags.rootId];
+          if (rootNote != null) {
+            final replies =
+                rootNote['replies'] as List<Map<String, dynamic>>? ?? [];
+            if (!replies.any((r) => r['id'] == note['id'])) {
+              replies.add(note);
+              rootNote['replies'] = replies;
+            }
+          }
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   final Set<String> _pendingThreadFetches = {};
@@ -679,6 +790,28 @@ class DataService {
 
     _pendingThreadFetches.add(rootNoteId);
 
+    try {
+      final cached = await _eventCacheService.getEventsByETags(
+        [rootNoteId],
+        kinds: [1],
+        limit: 100,
+      );
+
+      if (cached.isNotEmpty) {
+        for (final event in cached) {
+          await processEventFromCache(event.toEventData());
+        }
+      }
+
+      unawaited(_refreshThreadReplies(rootNoteId));
+
+      _pendingThreadFetches.remove(rootNoteId);
+    } catch (e) {
+      _pendingThreadFetches.remove(rootNoteId);
+    }
+  }
+
+  Future<void> _refreshThreadReplies(String rootNoteId) async {
     try {
       final filter = NostrService.createThreadRepliesFilter(
         rootNoteId: rootNoteId,
@@ -706,17 +839,14 @@ class DataService {
           } catch (_) {}
         },
       );
-
-      _pendingThreadFetches.remove(rootNoteId);
-    } catch (e) {
-      _pendingThreadFetches.remove(rootNoteId);
-    }
+    } catch (e) {}
   }
 
-  Future<void> _handleReplyEvent(Map<String, dynamic> eventData, String parentEventId) async {
+  Future<void> _handleReplyEvent(
+      Map<String, dynamic> eventData, String parentEventId) async {
     try {
       final id = eventData['id'] as String;
-      
+
       if (_eventIds.contains(id)) return;
 
       final pubkey = eventData['pubkey'] as String;
@@ -730,27 +860,30 @@ class DataService {
       final parsedTags = _parseTags(tags);
       final actualParentId = parsedTags.parentId ?? parentEventId;
       final rootId = parsedTags.rootId;
-      final replyMarker = rootId != null ? 'root' : (parsedTags.parentId != null ? 'reply' : null);
+      final replyMarker = rootId != null
+          ? 'root'
+          : (parsedTags.parentId != null ? 'reply' : null);
       final parentNote = _noteCache[actualParentId];
 
-      final replyNote = NoteModel(
-        id: id,
-        content: content,
-        author: authorNpub,
-        timestamp: timestamp,
-        isReply: true,
-        parentId: actualParentId,
-        rootId: rootId ?? parentNote?.rootId,
-        rawWs: jsonEncode(eventData),
-        eTags: parsedTags.eTags,
-        pTags: parsedTags.pTags,
-        tTags: parsedTags.tTags,
-        replyMarker: replyMarker,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-      );
+      final replyNote = <String, dynamic>{
+        'id': id,
+        'content': content,
+        'author': authorNpub,
+        'timestamp': timestamp,
+        'isReply': true,
+        'parentId': actualParentId,
+        'rootId': rootId ?? (parentNote?['rootId'] as String?),
+        'rawWs': jsonEncode(eventData),
+        'eTags': parsedTags.eTags,
+        'pTags': parsedTags.pTags,
+        'tTags': parsedTags.tTags,
+        'replyMarker': replyMarker,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'replies': <Map<String, dynamic>>[],
+      };
 
       _addNoteToCache(replyNote);
 
@@ -759,14 +892,13 @@ class DataService {
       _updateParentNoteReplyCount(actualParentId);
 
       _scheduleUIUpdate();
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _processReactionEvent(Map<String, dynamic> eventData) {
     try {
       final id = eventData['id'] as String;
-      
+
       if (_pendingOptimisticReactionIds.contains(id)) {
         _pendingOptimisticReactionIds.remove(id);
         return;
@@ -780,30 +912,35 @@ class DataService {
       final targetEventId = _getTagValue(tags, 'e');
 
       if (targetEventId != null) {
-        final reaction = ReactionModel(
-          id: id,
-          targetEventId: targetEventId,
-          content: content,
-          author: _authService.hexToNpub(pubkey) ?? pubkey,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
-          fetchedAt: DateTime.now(),
-        );
+        final reaction = <String, dynamic>{
+          'id': id,
+          'targetEventId': targetEventId,
+          'content': content,
+          'author': _authService.hexToNpub(pubkey) ?? pubkey,
+          'timestamp': DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
+          'fetchedAt': DateTime.now(),
+        };
 
-        _noteCache[targetEventId]?.addReaction(reaction);
+        final targetNote = _noteCache[targetEventId];
+        if (targetNote != null) {
+          final reactionCount = (targetNote['reactionCount'] as int? ?? 0) + 1;
+          targetNote['reactionCount'] = reactionCount;
+        }
 
         final reactions = _reactionsMap.putIfAbsent(targetEventId, () => []);
-        if (!reactions.any((r) => r.id == reaction.id)) {
+        final reactionId = reaction['id'] as String? ?? '';
+        if (reactionId.isNotEmpty &&
+            !reactions.any((r) => (r['id'] as String? ?? '') == reactionId)) {
           reactions.add(reaction);
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _processRepostEvent(Map<String, dynamic> eventData) async {
     try {
       final id = eventData['id'] as String;
-      
+
       _trackRepostForCount(eventData);
 
       if (_eventIds.contains(id)) return;
@@ -844,10 +981,10 @@ class DataService {
 
         _ensureProfileExists(pubkey, reposterNpub);
         if (originalAuthorHex != null) {
-          final originalAuthorNpub = _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
+          final originalAuthorNpub =
+              _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
           _ensureProfileExists(originalAuthorHex, originalAuthorNpub);
         }
-
 
         bool detectedIsReply = false;
         String? detectedRootId;
@@ -855,29 +992,32 @@ class DataService {
 
         final originalNote = _noteCache[originalEventId];
         String displayContent = 'Reposted note';
-        String displayAuthor = originalAuthorHex != null ? (_authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex) : 'Unknown';
+        String displayAuthor = originalAuthorHex != null
+            ? (_authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex)
+            : 'Unknown';
 
         if (originalNote != null) {
-          detectedIsReply = originalNote.isReply;
-          detectedRootId = originalNote.rootId;
-          detectedParentId = originalNote.parentId;
+          detectedIsReply = originalNote['isReply'] as bool? ?? false;
+          detectedRootId = originalNote['rootId'] as String?;
+          detectedParentId = originalNote['parentId'] as String?;
         }
 
         if (originalNote != null) {
-          displayContent = originalNote.content;
-          displayAuthor = originalNote.author;
+          displayContent = originalNote['content'] as String? ?? '';
+          displayAuthor = originalNote['author'] as String? ?? '';
         } else if (content.isNotEmpty) {
-
           try {
             final originalContent = jsonDecode(content) as Map<String, dynamic>;
 
-            displayContent = originalContent['content'] as String? ?? displayContent;
+            displayContent =
+                originalContent['content'] as String? ?? displayContent;
             if (originalAuthorHex != null) {
-              displayAuthor = _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
+              displayAuthor = _authService.hexToNpub(originalAuthorHex) ??
+                  originalAuthorHex;
             }
 
-            final originalTags = originalContent['tags'] as List<dynamic>? ?? [];
-
+            final originalTags =
+                originalContent['tags'] as List<dynamic>? ?? [];
 
             for (int i = 0; i < originalTags.length; i++) {
               final tag = originalTags[i];
@@ -895,8 +1035,7 @@ class DataService {
                     detectedParentId = eventId;
                     detectedIsReply = true;
                   } else if (marker == 'mention') {
-                  } else {
-                  }
+                  } else {}
                 } else {
                   if (detectedParentId == null) {
                     detectedParentId = eventId;
@@ -907,23 +1046,26 @@ class DataService {
               }
             }
 
-
-            if (originalAuthorHex != null && !_noteCache.containsKey(originalEventId)) {
-              final originalNoteFromRepost = NoteModel(
-                id: originalEventId,
-                content: displayContent,
-                author: displayAuthor,
-                timestamp: DateTime.fromMillisecondsSinceEpoch((originalContent['created_at'] as int? ?? createdAt) * 1000),
-                isReply: detectedIsReply,
-                isRepost: false,
-                rootId: detectedRootId,
-                parentId: detectedParentId,
-                reactionCount: 0,
-                replyCount: 0,
-                repostCount: 0,
-                zapAmount: 0,
-                rawWs: content,
-              );
+            if (originalAuthorHex != null &&
+                !_noteCache.containsKey(originalEventId)) {
+              final originalNoteFromRepost = <String, dynamic>{
+                'id': originalEventId,
+                'content': displayContent,
+                'author': displayAuthor,
+                'timestamp': DateTime.fromMillisecondsSinceEpoch(
+                    (originalContent['created_at'] as int? ?? createdAt) *
+                        1000),
+                'isReply': detectedIsReply,
+                'isRepost': false,
+                'rootId': detectedRootId,
+                'parentId': detectedParentId,
+                'reactionCount': 0,
+                'replyCount': 0,
+                'repostCount': 0,
+                'zapAmount': 0,
+                'rawWs': content,
+                'replies': <Map<String, dynamic>>[],
+              };
 
               _addNoteToCache(originalNoteFromRepost);
             }
@@ -936,41 +1078,39 @@ class DataService {
         final finalRootId = detectedRootId;
         final finalParentId = detectedParentId;
 
+        final repostNote = <String, dynamic>{
+          'id': id,
+          'content': displayContent,
+          'author': displayAuthor,
+          'timestamp': timestamp,
+          'isReply': finalIsReply,
+          'isRepost': true,
+          'rootId': finalRootId ?? originalEventId,
+          'parentId': finalParentId,
+          'repostedBy': reposterNpub,
+          'repostTimestamp': timestamp,
+          'reactionCount': 0,
+          'replyCount': 0,
+          'repostCount': 0,
+          'zapAmount': 0,
+          'rawWs': jsonEncode(eventData),
+          'replies': <Map<String, dynamic>>[],
+        };
 
-        final repostNote = NoteModel(
-          id: id,
-          content: displayContent,
-          author: displayAuthor,
-          timestamp: timestamp,
-          isReply: finalIsReply,
-          isRepost: true,
-          rootId: finalRootId ?? originalEventId,
-          parentId: finalParentId,
-          repostedBy: reposterNpub,
-          repostTimestamp: timestamp,
-          reactionCount: 0,
-          replyCount: 0,
-          repostCount: 0,
-          zapAmount: 0,
-          rawWs: jsonEncode(eventData),
-        );
-
-
-        if (repostNote.isReply && repostNote.parentId != null) {
-        } else {
-        }
+        if ((repostNote['isReply'] as bool? ?? false) &&
+            repostNote['parentId'] != null) {
+        } else {}
 
         _addNoteToCache(repostNote);
 
         final targetNote = _noteCache[originalEventId];
         if (targetNote != null) {
-          targetNote.repostCount = _repostsMap[originalEventId]?.length ?? 0;
+          targetNote['repostCount'] = _repostsMap[originalEventId]?.length ?? 0;
         }
-      
+
         _scheduleUIUpdate();
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _trackRepostForCount(Map<String, dynamic> eventData) {
@@ -986,28 +1126,29 @@ class DataService {
         final reposterNpub = _authService.hexToNpub(pubkey) ?? pubkey;
         final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
-        final repost = ReactionModel(
-          id: id,
-          targetEventId: originalEventId,
-          content: '',
-          author: reposterNpub,
-          timestamp: timestamp,
-          fetchedAt: DateTime.now(),
-        );
+        final repost = <String, dynamic>{
+          'id': id,
+          'targetEventId': originalEventId,
+          'content': '',
+          'author': reposterNpub,
+          'timestamp': timestamp,
+          'fetchedAt': DateTime.now(),
+        };
 
         _repostsMap.putIfAbsent(originalEventId, () => []);
-        if (!_repostsMap[originalEventId]!.any((r) => r.id == repost.id)) {
+        final repostId = repost['id'] as String? ?? '';
+        if (repostId.isNotEmpty &&
+            !_repostsMap[originalEventId]!
+                .any((r) => (r['id'] as String? ?? '') == repostId)) {
           _repostsMap[originalEventId]!.add(repost);
 
           final targetNote = _noteCache[originalEventId];
           if (targetNote != null) {
-            targetNote.repostCount = _repostsMap[originalEventId]!.length;
+            targetNote['repostCount'] = _repostsMap[originalEventId]!.length;
           }
-
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _processFollowEvent(Map<String, dynamic> eventData) async {
@@ -1019,21 +1160,24 @@ class DataService {
       try {
         await _followCacheService.put(pubkey, newFollowing);
       } catch (_) {}
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _processMuteEvent(Map<String, dynamic> eventData) async {
     try {
       final pubkey = eventData['pubkey'] as String;
+      final createdAt = eventData['created_at'] as int? ?? 0;
       final tags = eventData['tags'] as List<dynamic>;
       final newMuted = _extractPTags(tags);
 
-      try {
-        await _muteCacheService.put(pubkey, newMuted);
-      } catch (_) {}
-    } catch (e) {
-    }
+      final existingTimestamp = _muteEventTimestamps[pubkey] ?? 0;
+      if (createdAt > existingTimestamp) {
+        _muteEventTimestamps[pubkey] = createdAt;
+        try {
+          await _muteCacheService.put(pubkey, newMuted);
+        } catch (_) {}
+      }
+    } catch (e) {}
   }
 
   Future<void> _processDeletionEvent(Map<String, dynamic> eventData) async {
@@ -1051,14 +1195,15 @@ class DataService {
             _repostsMap.remove(deletedNoteId);
             _zapsMap.remove(deletedNoteId);
 
+            await _eventCacheService.deleteEvent(deletedNoteId);
+
             if (!_isClosed && !_noteDeletedController.isClosed) {
               _noteDeletedController.add(deletedNoteId);
             }
           }
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void markZapAsUserPublished(String zapEventId) {
@@ -1090,7 +1235,7 @@ class DataService {
       final recipient = _getTagValue(tags, 'p') ?? '';
       final bolt11 = _getTagValue(tags, 'bolt11') ?? '';
       final description = _getTagValue(tags, 'description') ?? '';
-      
+
       int amount = 0;
       final amountStr = _getTagValue(tags, 'amount');
       if (amountStr != null) {
@@ -1124,35 +1269,47 @@ class DataService {
       }
 
       if (targetEventId != null) {
-        final zap = ZapModel(
-          id: id,
-          sender: _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey,
-          recipient: _authService.hexToNpub(recipient) ?? recipient,
-          targetEventId: targetEventId,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
-          bolt11: bolt11,
-          comment: zapComment ?? (content.isNotEmpty ? content : null),
-          amount: amount,
-        );
+        final zap = <String, dynamic>{
+          'id': id,
+          'sender':
+              _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey,
+          'recipient': _authService.hexToNpub(recipient) ?? recipient,
+          'targetEventId': targetEventId,
+          'timestamp': DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
+          'bolt11': bolt11,
+          'comment': zapComment ?? (content.isNotEmpty ? content : null),
+          'amount': amount,
+        };
 
         final targetNote = _noteCache[targetEventId];
         if (targetNote != null) {
-          targetNote.addZap(zap);
+          final zapAmount = (targetNote['zapAmount'] as int? ?? 0) + amount;
+          targetNote['zapAmount'] = zapAmount;
           _scheduleUIUpdate();
         }
 
+        _zapsMap.putIfAbsent(targetEventId, () => []);
+        final zapId = zap['id'] as String? ?? '';
+        if (zapId.isNotEmpty &&
+            !_zapsMap[targetEventId]!
+                .any((z) => (z['id'] as String? ?? '') == zapId)) {
+          _zapsMap[targetEventId]!.add(zap);
+        }
+
         final zaps = _zapsMap.putIfAbsent(targetEventId, () => []);
-        if (!zaps.any((z) => z.id == zap.id)) {
+        final zapId2 = zap['id'] as String? ?? '';
+        if (zapId2.isNotEmpty &&
+            !zaps.any((z) => (z['id'] as String? ?? '') == zapId2)) {
           zaps.add(zap);
           _processedZapIds.add(id);
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  void _processNotificationFast(Map<String, dynamic> eventData, int kind, String eventAuthor) {
-    if (![1, 6, 7, 9735].contains(kind)) return;
+  void _processNotificationFast(
+      Map<String, dynamic> eventData, int kind, String eventAuthor) {
+    if (!_kindRouter.isNotificationKind(kind)) return;
     if (_currentUserNpub.isEmpty) return;
 
     final currentUserHex = _authService.npubToHex(_currentUserNpub);
@@ -1173,54 +1330,48 @@ class DataService {
 
     if (!isUserMentioned) return;
 
-    String notificationType;
-    switch (kind) {
-      case 1:
-        notificationType = "mention";
-        break;
-      case 6:
-        notificationType = "repost";
-        break;
-      case 7:
-        notificationType = "reaction";
-        break;
-      case 9735:
-        notificationType = "zap";
-        break;
-      default:
-        return;
-    }
+    final notificationType = _kindRouter.getNotificationTypeForKind(kind);
+    if (notificationType == null) return;
 
     try {
-      final notification = NotificationModel.fromEvent(eventData, notificationType);
+      final notification =
+          _createNotificationFromEvent(eventData, notificationType);
+      if (notification == null) return;
 
-      final authorNpub = _authService.hexToNpub(notification.author) ?? notification.author;
-      final updatedNotification = NotificationModel(
-        id: notification.id,
-        targetEventId: notification.targetEventId,
-        author: authorNpub,
-        type: notification.type,
-        content: notification.content,
-        timestamp: notification.timestamp,
-        fetchedAt: notification.fetchedAt,
-        isRead: notification.isRead,
-        amount: notification.amount,
-      );
+      final authorNpub =
+          _authService.hexToNpub(notification['author'] as String? ?? '') ??
+              (notification['author'] as String? ?? '');
+      final updatedNotification = <String, dynamic>{
+        'id': notification['id'] as String? ?? '',
+        'targetEventId': notification['targetEventId'] as String? ?? '',
+        'author': authorNpub,
+        'type': notification['type'] as String? ?? '',
+        'content': notification['content'] as String? ?? '',
+        'timestamp': notification['timestamp'] as DateTime? ?? DateTime.now(),
+        'fetchedAt': notification['fetchedAt'] as DateTime? ?? DateTime.now(),
+        'isRead': notification['isRead'] as bool? ?? false,
+        'amount': notification['amount'] as int? ?? 0,
+      };
 
-      final notifications = _notificationCache.putIfAbsent(_currentUserNpub, () => []);
-      if (!notifications.any((n) => n.id == updatedNotification.id)) {
+      final notifications =
+          _notificationCache.putIfAbsent(_currentUserNpub, () => []);
+      final updatedId = updatedNotification['id'] as String? ?? '';
+      if (updatedId.isNotEmpty &&
+          !notifications.any((n) => (n['id'] as String? ?? '') == updatedId)) {
         notifications.add(updatedNotification);
-        notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        notifications.sort((a, b) {
+          final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+          final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
         if (!_notificationsController.isClosed) {
           _notificationsController.add(notifications);
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  void _handleRelayDisconnection(String relayUrl) {
-  }
+  void _handleRelayDisconnection(String relayUrl) {}
 
   void _startCacheCleanup() {}
 
@@ -1249,21 +1400,20 @@ class DataService {
     final sortedNotes = _interactionFetchPriority.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    final notesToFetch = sortedNotes
-        .take(_maxInteractionBatchSize)
-        .map((e) => e.key)
-        .toList();
+    final notesToFetch =
+        sortedNotes.take(_maxInteractionBatchSize).map((e) => e.key).toList();
 
     _interactionFetchPriority.clear();
 
-    await _fetchInteractionsOptimized(notesToFetch);
+    await _fetchInteractions(notesToFetch);
   }
 
-  void _addNoteToCache(NoteModel note) {
-    if (_noteCache.containsKey(note.id)) return;
+  void _addNoteToCache(Map<String, dynamic> note) {
+    final noteId = note['id'] as String? ?? '';
+    if (noteId.isEmpty || _noteCache.containsKey(noteId)) return;
 
-    _noteCache[note.id] = note;
-    _eventIds.add(note.id);
+    _noteCache[noteId] = note;
+    _eventIds.add(noteId);
   }
 
   void _cleanupCacheIfNeeded() {
@@ -1271,12 +1421,14 @@ class DataService {
 
     if (_profileCache.length > _profileCacheMaxSize) {
       final cutoffTime = now.subtract(_profileCacheTTL);
-      _profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
+      _profileCache
+          .removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
     }
 
     if (_lastInteractionFetch.length > _interactionFetchMaxSize) {
       final interactionCutoff = now.subtract(_interactionCutoff);
-      _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(interactionCutoff));
+      _lastInteractionFetch.removeWhere(
+          (key, timestamp) => timestamp.isBefore(interactionCutoff));
     }
 
     if (_processedInteractionIds.length > 10000) {
@@ -1289,9 +1441,17 @@ class DataService {
 
     if (_noteCache.length > _noteCacheMaxSize) {
       final sortedNotes = _noteCache.values.toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        ..sort((a, b) {
+          final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+          final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
 
-      final notesToRemove = sortedNotes.skip(_noteCacheKeepSize).map((n) => n.id).toList();
+      final notesToRemove = sortedNotes
+          .skip(_noteCacheKeepSize)
+          .map((n) => n['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
       for (final id in notesToRemove) {
         _noteCache.remove(id);
         _eventIds.remove(id);
@@ -1304,18 +1464,37 @@ class DataService {
     }
   }
 
-  List<UserModel> _getUsersList() {
+  List<Map<String, dynamic>> _getUsersList() {
     return _profileCache.entries.map((entry) {
-      return UserModel.fromCachedProfile(entry.key, entry.value.data);
+      final profileData = entry.value.data;
+      return <String, dynamic>{
+        'pubkeyHex': entry.key,
+        'name': profileData['name'] ?? '',
+        'about': profileData['about'] ?? '',
+        'profileImage': profileData['profileImage'] ?? '',
+        'banner': profileData['banner'] ?? '',
+        'website': profileData['website'] ?? '',
+        'nip05': profileData['nip05'] ?? '',
+        'lud16': profileData['lud16'] ?? '',
+        'updatedAt': entry.value.fetchedAt,
+      };
     }).toList();
   }
 
-  List<NoteModel> _getNotesList() {
+  List<Map<String, dynamic>> _getNotesList() {
     final notesList = _noteCache.values.toList();
 
     notesList.sort((a, b) {
-      final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-      final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+      final aIsRepost = a['isRepost'] as bool? ?? false;
+      final aRepostTime = a['repostTimestamp'] as DateTime?;
+      final aTime = aIsRepost
+          ? (aRepostTime ?? a['timestamp'] as DateTime? ?? DateTime(2000))
+          : (a['timestamp'] as DateTime? ?? DateTime(2000));
+      final bIsRepost = b['isRepost'] as bool? ?? false;
+      final bRepostTime = b['repostTimestamp'] as DateTime?;
+      final bTime = bIsRepost
+          ? (bRepostTime ?? b['timestamp'] as DateTime? ?? DateTime(2000))
+          : (b['timestamp'] as DateTime? ?? DateTime(2000));
       return bTime.compareTo(aTime);
     });
 
@@ -1332,7 +1511,7 @@ class DataService {
 
       _uiUpdatePending = false;
       _uiUpdateCounter++;
-      
+
       if (_uiUpdateCounter % 3 == 0 || _eventQueue.isEmpty) {
         final notesList = _getFilteredNotesList();
         if (!_notesController.isClosed) {
@@ -1342,18 +1521,27 @@ class DataService {
     });
   }
 
-  List<NoteModel> _getFilteredNotesList() {
+  List<Map<String, dynamic>> _getFilteredNotesList() {
     final allNotes = _noteCache.values.toList();
 
     final replyFilteredNotes = allNotes.where((note) {
-      if (!note.isReply) return true;
-      if (note.isReply && note.isRepost) return true;
+      final isReply = note['isReply'] as bool? ?? false;
+      if (!isReply) return true;
+      if (isReply && (note['isRepost'] as bool? ?? false)) return true;
       return false;
     }).toList();
 
     replyFilteredNotes.sort((a, b) {
-      final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-      final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+      final aIsRepost = a['isRepost'] as bool? ?? false;
+      final aRepostTime = a['repostTimestamp'] as DateTime?;
+      final aTime = aIsRepost
+          ? (aRepostTime ?? a['timestamp'] as DateTime? ?? DateTime(2000))
+          : (a['timestamp'] as DateTime? ?? DateTime(2000));
+      final bIsRepost = b['isRepost'] as bool? ?? false;
+      final bRepostTime = b['repostTimestamp'] as DateTime?;
+      final bTime = bIsRepost
+          ? (bRepostTime ?? b['timestamp'] as DateTime? ?? DateTime(2000))
+          : (b['timestamp'] as DateTime? ?? DateTime(2000));
       return bTime.compareTo(aTime);
     });
 
@@ -1377,8 +1565,7 @@ class DataService {
       }, timeService.now);
 
       unawaited(_fetchUserProfile(npub));
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _fetchUserProfile(String npub) async {
@@ -1388,7 +1575,8 @@ class DataService {
       final cachedProfile = _profileCache[pubkeyHex];
       final now = timeService.now;
 
-      if (cachedProfile != null && now.difference(cachedProfile.fetchedAt) < _profileCacheTTL) {
+      if (cachedProfile != null &&
+          now.difference(cachedProfile.fetchedAt) < _profileCacheTTL) {
         return;
       }
 
@@ -1399,11 +1587,10 @@ class DataService {
 
       final request = NostrService.createRequest(filter);
       await _relayManager.broadcast(NostrService.serializeRequest(request));
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  Future<Result<List<NoteModel>>> fetchFeedNotes({
+  Future<Result<List<Map<String, dynamic>>>> fetchFeedNotes({
     required List<String> authorNpubs,
     int limit = 50,
     DateTime? until,
@@ -1416,26 +1603,31 @@ class DataService {
         _currentUserNpub = currentUser.data!;
       }
 
-      final authorHexKeys = authorNpubs.map((npub) => _authService.npubToHex(npub)).where((hex) => hex != null).cast<String>().toList();
+      final authorHexKeys = authorNpubs
+          .map((npub) => _authService.npubToHex(npub))
+          .where((hex) => hex != null)
+          .cast<String>()
+          .toList();
 
       List<String> targetAuthors = [];
 
       if (authorHexKeys.isEmpty) {
         return Result.success([]);
-      } else if (!isProfileMode && authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
-
+      } else if (!isProfileMode &&
+          authorHexKeys.length == 1 &&
+          authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
         final currentUserHex = _authService.npubToHex(_currentUserNpub);
         if (currentUserHex == null) {
           return const Result.error('Invalid current user npub format');
         }
 
-
         final followingResult = await getFollowingList(_currentUserNpub);
 
-        if (followingResult.isSuccess && followingResult.data != null && followingResult.data!.isNotEmpty) {
+        if (followingResult.isSuccess &&
+            followingResult.data != null &&
+            followingResult.data!.isNotEmpty) {
           targetAuthors = List<String>.from(followingResult.data!);
           targetAuthors.add(currentUserHex);
-
         } else {
           return Result.success([]);
         }
@@ -1447,6 +1639,32 @@ class DataService {
         return Result.success([]);
       }
 
+      final cached = await _eventCacheService.getEventsByAuthorsAndKinds(
+        targetAuthors,
+        [1, 6],
+        limit: limit,
+        since: since,
+        until: until,
+      );
+
+      if (cached.isNotEmpty) {
+        for (final event in cached) {
+          await processEventFromCache(event.toEventData());
+        }
+      }
+
+      unawaited(
+          _refreshFeedNotesForAuthors(targetAuthors, limit, since, until));
+
+      return Result.success([]);
+    } catch (e) {
+      return Result.error('Failed to fetch feed notes: $e');
+    }
+  }
+
+  Future<void> _refreshFeedNotesForAuthors(List<String> targetAuthors,
+      int limit, DateTime? since, DateTime? until) async {
+    try {
       final filter = NostrService.createNotesFilter(
         authors: targetAuthors,
         kinds: [1, 6],
@@ -1457,14 +1675,10 @@ class DataService {
 
       final request = NostrService.createRequest(filter);
       await _relayManager.broadcast(NostrService.serializeRequest(request));
-
-      return Result.success([]);
-    } catch (e) {
-      return Result.error('Failed to fetch feed notes: $e');
-    }
+    } catch (e) {}
   }
 
-  Future<Result<List<NoteModel>>> fetchProfileNotes({
+  Future<Result<List<Map<String, dynamic>>>> fetchProfileNotes({
     required String userNpub,
     int limit = 50,
     DateTime? until,
@@ -1476,6 +1690,31 @@ class DataService {
         return const Result.error('Invalid npub format');
       }
 
+      final cached = await _eventCacheService.getEventsByAuthorsAndKinds(
+        [pubkeyHex],
+        [1, 6],
+        limit: limit,
+        since: since,
+        until: until,
+      );
+
+      if (cached.isNotEmpty) {
+        for (final event in cached) {
+          await processEventFromCache(event.toEventData());
+        }
+      }
+
+      unawaited(_refreshProfileNotes(pubkeyHex, limit, since, until));
+
+      return Result.success([]);
+    } catch (e) {
+      return Result.error('Failed to fetch profile notes: $e');
+    }
+  }
+
+  Future<void> _refreshProfileNotes(
+      String pubkeyHex, int limit, DateTime? since, DateTime? until) async {
+    try {
       final filter = NostrService.createNotesFilter(
         authors: [pubkeyHex],
         kinds: [1, 6],
@@ -1486,14 +1725,11 @@ class DataService {
 
       final request = NostrService.createRequest(filter);
       await _relayManager.broadcast(NostrService.serializeRequest(request));
-
-      return Result.success([]);
-    } catch (e) {
-      return Result.error('Failed to fetch profile notes: $e');
-    }
+    } catch (e) {}
   }
 
-  NoteModel? _processProfileEventDirectlySync(Map<String, dynamic> eventData, String userNpub) {
+  Map<String, dynamic>? _processProfileEventDirectlySync(
+      Map<String, dynamic> eventData, String userNpub) {
     try {
       final pubkey = eventData['pubkey'] as String;
       final createdAt = eventData['created_at'] as int;
@@ -1514,8 +1750,8 @@ class DataService {
     }
   }
 
-
-  NoteModel? _processKind1ForProfileSync(Map<String, dynamic> eventData, String authorNpub, DateTime timestamp) {
+  Map<String, dynamic>? _processKind1ForProfileSync(
+      Map<String, dynamic> eventData, String authorNpub, DateTime timestamp) {
     try {
       final id = eventData['id'] as String;
       final content = eventData['content'] as String;
@@ -1524,24 +1760,25 @@ class DataService {
       final parsedTags = _parseTags(tags, includeTTags: false);
       final isReply = parsedTags.rootId != null;
 
-      final note = NoteModel(
-        id: id,
-        content: content,
-        author: authorNpub,
-        timestamp: timestamp,
-        isReply: isReply,
-        isRepost: false,
-        rootId: parsedTags.rootId,
-        parentId: parsedTags.parentId,
-        repostedBy: null,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-        rawWs: jsonEncode(eventData),
-        eTags: parsedTags.eTags,
-        pTags: parsedTags.pTags,
-      );
+      final note = <String, dynamic>{
+        'id': id,
+        'content': content,
+        'author': authorNpub,
+        'timestamp': timestamp,
+        'isReply': isReply,
+        'isRepost': false,
+        'rootId': parsedTags.rootId,
+        'parentId': parsedTags.parentId,
+        'repostedBy': null,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'rawWs': jsonEncode(eventData),
+        'eTags': parsedTags.eTags,
+        'pTags': parsedTags.pTags,
+        'replies': <Map<String, dynamic>>[],
+      };
 
       return note;
     } catch (e) {
@@ -1549,8 +1786,8 @@ class DataService {
     }
   }
 
-
-  NoteModel? _processKind6ForProfileSync(Map<String, dynamic> eventData, String reposterNpub, DateTime timestamp) {
+  Map<String, dynamic>? _processKind6ForProfileSync(
+      Map<String, dynamic> eventData, String reposterNpub, DateTime timestamp) {
     try {
       final id = eventData['id'] as String;
       final content = eventData['content'] as String? ?? '';
@@ -1572,61 +1809,70 @@ class DataService {
       if (originalEventId == null) return null;
 
       String displayContent = 'Reposted note';
-      String displayAuthor = originalAuthorHex != null ? (_authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex) : 'Unknown';
+      String displayAuthor = originalAuthorHex != null
+          ? (_authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex)
+          : 'Unknown';
       String? detectedRootId;
       String? detectedParentId;
 
       if (content.isNotEmpty) {
         try {
           final originalContent = jsonDecode(content) as Map<String, dynamic>;
-          displayContent = originalContent['content'] as String? ?? displayContent;
+          displayContent =
+              originalContent['content'] as String? ?? displayContent;
 
           if (originalAuthorHex != null) {
-            displayAuthor = _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
+            displayAuthor =
+                _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
           }
 
           final originalTags = originalContent['tags'] as List<dynamic>? ?? [];
           for (final tag in originalTags) {
-            if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root') {
+            if (tag is List &&
+                tag.length >= 4 &&
+                tag[0] == 'e' &&
+                tag[3] == 'root') {
               detectedRootId = tag[1] as String;
               detectedParentId = tag[1] as String;
               break;
-            } else if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'reply') {
+            } else if (tag is List &&
+                tag.length >= 4 &&
+                tag[0] == 'e' &&
+                tag[3] == 'reply') {
               detectedParentId = tag[1] as String;
             }
           }
-        } catch (e) {
-        }
+        } catch (e) {}
       }
 
       final bool detectedIsReply = detectedRootId != null;
 
-      final note = NoteModel(
-        id: id,
-        content: displayContent,
-        author: displayAuthor,
-        timestamp: timestamp,
-        isReply: detectedIsReply,
-        isRepost: true,
-        rootId: detectedRootId ?? originalEventId,
-        parentId: detectedParentId,
-        repostedBy: reposterNpub,
-        repostTimestamp: timestamp,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-        rawWs: jsonEncode(eventData),
-      );
-    
+      final note = <String, dynamic>{
+        'id': id,
+        'content': displayContent,
+        'author': displayAuthor,
+        'timestamp': timestamp,
+        'isReply': detectedIsReply,
+        'isRepost': true,
+        'rootId': detectedRootId ?? originalEventId,
+        'parentId': detectedParentId,
+        'repostedBy': reposterNpub,
+        'repostTimestamp': timestamp,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'rawWs': jsonEncode(eventData),
+        'replies': <Map<String, dynamic>>[],
+      };
+
       return note;
     } catch (e) {
       return null;
     }
   }
 
-
-  Future<Result<List<NoteModel>>> fetchHashtagNotes({
+  Future<Result<List<Map<String, dynamic>>>> fetchHashtagNotes({
     required String hashtag,
     int limit = 20,
     DateTime? until,
@@ -1634,56 +1880,45 @@ class DataService {
   }) async {
     try {
       final targetHashtag = hashtag.toLowerCase();
+      final hashtagNotes = <Map<String, dynamic>>[];
 
-      final filterMap = {
-        'kinds': [1],
-        '#t': [targetHashtag],
-        'limit': limit,
-        if (until != null) 'until': until.millisecondsSinceEpoch ~/ 1000,
-        if (since != null) 'since': since.millisecondsSinceEpoch ~/ 1000,
-      };
-
-      final subscriptionId = NostrService.generateUUID();
-      final serializedRequest = jsonEncode(['REQ', subscriptionId, filterMap]);
-      final hashtagNotes = <NoteModel>[];
-
-      await _queryAllRelays(
-        request: serializedRequest,
-        subscriptionId: subscriptionId,
-        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
-        checkClosed: false,
-        onEvent: (data, url) {
-          try {
-            final eventData = data;
-            final eventId = eventData['id'] as String? ?? '';
-            final eventKind = eventData['kind'] as int? ?? 0;
-
-            if (eventKind == 1 && eventId.isNotEmpty) {
-              if (_eventIds.contains(eventId)) {
-                final cachedNote = _noteCache[eventId];
-                if (cachedNote != null && !hashtagNotes.any((n) => n.id == eventId)) {
-                  hashtagNotes.add(cachedNote);
-                }
-              } else {
-                final note = _processHashtagEventDirectlySync(eventData);
-                if (note != null) {
-                  _addNoteToCache(note);
-                  if (!hashtagNotes.any((n) => n.id == eventId)) {
-                    hashtagNotes.add(note);
-                  }
-                }
-              }
-            }
-          } catch (_) {}
-        },
+      final cached = await _eventCacheService.getEventsByTag(
+        't',
+        targetHashtag,
+        kind: 1,
+        limit: limit,
+        since: since,
+        until: until,
       );
 
+      if (cached.isNotEmpty) {
+        for (final event in cached) {
+          final eventData = event.toEventData();
+          final eventId = eventData['id'] as String? ?? '';
+          if (_eventIds.contains(eventId)) {
+            final cachedNote = _noteCache[eventId];
+            if (cachedNote != null) {
+              hashtagNotes.add(cachedNote);
+            }
+          } else {
+            final note = _processHashtagEventDirectlySync(eventData);
+            if (note != null) {
+              _addNoteToCache(note);
+              hashtagNotes.add(note);
+            }
+          }
+        }
+      }
+
+      unawaited(_refreshHashtagNotes(targetHashtag, limit, since, until));
+
       final validatedHashtagNotes = hashtagNotes.where((note) {
-        if (note.tTags.isNotEmpty) {
-          return note.tTags.contains(targetHashtag);
+        final tTags = note['tTags'] as List<String>? ?? [];
+        if (tTags.isNotEmpty) {
+          return tTags.contains(targetHashtag);
         }
 
-        final content = note.content.toLowerCase();
+        final content = (note['content'] as String? ?? '').toLowerCase();
         final hashtagRegex = RegExp(r'#(\w+)');
         final matches = hashtagRegex.allMatches(content);
 
@@ -1697,15 +1932,23 @@ class DataService {
         return false;
       }).toList();
 
-      final filteredHashtagNotes = await filterNotesByMuteList(validatedHashtagNotes);
+      final filteredHashtagNotes =
+          await filterNotesByMuteList(validatedHashtagNotes);
 
-      final uniqueNotes = <String, NoteModel>{};
+      final uniqueNotes = <String, Map<String, dynamic>>{};
       for (final note in filteredHashtagNotes) {
-        uniqueNotes[note.id] = note;
+        final noteId = note['id'] as String? ?? '';
+        if (noteId.isNotEmpty) {
+          uniqueNotes[noteId] = note;
+        }
       }
       final deduplicated = uniqueNotes.values.toList();
 
-      deduplicated.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      deduplicated.sort((a, b) {
+        final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+        final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+        return bTime.compareTo(aTime);
+      });
       final limitedNotes = deduplicated.take(limit).toList();
 
       _scheduleUIUpdate();
@@ -1716,7 +1959,49 @@ class DataService {
     }
   }
 
-  NoteModel? _processHashtagEventDirectlySync(Map<String, dynamic> eventData) {
+  Future<void> _refreshHashtagNotes(
+      String targetHashtag, int limit, DateTime? since, DateTime? until) async {
+    try {
+      final filterMap = {
+        'kinds': [1],
+        '#t': [targetHashtag],
+        'limit': limit,
+        if (until != null) 'until': until.millisecondsSinceEpoch ~/ 1000,
+        if (since != null) 'since': since.millisecondsSinceEpoch ~/ 1000,
+      };
+
+      final subscriptionId = NostrService.generateUUID();
+      final serializedRequest = jsonEncode(['REQ', subscriptionId, filterMap]);
+
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
+        checkClosed: false,
+        onEvent: (data, url) {
+          try {
+            final eventData = data;
+            final eventId = eventData['id'] as String? ?? '';
+            final eventKind = eventData['kind'] as int? ?? 0;
+
+            if (eventKind == 1 &&
+                eventId.isNotEmpty &&
+                !_eventIds.contains(eventId)) {
+              final note = _processHashtagEventDirectlySync(eventData);
+              if (note != null) {
+                _addNoteToCache(note);
+              }
+            }
+          } catch (_) {}
+        },
+      );
+
+      _scheduleUIUpdate();
+    } catch (e) {}
+  }
+
+  Map<String, dynamic>? _processHashtagEventDirectlySync(
+      Map<String, dynamic> eventData) {
     try {
       final id = eventData['id'] as String;
       final pubkey = eventData['pubkey'] as String;
@@ -1730,25 +2015,26 @@ class DataService {
       final parsedTags = _parseTags(tags);
       final isReply = parsedTags.rootId != null;
 
-      final note = NoteModel(
-        id: id,
-        content: content,
-        author: authorNpub,
-        timestamp: timestamp,
-        isReply: isReply,
-        isRepost: false,
-        rootId: parsedTags.rootId,
-        parentId: parsedTags.parentId,
-        repostedBy: null,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-        rawWs: jsonEncode(eventData),
-        eTags: parsedTags.eTags,
-        pTags: parsedTags.pTags,
-        tTags: parsedTags.tTags,
-      );
+      final note = <String, dynamic>{
+        'id': id,
+        'content': content,
+        'author': authorNpub,
+        'timestamp': timestamp,
+        'isReply': isReply,
+        'isRepost': false,
+        'rootId': parsedTags.rootId,
+        'parentId': parsedTags.parentId,
+        'repostedBy': null,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'rawWs': jsonEncode(eventData),
+        'eTags': parsedTags.eTags,
+        'pTags': parsedTags.pTags,
+        'tTags': parsedTags.tTags,
+        'replies': <Map<String, dynamic>>[],
+      };
 
       return note;
     } catch (e) {
@@ -1756,8 +2042,7 @@ class DataService {
     }
   }
 
-
-  Future<Result<UserModel>> fetchUserProfile(String npub) async {
+  Future<Result<Map<String, dynamic>>> fetchUserProfile(String npub) async {
     try {
       final pubkeyHex = _authService.npubToHex(npub);
       if (pubkeyHex == null) {
@@ -1767,8 +2052,20 @@ class DataService {
       final cachedProfile = _profileCache[pubkeyHex];
       final now = timeService.now;
 
-      if (cachedProfile != null && now.difference(cachedProfile.fetchedAt) < _profileCacheTTL) {
-        final user = UserModel.fromCachedProfile(pubkeyHex, cachedProfile.data);
+      if (cachedProfile != null &&
+          now.difference(cachedProfile.fetchedAt) < _profileCacheTTL) {
+        final profileData = cachedProfile.data;
+        final user = <String, dynamic>{
+          'pubkeyHex': pubkeyHex,
+          'name': profileData['name'] ?? '',
+          'about': profileData['about'] ?? '',
+          'profileImage': profileData['profileImage'] ?? '',
+          'banner': profileData['banner'] ?? '',
+          'website': profileData['website'] ?? '',
+          'nip05': profileData['nip05'] ?? '',
+          'lud16': profileData['lud16'] ?? '',
+          'updatedAt': cachedProfile.fetchedAt,
+        };
         return Result.success(user);
       }
 
@@ -1780,13 +2077,14 @@ class DataService {
       final request = NostrService.createRequest(filter);
       final serializedRequest = NostrService.serializeRequest(request);
 
-      final completer = Completer<UserModel?>();
+      final completer = Completer<Map<String, dynamic>?>();
       late StreamSubscription subscription;
 
       subscription = _usersController.stream.listen((users) {
         if (!completer.isCompleted) {
           for (final user in users) {
-            if (user.pubkeyHex == pubkeyHex) {
+            final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
+            if (userPubkeyHex == pubkeyHex) {
               completer.complete(user);
               subscription.cancel();
               return;
@@ -1810,22 +2108,33 @@ class DataService {
 
       final updatedProfile = _profileCache[pubkeyHex];
       if (updatedProfile != null) {
-        final cachedUser = UserModel.fromCachedProfile(pubkeyHex, updatedProfile.data);
+        final profileData = updatedProfile.data;
+        final cachedUser = <String, dynamic>{
+          'pubkeyHex': pubkeyHex,
+          'name': profileData['name'] ?? '',
+          'about': profileData['about'] ?? '',
+          'profileImage': profileData['profileImage'] ?? '',
+          'banner': profileData['banner'] ?? '',
+          'website': profileData['website'] ?? '',
+          'nip05': profileData['nip05'] ?? '',
+          'lud16': profileData['lud16'] ?? '',
+          'updatedAt': updatedProfile.fetchedAt,
+        };
         return Result.success(cachedUser);
       }
 
-      final basicUser = UserModel.create(
-        pubkeyHex: npub,
-        name: npub.substring(0, 8),
-        about: '',
-        profileImage: '',
-        banner: '',
-        website: '',
-        nip05: '',
-        lud16: '',
-        updatedAt: DateTime.now(),
-        nip05Verified: false,
-      );
+      final basicUser = <String, dynamic>{
+        'pubkeyHex': npub,
+        'name': npub.length > 8 ? npub.substring(0, 8) : npub,
+        'about': '',
+        'profileImage': '',
+        'banner': '',
+        'website': '',
+        'nip05': '',
+        'lud16': '',
+        'updatedAt': DateTime.now(),
+        'nip05Verified': false,
+      };
 
       return Result.success(basicUser);
     } catch (e) {
@@ -1833,12 +2142,11 @@ class DataService {
     }
   }
 
-  Future<Result<NoteModel>> postNote({
+  Future<Result<Map<String, dynamic>>> postNote({
     required String content,
     List<List<String>>? tags,
   }) async {
     try {
-
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
         return Result.error('Private key not found: ${privateKeyResult.error}');
@@ -1848,7 +2156,6 @@ class DataService {
       if (privateKey == null || privateKey.isEmpty) {
         return const Result.error('Private key not found.');
       }
-
 
       dynamic event;
       try {
@@ -1863,27 +2170,30 @@ class DataService {
 
       await _ensureRelayConnection();
 
-      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+      await _relayManager
+          .priorityBroadcastToAll(NostrService.serializeEvent(event));
 
       final userResult = await _authService.getCurrentUserNpub();
       final authorNpub = userResult.data ?? '';
 
-      final note = NoteModel(
-        id: event.id,
-        content: content,
-        author: authorNpub,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-        isReply: tags?.any((tag) => tag.isNotEmpty && tag[0] == 'e') ?? false,
-        isRepost: false,
-        rootId: null,
-        parentId: null,
-        repostedBy: null,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-        rawWs: jsonEncode(NostrService.eventToJson(event)),
-      );
+      final note = <String, dynamic>{
+        'id': event.id,
+        'content': content,
+        'author': authorNpub,
+        'timestamp':
+            DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+        'isReply': tags?.any((tag) => tag.isNotEmpty && tag[0] == 'e') ?? false,
+        'isRepost': false,
+        'rootId': null,
+        'parentId': null,
+        'repostedBy': null,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'rawWs': jsonEncode(NostrService.eventToJson(event)),
+        'replies': <Map<String, dynamic>>[],
+      };
 
       _addNoteToCache(note);
 
@@ -1918,26 +2228,28 @@ class DataService {
 
       _pendingOptimisticReactionIds.add(event.id);
 
-      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+      await _relayManager
+          .priorityBroadcastToAll(NostrService.serializeEvent(event));
 
       final userResult = await _authService.getCurrentUserNpub();
       final authorNpub = userResult.data ?? '';
 
-      final optimisticReaction = ReactionModel(
-        id: event.id,
-        targetEventId: noteId,
-        content: reaction,
-        author: authorNpub,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-        fetchedAt: DateTime.now(),
-      );
+      final optimisticReaction = <String, dynamic>{
+        'id': event.id,
+        'targetEventId': noteId,
+        'content': reaction,
+        'author': authorNpub,
+        'timestamp':
+            DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+        'fetchedAt': DateTime.now(),
+      };
 
       _reactionsMap.putIfAbsent(noteId, () => []);
       _reactionsMap[noteId]!.add(optimisticReaction);
 
       final note = _noteCache[noteId];
       if (note != null) {
-        note.reactionCount = _reactionsMap[noteId]!.length;
+        note['reactionCount'] = _reactionsMap[noteId]!.length;
         _scheduleUIUpdate();
       }
 
@@ -1959,7 +2271,7 @@ class DataService {
       final userNpub = userResult.data!;
       final reposts = _repostsMap[noteId] ?? [];
       final userRepost = reposts.firstWhere(
-        (repost) => repost.author == userNpub,
+        (repost) => (repost['author'] as String? ?? '') == userNpub,
         orElse: () => throw Exception('User has not reposted this note'),
       );
 
@@ -1973,39 +2285,47 @@ class DataService {
         return const Result.error('Private key not found.');
       }
 
-      final repostNote = _noteCache[userRepost.id];
-      
-      _repostsMap[noteId]?.removeWhere((repost) => repost.id == userRepost.id);
+      final userRepostId = userRepost['id'] as String? ?? '';
+      final repostNote = _noteCache[userRepostId];
+
+      _repostsMap[noteId]?.removeWhere(
+          (repost) => (repost['id'] as String? ?? '') == userRepostId);
       if (_repostsMap[noteId]?.isEmpty ?? false) {
         _repostsMap.remove(noteId);
       }
 
-      if (repostNote != null && repostNote.isRepost) {
-        _noteCache.remove(userRepost.id);
-        _eventIds.remove(userRepost.id);
+      if (repostNote != null && (repostNote['isRepost'] as bool? ?? false)) {
+        _noteCache.remove(userRepostId);
+        _eventIds.remove(userRepostId);
 
         if (!_isClosed && !_noteDeletedController.isClosed) {
-          _noteDeletedController.add(userRepost.id);
+          _noteDeletedController.add(userRepostId);
         }
       }
 
       final note = _noteCache[noteId];
       if (note != null) {
-        if (repostNote != null && repostNote.isRepost) {
-          note.removeBoost(repostNote);
+        if (repostNote != null && (repostNote['isRepost'] as bool? ?? false)) {
+          final noteReplies =
+              note['replies'] as List<Map<String, dynamic>>? ?? [];
+          final repostNoteId = repostNote['id'] as String? ?? '';
+          noteReplies
+              .removeWhere((r) => (r['id'] as String? ?? '') == repostNoteId);
+          note['replies'] = noteReplies;
         }
-        note.repostCount = _repostsMap[noteId]?.length ?? 0;
+        note['repostCount'] = _repostsMap[noteId]?.length ?? 0;
         _scheduleUIUpdate();
       }
 
       final event = NostrService.createDeletionEvent(
-        eventIds: [userRepost.id],
+        eventIds: [userRepostId],
         privateKey: privateKey,
       );
 
       await _ensureRelayConnection('repost_delete');
 
-      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+      await _relayManager
+          .priorityBroadcastToAll(NostrService.serializeEvent(event));
 
       return const Result.success(null);
     } catch (e) {
@@ -2019,7 +2339,6 @@ class DataService {
     String? content,
   }) async {
     try {
-
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
         return Result.error('Authentication error: ${privateKeyResult.error}');
@@ -2031,17 +2350,22 @@ class DataService {
       }
 
       final originalNote = _noteCache[noteId];
+      final originalRawWs = originalNote?['rawWs'] as String?;
+      final originalContent = originalNote?['content'] as String? ?? '';
+      final originalTimestamp = originalNote?['timestamp'] as DateTime?;
+      final originalIsRepost = originalNote?['isRepost'] as bool? ?? false;
       final repostContent = content ??
-          (originalNote?.rawWs ??
+          (originalRawWs ??
               jsonEncode({
                 'id': noteId,
                 'pubkey': _authService.npubToHex(noteAuthor) ?? noteAuthor,
-                'content': originalNote?.content ?? '',
-                'created_at': originalNote?.timestamp.millisecondsSinceEpoch ?? 0 ~/ 1000,
-                'kind': originalNote?.isRepost ?? false ? 6 : 1,
+                'content': originalContent,
+                'created_at': originalTimestamp != null
+                    ? (originalTimestamp.millisecondsSinceEpoch ~/ 1000)
+                    : 0,
+                'kind': originalIsRepost ? 6 : 1,
                 'tags': [],
               }));
-
 
       final event = NostrService.createRepostEvent(
         noteId: noteId,
@@ -2052,11 +2376,13 @@ class DataService {
 
       await _ensureRelayConnection('repost');
 
-      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+      await _relayManager
+          .priorityBroadcastToAll(NostrService.serializeEvent(event));
 
       final userResult = await _authService.getCurrentUserNpub();
       final reposterNpub = userResult.data ?? '';
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000);
+      final timestamp =
+          DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000);
 
       String displayContent = 'Reposted note';
       String displayAuthor = noteAuthor;
@@ -2065,17 +2391,21 @@ class DataService {
       String? detectedParentId;
 
       if (originalNote != null) {
-        displayContent = originalNote.content;
-        displayAuthor = originalNote.author;
-        detectedIsReply = originalNote.isReply;
-        detectedRootId = originalNote.rootId;
-        detectedParentId = originalNote.parentId;
+        displayContent = originalNote['content'] as String? ?? '';
+        displayAuthor = originalNote['author'] as String? ?? '';
+        detectedIsReply = originalNote['isReply'] as bool? ?? false;
+        detectedRootId = originalNote['rootId'] as String?;
+        detectedParentId = originalNote['parentId'] as String?;
       } else if (repostContent.isNotEmpty) {
         try {
-          final originalContent = jsonDecode(repostContent) as Map<String, dynamic>;
-          displayContent = originalContent['content'] as String? ?? 'Reposted note';
-          final originalAuthorHex = _authService.npubToHex(noteAuthor) ?? noteAuthor;
-          displayAuthor = _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
+          final originalContent =
+              jsonDecode(repostContent) as Map<String, dynamic>;
+          displayContent =
+              originalContent['content'] as String? ?? 'Reposted note';
+          final originalAuthorHex =
+              _authService.npubToHex(noteAuthor) ?? noteAuthor;
+          displayAuthor =
+              _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
 
           final originalTags = originalContent['tags'] as List<dynamic>? ?? [];
           for (final tag in originalTags) {
@@ -2100,27 +2430,30 @@ class DataService {
           }
         } catch (e) {
           displayContent = 'Reposted note';
-          displayAuthor = _authService.hexToNpub(_authService.npubToHex(noteAuthor) ?? noteAuthor) ?? noteAuthor;
+          displayAuthor = _authService.hexToNpub(
+                  _authService.npubToHex(noteAuthor) ?? noteAuthor) ??
+              noteAuthor;
         }
       }
 
-      final repostNote = NoteModel(
-        id: event.id,
-        content: displayContent,
-        author: displayAuthor,
-        timestamp: timestamp,
-        isReply: detectedIsReply,
-        isRepost: true,
-        rootId: detectedRootId ?? noteId,
-        parentId: detectedParentId,
-        repostedBy: reposterNpub,
-        repostTimestamp: timestamp,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-        rawWs: jsonEncode(NostrService.eventToJson(event)),
-      );
+      final repostNote = <String, dynamic>{
+        'id': event.id,
+        'content': displayContent,
+        'author': displayAuthor,
+        'timestamp': timestamp,
+        'isReply': detectedIsReply,
+        'isRepost': true,
+        'rootId': detectedRootId ?? noteId,
+        'parentId': detectedParentId,
+        'repostedBy': reposterNpub,
+        'repostTimestamp': timestamp,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'rawWs': jsonEncode(NostrService.eventToJson(event)),
+        'replies': <Map<String, dynamic>>[],
+      };
 
       _addNoteToCache(repostNote);
 
@@ -2134,7 +2467,7 @@ class DataService {
     }
   }
 
-  Future<Result<NoteModel>> postReply({
+  Future<Result<Map<String, dynamic>>> postReply({
     required String content,
     required String rootId,
     String? replyId,
@@ -2155,32 +2488,33 @@ class DataService {
         return const Result.error('Authentication credentials not available.');
       }
 
-      final parentNote = _noteCache.values.where((note) => note.id == parentEventId).firstOrNull;
+      final parentNote = _noteCache[parentEventId];
 
       if (parentNote == null) {
         return const Result.error('Parent note not found.');
       }
 
-
       String actualRootId;
       String actualReplyId = parentEventId;
       String replyMarker;
 
-      if (parentNote.isReply && parentNote.rootId != null && parentNote.rootId!.isNotEmpty) {
-        actualRootId = parentNote.rootId!;
+      final parentIsReply = parentNote['isReply'] as bool? ?? false;
+      final parentRootId = parentNote['rootId'] as String?;
+      if (parentIsReply && parentRootId != null && parentRootId.isNotEmpty) {
+        actualRootId = parentRootId;
         replyMarker = 'reply';
       } else {
         actualRootId = parentEventId;
         replyMarker = 'root';
       }
 
-
       List<List<String>> tags = [];
 
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
 
-      final authorHex = _authService.npubToHex(parentNote.author) ?? parentNote.author;
+      final parentAuthor = parentNote['author'] as String? ?? '';
+      final authorHex = _authService.npubToHex(parentAuthor) ?? parentAuthor;
 
       if (actualRootId != actualReplyId) {
         tags.add(['e', actualRootId, '', 'root', authorHex]);
@@ -2211,10 +2545,13 @@ class DataService {
 
       Set<String> mentionedPubkeys = {authorHex};
 
-      if (parentNote.pTags.isNotEmpty == true) {
-        for (final pTag in parentNote.pTags) {
-          if (pTag['pubkey'] != null && pTag['pubkey']!.isNotEmpty) {
-            mentionedPubkeys.add(pTag['pubkey']!);
+      final parentPTags = parentNote['pTags'] as List<dynamic>? ?? [];
+      if (parentPTags.isNotEmpty) {
+        for (final pTag in parentPTags) {
+          if (pTag is Map &&
+              pTag['pubkey'] != null &&
+              (pTag['pubkey'] as String? ?? '').isNotEmpty) {
+            mentionedPubkeys.add(pTag['pubkey'] as String);
           }
         }
       }
@@ -2232,7 +2569,6 @@ class DataService {
         tags.addAll(additionalTags);
       }
 
-
       final event = NostrService.createReplyEvent(
         content: content,
         privateKey: privateKey,
@@ -2246,34 +2582,34 @@ class DataService {
         if (ws.readyState == WebSocket.open) {
           try {
             ws.add(serializedEvent);
-          } catch (e) {
-          }
-        } else {
-        }
+          } catch (e) {}
+        } else {}
       }
 
       final userResult = await _authService.getCurrentUserNpub();
       final authorNpub = userResult.data ?? '';
 
-      final reply = NoteModel(
-        id: event.id,
-        content: content,
-        author: authorNpub,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-        isReply: true,
-        isRepost: false,
-        rootId: actualRootId,
-        parentId: actualReplyId,
-        repostedBy: null,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-        rawWs: jsonEncode(NostrService.eventToJson(event)),
-        eTags: eTags,
-        pTags: pTags,
-        replyMarker: replyMarker,
-      );
+      final reply = <String, dynamic>{
+        'id': event.id,
+        'content': content,
+        'author': authorNpub,
+        'timestamp':
+            DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+        'isReply': true,
+        'isRepost': false,
+        'rootId': actualRootId,
+        'parentId': actualReplyId,
+        'repostedBy': null,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'rawWs': jsonEncode(NostrService.eventToJson(event)),
+        'eTags': eTags,
+        'pTags': pTags,
+        'replyMarker': replyMarker,
+        'replies': <Map<String, dynamic>>[],
+      };
 
       _addNoteToCache(reply);
       _scheduleUIUpdate();
@@ -2284,9 +2620,9 @@ class DataService {
     }
   }
 
-  Future<Result<UserModel>> updateUserProfile(UserModel user) async {
+  Future<Result<Map<String, dynamic>>> updateUserProfile(
+      Map<String, dynamic> user) async {
     try {
-
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
         return Result.error('Authentication error: ${privateKeyResult.error}');
@@ -2298,43 +2634,47 @@ class DataService {
       }
 
       final Map<String, dynamic> profileContent = {
-        'name': user.name,
-        'about': user.about,
-        'picture': user.profileImage,
+        'name': user['name'] as String? ?? '',
+        'about': user['about'] as String? ?? '',
+        'picture': user['profileImage'] as String? ?? '',
       };
 
-      if (user.nip05.isNotEmpty) profileContent['nip05'] = user.nip05;
-      if (user.banner.isNotEmpty) profileContent['banner'] = user.banner;
-      if (user.lud16.isNotEmpty) profileContent['lud16'] = user.lud16;
-      if (user.website.isNotEmpty) profileContent['website'] = user.website;
-
+      final nip05 = user['nip05'] as String? ?? '';
+      final banner = user['banner'] as String? ?? '';
+      final lud16 = user['lud16'] as String? ?? '';
+      final website = user['website'] as String? ?? '';
+      if (nip05.isNotEmpty) profileContent['nip05'] = nip05;
+      if (banner.isNotEmpty) profileContent['banner'] = banner;
+      if (lud16.isNotEmpty) profileContent['lud16'] = lud16;
+      if (website.isNotEmpty) profileContent['website'] = website;
 
       final event = NostrService.createProfileEvent(
         profileContent: profileContent,
         privateKey: privateKey,
       );
 
-
       await _ensureRelayConnection('profile_update');
 
-      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+      await _relayManager
+          .priorityBroadcastToAll(NostrService.serializeEvent(event));
 
       final eventJson = NostrService.eventToJson(event);
-      final updatedAt = DateTime.fromMillisecondsSinceEpoch(eventJson['created_at'] * 1000);
+      final updatedAt =
+          DateTime.fromMillisecondsSinceEpoch(eventJson['created_at'] * 1000);
       final pubkeyHex = eventJson['pubkey'] as String;
 
-      final updatedUser = UserModel.create(
-        pubkeyHex: user.pubkeyHex,
-        name: user.name,
-        about: user.about,
-        profileImage: user.profileImage,
-        nip05: user.nip05,
-        banner: user.banner,
-        lud16: user.lud16,
-        website: user.website,
-        updatedAt: updatedAt,
-        nip05Verified: false,
-      );
+      final updatedUser = <String, dynamic>{
+        'pubkeyHex': user['pubkeyHex'] as String? ?? '',
+        'name': user['name'] as String? ?? '',
+        'about': user['about'] as String? ?? '',
+        'profileImage': user['profileImage'] as String? ?? '',
+        'nip05': user['nip05'] as String? ?? '',
+        'banner': user['banner'] as String? ?? '',
+        'lud16': user['lud16'] as String? ?? '',
+        'website': user['website'] as String? ?? '',
+        'updatedAt': updatedAt,
+        'nip05Verified': false,
+      };
 
       _profileCache.remove(pubkeyHex);
       _profileCache[pubkeyHex] = CachedProfile(
@@ -2351,7 +2691,7 @@ class DataService {
     }
   }
 
-  Future<Result<List<NotificationModel>>> fetchNotifications({
+  Future<Result<List<Map<String, dynamic>>>> fetchNotifications({
     DateTime? since,
   }) async {
     try {
@@ -2367,9 +2707,117 @@ class DataService {
 
       _currentUserNpub = (await _authService.getCurrentUserNpub()).data ?? '';
 
-      final fetchedNotifications = <String, NotificationModel>{};
+      final fetchedNotifications = <String, Map<String, dynamic>>{};
 
-      final sinceTimestamp = since != null ? since.millisecondsSinceEpoch ~/ 1000 : null;
+      final cached = await _eventCacheService.getEventsByPTags(
+        [pubkeyHex],
+        [1, 6, 7, 9735],
+        since: since,
+        limit: 100,
+      );
+
+      for (final event in cached) {
+        final eventData = event.toEventData();
+        final eventId = eventData['id'] as String? ?? '';
+        final eventKind = eventData['kind'] as int? ?? 0;
+        final eventPubkey = eventData['pubkey'] as String? ?? '';
+        final eventCreatedAt = eventData['created_at'] as int? ?? 0;
+        final eventTags = eventData['tags'] as List<dynamic>? ?? [];
+        final eventContent = eventData['content'] as String? ?? '';
+
+        if (eventId.isEmpty || eventPubkey.isEmpty) continue;
+
+        final notification = _processNotificationEvent(
+          eventId: eventId,
+          eventKind: eventKind,
+          eventPubkey: eventPubkey,
+          eventCreatedAt: eventCreatedAt,
+          eventTags: eventTags,
+          eventContent: eventContent,
+          targetUserHex: pubkeyHex,
+        );
+
+        if (notification != null) {
+          final notificationId = notification['id'] as String? ?? '';
+          if (notificationId.isNotEmpty &&
+              !fetchedNotifications.containsKey(notificationId)) {
+            fetchedNotifications[notificationId] = notification;
+          }
+        }
+      }
+
+      unawaited(_refreshNotifications(pubkeyHex, since));
+
+      final notificationsList = fetchedNotifications.values.toList();
+      notificationsList.sort((a, b) {
+        final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+        final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+        return bTime.compareTo(aTime);
+      });
+
+      final notifications =
+          _notificationCache.putIfAbsent(_currentUserNpub, () => []);
+      notifications.clear();
+      notifications.addAll(notificationsList);
+      notifications.sort((a, b) {
+        final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+        final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+        return bTime.compareTo(aTime);
+      });
+
+      if (!_notificationsController.isClosed) {
+        _notificationsController.add(List.unmodifiable(notifications));
+      }
+
+      return Result.success(notificationsList);
+    } catch (e) {
+      return Result.error('Failed to fetch notifications: $e');
+    }
+  }
+
+  Future<void> _fetchAndCacheNotifications(String pubkeyHex) async {
+    try {
+      if (_isClosed || _allRelays.isEmpty) return;
+
+      final filter = <String, dynamic>{
+        'kinds': [1, 6, 7, 9735],
+        '#p': [pubkeyHex],
+        'limit': 100,
+      };
+
+      final subscriptionId = NostrService.generateUUID();
+      final request = ['REQ', subscriptionId, filter];
+      final serializedRequest = jsonEncode(request);
+
+      final eventsToCache = <Map<String, dynamic>>[];
+
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
+        checkClosed: false,
+        onEvent: (eventData, url) {
+          try {
+            final eventId = eventData['id'] as String? ?? '';
+            if (eventId.isNotEmpty) {
+              eventsToCache.add(eventData);
+            }
+          } catch (_) {}
+        },
+      );
+
+      if (eventsToCache.isNotEmpty) {
+        await _eventCacheService.saveEvents(eventsToCache);
+      }
+    } catch (e) {
+      debugPrint('[DataService] Error fetching and caching notifications: $e');
+    }
+  }
+
+  Future<void> _refreshNotifications(String pubkeyHex, DateTime? since) async {
+    try {
+      final sinceTimestamp =
+          since != null ? since.millisecondsSinceEpoch ~/ 1000 : null;
 
       try {
         final primalService = PrimalCacheService.instance;
@@ -2381,21 +2829,31 @@ class DataService {
 
         for (final notifData in primalNotifications) {
           try {
-            final notification = _processPrimalNotification(notifData, pubkeyHex);
-            if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
-              fetchedNotifications[notification.id] = notification;
+            final notification =
+                _processPrimalNotification(notifData, pubkeyHex);
+            if (notification != null) {
+              final notificationId = notification['id'] as String? ?? '';
+              if (notificationId.isNotEmpty) {
+                final notifications =
+                    _notificationCache.putIfAbsent(_currentUserNpub, () => []);
+                if (!notifications
+                    .any((n) => (n['id'] as String? ?? '') == notificationId)) {
+                  notifications.add(notification);
+                  notifications.sort((a, b) {
+                    final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+                    final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+                    return bTime.compareTo(aTime);
+                  });
+                  if (!_notificationsController.isClosed) {
+                    _notificationsController
+                        .add(List.unmodifiable(notifications));
+                  }
+                }
+              }
             }
-          } catch (e) {
-            if (kDebugMode) {
-              print('[DataService] Error processing primal notification: $e');
-            }
-          }
+          } catch (e) {}
         }
-      } catch (e) {
-        if (kDebugMode) {
-          print('[DataService] Error fetching primal notifications: $e');
-        }
-      }
+      } catch (e) {}
 
       final filter = <String, dynamic>{
         'kinds': [1, 6, 7, 9735],
@@ -2437,40 +2895,43 @@ class DataService {
                 targetUserHex: pubkeyHex,
               );
 
-              if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
-                fetchedNotifications[notification.id] = notification;
+              if (notification != null) {
+                final notificationId = notification['id'] as String? ?? '';
+                if (notificationId.isNotEmpty) {
+                  final notifications = _notificationCache.putIfAbsent(
+                      _currentUserNpub, () => []);
+                  if (!notifications.any(
+                      (n) => (n['id'] as String? ?? '') == notificationId)) {
+                    notifications.add(notification);
+                    notifications.sort((a, b) {
+                      final aTime =
+                          a['timestamp'] as DateTime? ?? DateTime(2000);
+                      final bTime =
+                          b['timestamp'] as DateTime? ?? DateTime(2000);
+                      return bTime.compareTo(aTime);
+                    });
+                    if (!_notificationsController.isClosed) {
+                      _notificationsController
+                          .add(List.unmodifiable(notifications));
+                    }
+                  }
+                }
               }
             } catch (_) {}
           },
         );
       }
-
-      final notificationsList = fetchedNotifications.values.toList();
-      notificationsList.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-      final notifications = _notificationCache.putIfAbsent(_currentUserNpub, () => []);
-      notifications.clear();
-      notifications.addAll(notificationsList);
-      notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-      if (!_notificationsController.isClosed) {
-        _notificationsController.add(List.unmodifiable(notifications));
-      }
-
-      return Result.success(notificationsList);
-    } catch (e) {
-      return Result.error('Failed to fetch notifications: $e');
-    }
+    } catch (e) {}
   }
 
-  NotificationModel? _processPrimalNotification(
+  Map<String, dynamic>? _processPrimalNotification(
     Map<String, dynamic> notifData,
     String targetUserHex,
   ) {
     try {
       final notifType = notifData['type'] as int?;
       final createdAt = notifData['created_at'] as int?;
-      
+
       if (notifType == null || createdAt == null) {
         return null;
       }
@@ -2534,17 +2995,17 @@ class DataService {
       final authorNpub = _authService.hexToNpub(authorHex) ?? authorHex;
       final notificationId = 'primal_${notifType}_${authorHex}_${createdAt}';
 
-      return NotificationModel(
-        id: notificationId,
-        type: notificationType,
-        author: authorNpub,
-        targetEventId: targetEventId,
-        timestamp: timestamp,
-        content: content,
-        fetchedAt: DateTime.now(),
-        isRead: false,
-        amount: 0,
-      );
+      return <String, dynamic>{
+        'id': notificationId,
+        'type': notificationType,
+        'author': authorNpub,
+        'targetEventId': targetEventId,
+        'timestamp': timestamp,
+        'content': content,
+        'fetchedAt': DateTime.now(),
+        'isRead': false,
+        'amount': 0,
+      };
     } catch (e) {
       if (kDebugMode) {
         print('[DataService] Error processing primal notification: $e');
@@ -2553,7 +3014,36 @@ class DataService {
     }
   }
 
-  NotificationModel? _processNotificationEvent({
+  Map<String, dynamic>? _createNotificationFromEvent(
+      Map<String, dynamic> eventData, String notificationType) {
+    try {
+      final eventId = eventData['id'] as String? ?? '';
+      final eventKind = eventData['kind'] as int? ?? 0;
+      final eventPubkey = eventData['pubkey'] as String? ?? '';
+      final eventCreatedAt = eventData['created_at'] as int? ?? 0;
+      final eventTags = eventData['tags'] as List<dynamic>? ?? [];
+      final eventContent = eventData['content'] as String? ?? '';
+
+      final currentUserHex = _authService.npubToHex(_currentUserNpub);
+      if (currentUserHex == null || eventPubkey.isEmpty) {
+        return null;
+      }
+
+      return _processNotificationEvent(
+        eventId: eventId,
+        eventKind: eventKind,
+        eventPubkey: eventPubkey,
+        eventCreatedAt: eventCreatedAt,
+        eventTags: eventTags,
+        eventContent: eventContent,
+        targetUserHex: currentUserHex,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Map<String, dynamic>? _processNotificationEvent({
     required String eventId,
     required int eventKind,
     required String eventPubkey,
@@ -2597,39 +3087,42 @@ class DataService {
 
         try {
           final decoded = jsonDecode(descriptionJson);
-          if (decoded is Map<String, dynamic> && decoded.containsKey('pubkey')) {
+          if (decoded is Map<String, dynamic> &&
+              decoded.containsKey('pubkey')) {
             actualAuthor = decoded['pubkey'] as String;
           }
-        } catch (e) {
-        }
+        } catch (e) {}
       } else {
         return null;
       }
 
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(eventCreatedAt * 1000);
+      final timestamp =
+          DateTime.fromMillisecondsSinceEpoch(eventCreatedAt * 1000);
       targetEventId ??= eventId;
 
       final authorNpub = _authService.hexToNpub(actualAuthor) ?? actualAuthor;
 
-      return NotificationModel(
-        id: eventId,
-        type: notificationType,
-        author: authorNpub,
-        targetEventId: targetEventId,
-        timestamp: timestamp,
-        content: eventContent,
-        fetchedAt: DateTime.now(),
-        isRead: false,
-        amount: zapAmount,
-      );
+      return <String, dynamic>{
+        'id': eventId,
+        'type': notificationType,
+        'author': authorNpub,
+        'targetEventId': targetEventId,
+        'timestamp': timestamp,
+        'content': eventContent,
+        'fetchedAt': DateTime.now(),
+        'isRead': false,
+        'amount': zapAmount,
+      };
     } catch (e) {
       return null;
     }
   }
 
   Future<void> stopNotificationSubscription() async {
-    if (_notificationSubscriptionActive && _notificationSubscriptionId != null) {
-      await _relayManager.broadcast(jsonEncode(['CLOSE', _notificationSubscriptionId]));
+    if (_notificationSubscriptionActive &&
+        _notificationSubscriptionId != null) {
+      await _relayManager
+          .broadcast(jsonEncode(['CLOSE', _notificationSubscriptionId]));
       _notificationSubscriptionActive = false;
       _notificationSubscriptionId = null;
     }
@@ -2638,7 +3131,26 @@ class DataService {
   Future<Result<List<String>>> getFollowingList(String npub) async {
     try {
       final pubkeyHex = _authService.npubToHex(npub) ?? npub;
+      final following = <String>{};
 
+      final cached =
+          await _eventCacheService.getLatestByAuthorAndKind(pubkeyHex, 3);
+      if (cached != null) {
+        final eventData = cached.toEventData();
+        following
+            .addAll(_extractPTags(eventData['tags'] as List<dynamic>? ?? []));
+      }
+
+      unawaited(_refreshFollowingList(pubkeyHex));
+
+      return Result.success(following.toList());
+    } catch (e) {
+      return Result.error('Failed to get following list: $e');
+    }
+  }
+
+  Future<void> _refreshFollowingList(String pubkeyHex) async {
+    try {
       final filter = NostrService.createFollowingFilter(
         authors: [pubkeyHex],
         limit: 1,
@@ -2647,7 +3159,6 @@ class DataService {
       final request = NostrService.createRequest(filter);
       final serializedRequest = NostrService.serializeRequest(request);
 
-      final following = <String>{};
       final processedEventIds = <String>{};
       final subscriptionId = _extractSubscriptionId(serializedRequest);
 
@@ -2660,20 +3171,16 @@ class DataService {
             final eventAuthor = eventData['pubkey'] as String;
             final eventKind = eventData['kind'] as int;
 
-            if (eventAuthor == pubkeyHex && eventKind == 3 && !processedEventIds.contains(eventId)) {
+            if (eventAuthor == pubkeyHex &&
+                eventKind == 3 &&
+                !processedEventIds.contains(eventId)) {
               processedEventIds.add(eventId);
-              following.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
+              _processFollowEvent(eventData);
             }
           } catch (_) {}
         },
       );
-
-      final uniqueFollowing = following.toList();
-
-      return Result.success(uniqueFollowing);
-    } catch (e) {
-      return Result.error('Failed to get following list: $e');
-    }
+    } catch (e) {}
   }
 
   Future<bool> fetchSpecificNote(String noteId) async {
@@ -2700,7 +3207,8 @@ class DataService {
               if (kind == 1 || kind == 6) {
                 final pubkeyHex = eventData['pubkey'] as String;
                 final userNpub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
-                final note = _processProfileEventDirectlySync(eventData, userNpub);
+                final note =
+                    _processProfileEventDirectlySync(eventData, userNpub);
                 if (note != null) {
                   _addNoteToCache(note);
                   noteFound = true;
@@ -2721,20 +3229,20 @@ class DataService {
     try {
       if (noteIds.isEmpty) return;
 
-      final notesToFetch = noteIds.where((id) => !_noteCache.containsKey(id)).toList();
+      final notesToFetch =
+          noteIds.where((id) => !_noteCache.containsKey(id)).toList();
       if (notesToFetch.isEmpty) return;
 
       final filter = NostrService.createEventByIdFilter(eventIds: notesToFetch);
       final request = NostrService.createRequest(filter);
 
       await _relayManager.broadcast(NostrService.serializeRequest(request));
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  List<NoteModel> get cachedNotes => _getNotesList();
+  List<Map<String, dynamic>> get cachedNotes => _getNotesList();
 
-  List<UserModel> get cachedUsers => _getUsersList();
+  List<Map<String, dynamic>> get cachedUsers => _getUsersList();
 
   final Map<String, Map<String, dynamic>> _pendingCountRequests = {};
 
@@ -2758,8 +3266,7 @@ class DataService {
           return;
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _handleClosedMessage(List<dynamic> message) {
@@ -2781,20 +3288,19 @@ class DataService {
 
         _pendingCountRequests.remove(subscriptionId);
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  Future<int> fetchFollowerCount(String pubkeyHex, {int maxRetries = 3, int attempt = 1}) async {
+  Future<int> fetchFollowerCount(String pubkeyHex,
+      {int maxRetries = 3, int attempt = 1}) async {
     try {
       final primalService = PrimalCacheService.instance;
       final primalCount = await primalService.fetchFollowerCount(pubkeyHex);
-      
+
       if (primalCount > 0) {
         return primalCount;
       }
-    } catch (e) {
-    }
+    } catch (e) {}
 
     try {
       final filterMap = <String, dynamic>{
@@ -2829,7 +3335,8 @@ class DataService {
         } on TimeoutException {
           if (attempt < maxRetries) {
             await Future.delayed(Duration(milliseconds: 300 * attempt));
-            return fetchFollowerCount(pubkeyHex, maxRetries: maxRetries, attempt: attempt + 1);
+            return fetchFollowerCount(pubkeyHex,
+                maxRetries: maxRetries, attempt: attempt + 1);
           }
           return 0;
         } catch (e) {
@@ -2837,7 +3344,8 @@ class DataService {
             return 0;
           } else if (attempt < maxRetries) {
             await Future.delayed(Duration(milliseconds: 300 * attempt));
-            return fetchFollowerCount(pubkeyHex, maxRetries: maxRetries, attempt: attempt + 1);
+            return fetchFollowerCount(pubkeyHex,
+                maxRetries: maxRetries, attempt: attempt + 1);
           }
           return 0;
         }
@@ -2854,59 +3362,91 @@ class DataService {
     _scheduleInteractionFetch(noteId, priority: 100);
   }
 
-  Future<void> fetchInteractionsForNotesBatchWithEOSE(List<String>? noteIds) async {
+  Future<void> fetchInteractionsForNotesBatchWithEOSE(
+      List<String>? noteIds) async {
     if (noteIds == null || noteIds.isEmpty) return;
     for (final noteId in noteIds) {
       _scheduleInteractionFetch(noteId, priority: 50);
     }
   }
 
-  Future<void> _fetchInteractionsOptimized(List<String> noteIds) async {
+  Future<void> _fetchInteractions(List<String> noteIds) async {
     if (_isClosed || noteIds.isEmpty) return;
 
-    final now = timeService.now;
-    final minDelay = Duration(milliseconds: 1000 ~/ _maxRelayQueriesPerSecond);
-    final timeSinceLastQuery = now.difference(_lastRelayQueryTime);
-
-    if (timeSinceLastQuery < minDelay) {
-      await Future.delayed(minDelay - timeSinceLastQuery);
-    }
-    _lastRelayQueryTime = timeService.now;
-
     try {
-      final allRelays = _relayManager.relayUrls.toList();
-      if (allRelays.isEmpty) return;
-
-      final replyKinds = [1];
       final interactionKinds = [7, 6, 9735];
-      final deletionKinds = [5];
-
       final oldestFetch = noteIds
           .map((id) => _lastInteractionFetch[id])
           .whereType<DateTime>()
-          .fold<DateTime?>(null, (oldest, date) =>
-              oldest == null || date.isBefore(oldest) ? date : oldest);
+          .fold<DateTime?>(
+              null,
+              (oldest, date) =>
+                  oldest == null || date.isBefore(oldest) ? date : oldest);
 
-      final since = oldestFetch != null ? oldestFetch.millisecondsSinceEpoch ~/ 1000 : null;
+      final since = oldestFetch != null ? oldestFetch : null;
+
+      final cachedInteractionEvents =
+          await _eventCacheService.getInteractionEventsForNotes(
+        noteIds,
+        kinds: interactionKinds,
+        since: since,
+      );
+
+      if (cachedInteractionEvents.isNotEmpty) {
+        for (final eventModel in cachedInteractionEvents) {
+          try {
+            final eventData = _eventConverter.modelToEventData(eventModel);
+            final eventId = eventData['id'] as String? ?? '';
+            if (eventId.isNotEmpty &&
+                !_processedInteractionIds.contains(eventId)) {
+              _processedInteractionIds.add(eventId);
+              await _processNostrEvent(eventData, skipCache: true);
+            }
+          } catch (e) {}
+        }
+      }
+
+      final now = timeService.now;
+      final minDelay =
+          Duration(milliseconds: 1000 ~/ _maxRelayQueriesPerSecond);
+      final timeSinceLastQuery = now.difference(_lastRelayQueryTime);
+
+      if (timeSinceLastQuery < minDelay) {
+        await Future.delayed(minDelay - timeSinceLastQuery);
+      }
+      _lastRelayQueryTime = timeService.now;
+
+      final allRelays = _relayManager.relayUrls.toList();
+      if (allRelays.isEmpty) {
+        _updateInteractionCounts(noteIds, now);
+        return;
+      }
+
+      final replyKinds = [1];
+      final deletionKinds = [5];
+
+      final sinceTimestamp = oldestFetch != null
+          ? oldestFetch.millisecondsSinceEpoch ~/ 1000
+          : null;
 
       final filters = [
         NostrService.createInteractionFilter(
           kinds: replyKinds,
           eventIds: noteIds,
           limit: 200,
-          since: since,
+          since: sinceTimestamp,
         ),
         NostrService.createInteractionFilter(
           kinds: interactionKinds,
           eventIds: noteIds,
           limit: 500,
-          since: since,
+          since: sinceTimestamp,
         ),
         NostrService.createInteractionFilter(
           kinds: deletionKinds,
           eventIds: noteIds,
           limit: 50,
-          since: since,
+          since: sinceTimestamp,
         ),
       ];
 
@@ -2935,50 +3475,66 @@ class DataService {
         },
       );
 
-      for (final noteId in noteIds) {
-        _lastInteractionFetch[noteId] = now;
-        final note = _noteCache[noteId];
-        if (note != null) {
-          note.reactionCount = _reactionsMap[noteId]?.length ?? 0;
-          note.repostCount = _repostsMap[noteId]?.length ?? 0;
-          note.zapAmount = _zapsMap[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
-          _updateNoteReplyCount(noteId);
-        }
-      }
-
-      _scheduleUIUpdate();
-    } catch (e) {
-    }
+      _updateInteractionCounts(noteIds, now);
+    } catch (e) {}
   }
 
+  void _updateInteractionCounts(List<String> noteIds, DateTime now) {
+    for (final noteId in noteIds) {
+      _lastInteractionFetch[noteId] = now;
+      final note = _noteCache[noteId];
+      if (note != null) {
+        note['reactionCount'] = _reactionsMap[noteId]?.length ?? 0;
+        note['repostCount'] = _repostsMap[noteId]?.length ?? 0;
+        final zapAmount = _zapsMap[noteId]?.fold<int>(0, (sum, zap) {
+              final amount = zap['amount'] as int? ?? 0;
+              return sum + amount;
+            }) ??
+            0;
+        note['zapAmount'] = zapAmount;
+        _updateNoteReplyCount(noteId);
+      }
+    }
+
+    _scheduleUIUpdate();
+  }
 
   void _updateParentNoteReplyCount(String parentNoteId) {
     try {
       final parentNote = _noteCache[parentNoteId];
       if (parentNote != null) {
-        final replyCount =
-            _noteCache.values.where((note) => note.isReply && (note.parentId == parentNoteId || note.rootId == parentNoteId)).length;
-        parentNote.replyCount = replyCount;
+        final replyCount = _noteCache.values.where((note) {
+          final isReply = note['isReply'] as bool? ?? false;
+          final parentId = note['parentId'] as String?;
+          final rootId = note['rootId'] as String?;
+          return isReply &&
+              (parentId == parentNoteId || rootId == parentNoteId);
+        }).length;
+        parentNote['replyCount'] = replyCount;
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _updateNoteReplyCount(String noteId) {
     try {
       final note = _noteCache[noteId];
       if (note != null) {
-        final replyCount = _noteCache.values.where((reply) => reply.isReply && (reply.parentId == noteId || reply.rootId == noteId)).length;
-        if (note.replyCount != replyCount) {
-          note.replyCount = replyCount;
+        final replyCount = _noteCache.values.where((reply) {
+          final isReply = reply['isReply'] as bool? ?? false;
+          final parentId = reply['parentId'] as String?;
+          final rootId = reply['rootId'] as String?;
+          return isReply && (parentId == noteId || rootId == noteId);
+        }).length;
+        final currentReplyCount = note['replyCount'] as int? ?? 0;
+        if (currentReplyCount != replyCount) {
+          note['replyCount'] = replyCount;
           _scheduleUIUpdate();
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  Future<Result<NoteModel>> postQuote({
+  Future<Result<Map<String, dynamic>>> postQuote({
     required String content,
     required String quotedEventId,
     String? quotedEventPubkey,
@@ -2986,7 +3542,6 @@ class DataService {
     List<List<String>>? additionalTags,
   }) async {
     try {
-
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
         return Result.error('Authentication error: ${privateKeyResult.error}');
@@ -2996,7 +3551,6 @@ class DataService {
       if (privateKey == null || privateKey.isEmpty) {
         return const Result.error('Authentication credentials not available.');
       }
-
 
       final event = NostrService.createQuoteEvent(
         content: content,
@@ -3009,27 +3563,30 @@ class DataService {
 
       await _ensureRelayConnection('quote_post');
 
-      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+      await _relayManager
+          .priorityBroadcastToAll(NostrService.serializeEvent(event));
 
       final userResult = await _authService.getCurrentUserNpub();
       final authorNpub = userResult.data ?? '';
 
-      final note = NoteModel(
-        id: event.id,
-        content: content,
-        author: authorNpub,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-        isReply: false,
-        isRepost: false,
-        rootId: null,
-        parentId: null,
-        repostedBy: null,
-        reactionCount: 0,
-        replyCount: 0,
-        repostCount: 0,
-        zapAmount: 0,
-        rawWs: jsonEncode(NostrService.eventToJson(event)),
-      );
+      final note = <String, dynamic>{
+        'id': event.id,
+        'content': content,
+        'author': authorNpub,
+        'timestamp':
+            DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+        'isReply': false,
+        'isRepost': false,
+        'rootId': null,
+        'parentId': null,
+        'repostedBy': null,
+        'reactionCount': 0,
+        'replyCount': 0,
+        'repostCount': 0,
+        'zapAmount': 0,
+        'rawWs': jsonEncode(NostrService.eventToJson(event)),
+        'replies': <Map<String, dynamic>>[],
+      };
 
       _addNoteToCache(note);
       _scheduleUIUpdate();
@@ -3063,13 +3620,16 @@ class DataService {
 
       await _ensureRelayConnection('note_delete');
 
-      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+      await _relayManager
+          .priorityBroadcastToAll(NostrService.serializeEvent(event));
 
       _noteCache.remove(noteId);
       _eventIds.remove(noteId);
       _reactionsMap.remove(noteId);
       _repostsMap.remove(noteId);
       _zapsMap.remove(noteId);
+
+      await _eventCacheService.deleteEvent(noteId);
 
       if (!_isClosed && !_noteDeletedController.isClosed) {
         _noteDeletedController.add(noteId);
@@ -3083,7 +3643,6 @@ class DataService {
 
   Future<Result<String>> sendMedia(String filePath, String blossomUrl) async {
     try {
-
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
         return Result.error('Authentication error: ${privateKeyResult.error}');
@@ -3111,7 +3670,6 @@ class DataService {
     required String privateKey,
   }) async {
     try {
-
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isError || currentUserResult.data == null) {
         return const Result.error('Current user not found');
@@ -3133,16 +3691,15 @@ class DataService {
         if (ws.readyState == WebSocket.open) {
           try {
             ws.add(serializedEvent);
-          } catch (e) {
-          }
+          } catch (e) {}
         }
       }
 
       try {
-        final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+        final currentUserHex =
+            _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
         await _followCacheService.put(currentUserHex, followingHexList);
-      } catch (e) {
-      }
+      } catch (e) {}
 
       return const Result.success(null);
     } catch (e) {
@@ -3153,7 +3710,25 @@ class DataService {
   Future<Result<List<String>>> getMuteList(String npub) async {
     try {
       final pubkeyHex = _authService.npubToHex(npub) ?? npub;
+      final muted = <String>{};
 
+      final cached =
+          await _eventCacheService.getLatestByAuthorAndKind(pubkeyHex, 10000);
+      if (cached != null) {
+        final eventData = cached.toEventData();
+        muted.addAll(_extractPTags(eventData['tags'] as List<dynamic>? ?? []));
+      }
+
+      unawaited(_refreshMuteList(pubkeyHex));
+
+      return Result.success(muted.toList());
+    } catch (e) {
+      return Result.error('Failed to get mute list: $e');
+    }
+  }
+
+  Future<void> _refreshMuteList(String pubkeyHex) async {
+    try {
       final filter = NostrService.createMuteFilter(
         authors: [pubkeyHex],
         limit: 1,
@@ -3162,7 +3737,6 @@ class DataService {
       final request = NostrService.createRequest(filter);
       final serializedRequest = NostrService.serializeRequest(request);
 
-      final muted = <String>{};
       final processedEventIds = <String>{};
       final subscriptionId = _extractSubscriptionId(serializedRequest);
 
@@ -3175,24 +3749,16 @@ class DataService {
             final eventAuthor = eventData['pubkey'] as String;
             final eventKind = eventData['kind'] as int;
 
-            if (eventAuthor == pubkeyHex && eventKind == 10000 && !processedEventIds.contains(eventId)) {
+            if (eventAuthor == pubkeyHex &&
+                eventKind == 10000 &&
+                !processedEventIds.contains(eventId)) {
               processedEventIds.add(eventId);
-              muted.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
+              _processMuteEvent(eventData);
             }
           } catch (_) {}
         },
       );
-
-      final uniqueMuted = muted.toList();
-
-      if (uniqueMuted.isNotEmpty) {
-        await _muteCacheService.put(pubkeyHex, uniqueMuted);
-      }
-
-      return Result.success(uniqueMuted);
-    } catch (e) {
-      return Result.error('Failed to get mute list: $e');
-    }
+    } catch (e) {}
   }
 
   Future<Result<void>> publishMuteEvent({
@@ -3200,7 +3766,6 @@ class DataService {
     required String privateKey,
   }) async {
     try {
-
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isError || currentUserResult.data == null) {
         return const Result.error('Current user not found');
@@ -3222,16 +3787,17 @@ class DataService {
         if (ws.readyState == WebSocket.open) {
           try {
             ws.add(serializedEvent);
-          } catch (e) {
-          }
+          } catch (e) {}
         }
       }
 
       try {
-        final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+        final currentUserHex =
+            _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+        _muteEventTimestamps[currentUserHex] =
+            DateTime.now().millisecondsSinceEpoch ~/ 1000;
         await _muteCacheService.put(currentUserHex, mutedHexList);
-      } catch (e) {
-      }
+      } catch (e) {}
 
       return const Result.success(null);
     } catch (e) {
@@ -3246,15 +3812,20 @@ class DataService {
 
       final notesToRemove = <String>[];
       for (final note in _noteCache.values) {
-        final noteAuthorHex = _authService.npubToHex(note.author);
+        final noteAuthor = note['author'] as String? ?? '';
+        final noteAuthorHex = _authService.npubToHex(noteAuthor);
+        final noteId = note['id'] as String? ?? '';
         if (noteAuthorHex != null && mutedSet.contains(noteAuthorHex)) {
-          notesToRemove.add(note.id);
+          notesToRemove.add(noteId);
           removedCount++;
-        } else if (note.isRepost && note.repostedBy != null) {
-          final reposterHex = _authService.npubToHex(note.repostedBy!);
-          if (reposterHex != null && mutedSet.contains(reposterHex)) {
-            notesToRemove.add(note.id);
-            removedCount++;
+        } else if ((note['isRepost'] as bool? ?? false)) {
+          final repostedBy = note['repostedBy'] as String?;
+          if (repostedBy != null) {
+            final reposterHex = _authService.npubToHex(repostedBy);
+            if (reposterHex != null && mutedSet.contains(reposterHex)) {
+              notesToRemove.add(noteId);
+              removedCount++;
+            }
           }
         }
       }
@@ -3267,8 +3838,7 @@ class DataService {
       if (removedCount > 0) {
         _scheduleUIUpdate();
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void clearCaches() {
@@ -3285,22 +3855,23 @@ class DataService {
     NostrService.clearAllCaches();
   }
 
-  List<ReactionModel> getReactionsForNote(String noteId) {
+  List<Map<String, dynamic>> getReactionsForNote(String noteId) {
     return _reactionsMap[noteId] ?? [];
   }
 
-  List<ReactionModel> getRepostsForNote(String noteId) {
+  List<Map<String, dynamic>> getRepostsForNote(String noteId) {
     return _repostsMap[noteId] ?? [];
   }
 
-  List<ZapModel> getZapsForNote(String noteId) {
+  List<Map<String, dynamic>> getZapsForNote(String noteId) {
     return _zapsMap[noteId] ?? [];
   }
 
   bool hasUserReacted(String noteId, String userNpub) {
     try {
       final reactions = _reactionsMap[noteId] ?? [];
-      return reactions.any((reaction) => reaction.author == userNpub);
+      return reactions
+          .any((reaction) => (reaction['author'] as String? ?? '') == userNpub);
     } catch (e) {
       return false;
     }
@@ -3309,7 +3880,8 @@ class DataService {
   bool hasUserReposted(String noteId, String userNpub) {
     try {
       final reposts = _repostsMap[noteId] ?? [];
-      return reposts.any((repost) => repost.author == userNpub);
+      return reposts
+          .any((repost) => (repost['author'] as String? ?? '') == userNpub);
     } catch (e) {
       return false;
     }
@@ -3318,18 +3890,21 @@ class DataService {
   bool hasUserZapped(String noteId, String userNpub) {
     try {
       final zaps = _zapsMap[noteId] ?? [];
-      return zaps.any((zap) => zap.sender == userNpub);
+      return zaps.any((zap) => (zap['sender'] as String? ?? '') == userNpub);
     } catch (e) {
       return false;
     }
   }
 
-  Map<String, List<ReactionModel>> get reactionsMap => Map.unmodifiable(_reactionsMap);
-  Map<String, List<ReactionModel>> get repostsMap => Map.unmodifiable(_repostsMap);
-  Map<String, List<ZapModel>> get zapsMap => Map.unmodifiable(_zapsMap);
+  Map<String, List<Map<String, dynamic>>> get reactionsMap =>
+      Map.unmodifiable(_reactionsMap);
+  Map<String, List<Map<String, dynamic>>> get repostsMap =>
+      Map.unmodifiable(_repostsMap);
+  Map<String, List<Map<String, dynamic>>> get zapsMap =>
+      Map.unmodifiable(_zapsMap);
 
-
-  Future<List<NoteModel>> filterNotesByMuteList(List<NoteModel> notes) async {
+  Future<List<Map<String, dynamic>>> filterNotesByMuteList(
+      List<Map<String, dynamic>> notes) async {
     try {
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isError || currentUserResult.data == null) {
@@ -3337,7 +3912,8 @@ class DataService {
       }
 
       final currentUserNpub = currentUserResult.data!;
-      final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+      final currentUserHex =
+          _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
 
       final mutedList = _muteCacheService.getSync(currentUserHex);
       if (mutedList == null || mutedList.isEmpty) {
@@ -3347,14 +3923,20 @@ class DataService {
       final mutedSet = mutedList.toSet();
 
       final filteredNotes = notes.where((note) {
-        if (note.isRepost && note.repostedBy != null) {
-          final reposterHex = _authService.npubToHex(note.repostedBy!) ?? note.repostedBy!;
-          if (mutedSet.contains(reposterHex)) {
-            return false;
+        final isRepost = note['isRepost'] as bool? ?? false;
+        if (isRepost) {
+          final repostedBy = note['repostedBy'] as String?;
+          if (repostedBy != null) {
+            final reposterHex =
+                _authService.npubToHex(repostedBy) ?? repostedBy;
+            if (mutedSet.contains(reposterHex)) {
+              return false;
+            }
           }
         }
 
-        final noteAuthorHex = _authService.npubToHex(note.author) ?? note.author;
+        final noteAuthor = note['author'] as String? ?? '';
+        final noteAuthorHex = _authService.npubToHex(noteAuthor) ?? noteAuthor;
         if (mutedSet.contains(noteAuthorHex)) {
           return false;
         }
@@ -3406,7 +3988,8 @@ class CachedProfile {
 }
 
 int parseAmountFromBolt11(String bolt11) {
-  final match = RegExp(r'^lnbc(\d+)([munp]?)', caseSensitive: false).firstMatch(bolt11);
+  final match =
+      RegExp(r'^lnbc(\d+)([munp]?)', caseSensitive: false).firstMatch(bolt11);
   if (match == null) return 0;
 
   final number = int.tryParse(match.group(1) ?? '') ?? 0;

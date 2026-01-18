@@ -2,23 +2,25 @@ import 'dart:async';
 import 'package:ndk/ndk.dart';
 import 'package:ndk/shared/nips/nip04/nip04.dart';
 import '../../core/base/result.dart';
-import '../../models/dm_message_model.dart';
 import 'auth_service.dart';
+import 'event_cache_service.dart';
 import '../../constants/relays.dart';
 
 class DmService {
   final AuthService _authService;
+  final EventCacheService _eventCacheService = EventCacheService.instance;
   Ndk? _ndk;
   String? _currentUserPubkeyHex;
-  String? _currentUserPrivateKey;
 
-  final Map<String, List<DmMessageModel>> _messagesCache = {};
-  final Map<String, StreamController<List<DmMessageModel>>> _messageStreams = {};
-  final Map<String, StreamSubscription<Nip01Event>> _liveMessageSubscriptions = {};
+  final Map<String, List<Map<String, dynamic>>> _messagesCache = {};
+  final Map<String, StreamController<List<Map<String, dynamic>>>>
+      _messageStreams = {};
+  final Map<String, StreamSubscription<Nip01Event>> _liveMessageSubscriptions =
+      {};
   final Map<String, String> _liveSubscriptionIds = {};
   StreamSubscription<Nip01Event>? _globalLiveSubscription;
 
-  List<DmConversationModel>? _cachedConversations;
+  List<Map<String, dynamic>>? _cachedConversations;
   DateTime? _lastConversationsFetch;
   static const Duration _conversationsCacheDuration = Duration(minutes: 5);
 
@@ -26,16 +28,24 @@ class DmService {
     required AuthService authService,
   }) : _authService = authService;
 
-  List<DmConversationModel>? get cachedConversations => _cachedConversations;
+  List<Map<String, dynamic>>? get cachedConversations => _cachedConversations;
+
+  Future<String?> _getPrivateKey() async {
+    final result = await _authService.getCurrentUserPrivateKey();
+    if (result.isError || result.data == null) {
+      return null;
+    }
+    return result.data;
+  }
 
   Future<Result<void>> _ensureNdkInitialized() async {
-    if (_ndk != null && _currentUserPubkeyHex != null && _currentUserPrivateKey != null) {
+    if (_ndk != null && _currentUserPubkeyHex != null) {
       return const Result.success(null);
     }
 
     try {
-      final privateKeyResult = await _authService.getCurrentUserPrivateKey();
-      if (privateKeyResult.isError || privateKeyResult.data == null) {
+      final privateKey = await _getPrivateKey();
+      if (privateKey == null) {
         return Result.error('Not authenticated');
       }
 
@@ -44,7 +54,6 @@ class DmService {
         return Result.error('Not authenticated');
       }
 
-      _currentUserPrivateKey = privateKeyResult.data;
       final npub = npubResult.data!;
       _currentUserPubkeyHex = _authService.npubToHex(npub);
 
@@ -64,7 +73,7 @@ class DmService {
 
       _ndk!.accounts.loginPrivateKey(
         pubkey: _currentUserPubkeyHex!,
-        privkey: _currentUserPrivateKey!,
+        privkey: privateKey,
       );
 
       await _startGlobalLiveSubscription();
@@ -75,8 +84,11 @@ class DmService {
     }
   }
 
-  Future<Result<List<DmConversationModel>>> getConversations({bool forceRefresh = false}) async {
-    if (!forceRefresh && _cachedConversations != null && _lastConversationsFetch != null) {
+  Future<Result<List<Map<String, dynamic>>>> getConversations(
+      {bool forceRefresh = false}) async {
+    if (!forceRefresh &&
+        _cachedConversations != null &&
+        _lastConversationsFetch != null) {
       final age = DateTime.now().difference(_lastConversationsFetch!);
       if (age < _conversationsCacheDuration) {
         return Result.success(_cachedConversations!);
@@ -86,6 +98,110 @@ class DmService {
     final initResult = await _ensureNdkInitialized();
     if (initResult.isError) {
       return Result.error(initResult.error!);
+    }
+
+    final privateKey = await _getPrivateKey();
+    if (privateKey == null) {
+      return Result.error('Not authenticated');
+    }
+
+    final Map<String, Map<String, dynamic>> conversationsMap = {};
+
+    final cachedDMs = await _eventCacheService.getDMEvents(
+      _currentUserPubkeyHex!,
+      limit: 60,
+    );
+
+    for (final event in cachedDMs) {
+      try {
+        final eventData = event.toEventData();
+        final eventPubkey = eventData['pubkey'] as String? ?? '';
+        final eventContent = eventData['content'] as String? ?? '';
+        final createdAt = eventData['created_at'] as int? ?? 0;
+        final tags = eventData['tags'] as List<dynamic>? ?? [];
+
+        String otherUserPubkeyHex;
+        if (eventPubkey == _currentUserPubkeyHex) {
+          String? pTag;
+          for (final tag in tags) {
+            if (tag is List &&
+                tag.isNotEmpty &&
+                tag[0] == 'p' &&
+                tag.length > 1) {
+              pTag = tag[1] as String?;
+              break;
+            }
+          }
+          if (pTag == null || pTag.isEmpty) continue;
+          otherUserPubkeyHex = pTag;
+        } else {
+          otherUserPubkeyHex = eventPubkey;
+        }
+
+        if (otherUserPubkeyHex.isEmpty) continue;
+
+        String decryptedContent;
+        try {
+          if (eventPubkey == _currentUserPubkeyHex) {
+            decryptedContent = Nip04.decrypt(
+                privateKey, otherUserPubkeyHex, eventContent);
+          } else {
+            decryptedContent = Nip04.decrypt(
+                privateKey, eventPubkey, eventContent);
+          }
+        } catch (e) {
+          continue;
+        }
+
+        final message = <String, dynamic>{
+          'id': eventData['id'] as String? ?? '',
+          'senderPubkeyHex': eventPubkey,
+          'recipientPubkeyHex': otherUserPubkeyHex,
+          'content': decryptedContent,
+          'createdAt': DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
+          'isFromCurrentUser': eventPubkey == _currentUserPubkeyHex,
+        };
+
+        final conversationKey = otherUserPubkeyHex;
+        final messageTime = message['createdAt'] as DateTime?;
+
+        if (!conversationsMap.containsKey(conversationKey)) {
+          conversationsMap[conversationKey] = <String, dynamic>{
+            'otherUserPubkeyHex': otherUserPubkeyHex,
+            'lastMessage': message,
+            'lastMessageTime': messageTime,
+          };
+        } else {
+          final existing = conversationsMap[conversationKey]!;
+          final existingLastTime = existing['lastMessageTime'] as DateTime?;
+          if (existingLastTime == null ||
+              (messageTime != null && messageTime.isAfter(existingLastTime))) {
+            conversationsMap[conversationKey] = <String, dynamic>{
+              'otherUserPubkeyHex': existing['otherUserPubkeyHex'] as String? ??
+                  otherUserPubkeyHex,
+              'lastMessage': message,
+              'lastMessageTime': messageTime,
+            };
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    if (conversationsMap.isNotEmpty) {
+      final conversations = conversationsMap.values.toList()
+        ..sort((a, b) {
+          final aTime = a['lastMessageTime'] as DateTime? ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final bTime = b['lastMessageTime'] as DateTime? ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          return bTime.compareTo(aTime);
+        });
+      _cachedConversations = conversations;
+      _lastConversationsFetch = DateTime.now();
+      _refreshConversationsFromRelays();
+      return Result.success(conversations);
     }
 
     try {
@@ -107,7 +223,7 @@ class DmService {
         timeout: const Duration(seconds: 10),
       );
 
-      final Map<String, DmConversationModel> conversationsMap = {};
+      final Map<String, Map<String, dynamic>> conversationsMap = {};
       final Set<String> processedEventIds = {};
 
       try {
@@ -130,13 +246,13 @@ class DmService {
           try {
             if (event.pubKey == _currentUserPubkeyHex) {
               decryptedContent = Nip04.decrypt(
-                _currentUserPrivateKey!,
+                privateKey,
                 otherUserPubkeyHex,
                 event.content,
               );
             } else {
               decryptedContent = Nip04.decrypt(
-                _currentUserPrivateKey!,
+                privateKey,
                 event.pubKey,
                 event.content,
               );
@@ -145,14 +261,15 @@ class DmService {
             continue;
           }
 
-          final message = DmMessageModel(
-            id: event.id,
-            senderPubkeyHex: event.pubKey,
-            recipientPubkeyHex: otherUserPubkeyHex,
-            content: decryptedContent,
-            createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-            isFromCurrentUser: event.pubKey == _currentUserPubkeyHex,
-          );
+          final message = <String, dynamic>{
+            'id': event.id,
+            'senderPubkeyHex': event.pubKey,
+            'recipientPubkeyHex': otherUserPubkeyHex,
+            'content': decryptedContent,
+            'createdAt':
+                DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+            'isFromCurrentUser': event.pubKey == _currentUserPubkeyHex,
+          };
 
           final conversationKey = otherUserPubkeyHex;
 
@@ -161,31 +278,58 @@ class DmService {
           }
 
           final existingMessages = _messagesCache[conversationKey]!;
-          if (!existingMessages.any((m) => m.id == message.id)) {
+          final messageId = message['id'] as String? ?? '';
+          if (messageId.isNotEmpty &&
+              !existingMessages
+                  .any((m) => (m['id'] as String? ?? '') == messageId)) {
             existingMessages.add(message);
             if (existingMessages.length > 50) {
-              existingMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-              _messagesCache[conversationKey] = existingMessages.take(50).toList();
-              _messagesCache[conversationKey]!.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+              existingMessages.sort((a, b) {
+                final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+                final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+                return bTime.compareTo(aTime);
+              });
+              _messagesCache[conversationKey] =
+                  existingMessages.take(50).toList();
+              _messagesCache[conversationKey]!.sort((a, b) {
+                final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+                final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+                return aTime.compareTo(bTime);
+              });
             } else {
-              existingMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+              existingMessages.sort((a, b) {
+                final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+                final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+                return aTime.compareTo(bTime);
+              });
             }
             _notifyMessageStream(conversationKey);
           }
 
           if (!conversationsMap.containsKey(conversationKey)) {
-            conversationsMap[conversationKey] = DmConversationModel(
-              otherUserPubkeyHex: otherUserPubkeyHex,
-              lastMessage: message,
-              lastMessageTime: message.createdAt,
-            );
+            conversationsMap[conversationKey] = <String, dynamic>{
+              'otherUserPubkeyHex': otherUserPubkeyHex,
+              'lastMessage': message,
+              'lastMessageTime': message['createdAt'] as DateTime?,
+            };
           } else {
             final existing = conversationsMap[conversationKey]!;
-            if (existing.lastMessageTime == null || message.createdAt.isAfter(existing.lastMessageTime!)) {
-              conversationsMap[conversationKey] = existing.copyWith(
-                lastMessage: message,
-                lastMessageTime: message.createdAt,
-              );
+            final existingLastTime = existing['lastMessageTime'] as DateTime?;
+            final messageTime = message['createdAt'] as DateTime?;
+            if (existingLastTime == null ||
+                (messageTime != null &&
+                    messageTime.isAfter(existingLastTime))) {
+              conversationsMap[conversationKey] = <String, dynamic>{
+                'otherUserPubkeyHex':
+                    existing['otherUserPubkeyHex'] as String? ??
+                        otherUserPubkeyHex,
+                'otherUserName': existing['otherUserName'] as String?,
+                'otherUserProfileImage':
+                    existing['otherUserProfileImage'] as String?,
+                'lastMessage': message,
+                'unreadCount': existing['unreadCount'] as int? ?? 0,
+                'lastMessageTime': messageTime,
+              };
             }
           }
         }
@@ -195,8 +339,10 @@ class DmService {
 
       final conversations = conversationsMap.values.toList()
         ..sort((a, b) {
-          final aTime = a.lastMessageTime ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bTime = b.lastMessageTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final aTime = a['lastMessageTime'] as DateTime? ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final bTime = b['lastMessageTime'] as DateTime? ??
+              DateTime.fromMillisecondsSinceEpoch(0);
           return bTime.compareTo(aTime);
         });
 
@@ -217,15 +363,57 @@ class DmService {
     }
   }
 
-  Future<Result<List<DmMessageModel>>> getMessages(String otherUserPubkeyHex) async {
+  Future<void> _refreshConversationsFromRelays() async {
+    try {
+      final relays = await getRelaySetMainSockets();
+      final response = _ndk!.requests.query(
+        filters: [
+          Filter(
+            kinds: [4],
+            authors: [_currentUserPubkeyHex!],
+            limit: 30,
+          ),
+          Filter(
+            kinds: [4],
+            pTags: [_currentUserPubkeyHex!],
+            limit: 30,
+          ),
+        ],
+        explicitRelays: relays.toSet(),
+        timeout: const Duration(seconds: 10),
+      );
+
+      await for (final event in response.stream) {
+        final eventData = <String, dynamic>{
+          'id': event.id,
+          'pubkey': event.pubKey,
+          'kind': 4,
+          'created_at': event.createdAt,
+          'content': event.content,
+          'tags': event.tags,
+          'sig': event.sig,
+        };
+        await _eventCacheService.saveEvent(eventData);
+      }
+    } catch (e) {}
+  }
+
+  Future<Result<List<Map<String, dynamic>>>> getMessages(
+      String otherUserPubkeyHex) async {
     final initResult = await _ensureNdkInitialized();
     if (initResult.isError) {
       return Result.error(initResult.error!);
     }
 
-    if (_messagesCache.containsKey(otherUserPubkeyHex) && _messagesCache[otherUserPubkeyHex]!.isNotEmpty) {
+    if (_messagesCache.containsKey(otherUserPubkeyHex) &&
+        _messagesCache[otherUserPubkeyHex]!.isNotEmpty) {
       _fetchMessagesInBackground(otherUserPubkeyHex);
       return Result.success(_messagesCache[otherUserPubkeyHex]!);
+    }
+
+    final privateKey = await _getPrivateKey();
+    if (privateKey == null) {
+      return Result.error('Not authenticated');
     }
 
     try {
@@ -249,7 +437,7 @@ class DmService {
         timeout: const Duration(seconds: 8),
       );
 
-      final Map<String, DmMessageModel> messagesMap = {};
+      final Map<String, Map<String, dynamic>> messagesMap = {};
       final Set<String> processedEventIds = {};
 
       try {
@@ -261,13 +449,13 @@ class DmService {
           try {
             if (event.pubKey == _currentUserPubkeyHex) {
               decryptedContent = Nip04.decrypt(
-                _currentUserPrivateKey!,
+                privateKey,
                 otherUserPubkeyHex,
                 event.content,
               );
             } else {
               decryptedContent = Nip04.decrypt(
-                _currentUserPrivateKey!,
+                privateKey,
                 event.pubKey,
                 event.content,
               );
@@ -276,20 +464,24 @@ class DmService {
             continue;
           }
 
-          messagesMap[event.id] = DmMessageModel(
-            id: event.id,
-            senderPubkeyHex: event.pubKey,
-            recipientPubkeyHex: event.pubKey == _currentUserPubkeyHex ? otherUserPubkeyHex : _currentUserPubkeyHex!,
-            content: decryptedContent,
-            createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-            isFromCurrentUser: event.pubKey == _currentUserPubkeyHex,
-          );
+          messagesMap[event.id] = <String, dynamic>{
+            'id': event.id,
+            'senderPubkeyHex': event.pubKey,
+            'recipientPubkeyHex': event.pubKey == _currentUserPubkeyHex
+                ? otherUserPubkeyHex
+                : _currentUserPubkeyHex!,
+            'content': decryptedContent,
+            'createdAt':
+                DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+            'isFromCurrentUser': event.pubKey == _currentUserPubkeyHex,
+          };
         }
       } catch (e) {
         return Result.error('Failed to get messages: $e');
       }
 
-      final merged = _mergeAndCapMessages(otherUserPubkeyHex, messagesMap.values);
+      final merged =
+          _mergeAndCapMessages(otherUserPubkeyHex, messagesMap.values);
       return Result.success(merged);
     } catch (e) {
       return Result.error('Failed to get messages: $e');
@@ -298,6 +490,9 @@ class DmService {
 
   Future<void> _fetchMessagesInBackground(String otherUserPubkeyHex) async {
     try {
+      final privateKey = await _getPrivateKey();
+      if (privateKey == null) return;
+
       final relays = await getRelaySetMainSockets();
       final response = _ndk!.requests.query(
         filters: [
@@ -318,7 +513,7 @@ class DmService {
         timeout: const Duration(seconds: 5),
       );
 
-      final Map<String, DmMessageModel> messagesMap = {};
+      final Map<String, Map<String, dynamic>> messagesMap = {};
       final Set<String> processedEventIds = {};
 
       await for (final event in response.stream) {
@@ -329,13 +524,13 @@ class DmService {
         try {
           if (event.pubKey == _currentUserPubkeyHex) {
             decryptedContent = Nip04.decrypt(
-              _currentUserPrivateKey!,
+              privateKey,
               otherUserPubkeyHex,
               event.content,
             );
           } else {
             decryptedContent = Nip04.decrypt(
-              _currentUserPrivateKey!,
+              privateKey,
               event.pubKey,
               event.content,
             );
@@ -344,38 +539,54 @@ class DmService {
           continue;
         }
 
-        messagesMap[event.id] = DmMessageModel(
-          id: event.id,
-          senderPubkeyHex: event.pubKey,
-          recipientPubkeyHex: event.pubKey == _currentUserPubkeyHex ? otherUserPubkeyHex : _currentUserPubkeyHex!,
-          content: decryptedContent,
-          createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-          isFromCurrentUser: event.pubKey == _currentUserPubkeyHex,
-        );
+        messagesMap[event.id] = <String, dynamic>{
+          'id': event.id,
+          'senderPubkeyHex': event.pubKey,
+          'recipientPubkeyHex': event.pubKey == _currentUserPubkeyHex
+              ? otherUserPubkeyHex
+              : _currentUserPubkeyHex!,
+          'content': decryptedContent,
+          'createdAt':
+              DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+          'isFromCurrentUser': event.pubKey == _currentUserPubkeyHex,
+        };
       }
 
       if (messagesMap.isNotEmpty) {
-        _mergeAndCapMessages(otherUserPubkeyHex, messagesMap.values, notify: true);
+        _mergeAndCapMessages(otherUserPubkeyHex, messagesMap.values,
+            notify: true);
       }
     } catch (e) {}
   }
 
-  List<DmMessageModel> _mergeAndCapMessages(
+  List<Map<String, dynamic>> _mergeAndCapMessages(
     String otherUserPubkeyHex,
-    Iterable<DmMessageModel> incoming, {
+    Iterable<Map<String, dynamic>> incoming, {
     bool notify = false,
   }) {
     final existing = _messagesCache[otherUserPubkeyHex] ?? [];
-    final mergedMap = <String, DmMessageModel>{};
+    final mergedMap = <String, Map<String, dynamic>>{};
     for (final m in existing) {
-      mergedMap[m.id] = m;
+      final mId = m['id'] as String? ?? '';
+      if (mId.isNotEmpty) {
+        mergedMap[mId] = m;
+      }
     }
     for (final m in incoming) {
-      mergedMap[m.id] = m;
+      final mId = m['id'] as String? ?? '';
+      if (mId.isNotEmpty) {
+        mergedMap[mId] = m;
+      }
     }
 
-    final merged = mergedMap.values.toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final capped = merged.length > 50 ? merged.sublist(merged.length - 50) : merged;
+    final merged = mergedMap.values.toList()
+      ..sort((a, b) {
+        final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+        final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+        return aTime.compareTo(bTime);
+      });
+    final capped =
+        merged.length > 50 ? merged.sublist(merged.length - 50) : merged;
 
     _messagesCache[otherUserPubkeyHex] = capped;
     if (notify) {
@@ -384,15 +595,21 @@ class DmService {
     return capped;
   }
 
-  Future<Result<void>> sendMessage(String recipientPubkeyHex, String content) async {
+  Future<Result<void>> sendMessage(
+      String recipientPubkeyHex, String content) async {
     final initResult = await _ensureNdkInitialized();
     if (initResult.isError) {
       return Result.error(initResult.error!);
     }
 
+    final privateKey = await _getPrivateKey();
+    if (privateKey == null) {
+      return Result.error('Not authenticated');
+    }
+
     try {
       final encryptedContent = Nip04.encrypt(
-        _currentUserPrivateKey!,
+        privateKey,
         recipientPubkeyHex,
         content,
       );
@@ -415,14 +632,14 @@ class DmService {
       );
 
       // Optimistic local append for instant UI update
-      final optimisticMessage = DmMessageModel(
-        id: event.id,
-        senderPubkeyHex: _currentUserPubkeyHex!,
-        recipientPubkeyHex: recipientPubkeyHex,
-        content: content,
-        createdAt: DateTime.now(),
-        isFromCurrentUser: true,
-      );
+      final optimisticMessage = <String, dynamic>{
+        'id': event.id,
+        'senderPubkeyHex': _currentUserPubkeyHex!,
+        'recipientPubkeyHex': recipientPubkeyHex,
+        'content': content,
+        'createdAt': DateTime.now(),
+        'isFromCurrentUser': true,
+      };
 
       if (!_messagesCache.containsKey(recipientPubkeyHex)) {
         _messagesCache[recipientPubkeyHex] = [];
@@ -430,11 +647,23 @@ class DmService {
       final msgs = _messagesCache[recipientPubkeyHex]!;
       msgs.add(optimisticMessage);
       if (msgs.length > 50) {
-        msgs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        msgs.sort((a, b) {
+          final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+          final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
         _messagesCache[recipientPubkeyHex] = msgs.take(50).toList()
-          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          ..sort((a, b) {
+            final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+            final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+            return aTime.compareTo(bTime);
+          });
       } else {
-        msgs.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        msgs.sort((a, b) {
+          final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+          final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+          return aTime.compareTo(bTime);
+        });
       }
       _notifyMessageStream(recipientPubkeyHex);
 
@@ -447,34 +676,49 @@ class DmService {
     }
   }
 
-  void _updateConversationCache(String otherUserPubkeyHex, DmMessageModel message) {
+  void _updateConversationCache(
+      String otherUserPubkeyHex, Map<String, dynamic> message) {
     if (_cachedConversations == null) return;
-    final idx = _cachedConversations!.indexWhere((c) => c.otherUserPubkeyHex == otherUserPubkeyHex);
+    final idx = _cachedConversations!.indexWhere((c) =>
+        (c['otherUserPubkeyHex'] as String? ?? '') == otherUserPubkeyHex);
     if (idx >= 0) {
-      final updated = _cachedConversations![idx].copyWith(
-        lastMessage: message,
-        lastMessageTime: message.createdAt,
-      );
-      _cachedConversations![idx] = updated;
+      final existing = _cachedConversations![idx];
+      final messageTime = message['createdAt'] as DateTime?;
+      _cachedConversations![idx] = <String, dynamic>{
+        'otherUserPubkeyHex':
+            existing['otherUserPubkeyHex'] as String? ?? otherUserPubkeyHex,
+        'otherUserName': existing['otherUserName'] as String?,
+        'otherUserProfileImage': existing['otherUserProfileImage'] as String?,
+        'lastMessage': message,
+        'unreadCount': existing['unreadCount'] as int? ?? 0,
+        'lastMessageTime': messageTime,
+      };
     } else {
-      _cachedConversations!.add(DmConversationModel(
-        otherUserPubkeyHex: otherUserPubkeyHex,
-        lastMessage: message,
-        lastMessageTime: message.createdAt,
-      ));
+      final messageTime = message['createdAt'] as DateTime?;
+      _cachedConversations!.add(<String, dynamic>{
+        'otherUserPubkeyHex': otherUserPubkeyHex,
+        'otherUserName': null,
+        'otherUserProfileImage': null,
+        'lastMessage': message,
+        'unreadCount': 0,
+        'lastMessageTime': messageTime,
+      });
     }
     _cachedConversations!.sort((a, b) {
-      final aTime = a.lastMessageTime ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bTime = b.lastMessageTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final aTime = a['lastMessageTime'] as DateTime? ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b['lastMessageTime'] as DateTime? ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       return bTime.compareTo(aTime);
     });
   }
 
-  Stream<List<DmMessageModel>> subscribeToMessages(String otherUserPubkeyHex) {
-    StreamController<List<DmMessageModel>> controller;
+  Stream<List<Map<String, dynamic>>> subscribeToMessages(
+      String otherUserPubkeyHex) {
+    StreamController<List<Map<String, dynamic>>> controller;
 
     if (!_messageStreams.containsKey(otherUserPubkeyHex)) {
-      controller = StreamController<List<DmMessageModel>>.broadcast();
+      controller = StreamController<List<Map<String, dynamic>>>.broadcast();
       _messageStreams[otherUserPubkeyHex] = controller;
 
       controller.onCancel = () {
@@ -545,8 +789,9 @@ class DmService {
         explicitRelays: relays.toSet(),
       );
 
-      final sub = response.stream.listen((event) {
-        if (event.pubKey != _currentUserPubkeyHex && event.pubKey != otherUserPubkeyHex) {
+      final sub = response.stream.listen((event) async {
+        if (event.pubKey != _currentUserPubkeyHex &&
+            event.pubKey != otherUserPubkeyHex) {
           return;
         }
 
@@ -555,19 +800,24 @@ class DmService {
         }
 
         final existingMessages = _messagesCache[otherUserPubkeyHex]!;
-        if (existingMessages.any((m) => m.id == event.id)) return;
+        final eventId = event.id;
+        if (existingMessages.any((m) => (m['id'] as String? ?? '') == eventId))
+          return;
+
+        final privateKey = await _getPrivateKey();
+        if (privateKey == null) return;
 
         String decryptedContent;
         try {
           if (event.pubKey == _currentUserPubkeyHex) {
             decryptedContent = Nip04.decrypt(
-              _currentUserPrivateKey!,
+              privateKey,
               otherUserPubkeyHex,
               event.content,
             );
           } else {
             decryptedContent = Nip04.decrypt(
-              _currentUserPrivateKey!,
+              privateKey,
               event.pubKey,
               event.content,
             );
@@ -576,22 +826,38 @@ class DmService {
           return;
         }
 
-        final message = DmMessageModel(
-          id: event.id,
-          senderPubkeyHex: event.pubKey,
-          recipientPubkeyHex: event.pubKey == _currentUserPubkeyHex ? otherUserPubkeyHex : _currentUserPubkeyHex!,
-          content: decryptedContent,
-          createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-          isFromCurrentUser: event.pubKey == _currentUserPubkeyHex,
-        );
+        final message = <String, dynamic>{
+          'id': event.id,
+          'senderPubkeyHex': event.pubKey,
+          'recipientPubkeyHex': event.pubKey == _currentUserPubkeyHex
+              ? otherUserPubkeyHex
+              : _currentUserPubkeyHex!,
+          'content': decryptedContent,
+          'createdAt':
+              DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+          'isFromCurrentUser': event.pubKey == _currentUserPubkeyHex,
+        };
 
         existingMessages.add(message);
         if (existingMessages.length > 50) {
-          existingMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          _messagesCache[otherUserPubkeyHex] = existingMessages.take(50).toList()
-            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          existingMessages.sort((a, b) {
+            final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+            final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
+          _messagesCache[otherUserPubkeyHex] =
+              existingMessages.take(50).toList()
+                ..sort((a, b) {
+                  final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+                  final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+                  return aTime.compareTo(bTime);
+                });
         } else {
-          existingMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          existingMessages.sort((a, b) {
+            final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+            final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+            return aTime.compareTo(bTime);
+          });
         }
 
         _notifyMessageStream(otherUserPubkeyHex);
@@ -604,8 +870,7 @@ class DmService {
 
   Future<void> _startGlobalLiveSubscription() async {
     if (_globalLiveSubscription != null) return;
-    final initResult = await _ensureNdkInitialized();
-    if (initResult.isError) return;
+    if (_ndk == null || _currentUserPubkeyHex == null) return;
 
     try {
       final relays = await getRelaySetMainSockets();
@@ -624,7 +889,7 @@ class DmService {
         explicitRelays: relays.toSet(),
       );
 
-      _globalLiveSubscription = response.stream.listen((event) {
+      _globalLiveSubscription = response.stream.listen((event) async {
         String otherUserPubkeyHex;
         if (event.pubKey == _currentUserPubkeyHex) {
           final pTag = event.getFirstTag('p');
@@ -641,19 +906,24 @@ class DmService {
         }
 
         final existingMessages = _messagesCache[otherUserPubkeyHex]!;
-        if (existingMessages.any((m) => m.id == event.id)) return;
+        final eventId = event.id;
+        if (existingMessages.any((m) => (m['id'] as String? ?? '') == eventId))
+          return;
+
+        final privateKey = await _getPrivateKey();
+        if (privateKey == null) return;
 
         String decryptedContent;
         try {
           if (event.pubKey == _currentUserPubkeyHex) {
             decryptedContent = Nip04.decrypt(
-              _currentUserPrivateKey!,
+              privateKey,
               otherUserPubkeyHex,
               event.content,
             );
           } else {
             decryptedContent = Nip04.decrypt(
-              _currentUserPrivateKey!,
+              privateKey,
               event.pubKey,
               event.content,
             );
@@ -662,22 +932,38 @@ class DmService {
           return;
         }
 
-        final message = DmMessageModel(
-          id: event.id,
-          senderPubkeyHex: event.pubKey,
-          recipientPubkeyHex: event.pubKey == _currentUserPubkeyHex ? otherUserPubkeyHex : _currentUserPubkeyHex!,
-          content: decryptedContent,
-          createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-          isFromCurrentUser: event.pubKey == _currentUserPubkeyHex,
-        );
+        final message = <String, dynamic>{
+          'id': event.id,
+          'senderPubkeyHex': event.pubKey,
+          'recipientPubkeyHex': event.pubKey == _currentUserPubkeyHex
+              ? otherUserPubkeyHex
+              : _currentUserPubkeyHex!,
+          'content': decryptedContent,
+          'createdAt':
+              DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+          'isFromCurrentUser': event.pubKey == _currentUserPubkeyHex,
+        };
 
         existingMessages.add(message);
         if (existingMessages.length > 50) {
-          existingMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          _messagesCache[otherUserPubkeyHex] = existingMessages.take(50).toList()
-            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          existingMessages.sort((a, b) {
+            final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+            final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
+          _messagesCache[otherUserPubkeyHex] =
+              existingMessages.take(50).toList()
+                ..sort((a, b) {
+                  final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+                  final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+                  return aTime.compareTo(bTime);
+                });
         } else {
-          existingMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          existingMessages.sort((a, b) {
+            final aTime = a['createdAt'] as DateTime? ?? DateTime(2000);
+            final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
+            return aTime.compareTo(bTime);
+          });
         }
 
         _notifyMessageStream(otherUserPubkeyHex);
@@ -685,24 +971,3 @@ class DmService {
     } catch (_) {}
   }
 }
-
-extension DmConversationModelExtension on DmConversationModel {
-  DmConversationModel copyWith({
-    String? otherUserPubkeyHex,
-    String? otherUserName,
-    String? otherUserProfileImage,
-    DmMessageModel? lastMessage,
-    int? unreadCount,
-    DateTime? lastMessageTime,
-  }) {
-    return DmConversationModel(
-      otherUserPubkeyHex: otherUserPubkeyHex ?? this.otherUserPubkeyHex,
-      otherUserName: otherUserName ?? this.otherUserName,
-      otherUserProfileImage: otherUserProfileImage ?? this.otherUserProfileImage,
-      lastMessage: lastMessage ?? this.lastMessage,
-      unreadCount: unreadCount ?? this.unreadCount,
-      lastMessageTime: lastMessageTime ?? this.lastMessageTime,
-    );
-  }
-}
-

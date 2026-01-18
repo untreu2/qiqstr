@@ -2,22 +2,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/custom_input_field.dart';
-import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
-import '../../../presentation/viewmodels/user_search_viewmodel.dart';
-import '../../../presentation/viewmodels/user_tile_viewmodel.dart';
-import '../../widgets/common/snackbar_widget.dart';
+import '../../../presentation/blocs/user_search/user_search_bloc.dart';
+import '../../../presentation/blocs/user_search/user_search_event.dart';
+import '../../../presentation/blocs/user_search/user_search_state.dart';
+import '../../../presentation/blocs/user_tile/user_tile_bloc.dart';
+import '../../../presentation/blocs/user_tile/user_tile_event.dart';
+import '../../../presentation/blocs/user_tile/user_tile_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
 class UserSearchPage extends StatefulWidget {
-  final Function(UserModel)? onUserSelected;
+  final Function(Map<String, dynamic>)? onUserSelected;
   final BuildContext? parentContext;
 
   const UserSearchPage({
@@ -32,35 +34,28 @@ class UserSearchPage extends StatefulWidget {
 
 class _UserSearchPageState extends State<UserSearchPage> {
   final TextEditingController _searchController = TextEditingController();
-  late final UserSearchViewModel _viewModel;
+  Timer? _debounceTimer;
+  UserSearchBloc? _searchBloc;
 
   @override
   void initState() {
     super.initState();
-    _viewModel = UserSearchViewModel(
-      userRepository: AppDI.get(),
-    );
-    _viewModel.addListener(_onViewModelChanged);
-    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
+    _debounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   void _onSearchChanged() {
-    final query = _searchController.text.trim();
-    _viewModel.searchUsers(query);
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted || _searchBloc == null) return;
+      final query = _searchController.text.trim();
+      _searchBloc!.add(UserSearchQueryChanged(query));
+    });
   }
 
 
@@ -72,153 +67,154 @@ class _UserSearchPageState extends State<UserSearchPage> {
     }
   }
 
-  Widget _buildSearchResults(BuildContext context) {
-    if (_viewModel.isSearching) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: context.colors.primary),
-            const SizedBox(height: 16),
-            Text(
-              'Searching for users...',
-              style: TextStyle(color: context.colors.textSecondary),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_viewModel.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: context.colors.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Search Error',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _viewModel.error!,
-              style: TextStyle(color: context.colors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            PrimaryButton(
-              label: 'Retry',
-              onPressed: () => _viewModel.searchUsers(_searchController.text.trim()),
-              backgroundColor: context.colors.accent,
-              foregroundColor: context.colors.background,
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_viewModel.filteredUsers.isEmpty && _searchController.text.trim().isNotEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search_off,
-              size: 48,
-              color: context.colors.textSecondary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No users found',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Try searching with a different term.',
-              style: TextStyle(color: context.colors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_viewModel.filteredUsers.isNotEmpty) {
-      return ListView.builder(
-        padding: EdgeInsets.zero,
-        itemCount: _viewModel.filteredUsers.length,
-        itemBuilder: (context, index) {
-          final user = _viewModel.filteredUsers[index];
-          return Column(
-            mainAxisSize: MainAxisSize.min,
+  Widget _buildSearchResults(BuildContext context, UserSearchState state) {
+    return switch (state) {
+      UserSearchLoading() => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildUserItem(context, user),
-              if (index < _viewModel.filteredUsers.length - 1) const _UserSeparator(),
+              CircularProgressIndicator(color: context.colors.primary),
+              const SizedBox(height: 16),
+              Text(
+                'Searching for users...',
+                style: TextStyle(color: context.colors.textSecondary),
+              ),
             ],
-          );
-        },
-      );
-    }
-
-    return _buildRandomUsersBubbleGrid(context);
+          ),
+        ),
+      UserSearchError(:final message) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: context.colors.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Search Error',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: TextStyle(color: context.colors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              PrimaryButton(
+                label: 'Retry',
+                onPressed: () {
+                  context.read<UserSearchBloc>().add(UserSearchQueryChanged(_searchController.text.trim()));
+                },
+                backgroundColor: context.colors.accent,
+                foregroundColor: context.colors.background,
+              ),
+            ],
+          ),
+        ),
+      UserSearchLoaded(:final filteredUsers, :final randomUsers, :final isSearching, :final isLoadingRandom) => isSearching
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: context.colors.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Searching for users...',
+                    style: TextStyle(color: context.colors.textSecondary),
+                  ),
+                ],
+              ),
+            )
+          : filteredUsers.isEmpty && _searchController.text.trim().isNotEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.search_off,
+                        size: 48,
+                        color: context.colors.textSecondary,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No users found',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Try searching with a different term.',
+                        style: TextStyle(color: context.colors.textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              : filteredUsers.isNotEmpty
+                  ? ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemCount: filteredUsers.length,
+                      itemBuilder: (context, index) {
+                        final user = filteredUsers[index];
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildUserItem(context, user),
+                            if (index < filteredUsers.length - 1) const _UserSeparator(),
+                          ],
+                        );
+                      },
+                    )
+                  : isLoadingRandom
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(color: context.colors.primary),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Loading users...',
+                                style: TextStyle(color: context.colors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        )
+                      : randomUsers.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No users to discover yet',
+                                style: TextStyle(color: context.colors.textSecondary),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: EdgeInsets.zero,
+                              itemCount: randomUsers.length,
+                              itemBuilder: (context, index) {
+                                final user = randomUsers[index];
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildUserItem(context, user),
+                                    if (index < randomUsers.length - 1) const _UserSeparator(),
+                                  ],
+                                );
+                              },
+                            ),
+      _ => const SizedBox(),
+    };
   }
 
-  Widget _buildRandomUsersBubbleGrid(BuildContext context) {
-    if (_viewModel.isLoadingRandom) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: context.colors.primary),
-            const SizedBox(height: 16),
-            Text(
-              'Loading users...',
-              style: TextStyle(color: context.colors.textSecondary),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_viewModel.randomUsers.isEmpty) {
-      return Center(
-        child: Text(
-          'No users to discover yet',
-          style: TextStyle(color: context.colors.textSecondary),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      itemCount: _viewModel.randomUsers.length,
-      itemBuilder: (context, index) {
-        final user = _viewModel.randomUsers[index];
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildUserItem(context, user),
-            if (index < _viewModel.randomUsers.length - 1) const _UserSeparator(),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildUserItem(BuildContext context, UserModel user) {
+  Widget _buildUserItem(BuildContext context, Map<String, dynamic> user) {
     return _UserItemWidget(
       user: user,
       onUserSelected: widget.onUserSelected,
@@ -252,71 +248,84 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.9,
-      decoration: BoxDecoration(
-        color: context.colors.background,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            width: 40,
-            height: 4,
-                decoration: BoxDecoration(
-              color: context.colors.textSecondary.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
-                    ),
-                ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Row(
+    return BlocProvider<UserSearchBloc>(
+      create: (context) {
+        final bloc = AppDI.get<UserSearchBloc>();
+        bloc.add(const UserSearchInitialized());
+        _searchBloc = bloc;
+        _searchController.addListener(_onSearchChanged);
+        return bloc;
+      },
+      child: BlocBuilder<UserSearchBloc, UserSearchState>(
+        builder: (context, state) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.9,
+            decoration: BoxDecoration(
+              color: context.colors.background,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
               children: [
-                _buildCancelButton(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: CustomInputField(
-                    controller: _searchController,
-                    autofocus: true,
-                    hintText: 'Search by name or npub...',
-                    suffixIcon: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GestureDetector(
-                        onTap: _pasteFromClipboard,
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: context.colors.background,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.content_paste,
-                            color: context.colors.textPrimary,
-                            size: 20,
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: context.colors.textSecondary.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Row(
+                    children: [
+                      _buildCancelButton(),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: CustomInputField(
+                          controller: _searchController,
+                          autofocus: true,
+                          hintText: 'Search by name or npub...',
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: GestureDetector(
+                              onTap: _pasteFromClipboard,
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: context.colors.background,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.content_paste,
+                                  color: context.colors.textPrimary,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: _buildSearchResults(context, state),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: _buildSearchResults(context),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
 class _UserItemWidget extends StatefulWidget {
-  final UserModel user;
-  final Function(UserModel)? onUserSelected;
+  final Map<String, dynamic> user;
+  final Function(Map<String, dynamic>)? onUserSelected;
   final BuildContext? parentContext;
 
   const _UserItemWidget({
@@ -330,32 +339,12 @@ class _UserItemWidget extends StatefulWidget {
 }
 
 class _UserItemWidgetState extends State<_UserItemWidget> {
-  late final UserTileViewModel _viewModel;
   String? _currentUserNpub;
 
   @override
   void initState() {
     super.initState();
-    _viewModel = UserTileViewModel(
-      userRepository: AppDI.get(),
-      authRepository: AppDI.get(),
-      user: widget.user,
-    );
-    _viewModel.addListener(_onViewModelChanged);
     _loadCurrentUserNpub();
-  }
-
-  @override
-  void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
-    super.dispose();
-  }
-
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   Future<void> _loadCurrentUserNpub() async {
@@ -379,31 +368,29 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
     );
   }
 
-  Future<void> _toggleFollow() async {
-    if (_viewModel.isFollowing == true) {
-      final userName = widget.user.name.isNotEmpty
-          ? widget.user.name
-          : (widget.user.nip05.isNotEmpty ? widget.user.nip05.split('@').first : 'this user');
+  Future<void> _toggleFollow(UserTileBloc bloc, UserTileLoaded state) async {
+    if (state.isFollowing == true) {
+      final userName = (widget.user['name'] as String? ?? '').isNotEmpty
+          ? widget.user['name'] as String
+          : ((widget.user['nip05'] as String? ?? '').isNotEmpty ? (widget.user['nip05'] as String).split('@').first : 'this user');
 
       showUnfollowUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => _viewModel.toggleFollow(),
+        onConfirm: () {
+          bloc.add(const UserTileFollowToggled());
+        },
       );
       return;
     }
 
-    _viewModel.toggleFollow().catchError((error) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Failed to follow user: $error');
-      }
-    });
+    bloc.add(const UserTileFollowToggled());
   }
 
-  Widget _buildFollowButton(BuildContext context) {
-    final isFollowing = _viewModel.isFollowing ?? false;
+  Widget _buildFollowButton(BuildContext context, UserTileLoaded state, UserTileBloc bloc) {
+    final isFollowing = state.isFollowing ?? false;
     return GestureDetector(
-      onTap: _viewModel.isLoading ? null : _toggleFollow,
+      onTap: state.isLoading ? null : () => _toggleFollow(bloc, state),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
@@ -411,7 +398,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
           color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
-        child: _viewModel.isLoading
+        child: state.isLoading
             ? SizedBox(
                 width: 16,
                 height: 16,
@@ -447,11 +434,25 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<UserTileViewModel>.value(
-      value: _viewModel,
-      child: Consumer<UserTileViewModel>(
-        builder: (context, viewModel, child) {
-          final isCurrentUser = _currentUserNpub == widget.user.pubkeyHex || _currentUserNpub == widget.user.npub;
+    return BlocProvider<UserTileBloc>(
+      create: (context) {
+        final userNpub = widget.user['npub'] as String? ?? '';
+        final bloc = UserTileBloc(
+          userRepository: AppDI.get(),
+          authRepository: AppDI.get(),
+          userNpub: userNpub,
+        );
+        if (userNpub.isNotEmpty) {
+          bloc.add(UserTileInitialized(userNpub: userNpub));
+        }
+        return bloc;
+      },
+      child: BlocBuilder<UserTileBloc, UserTileState>(
+        builder: (context, state) {
+          final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+          final userNpub = widget.user['npub'] as String? ?? '';
+          final isCurrentUser = _currentUserNpub != null && (_currentUserNpub == userPubkeyHex || _currentUserNpub == userNpub);
+          final loadedState = state is UserTileLoaded ? state : const UserTileLoaded();
 
           return GestureDetector(
           onTap: () {
@@ -466,14 +467,21 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                   try {
                     final router = GoRouter.of(navContext);
                     final currentLocation = router.routerDelegate.currentConfiguration.uri.path;
+                    final userNpub = widget.user['npub'] as String? ?? '';
+                    final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+                    if (userNpub.isEmpty && userPubkeyHex.isEmpty) return;
+                    
+                    final npubParam = userNpub.isNotEmpty ? userNpub : userPubkeyHex;
+                    final pubkeyHexParam = userPubkeyHex.isNotEmpty ? userPubkeyHex : userNpub;
+                    
                     if (currentLocation.startsWith('/home/feed')) {
-                      navContext.push('/home/feed/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                      navContext.push('/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
                     } else if (currentLocation.startsWith('/home/notifications')) {
-                      navContext.push('/home/notifications/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                      navContext.push('/home/notifications/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
                     } else if (currentLocation.startsWith('/home/dm')) {
-                      navContext.push('/home/dm/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                      navContext.push('/home/dm/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
                     } else {
-                      navContext.push('/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                      navContext.push('/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
                     }
                   } catch (e) {
                     debugPrint('[UserItemWidget] Navigation error: $e');
@@ -486,7 +494,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
-                _buildAvatar(context, widget.user.profileImage),
+                _buildAvatar(context, widget.user['profileImage'] as String? ?? ''),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Row(
@@ -497,7 +505,10 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                           children: [
                             Flexible(
                               child: Text(
-                                widget.user.name.length > 25 ? '${widget.user.name.substring(0, 25)}...' : widget.user.name,
+                                () {
+                                  final name = widget.user['name'] as String? ?? '';
+                                  return name.length > 25 ? '${name.substring(0, 25)}...' : name;
+                                }(),
                                 style: TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w600,
@@ -506,7 +517,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (widget.user.nip05.isNotEmpty && widget.user.nip05Verified) ...[
+                            if ((widget.user['nip05'] as String? ?? '').isNotEmpty && (widget.user['nip05Verified'] as bool? ?? false)) ...[
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.verified,
@@ -520,9 +531,9 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                     ],
                   ),
                 ),
-                if (!isCurrentUser && viewModel.isFollowing != null) ...[
+                if (!isCurrentUser && loadedState.isFollowing != null) ...[
                   const SizedBox(width: 10),
-                  _buildFollowButton(context),
+                  _buildFollowButton(context, loadedState, context.read<UserTileBloc>()),
                 ],
               ],
             ),

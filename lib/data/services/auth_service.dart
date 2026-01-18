@@ -5,7 +5,6 @@ import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip32/bip32.dart' as bip32;
 
 import '../../core/base/result.dart';
-import '../../models/wallet_model.dart';
 import 'coinos_service.dart';
 
 class AuthService {
@@ -378,7 +377,7 @@ class AuthService {
     }
   }
 
-  Future<Result<CoinosAuthResult>> authenticateWithCoinos() async {
+  Future<Result<Map<String, dynamic>>> authenticateWithCoinos() async {
     try {
       final coinosService = CoinosService();
 
@@ -388,13 +387,17 @@ class AuthService {
         return Result.error(authResult.error!);
       }
 
-      return Result.success(authResult.data!);
+      final authData = authResult.data!;
+      Map<String, dynamic> authMap;
+      authMap = authData;
+
+      return Result.success(authMap);
     } catch (e) {
       return Result.error('Coinos Nostr authentication failed: ${e.toString()}');
     }
   }
 
-  Future<Result<CoinosAuthResult>> autoLoginCoinos() async {
+  Future<Result<Map<String, dynamic>>> autoLoginCoinos() async {
     try {
       final coinosService = CoinosService();
 
@@ -403,7 +406,11 @@ class AuthService {
         return Result.error(authResult.error!);
       }
 
-      return Result.success(authResult.data!);
+      final authData = authResult.data!;
+      Map<String, dynamic> authMap;
+      authMap = authData;
+
+      return Result.success(authMap);
     } catch (e) {
       return Result.error('Coinos auto-login failed: ${e.toString()}');
     }
@@ -419,11 +426,24 @@ class AuthService {
     }
   }
 
-  Future<Result<CoinosUser?>> getCoinosUser() async {
+  Future<Result<Map<String, dynamic>?>> getCoinosUser() async {
     try {
       final coinosService = CoinosService();
       final userResult = await coinosService.getStoredUser();
-      return userResult;
+
+      if (userResult.isError) {
+        return Result.error(userResult.error!);
+      }
+
+      final user = userResult.data;
+      if (user == null) {
+        return Result.success(null);
+      }
+
+      Map<String, dynamic> userMap;
+      userMap = user;
+
+      return Result.success(userMap);
     } catch (e) {
       return Result.error('Failed to get Coinos user: ${e.toString()}');
     }

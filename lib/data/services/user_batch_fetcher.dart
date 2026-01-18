@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../../models/user_model.dart';
 import 'nostr_service.dart';
 import 'relay_service.dart';
 
@@ -16,7 +15,7 @@ class UserFetchRequest {
   final String pubkeyHex;
   final FetchPriority priority;
   final DateTime requestedAt;
-  final Completer<UserModel?> completer;
+  final Completer<Map<String, dynamic>?> completer;
 
   UserFetchRequest({
     required this.pubkeyHex,
@@ -68,7 +67,7 @@ class UserBatchFetcher {
   int _successfulFetches = 0;
   int _failedFetches = 0;
 
-  Future<UserModel?> fetchUser(String pubkeyHex, {FetchPriority priority = FetchPriority.normal}) async {
+  Future<Map<String, dynamic>?> fetchUser(String pubkeyHex, {FetchPriority priority = FetchPriority.normal}) async {
     _totalRequests++;
 
     if (_queuedPubkeys.contains(pubkeyHex)) {
@@ -78,13 +77,13 @@ class UserBatchFetcher {
         orElse: () => UserFetchRequest(
           pubkeyHex: pubkeyHex,
           priority: priority,
-          completer: Completer<UserModel?>(),
+          completer: Completer<Map<String, dynamic>?>(),
         ),
       );
       return await existingRequest.completer.future;
     }
 
-    final completer = Completer<UserModel?>();
+    final completer = Completer<Map<String, dynamic>?>();
     final request = UserFetchRequest(
       pubkeyHex: pubkeyHex,
       priority: priority,
@@ -103,17 +102,17 @@ class UserBatchFetcher {
     return await completer.future;
   }
 
-  Future<Map<String, UserModel?>> fetchUsers(
+  Future<Map<String, Map<String, dynamic>?>> fetchUsers(
     List<String> pubkeyHexList, {
     FetchPriority priority = FetchPriority.normal,
   }) async {
-    final futures = <String, Future<UserModel?>>{};
+    final futures = <String, Future<Map<String, dynamic>?>>{};
 
     for (final pubkeyHex in pubkeyHexList) {
       futures[pubkeyHex] = fetchUser(pubkeyHex, priority: priority);
     }
 
-    final results = <String, UserModel?>{};
+    final results = <String, Map<String, dynamic>?>{};
     for (final entry in futures.entries) {
       try {
         results[entry.key] = await entry.value;
@@ -195,8 +194,8 @@ class UserBatchFetcher {
     }
   }
 
-  Future<Map<String, UserModel>> _fetchProfilesFromRelays(List<String> pubkeyHexList) async {
-    final results = <String, UserModel>{};
+  Future<Map<String, Map<String, dynamic>>> _fetchProfilesFromRelays(List<String> pubkeyHexList) async {
+    final results = <String, Map<String, dynamic>>{};
 
     try {
       final filter = NostrService.createProfileFilter(
@@ -207,8 +206,8 @@ class UserBatchFetcher {
       final request = NostrService.createRequest(filter);
       final serializedRequest = NostrService.serializeRequest(request);
 
-      final completer = Completer<Map<String, UserModel>>();
-      final receivedProfiles = <String, UserModel>{};
+      final completer = Completer<Map<String, Map<String, dynamic>>>();
+      final receivedProfiles = <String, Map<String, dynamic>>{};
 
       void handleEvent(List<dynamic> decoded, String relayUrl) {
         try {
@@ -234,7 +233,7 @@ class UserBatchFetcher {
                       }
                     });
 
-                    final user = UserModel.fromCachedProfile(pubkey, profileData);
+                    final user = this._createUserFromProfileData(pubkey, profileData);
                     receivedProfiles[pubkey] = user;
 
                     if (receivedProfiles.length == pubkeyHexList.length) {
@@ -325,6 +324,22 @@ class UserBatchFetcher {
     _isRunning = false;
     _requestQueue.clear();
     _queuedPubkeys.clear();
+  }
+
+  Map<String, dynamic> _createUserFromProfileData(String pubkeyHex, Map<String, String> profileData) {
+    return {
+      'pubkeyHex': pubkeyHex,
+      'name': profileData['name'] ?? '',
+      'about': profileData['about'] ?? '',
+      'profileImage': profileData['profileImage'] ?? '',
+      'banner': profileData['banner'] ?? '',
+      'website': profileData['website'] ?? '',
+      'nip05': profileData['nip05'] ?? '',
+      'lud16': profileData['lud16'] ?? '',
+      'updatedAt': DateTime.now(),
+      'nip05Verified': false,
+      'followerCount': 0,
+    };
   }
 }
 

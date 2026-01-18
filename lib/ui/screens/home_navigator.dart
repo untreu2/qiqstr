@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:qiqstr/ui/screens/note/share_note.dart';
 import '../theme/theme_manager.dart';
 import '../../core/di/app_di.dart';
-import '../../presentation/viewmodels/home_navigator_viewmodel.dart';
+import '../../presentation/blocs/theme/theme_bloc.dart';
+import '../../presentation/blocs/theme/theme_state.dart';
+import '../../presentation/blocs/notification_indicator/notification_indicator_bloc.dart';
+import '../../presentation/blocs/notification_indicator/notification_indicator_event.dart';
+import '../../../data/repositories/notification_repository.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -25,12 +29,11 @@ class HomeNavigator extends StatefulWidget {
   State<HomeNavigator> createState() => _HomeNavigatorState();
 }
 
-class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateMixin {
+class _HomeNavigatorState extends State<HomeNavigator>
+    with TickerProviderStateMixin {
   late AnimationController _iconAnimationController;
   late AnimationController _exploreRotationController;
   bool _isFirstBuild = true;
-  bool _hasNewNotifications = false;
-  HomeNavigatorViewModel? _homeNavigatorViewModel;
 
   @override
   void initState() {
@@ -43,43 +46,52 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _subscribeToNewNotifications();
-  }
-
-  void _subscribeToNewNotifications() {
-    final viewModel = HomeNavigatorViewModel(
-      notificationRepository: AppDI.get(),
-    );
-    viewModel.addListener(_onViewModelChanged);
-    _homeNavigatorViewModel = viewModel;
-  }
-
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {
-        _hasNewNotifications = _homeNavigatorViewModel?.hasNewNotifications ?? false;
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
+        debugPrint('[HomeNavigator] initState: initializing NotificationIndicatorBloc');
+        indicatorBloc.add(const NotificationIndicatorInitialized());
+      }
+    });
   }
 
   @override
   void dispose() {
     _iconAnimationController.dispose();
     _exploreRotationController.dispose();
-    _homeNavigatorViewModel?.removeListener(_onViewModelChanged);
-    _homeNavigatorViewModel?.dispose();
     super.dispose();
   }
 
-  Widget _buildCustomBottomBar() {
-    final themeManager = context.themeManager;
-    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
+  Widget _buildCustomBottomBar(bool hasNewNotifications) {
+    debugPrint('[HomeNavigator] _buildCustomBottomBar: hasNewNotifications=$hasNewNotifications');
+    final themeState = context.themeState;
+    final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
 
     final navItems = [
-      {'icon': 'assets/house.svg', 'iconSelected': 'assets/house_fill.svg', 'index': 0, 'type': 'svg'},
-      {'icon': 'assets/chat.svg', 'iconSelected': 'assets/chat_fill.svg', 'index': 1, 'type': 'svg'},
-      {'icon': 'assets/wallet.svg', 'iconSelected': 'assets/wallet_fill.svg', 'index': 2, 'type': 'svg'},
-      {'icon': 'assets/bell.svg', 'iconSelected': 'assets/bell_fill.svg', 'index': 3, 'type': 'svg'},
+      {
+        'icon': 'assets/house.svg',
+        'iconSelected': 'assets/house_fill.svg',
+        'index': 0,
+        'type': 'svg'
+      },
+      {
+        'icon': 'assets/chat.svg',
+        'iconSelected': 'assets/chat_fill.svg',
+        'index': 1,
+        'type': 'svg'
+      },
+      {
+        'icon': 'assets/wallet.svg',
+        'iconSelected': 'assets/wallet_fill.svg',
+        'index': 2,
+        'type': 'svg'
+      },
+      {
+        'icon': 'assets/bell.svg',
+        'iconSelected': 'assets/bell_fill.svg',
+        'index': 3,
+        'type': 'svg'
+      },
     ];
 
     final orderedNavItems = navOrder.map((index) => navItems[index]).toList();
@@ -100,70 +112,77 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
             color: context.colors.surface.withValues(alpha: 0.8),
           ),
           child: SafeArea(
-        child: Container(
-          height: 60,
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Row(
-            children: items.map((item) {
-              final index = item['index'] as int;
+            child: Container(
+              height: 60,
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Row(
+                children: items.map((item) {
+                  final index = item['index'] as int;
 
-              if (item['type'] == 'add') {
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      ShareNotePage.show(context);
-                    },
-                    behavior: HitTestBehavior.opaque,
-                    child: Center(
-                      child: Container(
-                        width: 45,
-                        height: 45,
-                        decoration: BoxDecoration(
-                          color: context.colors.textPrimary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.add,
-                          color: context.colors.background,
-                          size: 25,
+                  if (item['type'] == 'add') {
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          ShareNotePage.show(context);
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Center(
+                          child: Container(
+                            width: 45,
+                            height: 45,
+                            decoration: BoxDecoration(
+                              color: context.colors.textPrimary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.add,
+                              color: context.colors.background,
+                              size: 25,
+                            ),
+                          ),
                         ),
                       ),
+                    );
+                  }
+
+                  final originalIndex = index;
+                  final themeState = context.themeState;
+                  final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
+                  final pageViewIndex = navOrder.indexOf(originalIndex);
+                  final bool isSelected =
+                      widget.navigationShell.currentIndex == pageViewIndex;
+
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        final themeState = context.themeState;
+                        final navOrder =
+                            themeState?.bottomNavOrder ?? [0, 1, 2, 3];
+                        final pageViewIndex = navOrder.indexOf(originalIndex);
+                        _handleNavigation(pageViewIndex);
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Center(
+                        child: originalIndex == 3
+                            ? _buildNotificationIcon(
+                                item['icon'] as String, isSelected, hasNewNotifications)
+                            : originalIndex == 2
+                                ? _buildWalletIcon(
+                                    item['icon'] as String, isSelected)
+                                : originalIndex == 1
+                                    ? _buildExploreIcon(
+                                        item['icon'] as String,
+                                        item['iconSelected'] as String?,
+                                        isSelected)
+                                    : _buildRegularIcon(item, isSelected),
+                      ),
                     ),
-                  ),
-                );
-              }
-
-              final originalIndex = index;
-              final themeManager = context.themeManager;
-              final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
-              final pageViewIndex = navOrder.indexOf(originalIndex);
-              final bool isSelected = widget.navigationShell.currentIndex == pageViewIndex;
-
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    final themeManager = context.themeManager;
-                    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
-                    final pageViewIndex = navOrder.indexOf(originalIndex);
-                    _handleNavigation(pageViewIndex);
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: Center(
-                    child: originalIndex == 3
-                        ? _buildNotificationIcon(item['icon'] as String, isSelected)
-                        : originalIndex == 2
-                            ? _buildWalletIcon(item['icon'] as String, isSelected)
-                            : originalIndex == 1
-                                ? _buildExploreIcon(item['icon'] as String, item['iconSelected'] as String?, isSelected)
-                                : _buildRegularIcon(item, isSelected),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         ),
       ),
@@ -237,7 +256,8 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
         );
       },
       child: SizedBox(
-        key: ValueKey('${isSelected ? (iconSelectedPath ?? iconPath) : iconPath}_${iconType ?? index}'),
+        key: ValueKey(
+            '${isSelected ? (iconSelectedPath ?? iconPath) : iconPath}_${iconType ?? index}'),
         width: iconSize,
         height: iconSize,
         child: isSelected
@@ -277,7 +297,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     );
   }
 
-  Widget _buildNotificationIcon(String iconPath, bool isSelected) {
+  Widget _buildNotificationIcon(String iconPath, bool isSelected, bool hasNewNotifications) {
     final icon = _buildIcon(
       iconPath: iconPath,
       isSelected: isSelected,
@@ -288,24 +308,36 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       isNotification: true,
     );
 
-    if (_hasNewNotifications) {
-      return Stack(
-        clipBehavior: Clip.none,
-        children: [
-          icon,
-          Positioned(
-            right: -2,
-            top: -2,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: context.colors.accent,
-                shape: BoxShape.circle,
+    if (hasNewNotifications) {
+      return SizedBox(
+        width: _iconSize + 6,
+        height: _iconSize + 6,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              child: icon,
+            ),
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: context.colors.accent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: context.colors.background,
+                    width: 1.5,
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
@@ -324,7 +356,8 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     );
   }
 
-  Widget _buildExploreIcon(String iconPath, String? iconSelectedPath, bool isSelected) {
+  Widget _buildExploreIcon(
+      String iconPath, String? iconSelectedPath, bool isSelected) {
     return _buildIcon(
       iconPath: iconPath,
       isSelected: isSelected,
@@ -359,8 +392,8 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   }
 
   void _handleNavigation(int pageViewIndex) {
-    final themeManager = context.themeManager;
-    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
+    final themeState = context.themeState;
+    final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
     final originalIndex = navOrder[pageViewIndex];
 
     if (originalIndex == 0) {
@@ -406,19 +439,31 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       });
     }
 
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        return Scaffold(
-          extendBody: true,
-          body: PageStorage(
-            bucket: PageStorageBucket(),
-            child: widget.navigationShell,
-          ),
-          bottomNavigationBar: RepaintBoundary(
-            child: _buildCustomBottomBar(),
-          ),
-        );
-      },
+    final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
+    debugPrint('[HomeNavigator] build: indicatorBloc=$indicatorBloc, currentState=${indicatorBloc.state}');
+    
+    return BlocProvider<NotificationIndicatorBloc>.value(
+      value: indicatorBloc,
+      child: BlocBuilder<ThemeBloc, ThemeState>(
+        builder: (context, themeState) {
+          return Scaffold(
+            extendBody: true,
+            body: PageStorage(
+              bucket: PageStorageBucket(),
+              child: widget.navigationShell,
+            ),
+            bottomNavigationBar: StreamBuilder<bool>(
+              stream: AppDI.get<NotificationRepository>().hasNewNotificationsStream,
+              initialData: false,
+              builder: (context, snapshot) {
+                final hasNewNotifications = snapshot.data ?? false;
+                debugPrint('[HomeNavigator] StreamBuilder: hasNewNotifications=$hasNewNotifications, snapshot.hasData=${snapshot.hasData}');
+                return _buildCustomBottomBar(hasNewNotifications);
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 }

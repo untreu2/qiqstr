@@ -4,10 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
-import '../../../models/link_preview_model.dart';
 import '../../screens/webview/webview_page.dart';
 
-Future<LinkPreviewModel?> _fetchAndParseMiniLink(String url) async {
+Future<Map<String, dynamic>?> _fetchAndParseMiniLink(String url) async {
   try {
     final response = await http.get(Uri.parse(url)).timeout(
       const Duration(seconds: 3),
@@ -22,7 +21,10 @@ Future<LinkPreviewModel?> _fetchAndParseMiniLink(String url) async {
       final String parsedTitle = metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
       final String? parsedImage = metaOgImage?.attributes['content'];
 
-      return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
+      return {
+        'title': parsedTitle,
+        'imageUrl': parsedImage,
+      };
     }
   } catch (e) {
     debugPrint('[MiniLinkPreview] Error fetching link preview: $e');
@@ -44,7 +46,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
   String? _imageUrl;
   bool _isLoading = true;
 
-  static final Map<String, LinkPreviewModel> _cache = {};
+  static final Map<String, Map<String, dynamic>> _cache = {};
 
   @override
   void initState() {
@@ -58,8 +60,8 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
       Future.microtask(() {
         if (mounted) {
           setState(() {
-            _title = cached.title;
-            _imageUrl = cached.imageUrl;
+            _title = cached['title'] as String?;
+            _imageUrl = cached['imageUrl'] as String?;
             _isLoading = false;
           });
         }
@@ -80,8 +82,8 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
           _cache[widget.url] = model;
           if (mounted) {
             setState(() {
-              _title = model.title;
-              _imageUrl = model.imageUrl;
+              _title = model['title'] as String?;
+              _imageUrl = model['imageUrl'] as String?;
               _isLoading = false;
             });
           }

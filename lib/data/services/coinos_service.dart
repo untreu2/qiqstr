@@ -8,7 +8,6 @@ import 'package:ndk/ndk.dart';
 import 'package:ndk/shared/nips/nip01/bip340.dart';
 
 import '../../core/base/result.dart';
-import '../../models/wallet_model.dart';
 
 class CoinosService {
   static const String _baseUrl = 'https://coinos.io/api';
@@ -21,9 +20,9 @@ class CoinosService {
   final http.Client _httpClient = http.Client();
 
   String? _cachedToken;
-  CoinosUser? _cachedUser;
+  Map<String, dynamic>? _cachedUser;
 
-  Future<Result<CoinosAuthResult>> authenticateWithNostr() async {
+  Future<Result<Map<String, dynamic>>> authenticateWithNostr() async {
     try {
       debugPrint('[CoinosService] Starting Nostr authentication with Coinos');
 
@@ -80,7 +79,11 @@ class CoinosService {
       if (authResponse.statusCode == 200) {
         final data = jsonDecode(authResponse.body) as Map<String, dynamic>;
 
-        final user = CoinosUser.fromJson(data['user'] ?? data);
+        final userData = data['user'] as Map<String, dynamic>? ?? data;
+        final user = <String, dynamic>{
+          'username': userData['username'] as String? ?? '',
+          'id': userData['id'] as String? ?? '',
+        };
         final token = data['token'] as String? ?? '';
 
         _cachedToken = token;
@@ -88,12 +91,16 @@ class CoinosService {
 
         await Future.wait([
           _secureStorage.write(key: _tokenKey, value: token),
-          _secureStorage.write(key: _userKey, value: jsonEncode(user.toJson())),
+          _secureStorage.write(key: _userKey, value: jsonEncode(user)),
         ]);
 
-        debugPrint('[CoinosService] Nostr authentication successful for user: ${user.username}');
+        final username = user['username'] as String? ?? '';
+        debugPrint('[CoinosService] Nostr authentication successful for user: $username');
 
-        return Result.success(CoinosAuthResult(user: user, token: token));
+        return Result.success({
+          'user': user,
+          'token': token,
+        });
       } else {
         debugPrint('[CoinosService] Nostr auth failed: ${authResponse.statusCode}');
         debugPrint('[CoinosService] Response body: ${authResponse.body}');
@@ -105,14 +112,17 @@ class CoinosService {
     }
   }
 
-  Future<Result<CoinosAuthResult>> autoLogin() async {
+  Future<Result<Map<String, dynamic>>> autoLogin() async {
     try {
       final tokenResult = await getStoredToken();
       if (tokenResult.isSuccess && tokenResult.data != null) {
         final userResult = await getStoredUser();
         if (userResult.isSuccess && userResult.data != null) {
           debugPrint('[CoinosService] Using stored auth data');
-          return Result.success(CoinosAuthResult(user: userResult.data!, token: tokenResult.data!));
+          return Result.success({
+            'user': userResult.data!,
+            'token': tokenResult.data!,
+          });
         }
       }
       debugPrint('[CoinosService] Attempting Nostr auto-login');
@@ -137,7 +147,7 @@ class CoinosService {
     }
   }
 
-  Future<Result<CoinosUser?>> getStoredUser() async {
+  Future<Result<Map<String, dynamic>?>> getStoredUser() async {
     try {
       if (_cachedUser != null) {
         return Result.success(_cachedUser);
@@ -146,7 +156,7 @@ class CoinosService {
       final userJson = await _secureStorage.read(key: _userKey);
       if (userJson != null) {
         final userData = jsonDecode(userJson) as Map<String, dynamic>;
-        _cachedUser = CoinosUser.fromJson(userData);
+        _cachedUser = userData;
         return Result.success(_cachedUser);
       }
 
@@ -217,23 +227,23 @@ class CoinosService {
     }
   }
 
-  Future<Result<CoinosUser>> getAccountInfo() async {
+  Future<Result<Map<String, dynamic>>> getAccountInfo() async {
     return _makeAuthenticatedRequest(
       '/me',
       'GET',
-      (json) => CoinosUser.fromJson(json),
+      (json) => json,
     );
   }
 
-  Future<Result<CoinosBalance>> getBalance() async {
+  Future<Result<Map<String, dynamic>>> getBalance() async {
     return _makeAuthenticatedRequest(
       '/me',
       'GET',
-      (json) => CoinosBalance.fromJson(json),
+      (json) => json,
     );
   }
 
-  Future<Result<CoinosInvoice>> createInvoice({
+  Future<Result<Map<String, dynamic>>> createInvoice({
     required String type,
     required int amount,
     bool fiat = false,
@@ -271,7 +281,7 @@ class CoinosService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         debugPrint('[CoinosService] Parsed invoice data: $data');
-        return Result.success(CoinosInvoice.fromJson(data));
+        return Result.success(data);
       } else if (response.statusCode == 401) {
         await clearAuthData();
         return const Result.error('Authentication token expired');
@@ -285,15 +295,15 @@ class CoinosService {
     }
   }
 
-  Future<Result<CoinosInvoice>> getInvoiceStatus(String hash) async {
+  Future<Result<Map<String, dynamic>>> getInvoiceStatus(String hash) async {
     return _makeAuthenticatedRequest(
       '/invoice/$hash',
       'GET',
-      (json) => CoinosInvoice.fromJson(json),
+      (json) => json,
     );
   }
 
-  Future<Result<CoinosPaymentResult>> payInvoice(String payreq) async {
+  Future<Result<Map<String, dynamic>>> payInvoice(String payreq) async {
     try {
       debugPrint('[CoinosService] Attempting to pay invoice: ${payreq.substring(0, 20)}...');
 
@@ -321,9 +331,12 @@ class CoinosService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         debugPrint('[CoinosService] Parsed payment data: $data');
 
-        final paymentResult = CoinosPaymentResult.fromJson(data);
+        final isSuccess = (data['success'] as bool?) ?? ((data['status'] as String?) == 'success');
+        final paymentResult = Map<String, dynamic>.from(data);
+        paymentResult['isSuccess'] = isSuccess;
+        paymentResult['error'] = data['error'] as String?;
         debugPrint('[CoinosService] Payment result: $paymentResult');
-        debugPrint('[CoinosService] Payment success: ${paymentResult.isSuccess}');
+        debugPrint('[CoinosService] Payment success: $isSuccess');
 
         return Result.success(paymentResult);
       } else if (response.statusCode == 401) {
@@ -339,14 +352,23 @@ class CoinosService {
     }
   }
 
-  Future<Result<CoinosPaymentResult>> sendInternalPayment({
+  Future<Result<Map<String, dynamic>>> sendInternalPayment({
     required String username,
     required int amount,
   }) async {
     return _makeAuthenticatedRequest(
       '/send',
       'POST',
-      (json) => CoinosPaymentResult.fromJson(json),
+      (json) {
+        final jsonMap = json;
+        final successValue = jsonMap['success'] as bool?;
+        final statusValue = jsonMap['status'] as String?;
+        final isSuccess = successValue ?? (statusValue == 'success');
+        final result = Map<String, dynamic>.from(jsonMap);
+        result['isSuccess'] = isSuccess;
+        result['error'] = jsonMap['error'] as String?;
+        return result;
+      },
       body: {
         'username': username,
         'amount': amount,
@@ -354,14 +376,23 @@ class CoinosService {
     );
   }
 
-  Future<Result<CoinosPaymentResult>> sendBitcoinPayment({
+  Future<Result<Map<String, dynamic>>> sendBitcoinPayment({
     required String address,
     required int amount,
   }) async {
     return _makeAuthenticatedRequest(
       '/bitcoin/send',
       'POST',
-      (json) => CoinosPaymentResult.fromJson(json),
+      (json) {
+        final jsonMap = json;
+        final successValue = jsonMap['success'] as bool?;
+        final statusValue = jsonMap['status'] as String?;
+        final isSuccess = successValue ?? (statusValue == 'success');
+        final result = Map<String, dynamic>.from(jsonMap);
+        result['isSuccess'] = isSuccess;
+        result['error'] = jsonMap['error'] as String?;
+        return result;
+      },
       body: {
         'address': address,
         'amount': amount,
@@ -369,7 +400,7 @@ class CoinosService {
     );
   }
 
-  Future<Result<List<CoinosPayment>>> getPaymentHistory({
+  Future<Result<List<Map<String, dynamic>>>> getPaymentHistory({
     int? start,
     int? end,
     int? limit,
@@ -381,19 +412,27 @@ class CoinosService {
     if (limit != null) queryParams['limit'] = limit.toString();
     if (offset != null) queryParams['offset'] = offset.toString();
 
-    final endpoint = '/payments${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}';
+    final queryString = queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : '';
+    final endpoint = '/payments$queryString';
 
     return _makeAuthenticatedRequest(
       endpoint,
       'GET',
       (json) {
-        final payments = json['payments'] as List<dynamic>? ?? json as List<dynamic>? ?? [];
-        return payments.map((p) => CoinosPayment.fromJson(p as Map<String, dynamic>)).toList();
+        final jsonMap = json;
+        final payments = jsonMap['payments'] as List<dynamic>?;
+        if (payments != null) {
+          return payments.map((p) => p as Map<String, dynamic>).toList();
+        }
+        if (json is List) {
+          return (json as List).map((p) => p as Map<String, dynamic>).toList();
+        }
+        return <Map<String, dynamic>>[];
       },
     );
   }
 
-  Future<Result<CoinosUser>> updateAccount({
+  Future<Result<Map<String, dynamic>>> updateAccount({
     String? username,
     String? display,
     String? currency,
@@ -408,7 +447,7 @@ class CoinosService {
     return _makeAuthenticatedRequest(
       '/user',
       'POST',
-      (json) => CoinosUser.fromJson(json),
+      (json) => json,
       body: updateData,
     );
   }

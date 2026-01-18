@@ -4,14 +4,17 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:provider/provider.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/share_note.dart';
-import '../../../models/note_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/interaction_bar_viewmodel.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/interaction/interaction_bloc.dart';
+import '../../../presentation/blocs/interaction/interaction_event.dart';
+import '../../../presentation/blocs/interaction/interaction_state.dart';
+import '../../../data/repositories/note_repository.dart';
 import '../../../data/services/event_verifier.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../dialogs/zap_dialog.dart';
 import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
@@ -19,7 +22,7 @@ import '../common/snackbar_widget.dart';
 class InteractionBar extends StatefulWidget {
   final String noteId;
   final String currentUserNpub;
-  final NoteModel? note;
+  final Map<String, dynamic>? note;
   final bool isBigSize;
 
   const InteractionBar({
@@ -35,32 +38,37 @@ class InteractionBar extends StatefulWidget {
 }
 
 class _InteractionBarState extends State<InteractionBar> {
-  late final InteractionBarViewModel _viewModel;
   final GlobalKey _repostButtonKey = GlobalKey();
   final GlobalKey _moreButtonKey = GlobalKey();
+  late final InteractionBloc _interactionBloc;
 
   @override
   void initState() {
     super.initState();
-    _viewModel = InteractionBarViewModel(
-      noteRepository: AppDI.get(),
+    _interactionBloc = InteractionBloc(
+      noteRepository: AppDI.get<NoteRepository>(),
       noteId: widget.noteId,
       currentUserNpub: widget.currentUserNpub,
       note: widget.note,
     );
+    _interactionBloc.add(InteractionInitialized(
+      noteId: widget.noteId,
+      currentUserNpub: widget.currentUserNpub,
+      note: widget.note,
+    ));
   }
 
   @override
   void didUpdateWidget(InteractionBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.noteId != widget.noteId || oldWidget.note != widget.note) {
-      _viewModel.updateNote(widget.note);
+      _interactionBloc.add(InteractionNoteUpdated(widget.note));
     }
   }
 
   @override
   void dispose() {
-    _viewModel.dispose();
+    _interactionBloc.close();
     super.dispose();
   }
 
@@ -72,18 +80,19 @@ class _InteractionBarState extends State<InteractionBar> {
     );
   }
 
-  void _handleRepostTap() {
+  void _handleRepostTap(InteractionLoaded state) {
     HapticFeedback.lightImpact();
-    _showRepostMenu();
+    _showRepostMenu(state);
   }
 
-  void _showRepostMenu() {
-    final RenderBox? renderBox = _repostButtonKey.currentContext?.findRenderObject() as RenderBox?;
+  void _showRepostMenu(InteractionLoaded state) {
+    final RenderBox? renderBox =
+        _repostButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
     final offset = renderBox.localToGlobal(Offset.zero);
     final size = renderBox.size;
-    final hasReposted = _viewModel.state.hasReposted;
+    final hasReposted = state.hasReposted;
 
     final items = <PopupMenuItem<String>>[];
 
@@ -91,6 +100,7 @@ class _InteractionBarState extends State<InteractionBar> {
       items.add(
         PopupMenuItem(
           value: 'undo_repost',
+          enabled: widget.note != null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
@@ -108,12 +118,12 @@ class _InteractionBarState extends State<InteractionBar> {
               ],
             ),
           ),
-          enabled: widget.note != null,
         ),
       );
       items.add(
         PopupMenuItem(
           value: 'repost',
+          enabled: widget.note != null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
@@ -131,13 +141,13 @@ class _InteractionBarState extends State<InteractionBar> {
               ],
             ),
           ),
-          enabled: widget.note != null,
         ),
       );
     } else {
       items.add(
         PopupMenuItem(
           value: 'repost',
+          enabled: widget.note != null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
@@ -155,7 +165,6 @@ class _InteractionBarState extends State<InteractionBar> {
               ],
             ),
           ),
-          enabled: widget.note != null,
         ),
       );
     }
@@ -163,11 +172,13 @@ class _InteractionBarState extends State<InteractionBar> {
     items.add(
       PopupMenuItem(
         value: 'quote',
+        enabled: widget.note != null,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Icon(Icons.format_quote, size: 17, color: context.colors.background),
+              Icon(Icons.format_quote,
+                  size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
                 'Quote',
@@ -180,7 +191,6 @@ class _InteractionBarState extends State<InteractionBar> {
             ],
           ),
         ),
-        enabled: widget.note != null,
       ),
     );
 
@@ -200,29 +210,18 @@ class _InteractionBarState extends State<InteractionBar> {
       HapticFeedback.lightImpact();
       if (value == 'undo_repost') {
         if (widget.note == null) return;
-        _viewModel.deleteRepost().catchError((error) {
-          if (mounted) {
-            AppSnackbar.error(context, 'Failed to undo repost: $error');
-          }
-        });
+        _interactionBloc.add(const InteractionRepostDeleted());
       } else if (value == 'repost') {
         if (widget.note == null) return;
         if (hasReposted) {
-          _viewModel.deleteRepost().then((_) {
+          _interactionBloc.add(const InteractionRepostDeleted());
+          Future.delayed(const Duration(milliseconds: 100), () {
             if (mounted) {
-              _viewModel.repostNote().catchError((error) {
-                if (mounted) {
-                  AppSnackbar.error(context, 'Failed to repost: $error');
-                }
-              });
+              _interactionBloc.add(const InteractionRepostRequested());
             }
           });
         } else {
-          _viewModel.repostNote().catchError((error) {
-            if (mounted) {
-              AppSnackbar.error(context, 'Failed to repost: $error');
-            }
-          });
+          _interactionBloc.add(const InteractionRepostRequested());
         }
       } else if (value == 'quote') {
         _handleQuoteTap();
@@ -232,9 +231,10 @@ class _InteractionBarState extends State<InteractionBar> {
 
   void _handleQuoteTap() {
     if (widget.note == null) return;
-    final noteToQuote = _viewModel.getNoteForActions();
+    final noteToQuote = _interactionBloc.getNoteForActions();
     if (noteToQuote == null) return;
-    final bech32 = encodeBasicBech32(noteToQuote.id, 'note');
+    final noteId = noteToQuote['id'] as String? ?? '';
+    final bech32 = encodeBasicBech32(noteId, 'note');
     final quoteText = 'nostr:$bech32';
 
     ShareNotePage.show(
@@ -246,31 +246,27 @@ class _InteractionBarState extends State<InteractionBar> {
   Future<void> _handleReactionTap() async {
     HapticFeedback.lightImpact();
     if (!mounted) return;
-    _viewModel.reactToNote().catchError((error) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Failed to react: $error');
-      }
-    });
+    _interactionBloc.add(const InteractionReactRequested());
   }
 
-  void _handleZapTap() async {
+  void _handleZapTap(InteractionLoaded state) async {
     HapticFeedback.lightImpact();
-    if (widget.note == null || _viewModel.state.hasZapped || !mounted) return;
+    if (widget.note == null || state.hasZapped || !mounted) return;
 
-    final noteToZap = _viewModel.getNoteForActions();
+    final noteToZap = _interactionBloc.getNoteForActions();
     if (noteToZap == null) return;
 
-    final themeManager = Provider.of<ThemeManager>(context, listen: false);
+    final themeState = context.read<ThemeBloc>().state;
 
-    if (themeManager.oneTapZap) {
+    if (themeState.oneTapZap) {
       await processZapDirectly(
         context,
         noteToZap,
-        themeManager.defaultZapAmount,
+        themeState.defaultZapAmount,
       );
 
       if (!mounted) return;
-      _viewModel.refreshState();
+      _interactionBloc.add(const InteractionStateRefreshed());
     } else {
       final zapResult = await showZapDialog(
         context: context,
@@ -281,16 +277,16 @@ class _InteractionBarState extends State<InteractionBar> {
 
       final zapSuccess = zapResult['success'] as bool;
       if (!zapSuccess) {
-        _viewModel.refreshState();
+        _interactionBloc.add(const InteractionStateRefreshed());
       }
     }
   }
 
-  void _handleZapLongPress() async {
+  void _handleZapLongPress(InteractionLoaded state) async {
     HapticFeedback.mediumImpact();
-    if (widget.note == null || _viewModel.state.hasZapped || !mounted) return;
+    if (widget.note == null || state.hasZapped || !mounted) return;
 
-    final noteToZap = _viewModel.getNoteForActions();
+    final noteToZap = _interactionBloc.getNoteForActions();
     if (noteToZap == null) return;
 
     final zapResult = await showZapDialog(
@@ -302,17 +298,17 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final zapSuccess = zapResult['success'] as bool;
     if (!zapSuccess) {
-      _viewModel.refreshState();
+      _interactionBloc.add(const InteractionStateRefreshed());
     }
   }
 
   void _handleStatsTap() {
     HapticFeedback.lightImpact();
     if (widget.note == null) return;
-    
-    final noteForStats = _viewModel.getNoteForActions();
+
+    final noteForStats = _interactionBloc.getNoteForActions();
     if (noteForStats == null) return;
-    
+
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
       context.push('/home/feed/note-statistics', extra: noteForStats);
@@ -329,9 +325,10 @@ class _InteractionBarState extends State<InteractionBar> {
     HapticFeedback.lightImpact();
     if (widget.note == null || !mounted) return;
 
-    final note = _viewModel.getNoteForActions();
+    final note = _interactionBloc.getNoteForActions();
     if (note == null) return;
-    if (note.rawWs == null || note.rawWs!.isEmpty) {
+    final rawWs = note['rawWs'] as String?;
+    if (rawWs == null || rawWs.isEmpty) {
       if (mounted) {
         AppSnackbar.error(context, 'Event data not available for verification');
       }
@@ -368,100 +365,85 @@ class _InteractionBarState extends State<InteractionBar> {
 
   Future<void> _confirmDelete() async {
     if (!mounted) return;
-    _viewModel.deleteNote().catchError((error) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Failed to delete note: $error');
-      }
-    });
+    _interactionBloc.add(const InteractionNoteDeleted());
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final height = widget.isBigSize ? 36.0 : 32.0;
-    
-    return ChangeNotifierProvider<InteractionBarViewModel>.value(
-      value: _viewModel,
-      child: RepaintBoundary(
-        key: ValueKey('interaction_${widget.noteId}'),
-        child: SizedBox(
-          height: height,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-            _SelectiveButton(
-              viewModel: _viewModel,
-              selector: (state) => state.replyCount,
-              builder: (count, isActive) => _InteractionButton(
-                iconPath: 'assets/reply_button_2.svg',
-                count: count,
-                isActive: false,
-                activeColor: colors.reply,
-                inactiveColor: colors.secondary,
-                onTap: _handleReplyTap,
-                isBigSize: widget.isBigSize,
+
+    return BlocProvider<InteractionBloc>.value(
+      value: _interactionBloc,
+      child: BlocBuilder<InteractionBloc, InteractionState>(
+        builder: (context, state) {
+          final interactionState =
+              state is InteractionLoaded ? state : const InteractionLoaded();
+
+          return RepaintBoundary(
+            key: ValueKey('interaction_${widget.noteId}'),
+            child: SizedBox(
+              height: height,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _InteractionButton(
+                    iconPath: 'assets/reply_button_2.svg',
+                    count: interactionState.replyCount,
+                    isActive: false,
+                    activeColor: colors.reply,
+                    inactiveColor: colors.secondary,
+                    onTap: _handleReplyTap,
+                    isBigSize: widget.isBigSize,
+                  ),
+                  _InteractionButton(
+                    key: _repostButtonKey,
+                    carbonIcon: CarbonIcons.renew,
+                    count: interactionState.repostCount,
+                    isActive: interactionState.hasReposted,
+                    activeColor: colors.repost,
+                    inactiveColor: colors.secondary,
+                    onTap: () => _handleRepostTap(interactionState),
+                    isBigSize: widget.isBigSize,
+                    buttonType: _ButtonType.repost,
+                  ),
+                  _InteractionButton(
+                    iconPath: 'assets/reaction_button.svg',
+                    count: interactionState.reactionCount,
+                    isActive: interactionState.hasReacted,
+                    activeColor: colors.reaction,
+                    inactiveColor: colors.secondary,
+                    onTap: _handleReactionTap,
+                    activeCarbonIcon: CarbonIcons.favorite_filled,
+                    isBigSize: widget.isBigSize,
+                    buttonType: _ButtonType.reaction,
+                  ),
+                  _InteractionButton(
+                    iconPath: 'assets/zap_button.svg',
+                    count: interactionState.zapAmount,
+                    isActive: interactionState.hasZapped,
+                    activeColor: colors.zap,
+                    inactiveColor: colors.secondary,
+                    onTap: () => _handleZapTap(interactionState),
+                    onLongPress: () => _handleZapLongPress(interactionState),
+                    activeCarbonIcon: CarbonIcons.flash_filled,
+                    isBigSize: widget.isBigSize,
+                    buttonType: _ButtonType.zap,
+                  ),
+                  _buildPopupMenu(colors, interactionState),
+                ],
               ),
             ),
-            _SelectiveButton(
-              viewModel: _viewModel,
-              selector: (state) => state.repostCount,
-              activeSelector: (state) => state.hasReposted,
-              builder: (count, isActive) => _InteractionButton(
-                key: _repostButtonKey,
-                carbonIcon: CarbonIcons.renew,
-                count: count,
-                isActive: isActive,
-                activeColor: colors.repost,
-                inactiveColor: colors.secondary,
-                onTap: _handleRepostTap,
-                isBigSize: widget.isBigSize,
-                buttonType: _ButtonType.repost,
-              ),
-            ),
-            _SelectiveButton(
-              viewModel: _viewModel,
-              selector: (state) => state.reactionCount,
-              activeSelector: (state) => state.hasReacted,
-              builder: (count, isActive) => _InteractionButton(
-                iconPath: 'assets/reaction_button.svg',
-                count: count,
-                isActive: isActive,
-                activeColor: colors.reaction,
-                inactiveColor: colors.secondary,
-                onTap: _handleReactionTap,
-                activeCarbonIcon: CarbonIcons.favorite_filled,
-                isBigSize: widget.isBigSize,
-                buttonType: _ButtonType.reaction,
-              ),
-            ),
-            _SelectiveButton(
-              viewModel: _viewModel,
-              selector: (state) => state.zapAmount,
-              activeSelector: (state) => state.hasZapped,
-              builder: (count, isActive) => _InteractionButton(
-                iconPath: 'assets/zap_button.svg',
-                count: count,
-                isActive: isActive,
-                activeColor: colors.zap,
-                inactiveColor: colors.secondary,
-                onTap: _handleZapTap,
-                onLongPress: _handleZapLongPress,
-                activeCarbonIcon: CarbonIcons.flash_filled,
-                isBigSize: widget.isBigSize,
-                buttonType: _ButtonType.zap,
-              ),
-            ),
-              _buildPopupMenu(colors),
-            ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 
-  void _showMoreMenu() {
-    final RenderBox? renderBox = _moreButtonKey.currentContext?.findRenderObject() as RenderBox?;
+  void _showMoreMenu(InteractionLoaded state) {
+    final RenderBox? renderBox =
+        _moreButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
     final offset = renderBox.localToGlobal(Offset.zero);
@@ -474,7 +456,8 @@ class _InteractionBarState extends State<InteractionBar> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Icon(CarbonIcons.checkmark_filled, size: 17, color: context.colors.background),
+              Icon(CarbonIcons.checkmark_filled,
+                  size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
                 'Verify signature',
@@ -494,7 +477,8 @@ class _InteractionBarState extends State<InteractionBar> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Icon(CarbonIcons.chart_bar, size: 17, color: context.colors.background),
+              Icon(CarbonIcons.chart_bar,
+                  size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
                 'Interactions',
@@ -510,7 +494,9 @@ class _InteractionBarState extends State<InteractionBar> {
       ),
     ];
 
-    if (_viewModel.getNoteForActions()?.author == widget.currentUserNpub) {
+    final noteForActions = _interactionBloc.getNoteForActions();
+    final noteAuthor = noteForActions?['author'] as String?;
+    if (noteAuthor == widget.currentUserNpub) {
       items.add(
         PopupMenuItem(
           value: 'delete',
@@ -518,7 +504,8 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(CarbonIcons.delete, size: 17, color: context.colors.background),
+                Icon(CarbonIcons.delete,
+                    size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Delete',
@@ -559,10 +546,10 @@ class _InteractionBarState extends State<InteractionBar> {
     });
   }
 
-  Widget _buildPopupMenu(dynamic colors) {
+  Widget _buildPopupMenu(dynamic colors, InteractionLoaded state) {
     return InkWell(
       key: _moreButtonKey,
-      onTap: _showMoreMenu,
+      onTap: () => _showMoreMenu(state),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -580,50 +567,6 @@ class _InteractionBarState extends State<InteractionBar> {
 }
 
 enum _ButtonType { reply, repost, reaction, zap }
-
-class _SelectiveButton extends StatelessWidget {
-  final InteractionBarViewModel viewModel;
-  final int Function(InteractionState) selector;
-  final bool Function(InteractionState)? activeSelector;
-  final Widget Function(int count, bool isActive) builder;
-
-  const _SelectiveButton({
-    required this.viewModel,
-    required this.selector,
-    this.activeSelector,
-    required this.builder,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Selector<InteractionBarViewModel, _ButtonState>(
-      selector: (context, vm) => _ButtonState(
-        count: selector(vm.state),
-        isActive: activeSelector?.call(vm.state) ?? false,
-      ),
-      builder: (context, buttonState, child) {
-        return builder(buttonState.count, buttonState.isActive);
-      },
-    );
-  }
-}
-
-class _ButtonState {
-  final int count;
-  final bool isActive;
-
-  _ButtonState({required this.count, required this.isActive});
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _ButtonState &&
-          count == other.count &&
-          isActive == other.isActive;
-
-  @override
-  int get hashCode => Object.hash(count, isActive);
-}
 
 class _InteractionButton extends StatelessWidget {
   final String? iconPath;
@@ -683,7 +626,8 @@ class _InteractionButton extends StatelessWidget {
                       style: TextStyle(
                         fontSize: fontSize,
                         color: effectiveColor,
-                        fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight:
+                            isActive ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                   ),

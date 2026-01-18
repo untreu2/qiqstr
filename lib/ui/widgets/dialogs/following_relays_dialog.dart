@@ -110,10 +110,11 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
       final manager = WebSocketManager.instance;
       final pubkeyHexList = followingUsers.map((user) {
         try {
-          final hex = authRepository.npubToHex(user.pubkeyHex);
-          return hex ?? user.pubkeyHex;
+          final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
+          final hex = authRepository.npubToHex(userPubkeyHex);
+          return hex ?? userPubkeyHex;
         } catch (_) {
-          return user.pubkeyHex;
+          return user['pubkeyHex'] as String? ?? '';
         }
       }).where((hex) => hex.isNotEmpty).toList();
 

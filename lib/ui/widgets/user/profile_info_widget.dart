@@ -2,12 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
 import '../media/photo_viewer_widget.dart';
 import '../note/note_content_widget.dart';
@@ -15,11 +13,16 @@ import '../common/snackbar_widget.dart';
 import '../dialogs/unfollow_user_dialog.dart';
 import '../dialogs/mute_user_dialog.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/profile_info_viewmodel.dart';
+import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
+import '../../../presentation/blocs/profile_info/profile_info_event.dart';
+import '../../../presentation/blocs/profile_info/profile_info_state.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/user_repository.dart';
+import '../../../data/services/data_service.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
-  final UserModel user;
+  final Map<String, dynamic> user;
   final Function(String)? onNavigateToProfile;
 
   const ProfileInfoWidget({
@@ -33,44 +36,31 @@ class ProfileInfoWidget extends StatefulWidget {
 }
 
 class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
-  late final ProfileInfoViewModel _viewModel;
-
-  @override
-  void initState() {
-    super.initState();
-    _viewModel = ProfileInfoViewModel(
-      authRepository: AppDI.get(),
-      userRepository: AppDI.get(),
-      dataService: AppDI.get(),
-      userPubkeyHex: widget.user.pubkeyHex,
-    );
-    _viewModel.updateUser(widget.user);
-    _viewModel.addListener(_onViewModelChanged);
-  }
-
-  @override
-  void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
-    super.dispose();
-  }
+  ProfileInfoBloc? _bloc;
 
   @override
   void didUpdateWidget(ProfileInfoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.user.pubkeyHex != widget.user.pubkeyHex) {
-      _viewModel.updateUser(widget.user);
-    } else if (oldWidget.user.name != widget.user.name ||
-        oldWidget.user.profileImage != widget.user.profileImage ||
-        oldWidget.user.about != widget.user.about) {
-      _viewModel.updateUser(widget.user);
+    final oldPubkeyHex = oldWidget.user['pubkeyHex'] as String? ?? '';
+    final oldName = oldWidget.user['name'] as String? ?? '';
+    final oldProfileImage = oldWidget.user['profileImage'] as String? ?? '';
+    final oldAbout = oldWidget.user['about'] as String? ?? '';
+    final newPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+    final newName = widget.user['name'] as String? ?? '';
+    final newProfileImage = widget.user['profileImage'] as String? ?? '';
+    final newAbout = widget.user['about'] as String? ?? '';
+    if (oldPubkeyHex != newPubkeyHex ||
+        oldName != newName ||
+        oldProfileImage != newProfileImage ||
+        oldAbout != newAbout) {
+      _bloc?.add(ProfileInfoUserUpdated(user: widget.user));
     }
   }
 
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
-    }
+  @override
+  void dispose() {
+    _bloc?.close();
+    super.dispose();
   }
 
   Map<String, dynamic> _parseBioContent(String bioText) {
@@ -96,53 +86,79 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     };
   }
 
-  Widget _buildBioContent(UserModel user) {
-    if (user.about.isEmpty) {
+  Widget _buildBioContent(Map<String, dynamic> user) {
+    final about = user['about'] as String? ?? '';
+    if (about.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final parsedContent = _parseBioContent(user.about);
+    final parsedContent = _parseBioContent(about);
+    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
 
     return NoteContentWidget(
       parsedContent: parsedContent,
-      noteId: 'bio_${user.pubkeyHex}',
+      noteId: 'bio_$pubkeyHex',
       onNavigateToMentionProfile: widget.onNavigateToProfile,
       size: NoteContentSize.small,
     );
   }
 
-  Future<void> _toggleFollow() async {
-    if (_viewModel.isFollowing == true) {
-      final userName = _viewModel.user.name.isNotEmpty
-          ? _viewModel.user.name
-          : (_viewModel.user.nip05.isNotEmpty ? _viewModel.user.nip05.split('@').first : 'this user');
+  Future<void> _toggleFollow(ProfileInfoLoaded state, ProfileInfoBloc bloc) async {
+    if (state.isFollowing == true) {
+      final userName = () {
+        final name = state.user['name'] as String? ?? '';
+        if (name.isNotEmpty) {
+          return name;
+        }
+        final nip05 = state.user['nip05'] as String? ?? '';
+        return nip05.isNotEmpty ? nip05.split('@').first : 'this user';
+      }();
 
       showUnfollowUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => _viewModel.toggleFollow(),
+        onConfirm: () {
+          bloc.add(const ProfileInfoFollowToggled());
+        },
       );
       return;
     }
 
-    _viewModel.toggleFollow().catchError((error) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Failed to follow user: $error');
-      }
-    });
+    bloc.add(const ProfileInfoFollowToggled());
   }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<ProfileInfoViewModel>.value(
-      value: _viewModel,
-      child: Consumer<ProfileInfoViewModel>(
-        builder: (context, viewModel, child) {
-          final user = viewModel.user;
+    final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+    if (_bloc == null || _bloc!.isClosed || _bloc!.userPubkeyHex != userPubkeyHex) {
+      _bloc?.close();
+      _bloc = ProfileInfoBloc(
+        authRepository: AppDI.get<AuthRepository>(),
+        userRepository: AppDI.get<UserRepository>(),
+        dataService: AppDI.get<DataService>(),
+        userPubkeyHex: userPubkeyHex,
+      );
+      _bloc!.add(ProfileInfoUserUpdated(user: widget.user));
+      _bloc!.add(ProfileInfoInitialized(userPubkeyHex: userPubkeyHex));
+    }
+
+    return BlocProvider<ProfileInfoBloc>.value(
+      value: _bloc!,
+      child: BlocBuilder<ProfileInfoBloc, ProfileInfoState>(
+        builder: (context, state) {
+          if (state is! ProfileInfoLoaded) {
+            return Container(
+              color: context.colors.background,
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          final user = state.user;
           final screenWidth = MediaQuery.of(context).size.width;
-          final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
-              ? "https://${user.website}"
-              : user.website;
+          final website = user['website'] as String? ?? '';
+          final websiteUrl = website.isNotEmpty && !(website.startsWith("http://") || website.startsWith("https://"))
+              ? "https://$website"
+              : website;
 
           return Container(
             color: context.colors.background,
@@ -156,15 +172,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildAvatarAndActionsRow(context, user),
+                      _buildAvatarAndActionsRow(context, state),
                       const SizedBox(height: 2),
                       _buildNameRow(context, user),
-                      if (user.about.isNotEmpty) ...[
+                      if ((user['about'] as String? ?? '').isNotEmpty) ...[
                         const SizedBox(height: 2),
                         _buildBioContent(user),
                         const SizedBox(height: 4),
                       ],
-                      if (user.website.isNotEmpty) ...[
+                      if (website.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         GestureDetector(
                           onTap: () async {
@@ -175,7 +191,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                           },
                           child: InkWell(
                             child: Text(
-                              user.website,
+                              website,
                               style: const TextStyle(
                                 decoration: TextDecoration.underline,
                                 fontSize: 14,
@@ -185,7 +201,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         ),
                       ],
                       const SizedBox(height: 4),
-                      _buildFollowerInfo(context),
+                      _buildFollowerInfo(context, state),
                     ],
                   ),
                 ),
@@ -199,7 +215,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   static final Map<String, Widget> _avatarCache = <String, Widget>{};
 
-  Widget _getCachedAvatar(String imageUrl, double radius, String cacheKey) {
+  Widget _getCachedAvatar(BuildContext context, String imageUrl, double radius, String cacheKey) {
     return _avatarCache.putIfAbsent(cacheKey, () {
       try {
         Widget avatarWidget;
@@ -260,49 +276,50 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     });
   }
 
-  Widget _buildAvatar(UserModel user) {
-    return Consumer<ProfileInfoViewModel>(
-      builder: (context, viewModel, child) {
-        final currentUser = viewModel.user;
-        final avatarRadius = 40.0;
-        final cacheKey = 'profile_large_${currentUser.pubkeyHex}_${currentUser.profileImage.hashCode}';
+  Widget _buildAvatar(BuildContext context, Map<String, dynamic> user) {
+    final avatarRadius = 40.0;
+    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    final profileImage = user['profileImage'] as String? ?? '';
+    final cacheKey = 'profile_large_${pubkeyHex}_${profileImage.hashCode}';
 
-        Widget avatar = RepaintBoundary(
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: context.colors.background,
-                width: 3,
-              ),
-            ),
-            child: _getCachedAvatar(
-              currentUser.profileImage,
-              avatarRadius,
-              cacheKey,
-            ),
+    Widget avatar = RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: context.colors.background,
+            width: 3,
           ),
-        );
-
-        if (currentUser.profileImage.isNotEmpty) {
-          return GestureDetector(
-            onTap: () {
-              Navigator.of(context, rootNavigator: true).push(
-                MaterialPageRoute(
-                  builder: (_) => PhotoViewerWidget(imageUrls: [currentUser.profileImage]),
-                ),
-              );
-            },
-            child: avatar,
-          );
-        }
-
-        return avatar;
-      },
+        ),
+        child: _getCachedAvatar(
+          context,
+          profileImage,
+          avatarRadius,
+          cacheKey,
+        ),
+      ),
     );
+
+    if (profileImage.isNotEmpty) {
+      return GestureDetector(
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(
+              builder: (_) => PhotoViewerWidget(imageUrls: [profileImage]),
+            ),
+          );
+        },
+        child: avatar,
+      );
+    }
+
+    return avatar;
   }
 
-  Widget _buildNameRow(BuildContext context, UserModel user) {
+  Widget _buildNameRow(BuildContext context, Map<String, dynamic> user) {
+    final name = user['name'] as String? ?? '';
+    final nip05 = user['nip05'] as String? ?? '';
+    final nip05Verified = user['nip05Verified'] as bool? ?? false;
     return Row(
       children: [
         Flexible(
@@ -311,7 +328,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             children: [
               Flexible(
                 child: Text(
-                  user.name.isNotEmpty ? user.name : (user.nip05.isNotEmpty ? user.nip05.split('@').first : 'Anonymous'),
+                  name.isNotEmpty ? name : (nip05.isNotEmpty ? nip05.split('@').first : 'Anonymous'),
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -320,10 +337,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+              if (nip05.isNotEmpty && nip05Verified) ...[
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () => _showVerificationTooltip(context, user.nip05),
+                  onTap: () => _showVerificationTooltip(context, nip05),
                   child: Icon(
                     Icons.verified,
                     size: 22,
@@ -343,23 +360,25 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     AppSnackbar.info(context, 'This user is verified by $domain');
   }
 
-  Widget _buildOptimizedBanner(BuildContext context, UserModel user, double screenWidth) {
+  Widget _buildOptimizedBanner(BuildContext context, Map<String, dynamic> user, double screenWidth) {
     final double bannerHeight = screenWidth * (3.5 / 10);
+    final banner = user['banner'] as String? ?? '';
+    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
 
     return GestureDetector(
       onTap: () {
-        if (user.banner.isNotEmpty) {
+        if (banner.isNotEmpty) {
           Navigator.of(context, rootNavigator: true).push(
             MaterialPageRoute(
-              builder: (_) => PhotoViewerWidget(imageUrls: [user.banner]),
+              builder: (_) => PhotoViewerWidget(imageUrls: [banner]),
             ),
           );
         }
       },
-      child: user.banner.isNotEmpty
+      child: banner.isNotEmpty
           ? CachedNetworkImage(
-              key: ValueKey('banner_image_${user.pubkeyHex}_${user.banner.hashCode}'),
-              imageUrl: user.banner,
+              key: ValueKey('banner_image_${pubkeyHex}_${banner.hashCode}'),
+              imageUrl: banner,
               width: screenWidth,
               height: bannerHeight,
               fit: BoxFit.cover,
@@ -386,40 +405,37 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Widget _buildAvatarAndActionsRow(BuildContext context, UserModel user) {
-    return Consumer<ProfileInfoViewModel>(
-      builder: (context, viewModel, child) {
-        final currentUserNpub = viewModel.currentUserNpub;
-        final authRepository = AppDI.get<AuthRepository>();
-        final currentUserHex = currentUserNpub != null ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub) : null;
-        final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == user.pubkeyHex.toLowerCase();
+  Widget _buildAvatarAndActionsRow(BuildContext context, ProfileInfoLoaded state) {
+    final currentUserNpub = state.currentUserNpub;
+    final authRepository = AppDI.get<AuthRepository>();
+    final currentUserHex = currentUserNpub != null ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub) : null;
+    final userPubkeyHex = state.user['pubkeyHex'] as String? ?? '';
+    final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
 
-        return Row(
-          children: [
-            _buildAvatar(user),
-            const Spacer(),
-            if (currentUserNpub != null && !isOwnProfile)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (viewModel.isMuted != null) ...[
-                      _buildMuteButton(context),
-                      const SizedBox(width: 8),
-                    ],
-                    if (viewModel.isFollowing != null) _buildFollowButton(context),
-                  ],
-                ),
-              )
-            else if (currentUserNpub != null && isOwnProfile)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: _buildEditProfileButton(context),
-              ),
-          ],
-        );
-      },
+    return Row(
+      children: [
+        _buildAvatar(context, state.user),
+        const Spacer(),
+        if (currentUserNpub != null && !isOwnProfile)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (state.isMuted != null) ...[
+                  _buildMuteButton(context, state),
+                  const SizedBox(width: 8),
+                ],
+                if (state.isFollowing != null) _buildFollowButton(context, state),
+              ],
+            ),
+          )
+        else if (currentUserNpub != null && isOwnProfile)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: _buildEditProfileButton(context),
+          ),
+      ],
     );
   }
 
@@ -447,38 +463,40 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Future<void> _toggleMute() async {
-    if (_viewModel.isMuted == true) {
-      _viewModel.toggleMute().catchError((error) {
-        if (mounted) {
-          AppSnackbar.error(context, 'Failed to unmute user: $error');
-        }
-      });
+  Future<void> _toggleMute(ProfileInfoLoaded state, ProfileInfoBloc bloc) async {
+    if (state.isMuted == true) {
+      bloc.add(const ProfileInfoMuteToggled());
     } else {
-      final userName = _viewModel.user.name.isNotEmpty
-          ? _viewModel.user.name
-          : (_viewModel.user.nip05.isNotEmpty ? _viewModel.user.nip05.split('@').first : 'this user');
+      final userName = () {
+        final name = state.user['name'] as String? ?? '';
+        if (name.isNotEmpty) {
+          return name;
+        }
+        final nip05 = state.user['nip05'] as String? ?? '';
+        return nip05.isNotEmpty ? nip05.split('@').first : 'this user';
+      }();
 
       showMuteUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => _viewModel.toggleMute(),
+        onConfirm: () {
+          bloc.add(const ProfileInfoMuteToggled());
+        },
       );
     }
   }
 
-  Widget _buildMuteButton(BuildContext context) {
-    return Consumer<ProfileInfoViewModel>(
-      builder: (context, viewModel, child) {
-        final isMuted = viewModel.isMuted ?? false;
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              debugPrint('Mute button tapped');
-              _toggleMute();
-            },
+  Widget _buildMuteButton(BuildContext context, ProfileInfoLoaded state) {
+    final isMuted = state.isMuted ?? false;
+    final bloc = context.read<ProfileInfoBloc>();
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          debugPrint('Mute button tapped');
+          _toggleMute(state, bloc);
+        },
             borderRadius: BorderRadius.circular(40),
             child: Ink(
               padding: isMuted ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8) : const EdgeInsets.all(8),
@@ -514,22 +532,19 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ),
           ),
         );
-      },
-    );
   }
 
-  Widget _buildFollowButton(BuildContext context) {
-    return Consumer<ProfileInfoViewModel>(
-      builder: (context, viewModel, child) {
-        final isFollowing = viewModel.isFollowing ?? false;
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              debugPrint('Follow button tapped');
-              _toggleFollow();
-            },
+  Widget _buildFollowButton(BuildContext context, ProfileInfoLoaded state) {
+    final isFollowing = state.isFollowing ?? false;
+    final bloc = context.read<ProfileInfoBloc>();
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          debugPrint('Follow button tapped');
+          _toggleFollow(state, bloc);
+        },
             borderRadius: BorderRadius.circular(40),
             child: Ink(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -559,8 +574,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ),
           ),
         );
-      },
-    );
   }
 
   String _formatCount(int count) {
@@ -574,9 +587,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return count.toString();
   }
 
-  Widget _buildFollowerInfo(BuildContext context) {
-    final viewModel = Provider.of<ProfileInfoViewModel>(context);
-    if (viewModel.isLoadingCounts) {
+  Widget _buildFollowerInfo(BuildContext context, ProfileInfoLoaded state) {
+    if (state.isLoadingCounts) {
       return const SizedBox(
         height: 16,
         width: 16,
@@ -584,10 +596,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       );
     }
 
-    final currentUserNpub = viewModel.currentUserNpub;
+    final currentUserNpub = state.currentUserNpub;
     final authRepository = AppDI.get<AuthRepository>();
     final currentUserHex = currentUserNpub != null ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub) : null;
-    final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == viewModel.user.pubkeyHex.toLowerCase();
+    final userPubkeyHex = state.user['pubkeyHex'] as String? ?? '';
+    final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
 
     return Row(
       children: [
@@ -595,13 +608,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           onTap: () {
             final currentLocation = GoRouterState.of(context).matchedLocation;
             if (currentLocation.startsWith('/home/feed')) {
-              context.push('/home/feed/following', extra: viewModel.user);
+              context.push('/home/feed/following', extra: state.user);
             } else if (currentLocation.startsWith('/home/notifications')) {
-              context.push('/home/notifications/following', extra: viewModel.user);
+              context.push('/home/notifications/following', extra: state.user);
             } else if (currentLocation.startsWith('/home/dm')) {
-              context.push('/home/dm/following', extra: viewModel.user);
+              context.push('/home/dm/following', extra: state.user);
             } else {
-              context.push('/following', extra: viewModel.user);
+              context.push('/following', extra: state.user);
             }
           },
           behavior: HitTestBehavior.opaque,
@@ -609,7 +622,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _formatCount(viewModel.followingCount),
+                _formatCount(state.followingCount),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -637,7 +650,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              _formatCount(viewModel.followerCount),
+              _formatCount(state.followerCount),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -653,7 +666,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ),
           ],
         ),
-        if (viewModel.doesUserFollowMe == true && !isOwnProfile) ...[
+        if (state.doesUserFollowMe == true && !isOwnProfile) ...[
           Text(
             ' • ',
             style: TextStyle(

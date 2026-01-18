@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:provider/provider.dart';
 import '../../theme/theme_manager.dart';
-import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
-import '../../../presentation/viewmodels/user_tile_viewmodel.dart';
-import '../../widgets/common/snackbar_widget.dart';
+import '../../../presentation/blocs/user_tile/user_tile_bloc.dart';
+import '../../../presentation/blocs/user_tile/user_tile_event.dart';
+import '../../../presentation/blocs/user_tile/user_tile_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
 class UserTile extends StatefulWidget {
-  final UserModel user;
+  final Map<String, dynamic> user;
   final bool showFollowButton;
   final bool isSelected;
   final bool showSelectionIndicator;
@@ -34,192 +34,186 @@ class UserTile extends StatefulWidget {
 }
 
 class _UserTileState extends State<UserTile> {
-  late final UserTileViewModel _viewModel;
-
-  @override
-  void initState() {
-    super.initState();
-    _viewModel = UserTileViewModel(
-      userRepository: AppDI.get(),
-      authRepository: AppDI.get(),
-      user: widget.user,
-    );
-    _viewModel.addListener(_onViewModelChanged);
-  }
-
-  @override
-  void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
-    super.dispose();
-  }
-
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _toggleFollow() async {
-    if (_viewModel.isFollowing == true) {
-      final userName = widget.user.name.isNotEmpty
-          ? widget.user.name
-          : (widget.user.nip05.isNotEmpty ? widget.user.nip05.split('@').first : 'this user');
+  Future<void> _toggleFollow(UserTileBloc bloc, UserTileLoaded state) async {
+    if (state.isFollowing == true) {
+      final userName = () {
+        final name = widget.user['name'] as String? ?? '';
+        if (name.isNotEmpty) {
+          return name;
+        }
+        final nip05 = widget.user['nip05'] as String? ?? '';
+        return nip05.isNotEmpty ? nip05.split('@').first : 'this user';
+      }();
 
       showUnfollowUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => _viewModel.toggleFollow(),
+        onConfirm: () {
+          bloc.add(const UserTileFollowToggled());
+        },
       );
       return;
     }
 
-    _viewModel.toggleFollow().catchError((error) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Failed to follow user: $error');
-      }
-    });
+    bloc.add(const UserTileFollowToggled());
   }
 
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<UserTileViewModel>.value(
-      value: _viewModel,
-      child: Consumer<UserTileViewModel>(
-        builder: (context, viewModel, child) {
+    return BlocProvider<UserTileBloc>(
+      create: (context) {
+        final userNpub = widget.user['npub'] as String? ?? '';
+        final bloc = UserTileBloc(
+          userRepository: AppDI.get(),
+          authRepository: AppDI.get(),
+          userNpub: userNpub,
+        );
+        bloc.add(UserTileInitialized(userNpub: userNpub));
+        return bloc;
+      },
+      child: BlocBuilder<UserTileBloc, UserTileState>(
+        builder: (context, state) {
           return FutureBuilder(
             future: AppDI.get<AuthRepository>().getCurrentUserNpub(),
             builder: (context, snapshot) {
               final currentUserNpub = snapshot.data?.fold((data) => data, (error) => null);
-              final isCurrentUser = currentUserNpub == widget.user.pubkeyHex || currentUserNpub == widget.user.npub;
+              final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+              final userNpub = widget.user['npub'] as String? ?? '';
+              final isCurrentUser = currentUserNpub == userPubkeyHex || currentUserNpub == userNpub;
+              final loadedState = state is UserTileLoaded ? state : const UserTileLoaded();
+              final userProfileImage = widget.user['profileImage'] as String? ?? '';
+              final userName = widget.user['name'] as String? ?? '';
+              final userNip05 = widget.user['nip05'] as String? ?? '';
+              final userNip05Verified = widget.user['nip05Verified'] as bool? ?? false;
 
-        return RepaintBoundary(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: GestureDetector(
-              onTap: widget.onTap ?? () {
-                context.push('/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                decoration: BoxDecoration(
-                  color: context.colors.overlayLight,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: Row(
-                  children: [
-                    _UserAvatar(
-                      imageUrl: widget.user.profileImage,
-                      colors: context.colors,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
+              return RepaintBoundary(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: GestureDetector(
+                    onTap: widget.onTap ?? () {
+                      context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: context.colors.overlayLight,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
                       child: Row(
-                        mainAxisAlignment: widget.trailing != null ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
                         children: [
-                          Flexible(
+                          _UserAvatar(
+                            imageUrl: userProfileImage,
+                            colors: context.colors,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: widget.trailing != null ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
                               children: [
                                 Flexible(
-                                  child: Text(
-                                    widget.user.name.length > 25 ? '${widget.user.name.substring(0, 25)}...' : widget.user.name,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: context.colors.textPrimary,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: context.colors.textPrimary,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (userNip05.isNotEmpty && userNip05Verified) ...[
+                                        const SizedBox(width: 3),
+                                        Icon(
+                                          Icons.verified,
+                                          size: 14,
+                                          color: context.colors.accent,
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
-                                if (widget.user.nip05.isNotEmpty && widget.user.nip05Verified) ...[
-                                  const SizedBox(width: 3),
-                                  Icon(
-                                    Icons.verified,
-                                    size: 14,
-                                    color: context.colors.accent,
+                                if (widget.trailing != null) ...[
+                                  Flexible(
+                                    child: widget.trailing!,
                                   ),
                                 ],
                               ],
                             ),
                           ),
-                          if (widget.trailing != null) ...[
-                            Flexible(
-                              child: widget.trailing!,
+                          if (widget.showSelectionIndicator) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: widget.isSelected ? context.colors.accent : Colors.transparent,
+                                border: Border.all(
+                                  color: widget.isSelected ? context.colors.accent : context.colors.border,
+                                  width: 2,
+                                ),
+                              ),
+                              child: widget.isSelected
+                                  ? Icon(
+                                      Icons.check,
+                                      color: context.colors.background,
+                                      size: 14,
+                                    )
+                                  : null,
+                            ),
+                          ],
+                          if (widget.showFollowButton && !isCurrentUser && loadedState.isFollowing != null && !widget.showSelectionIndicator) ...[
+                            const SizedBox(width: 10),
+                            Builder(
+                              builder: (context) {
+                                final followBgColor = context.colors.textPrimary;
+                                final followIconColor = context.colors.background;
+                                final unfollowBgColor = context.colors.background;
+                                final unfollowIconColor = context.colors.textPrimary;
+                                final bloc = context.read<UserTileBloc>();
+
+                                return GestureDetector(
+                                  onTap: loadedState.isLoading ? null : () => _toggleFollow(bloc, loadedState),
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: loadedState.isFollowing == true ? unfollowBgColor : followBgColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: loadedState.isLoading
+                                        ? SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor: AlwaysStoppedAnimation<Color>(
+                                                loadedState.isFollowing == true ? unfollowIconColor : followIconColor,
+                                              ),
+                                            ),
+                                          )
+                                        : Icon(
+                                            loadedState.isFollowing == true ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                                            size: 18,
+                                            color: loadedState.isFollowing == true ? unfollowIconColor : followIconColor,
+                                          ),
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ],
                       ),
                     ),
-                    if (widget.showSelectionIndicator) ...[
-                      const SizedBox(width: 10),
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: widget.isSelected ? context.colors.accent : Colors.transparent,
-                          border: Border.all(
-                            color: widget.isSelected ? context.colors.accent : context.colors.border,
-                            width: 2,
-                          ),
-                        ),
-                        child: widget.isSelected
-                            ? Icon(
-                                Icons.check,
-                                color: context.colors.background,
-                                size: 14,
-                              )
-                            : null,
-                      ),
-                    ],
-                    if (widget.showFollowButton && !isCurrentUser && viewModel.isFollowing != null && !widget.showSelectionIndicator) ...[
-                      const SizedBox(width: 10),
-                      Builder(
-                        builder: (context) {
-                          final followBgColor = context.colors.textPrimary;
-                          final followIconColor = context.colors.background;
-                          final unfollowBgColor = context.colors.background;
-                          final unfollowIconColor = context.colors.textPrimary;
-
-                          return GestureDetector(
-                            onTap: viewModel.isLoading ? null : _toggleFollow,
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: viewModel.isFollowing == true ? unfollowBgColor : followBgColor,
-                                shape: BoxShape.circle,
-                              ),
-                              child: viewModel.isLoading
-                                  ? SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                          viewModel.isFollowing == true ? unfollowIconColor : followIconColor,
-                                        ),
-                                      ),
-                                    )
-                                  : Icon(
-                                      viewModel.isFollowing == true ? CarbonIcons.user_admin : CarbonIcons.user_follow,
-                                      size: 18,
-                                      color: viewModel.isFollowing == true ? unfollowIconColor : followIconColor,
-                                    ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
-        );
+              );
             },
           );
         },

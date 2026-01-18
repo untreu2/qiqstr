@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
-import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/following_page_viewmodel.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../presentation/blocs/following/following_bloc.dart';
+import '../../../presentation/blocs/following/following_event.dart';
+import '../../../presentation/blocs/following/following_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 
 class FollowingPage extends StatefulWidget {
-  final UserModel user;
+  final String pubkeyHex;
 
   const FollowingPage({
     super.key,
-    required this.user,
+    required this.pubkeyHex,
   });
 
   @override
@@ -50,13 +52,16 @@ class _FollowingPageState extends State<FollowingPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<FollowingPageViewModel>(
-      create: (_) => FollowingPageViewModel(
-        userRepository: AppDI.get(),
-        userNpub: widget.user.npub,
-      ),
-      child: Consumer<FollowingPageViewModel>(
-        builder: (context, viewModel, child) {
+    return BlocProvider<FollowingBloc>(
+      create: (context) {
+        final bloc = AppDI.get<FollowingBloc>();
+        final authService = AppDI.get<AuthService>();
+        final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
+        bloc.add(FollowingLoadRequested(userNpub: npub));
+        return bloc;
+      },
+      child: BlocBuilder<FollowingBloc, FollowingState>(
+        builder: (context, state) {
           return Scaffold(
             backgroundColor: context.colors.background,
             body: Stack(
@@ -68,24 +73,28 @@ class _FollowingPageState extends State<FollowingPage> {
                       child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
                     ),
                     _buildHeader(context),
-                    if (viewModel.isLoading)
+                    if (state is FollowingLoading)
                       const SliverFillRemaining(
                         child: Center(child: CircularProgressIndicator()),
                       )
-                    else if (viewModel.error != null)
+                    else if (state is FollowingError)
                       SliverFillRemaining(
                         child: Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'Error: ${viewModel.error}',
+                                'Error: ${state.message}',
                                 style: TextStyle(color: context.colors.textSecondary),
                               ),
                               const SizedBox(height: 16),
                               PrimaryButton(
                                 label: 'Retry',
-                                onPressed: () => viewModel.refresh(),
+                                onPressed: () {
+                                  final authService = AppDI.get<AuthService>();
+                                  final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
+                                  context.read<FollowingBloc>().add(FollowingLoadRequested(userNpub: npub));
+                                },
                                 backgroundColor: context.colors.accent,
                                 foregroundColor: context.colors.background,
                               ),
@@ -93,25 +102,30 @@ class _FollowingPageState extends State<FollowingPage> {
                           ),
                         ),
                       )
-                    else if (viewModel.followingUsers.isEmpty)
-                      SliverFillRemaining(
-                        child: Center(
-                          child: Text(
-                            'No following users',
-                            style: TextStyle(color: context.colors.textSecondary),
-                          ),
-                        ),
-                      )
+                    else if (state is FollowingLoaded)
+                      state.followingUsers.isEmpty
+                          ? SliverFillRemaining(
+                              child: Center(
+                                child: Text(
+                                  'No following users',
+                                  style: TextStyle(color: context.colors.textSecondary),
+                                ),
+                              ),
+                            )
+                          : SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final user = state.followingUsers[index];
+                                  final userNpub = user['npub'] as String? ?? '';
+                                  final loadedUser = state.loadedUsers[userNpub] ?? user;
+                                  return _buildUserTile(context, state, loadedUser, index);
+                                },
+                                childCount: state.followingUsers.length,
+                              ),
+                            )
                     else
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final user = viewModel.followingUsers[index];
-                            final loadedUser = viewModel.loadedUsers[user.npub] ?? user;
-                            return _buildUserTile(context, viewModel, loadedUser, index);
-                          },
-                          childCount: viewModel.followingUsers.length,
-                        ),
+                      const SliverFillRemaining(
+                        child: Center(child: CircularProgressIndicator()),
                       ),
                   ],
                 ),
@@ -152,8 +166,8 @@ class _FollowingPageState extends State<FollowingPage> {
     );
   }
 
-  static Widget _buildUserTile(BuildContext context, FollowingPageViewModel viewModel, UserModel user, int index) {
-    final loadedUser = viewModel.loadedUsers[user.npub] ?? user;
+  static Widget _buildUserTile(BuildContext context, FollowingLoaded state, dynamic user, int index) {
+    final loadedUser = state.loadedUsers[user.npub] ?? user;
 
     final displayName = loadedUser.name.isNotEmpty
         ? (loadedUser.name.length > 25 ? '${loadedUser.name.substring(0, 25)}...' : loadedUser.name)
@@ -220,7 +234,7 @@ class _FollowingPageState extends State<FollowingPage> {
             ),
           ),
         ),
-        if (index < viewModel.followingUsers.length - 1) const _UserSeparator(),
+        if (index < state.followingUsers.length - 1) const _UserSeparator(),
       ],
     );
   }

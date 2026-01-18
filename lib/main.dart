@@ -2,18 +2,21 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider;
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'ui/theme/theme_manager.dart' as theme;
+import 'presentation/blocs/theme/theme_bloc.dart';
+import 'presentation/blocs/theme/theme_event.dart';
+import 'presentation/blocs/theme/theme_state.dart';
+
 import 'data/services/logging_service.dart';
 import 'core/di/app_di.dart';
 import 'data/services/memory_trimming_service.dart';
 import 'data/services/lifecycle_manager.dart';
 import 'data/services/event_parser_isolate.dart';
-import 'presentation/viewmodels/wallet_viewmodel.dart';
 import 'core/router/app_router.dart';
+import 'core/bloc/observers/app_bloc_observer.dart';
+import 'package:bloc/bloc.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -54,24 +57,20 @@ void main() {
 
     await AppDI.initialize();
 
+    Bloc.observer = AppBlocObserver();
+
     unawaited(EventParserIsolate.instance.initialize());
     MemoryTrimmingService().startPeriodicTrimming();
 
     final lifecycleManager = LifecycleManager();
     lifecycleManager.initialize();
 
-    AppDI.get<WalletViewModel>();
-
     FlutterNativeSplash.remove();
 
     runApp(
-      provider.MultiProvider(
-        providers: [
-          provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
-        ],
-        child: ProviderScope(
-          child: const QiqstrApp(),
-        ),
+      BlocProvider<ThemeBloc>(
+        create: (context) => ThemeBloc()..add(const ThemeInitialized()),
+        child: const QiqstrApp(),
       ),
     );
   }, (error, stack) {
@@ -86,15 +85,15 @@ void unawaited(Future<void> future) {
   future.catchError((error) {});
 }
 
-class QiqstrApp extends ConsumerWidget {
+class QiqstrApp extends StatelessWidget {
   const QiqstrApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return provider.Consumer<theme.ThemeManager>(
-      builder: (context, themeManager, child) {
-        final colors = themeManager.colors;
-        final isDark = themeManager.isDarkMode;
+  Widget build(BuildContext context) {
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
+        final colors = themeState.colors;
+        final isDark = themeState.isDarkMode;
 
         return MaterialApp.router(
           title: 'Qiqstr',
@@ -113,7 +112,8 @@ class QiqstrApp extends ConsumerWidget {
                   bodyMedium: TextStyle(height: 2.1, color: colors.textPrimary),
                   bodySmall: TextStyle(height: 2.1, color: colors.textPrimary),
                   titleLarge: TextStyle(height: 2.1, color: colors.textPrimary),
-                  titleMedium: TextStyle(height: 2.1, color: colors.textPrimary),
+                  titleMedium:
+                      TextStyle(height: 2.1, color: colors.textPrimary),
                   titleSmall: TextStyle(height: 2.1, color: colors.textPrimary),
                 ),
             colorScheme: isDark

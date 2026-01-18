@@ -9,12 +9,10 @@ import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
 class NostrService {
-  static final Map<String, Nip01Event> _eventCache = {};
   static final Map<String, Filter> _filterCache = {};
   static final Map<String, String> _requestCache = {};
   static const int _maxCacheSize = 1000;
 
-  static int _eventsCreated = 0;
   static int _filtersCreated = 0;
   static int _requestsCreated = 0;
   static int _cacheHits = 0;
@@ -28,16 +26,6 @@ class NostrService {
     required String privateKey,
     List<List<String>>? tags,
   }) {
-    final cacheKey = _generateEventCacheKey(1, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -46,8 +34,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -59,16 +45,6 @@ class NostrService {
     final tags = [
       ['e', targetEventId]
     ];
-    final cacheKey = _generateEventCacheKey(7, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -77,8 +53,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -87,16 +61,6 @@ class NostrService {
     required String privateKey,
     required List<List<String>> tags,
   }) {
-    final cacheKey = _generateEventCacheKey(1, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -105,8 +69,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -120,17 +82,6 @@ class NostrService {
       ['e', noteId],
       ['p', noteAuthor],
     ];
-
-    final cacheKey = _generateEventCacheKey(6, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -139,8 +90,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -151,17 +100,6 @@ class NostrService {
   }) {
     final tags = eventIds.map((id) => ['e', id]).toList();
     final content = reason ?? '';
-
-    final cacheKey = _generateEventCacheKey(5, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -170,8 +108,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -180,16 +116,6 @@ class NostrService {
     required String privateKey,
   }) {
     final content = jsonEncode(profileContent);
-    final cacheKey = _generateEventCacheKey(0, content, privateKey, []);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -198,8 +124,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -208,16 +132,6 @@ class NostrService {
     required String privateKey,
   }) {
     final tags = followingPubkeys.map((pubkey) => ['p', pubkey, '']).toList();
-    final cacheKey = _generateEventCacheKey(3, "", privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -226,8 +140,6 @@ class NostrService {
       content: "",
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -236,16 +148,6 @@ class NostrService {
     required String privateKey,
   }) {
     final tags = mutedPubkeys.map((pubkey) => ['p', pubkey]).toList();
-    final cacheKey = _generateEventCacheKey(10000, "", privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -254,8 +156,6 @@ class NostrService {
       content: "",
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -264,16 +164,6 @@ class NostrService {
     required String content,
     required String privateKey,
   }) {
-    final cacheKey = _generateEventCacheKey(9734, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -282,8 +172,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -311,16 +199,6 @@ class NostrService {
       tags.addAll(additionalTags);
     }
 
-    final cacheKey = _generateEventCacheKey(1, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -329,8 +207,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -345,17 +221,6 @@ class NostrService {
       ['x', sha256Hash],
       ['expiration', expiration.toString()],
     ];
-
-    final cacheKey = _generateEventCacheKey(24242, content, privateKey, tags);
-
-    if (_eventCache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _eventCache[cacheKey]!;
-    }
-
-    _cacheMisses++;
-    _eventsCreated++;
-
     final publicKey = Bip340.getPublicKey(privateKey);
     final event = Nip01Event(
       pubKey: publicKey,
@@ -364,8 +229,6 @@ class NostrService {
       content: content,
     );
     event.sig = Bip340.sign(event.id, privateKey);
-
-    _addToEventCache(cacheKey, event);
     return event;
   }
 
@@ -547,7 +410,8 @@ class NostrService {
     return const Uuid().v4().replaceAll('-', '');
   }
 
-  static String serializeEvent(Nip01Event event) => jsonEncode(['EVENT', event.toJson()]);
+  static String serializeEvent(Nip01Event event) =>
+      jsonEncode(['EVENT', event.toJson()]);
 
   static String serializeRequest(String request) => request;
 
@@ -677,23 +541,9 @@ class NostrService {
     return results;
   }
 
-  static String _generateEventCacheKey(int kind, String content, String privateKey, List<List<String>>? tags) {
-    final tagsStr = tags?.map((tag) => tag.join(':')).join('|') ?? '';
-
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final publicKeyHash = publicKey.hashCode;
-    return 'event_${kind}_${content.hashCode}_${publicKeyHash}_${tagsStr.hashCode}';
-  }
-
-  static String _generateFilterCacheKey(String type, Map<String, dynamic> params) {
+  static String _generateFilterCacheKey(
+      String type, Map<String, dynamic> params) {
     return 'filter_${type}_${params.hashCode}';
-  }
-
-  static void _addToEventCache(String key, Nip01Event event) {
-    if (_eventCache.length >= _maxCacheSize) {
-      _evictOldestCacheEntry(_eventCache);
-    }
-    _eventCache[key] = event;
   }
 
   static void _addToFilterCache(String key, Filter filter) {
@@ -718,25 +568,21 @@ class NostrService {
   }
 
   static Map<String, dynamic> getNostrStats() {
-    final hitRate = _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) : '0.0';
+    final hitRate = _cacheHits + _cacheMisses > 0
+        ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1)
+        : '0.0';
 
     return {
-      'eventsCreated': _eventsCreated,
       'filtersCreated': _filtersCreated,
       'requestsCreated': _requestsCreated,
       'cacheHits': _cacheHits,
       'cacheMisses': _cacheMisses,
       'hitRate': '$hitRate%',
-      'eventCacheSize': _eventCache.length,
       'filterCacheSize': _filterCache.length,
       'requestCacheSize': _requestCache.length,
       'batchQueueSize': _batchQueue.length,
       'isBatchProcessing': _isBatchProcessing,
     };
-  }
-
-  static void clearEventCache() {
-    _eventCache.clear();
   }
 
   static void clearFilterCache() {
@@ -748,13 +594,13 @@ class NostrService {
   }
 
   static void clearAllCaches() {
-    clearEventCache();
     clearFilterCache();
     clearRequestCache();
     _batchQueue.clear();
   }
 
-  static List<Nip01Event> createMultipleNoteEvents(List<Map<String, dynamic>> eventData) {
+  static List<Nip01Event> createMultipleNoteEvents(
+      List<Map<String, dynamic>> eventData) {
     return eventData
         .map((data) => createNoteEvent(
               content: data['content'],
@@ -764,7 +610,8 @@ class NostrService {
         .toList();
   }
 
-  static List<Filter> createMultipleFilters(List<Map<String, dynamic>> filterData) {
+  static List<Filter> createMultipleFilters(
+      List<Map<String, dynamic>> filterData) {
     return filterData
         .map((data) => createNotesFilter(
               authors: data['authors'],
@@ -823,7 +670,8 @@ class NostrService {
     );
 
     if (uploadResults.isEmpty || !uploadResults.first.success) {
-      throw Exception('Upload failed: ${uploadResults.first.error ?? 'Unknown error'}');
+      throw Exception(
+          'Upload failed: ${uploadResults.first.error ?? 'Unknown error'}');
     }
 
     final blobDescriptor = uploadResults.first.descriptor;
@@ -831,6 +679,8 @@ class NostrService {
       throw Exception('Upload succeeded but no descriptor returned.');
     }
 
-    return blobDescriptor.url.isNotEmpty ? blobDescriptor.url : blobDescriptor.sha256;
+    return blobDescriptor.url.isNotEmpty
+        ? blobDescriptor.url
+        : blobDescriptor.sha256;
   }
 }

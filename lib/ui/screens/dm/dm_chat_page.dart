@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
-import '../../../core/ui/ui_state_builder.dart';
-import '../../../presentation/providers/viewmodel_provider.dart';
-import '../../../presentation/viewmodels/dm_viewmodel.dart';
-import '../../../models/dm_message_model.dart';
+import '../../../presentation/blocs/dm/dm_bloc.dart';
+import '../../../presentation/blocs/dm/dm_event.dart';
+import '../../../presentation/blocs/dm/dm_state.dart';
+import '../../../core/di/app_di.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../../core/di/app_di.dart';
-import '../../../models/user_model.dart';
 
 class DmChatPage extends StatefulWidget {
   final String pubkeyHex;
@@ -28,7 +26,7 @@ class DmChatPage extends StatefulWidget {
 }
 
 class _DmChatPageState extends State<DmChatPage> {
-  final Map<String, UserModel?> _userCache = {};
+  final Map<String, Map<String, dynamic>?> _userCache = {};
   final Map<String, TextEditingController> _textControllers = {};
   bool _isInitialized = false;
 
@@ -43,29 +41,30 @@ class _DmChatPageState extends State<DmChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ViewModelProvider.dm(
-      builder: (context, viewModel) {
+    return BlocProvider<DmBloc>(
+      create: (context) {
+        final bloc = AppDI.get<DmBloc>();
         if (!_isInitialized) {
           _isInitialized = true;
           Future.microtask(() {
             if (mounted) {
-              viewModel.loadMessages(widget.pubkeyHex);
+              bloc.add(DmConversationOpened(widget.pubkeyHex));
             }
           });
         }
-
-        return Consumer<DmViewModel>(
-          builder: (context, vm, child) {
-            return _buildChatView(context, vm, widget.pubkeyHex);
-          },
-        );
+        return bloc;
       },
+      child: BlocBuilder<DmBloc, DmState>(
+        builder: (context, state) {
+          return _buildChatView(context, state, widget.pubkeyHex);
+        },
+      ),
     );
   }
 
   Widget _buildChatView(
     BuildContext context,
-    DmViewModel viewModel,
+    DmState state,
     String otherUserPubkeyHex,
   ) {
     final userRepository = AppDI.get<UserRepository>();
@@ -77,7 +76,7 @@ class _DmChatPageState extends State<DmChatPage> {
       userRepository.getUserProfile(otherUserNpub).then((result) {
         if (mounted) {
           setState(() {
-            _userCache[otherUserPubkeyHex] = result.data;
+            _userCache[otherUserPubkeyHex] = result.fold((u) => u, (_) => null);
           });
         }
       });
@@ -89,48 +88,50 @@ class _DmChatPageState extends State<DmChatPage> {
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          UIStateBuilder<List<DmMessageModel>>(
-            state: viewModel.messagesState,
-            builder: (context, messages) {
-              if (messages.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No messages yet',
-                    style: TextStyle(color: context.colors.textSecondary),
+          switch (state) {
+            DmChatLoaded(:final messages, :final pubkeyHex) when pubkeyHex == otherUserPubkeyHex => messages.isEmpty
+                ? Center(
+                    child: Text(
+                      'No messages yet',
+                      style: TextStyle(color: context.colors.textSecondary),
+                    ),
+                  )
+                : Builder(
+                    builder: (context) {
+                      final bottomPadding = MediaQuery.of(context).padding.bottom;
+                      return ListView.builder(
+                        padding: EdgeInsets.only(
+                          top: topPadding + 60,
+                          bottom: 80 + bottomPadding,
+                          left: 16,
+                          right: 16,
+                        ),
+                        reverse: true,
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final message = messages[messages.length - 1 - index];
+                          return _buildMessageBubble(context, message);
+                        },
+                      );
+                    },
                   ),
-                );
-              }
-              final bottomPadding = MediaQuery.of(context).padding.bottom;
-              return ListView.builder(
-                padding: EdgeInsets.only(
-                  top: topPadding + 60,
-                  bottom: 80 + bottomPadding,
-                  left: 16,
-                  right: 16,
-                ),
-                reverse: true,
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  final message = messages[messages.length - 1 - index];
-                  return _buildMessageBubble(context, message);
-                },
-              );
-            },
-            loading: () => const Center(
-              child: CircularProgressIndicator(),
-            ),
-            error: (error) => Center(
-              child: Text(
-                'Error loading messages',
-                style: TextStyle(color: context.colors.textSecondary),
+            DmLoading() => const Center(
+                child: CircularProgressIndicator(),
               ),
-            ),
-          ),
+            DmError(:final message) => Center(
+                child: Text(
+                  'Error loading messages: $message',
+                  style: TextStyle(color: context.colors.textSecondary),
+                ),
+              ),
+            _ => const Center(
+                child: CircularProgressIndicator(),
+              ),
+          },
           TopActionBarWidget(
             topOffset: 6,
             onBackPressed: () {
               context.pop();
-              viewModel.clearCurrentChat();
             },
             centerBubble: Row(
               mainAxisSize: MainAxisSize.min,
@@ -141,14 +142,16 @@ class _DmChatPageState extends State<DmChatPage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: context.colors.avatarPlaceholder,
-                    image: otherUser?.profileImage != null && otherUser!.profileImage.isNotEmpty
-                        ? DecorationImage(
-                            image: CachedNetworkImageProvider(otherUser.profileImage),
-                            fit: BoxFit.cover,
-                          )
+                    image: otherUser != null
+                        ? (otherUser['profileImage'] as String? ?? '').isNotEmpty
+                            ? DecorationImage(
+                                image: CachedNetworkImageProvider(otherUser['profileImage'] as String),
+                                fit: BoxFit.cover,
+                              )
+                            : null
                         : null,
                   ),
-                  child: otherUser?.profileImage == null || otherUser!.profileImage.isEmpty
+                  child: otherUser == null || (otherUser['profileImage'] as String? ?? '').isEmpty
                       ? Icon(
                           CarbonIcons.user,
                           size: 14,
@@ -158,7 +161,9 @@ class _DmChatPageState extends State<DmChatPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  otherUser?.name.isNotEmpty == true ? otherUser!.name : otherUserNpub.substring(0, 8),
+                  otherUser != null && (otherUser['name'] as String? ?? '').isNotEmpty
+                      ? otherUser['name'] as String
+                      : otherUserNpub.substring(0, 8),
                   style: TextStyle(
                     color: context.colors.background,
                     fontSize: 16,
@@ -169,20 +174,23 @@ class _DmChatPageState extends State<DmChatPage> {
             ),
             showShareButton: false,
           ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _buildMessageInput(context, viewModel, otherUserPubkeyHex),
-          ),
+          if (state is DmChatLoaded && state.pubkeyHex == otherUserPubkeyHex)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _buildMessageInput(context, otherUserPubkeyHex),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildMessageBubble(BuildContext context, DmMessageModel message) {
+  Widget _buildMessageBubble(BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
-    final isFromMe = message.isFromCurrentUser;
+    final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
+    final content = message['content'] as String? ?? '';
+    final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
 
     return RepaintBoundary(
       child: Align(
@@ -204,7 +212,7 @@ class _DmChatPageState extends State<DmChatPage> {
                 ),
               ),
               child: Text(
-                message.content,
+                content,
                 style: TextStyle(
                   color: isFromMe ? colors.background : colors.textPrimary,
                   fontSize: 15,
@@ -218,7 +226,7 @@ class _DmChatPageState extends State<DmChatPage> {
                 bottom: 12,
               ),
               child: Text(
-                _formatTime(message.createdAt),
+                _formatTime(createdAt),
                 style: TextStyle(
                   color: colors.textSecondary,
                   fontSize: 11,
@@ -233,7 +241,6 @@ class _DmChatPageState extends State<DmChatPage> {
 
   Widget _buildMessageInput(
     BuildContext context,
-    DmViewModel viewModel,
     String recipientPubkeyHex,
   ) {
     if (!_textControllers.containsKey(recipientPubkeyHex)) {
@@ -271,7 +278,7 @@ class _DmChatPageState extends State<DmChatPage> {
             onTap: () {
               final content = textController.text.trim();
               if (content.isNotEmpty) {
-                viewModel.sendMessage(recipientPubkeyHex, content);
+                context.read<DmBloc>().add(DmMessageSent(recipientPubkeyHex, content));
                 textController.clear();
               }
             },

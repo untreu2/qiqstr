@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/theme/theme_state.dart';
 
 class KeysInfoPage extends StatefulWidget {
   final String mnemonic;
@@ -21,8 +23,8 @@ class KeysInfoPage extends StatefulWidget {
 class _KeysInfoPageState extends State<KeysInfoPage> {
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
         return Scaffold(
           backgroundColor: context.colors.background,
           body: _buildBody(context),

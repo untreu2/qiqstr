@@ -1,11 +1,13 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:provider/provider.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../presentation/viewmodels/note_content_viewmodel.dart';
+import '../../../presentation/blocs/note_content/note_content_bloc.dart';
+import '../../../presentation/blocs/note_content/note_content_event.dart';
+import '../../../presentation/blocs/note_content/note_content_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../screens/note/feed_page.dart';
 import '../../screens/webview/webview_page.dart';
 import '../media/link_preview_widget.dart';
@@ -53,35 +55,20 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   
   List<InlineSpan>? _cachedSpans;
   int _cachedSpansHash = 0;
-  late final NoteContentViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
     _processParsedContent();
-    _viewModel = NoteContentViewModel(
-      userRepository: AppDI.get(),
-      authRepository: AppDI.get(),
-      textParts: _textParts.cast<Map<String, dynamic>>(),
-    );
-    _viewModel.addListener(_onViewModelChanged);
   }
 
   @override
   void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
     for (final recognizer in _gestureRecognizers) {
       recognizer.dispose();
     }
     _gestureRecognizers.clear();
     super.dispose();
-  }
-
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   void _processParsedContent() {
@@ -120,11 +107,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     }
   }
 
-  Future<void> _onHashtagTap(String hashtag) async {
+  Future<void> _onHashtagTap(String hashtag, NoteContentBloc bloc) async {
     try {
       final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
 
-      final npub = await _viewModel.getCurrentUserNpub();
+      final npub = await bloc.getCurrentUserNpub();
 
       if (npub == null) {
         if (mounted) {
@@ -150,9 +137,9 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     }
   }
 
-  List<InlineSpan> _buildSpans() {
-    final mentionUsersHash = _viewModel.mentionUsers.entries
-        .map((e) => Object.hash(e.key, e.value.name, e.value.profileImage))
+  List<InlineSpan> _buildSpans(BuildContext context, Map<String, Map<String, dynamic>> mentionUsers) {
+    final mentionUsersHash = mentionUsers.entries
+        .map((e) => Object.hash(e.key, e.value['name'] as String? ?? '', e.value['profileImage'] as String? ?? ''))
         .fold(0, (prev, hash) => Object.hash(prev, hash));
     
     final currentHash = Object.hash(
@@ -210,7 +197,8 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               recognizer: recognizer,
             ));
           } else if (hashtagMatch != null) {
-            final recognizer = TapGestureRecognizer()..onTap = () => _onHashtagTap(hashtagMatch);
+            final bloc = context.read<NoteContentBloc>();
+            final recognizer = TapGestureRecognizer()..onTap = () => _onHashtagTap(hashtagMatch, bloc);
             _gestureRecognizers.add(recognizer);
             spans.add(TextSpan(
               text: hashtagMatch,
@@ -258,31 +246,50 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         }
       } else if (p['type'] == 'mention') {
         final id = p['id'] as String;
-        final actualPubkey = _viewModel.extractPubkey(id);
+        String? actualPubkey;
+        try {
+          if (id.startsWith('npub1')) {
+            actualPubkey = decodeBasicBech32(id, 'npub');
+          } else if (id.startsWith('nprofile1')) {
+            final result = decodeTlvBech32Full(id, 'nprofile');
+            actualPubkey = result['type_0_main'];
+          }
+        } catch (e) {
+          continue;
+        }
         if (actualPubkey == null) continue;
         
-        final user = _viewModel.mentionUsers[actualPubkey];
-        final isLoading = _mentionLoadingStates[actualPubkey] == true;
+        final pubkey = actualPubkey;
+        final user = mentionUsers[pubkey];
+        final isLoading = _mentionLoadingStates[pubkey] == true;
 
         String displayText;
         if (isLoading) {
           displayText = '@loading...';
         } else if (user != null) {
-          final userName = user.name.isNotEmpty == true
-              ? user.name
-              : (user.pubkeyHex.substring(0, 8));
+          final userName = () {
+            final name = user['name'] as String? ?? '';
+            if (name.isNotEmpty) {
+              return name;
+            }
+            final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+            return pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
+          }();
           displayText = userName.length > 25 ? '@${userName.substring(0, 25)}...' : '@$userName';
         } else {
-          final fallbackName = actualPubkey.length > 8 ? actualPubkey.substring(0, 8) : actualPubkey;
+          final fallbackName = pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey;
           displayText = '@$fallbackName';
         }
 
         final recognizer = TapGestureRecognizer()
           ..onTap = () {
             try {
-              final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
+              final npubForNavigation = pubkey.startsWith('npub1')
+                  ? pubkey
+                  : encodeBasicBech32(pubkey, 'npub');
               widget.onNavigateToMentionProfile?.call(npubForNavigation);
             } catch (e) {
+              // Ignore encoding errors
             }
           };
         _gestureRecognizers.add(recognizer);
@@ -320,10 +327,19 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<NoteContentViewModel>.value(
-      value: _viewModel,
-      child: Consumer<NoteContentViewModel>(
-        builder: (context, viewModel, child) {
+    return BlocProvider<NoteContentBloc>(
+      create: (context) {
+        final bloc = NoteContentBloc(
+          userRepository: AppDI.get(),
+          authRepository: AppDI.get(),
+        );
+        bloc.add(NoteContentInitialized(textParts: _textParts.cast<Map<String, dynamic>>()));
+        return bloc;
+      },
+      child: BlocBuilder<NoteContentBloc, NoteContentState>(
+        builder: (context, state) {
+          final mentionUsers = state is NoteContentLoaded ? state.mentionUsers : <String, Map<String, dynamic>>{};
+
           return RepaintBoundary(
             key: ValueKey('content_${widget.noteId}'),
             child: Column(
@@ -334,7 +350,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             RepaintBoundary(
               child: widget.isSelectable
                   ? SelectableText.rich(
-                      TextSpan(children: _buildSpans()),
+                      TextSpan(children: _buildSpans(context, mentionUsers)),
                       style: TextStyle(
                         fontSize: _fontSize(context),
                         height: 1.2,
@@ -345,7 +361,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                       ),
                     )
                   : RichText(
-                      text: TextSpan(children: _buildSpans()),
+                      text: TextSpan(children: _buildSpans(context, mentionUsers)),
                       textHeightBehavior: const TextHeightBehavior(
                         applyHeightToFirstAscent: false,
                         applyHeightToLastDescent: false,

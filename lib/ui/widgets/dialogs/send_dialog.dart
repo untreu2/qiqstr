@@ -112,7 +112,8 @@ class _SendDialogState extends State<SendDialog> {
             _isLoading = false;
             result.fold(
               (paymentResult) {
-                _successMessage = 'Payment sent! Preimage: ${paymentResult.preimage ?? 'N/A'}';
+                final preimage = paymentResult['preimage'] as String?;
+                _successMessage = 'Payment sent! Preimage: ${preimage ?? 'N/A'}';
                 widget.onPaymentSuccess();
               },
               (errorResult) {

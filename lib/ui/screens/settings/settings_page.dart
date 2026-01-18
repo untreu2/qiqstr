@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../../utils/logout.dart';
@@ -8,6 +8,8 @@ import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/dialogs/logout_dialog.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/theme/theme_state.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -19,8 +21,8 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
         return Scaffold(
           backgroundColor: context.colors.background,
           body: Stack(
@@ -31,7 +33,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     _buildHeader(context),
                     const SizedBox(height: 16),
-                    _buildSettingsSection(context, themeManager),
+                    _buildSettingsSection(context),
                     const SizedBox(height: 150),
                   ],
                 ),
@@ -56,7 +58,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildSettingsSection(BuildContext context, ThemeManager themeManager) {
+  Widget _buildSettingsSection(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(

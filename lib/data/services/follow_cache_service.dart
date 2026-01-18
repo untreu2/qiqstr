@@ -27,7 +27,8 @@ class CachedFollowEntry {
 
 class FollowCacheService {
   static FollowCacheService? _instance;
-  static FollowCacheService get instance => _instance ??= FollowCacheService._internal();
+  static FollowCacheService get instance =>
+      _instance ??= FollowCacheService._internal();
 
   FollowCacheService._internal() {
     _initializeIsar();
@@ -58,6 +59,12 @@ class FollowCacheService {
     }
   }
 
+  Future<void> _ensureInitialized() async {
+    if (!_isIsarInitialized) {
+      await _initializeIsar();
+    }
+  }
+
   Future<List<String>?> get(String userPubkeyHex) async {
     final memoryEntry = _memoryCache[userPubkeyHex];
 
@@ -74,14 +81,18 @@ class FollowCacheService {
       }
     }
 
+    await _ensureInitialized();
+
     if (_isIsarInitialized) {
       try {
-        final followingData = await _isarService.getFollowingList(userPubkeyHex);
+        final followingData =
+            await _isarService.getFollowingList(userPubkeyHex);
         if (followingData != null) {
           _putInMemory(userPubkeyHex, followingData);
           return followingData;
         }
       } catch (e) {
+        // Silently handle error - cache miss is acceptable
       }
     }
 
@@ -108,7 +119,8 @@ class FollowCacheService {
     return List<String>.from(entry.followingList);
   }
 
-  void _putInMemory(String userPubkeyHex, List<String> followingList, {Duration? ttl}) {
+  void _putInMemory(String userPubkeyHex, List<String> followingList,
+      {Duration? ttl}) {
     final now = DateTime.now();
     final expiresAt = now.add(ttl ?? defaultTTL);
 
@@ -132,9 +144,12 @@ class FollowCacheService {
     _memoryCache[userPubkeyHex] = entry;
   }
 
-  Future<void> put(String userPubkeyHex, List<String> followingList, {Duration? ttl}) async {
+  Future<void> put(String userPubkeyHex, List<String> followingList,
+      {Duration? ttl}) async {
     _memoryCache.remove(userPubkeyHex);
     _putInMemory(userPubkeyHex, followingList, ttl: ttl);
+
+    await _ensureInitialized();
 
     if (_isIsarInitialized) {
       try {
@@ -178,7 +193,8 @@ class FollowCacheService {
     }
   }
 
-  Future<Map<String, List<String>>> batchGet(List<String> userPubkeyHexList) async {
+  Future<Map<String, List<String>>> batchGet(
+      List<String> userPubkeyHexList) async {
     final result = <String, List<String>>{};
     final missingKeys = <String>[];
 
@@ -193,20 +209,23 @@ class FollowCacheService {
 
     if (missingKeys.isNotEmpty && _isIsarInitialized) {
       try {
-        final persistentFollowingLists = await _isarService.getFollowingLists(missingKeys);
+        final persistentFollowingLists =
+            await _isarService.getFollowingLists(missingKeys);
 
         for (final entry in persistentFollowingLists.entries) {
           _putInMemory(entry.key, entry.value);
           result[entry.key] = entry.value;
         }
       } catch (e) {
+        // Silently handle error - cache miss is acceptable
       }
     }
 
     return result;
   }
 
-  Future<void> batchPut(Map<String, List<String>> followingLists, {Duration? ttl}) async {
+  Future<void> batchPut(Map<String, List<String>> followingLists,
+      {Duration? ttl}) async {
     for (final entry in followingLists.entries) {
       _putInMemory(entry.key, entry.value, ttl: ttl);
     }
@@ -277,7 +296,7 @@ class FollowCacheService {
     _isCleanupRunning = true;
     _runCleanupLoop();
   }
-  
+
   Future<void> _runCleanupLoop() async {
     while (_isCleanupRunning) {
       await Future.delayed(cleanupInterval);

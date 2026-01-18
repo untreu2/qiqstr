@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/base/result.dart';
-import '../../models/wallet_model.dart';
 import '../services/auth_service.dart';
 import '../services/coinos_service.dart';
 import '../services/validation_service.dart';
@@ -13,8 +12,8 @@ import '../services/validation_service.dart';
 class WalletRepository {
   final CoinosService _coinosService;
 
-  final StreamController<CoinosBalance> _balanceController = StreamController<CoinosBalance>.broadcast();
-  final StreamController<List<CoinosPayment>> _transactionsController = StreamController<List<CoinosPayment>>.broadcast();
+  final StreamController<Map<String, dynamic>> _balanceController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<List<Map<String, dynamic>>> _transactionsController = StreamController<List<Map<String, dynamic>>>.broadcast();
 
   WalletRepository({
     required CoinosService coinosService,
@@ -22,10 +21,23 @@ class WalletRepository {
     required ValidationService validationService,
   }) : _coinosService = coinosService;
 
-  Stream<CoinosBalance> get balanceStream => _balanceController.stream;
-  Stream<List<CoinosPayment>> get transactionsStream => _transactionsController.stream;
+  Stream<Map<String, dynamic>> get balanceStream => _balanceController.stream;
+  Stream<List<Map<String, dynamic>>> get transactionsStream => _transactionsController.stream;
 
-  Future<Result<CoinosUser>> authenticateWithCoinos() async {
+  Map<String, dynamic>? _coinosUserToMap(dynamic user) {
+    if (user == null) return null;
+    if (user is Map<String, dynamic>) return user;
+    try {
+      return {
+        'username': (user as dynamic).username as String? ?? '',
+        'id': (user as dynamic).id as String? ?? '',
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Result<Map<String, dynamic>>> authenticateWithCoinos() async {
     try {
       debugPrint('[WalletRepository] Starting Coinos authentication');
 
@@ -34,17 +46,23 @@ class WalletRepository {
         return Result.error(authResult.error!);
       }
 
-      final user = authResult.data!.user;
-      debugPrint('[WalletRepository] Authentication successful for user: ${user.username}');
+      final authData = authResult.data!;
+      final user = (authData as dynamic).user;
+      final userMap = _coinosUserToMap(user);
+      if (userMap == null) {
+        return const Result.error('Failed to convert user data');
+      }
+      final username = userMap['username'] as String? ?? '';
+      debugPrint('[WalletRepository] Authentication successful for user: $username');
 
-      return Result.success(user);
+      return Result.success(userMap);
     } catch (e) {
       debugPrint('[WalletRepository] Authentication error: $e');
       return Result.error('Authentication failed: $e');
     }
   }
 
-  Future<Result<CoinosUser>> authenticateWithNostr() async {
+  Future<Result<Map<String, dynamic>>> authenticateWithNostr() async {
     try {
       debugPrint('[WalletRepository] Authenticating with Nostr');
 
@@ -57,21 +75,31 @@ class WalletRepository {
       final userInfoResult = await _coinosService.getAccountInfo();
       if (userInfoResult.isSuccess && userInfoResult.data != null) {
         final user = userInfoResult.data!;
-        debugPrint('[WalletRepository] Nostr authentication successful for user: ${user.username}');
-        return Result.success(user);
+        final userMap = _coinosUserToMap(user);
+        if (userMap != null) {
+          final username = userMap['username'] as String? ?? '';
+          debugPrint('[WalletRepository] Nostr authentication successful for user: $username');
+          return Result.success(userMap);
+        }
       }
 
-      final user = authResult.data!.user;
-      debugPrint('[WalletRepository] Nostr authentication successful for user: ${user.username}');
+      final authData = authResult.data!;
+      final user = (authData as dynamic).user;
+      final userMap = _coinosUserToMap(user);
+      if (userMap != null) {
+        final username = userMap['username'] as String? ?? '';
+        debugPrint('[WalletRepository] Nostr authentication successful for user: $username');
+        return Result.success(userMap);
+      }
 
-      return Result.success(user);
+      return const Result.error('Failed to get user data');
     } catch (e) {
       debugPrint('[WalletRepository] Nostr authentication error: $e');
       return Result.error('Nostr authentication failed: $e');
     }
   }
 
-  Future<Result<CoinosUser?>> autoConnect() async {
+  Future<Result<Map<String, dynamic>?>> autoConnect() async {
     try {
       debugPrint('[WalletRepository] Attempting auto-connect');
 
@@ -79,8 +107,9 @@ class WalletRepository {
       if (isAuthenticatedResult.isSuccess && isAuthenticatedResult.data == true) {
         final userResult = await _coinosService.getStoredUser();
         if (userResult.isSuccess && userResult.data != null) {
+          final userMap = _coinosUserToMap(userResult.data);
           debugPrint('[WalletRepository] Auto-connect successful');
-          return Result.success(userResult.data);
+          return Result.success(userMap);
         }
       }
 
@@ -99,14 +128,30 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosBalance>> getBalance() async {
+  Map<String, dynamic>? _coinosBalanceToMap(dynamic balance) {
+    if (balance == null) return null;
+    if (balance is Map<String, dynamic>) return balance;
+    try {
+      return {
+        'balance': (balance as dynamic).balance as int? ?? 0,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Result<Map<String, dynamic>>> getBalance() async {
     try {
       final result = await _coinosService.getBalance();
 
       return result.fold(
         (balance) {
-          _balanceController.add(balance);
-          return Result.success(balance);
+          final balanceMap = _coinosBalanceToMap(balance);
+          if (balanceMap != null) {
+            _balanceController.add(balanceMap);
+            return Result.success(balanceMap);
+          }
+          return const Result.error('Failed to convert balance');
         },
         (error) => Result.error(error),
       );
@@ -130,20 +175,26 @@ class WalletRepository {
         (invoice) {
           debugPrint('[WalletRepository] Invoice created: ${invoice.toString()}');
 
-          String? invoiceString;
+          Map<String, dynamic> invoiceMap;
+          invoiceMap = invoice;
 
-          if (invoice.bolt11 != null && invoice.bolt11!.isNotEmpty) {
-            invoiceString = invoice.bolt11;
-          } else if (invoice.text != null && invoice.text!.isNotEmpty) {
-            invoiceString = invoice.text;
-          } else if (invoice.hash != null && invoice.hash!.isNotEmpty) {
-            invoiceString = invoice.hash;
+          String? invoiceString;
+          final bolt11 = invoiceMap['bolt11'] as String?;
+          final text = invoiceMap['text'] as String?;
+          final hash = invoiceMap['hash'] as String?;
+
+          if (bolt11 != null && bolt11.isNotEmpty) {
+            invoiceString = bolt11;
+          } else if (text != null && text.isNotEmpty) {
+            invoiceString = text;
+          } else if (hash != null && hash.isNotEmpty) {
+            invoiceString = hash;
           }
 
           if (invoiceString != null && invoiceString.isNotEmpty) {
             return Result.success(invoiceString);
           } else {
-            debugPrint('[WalletRepository] Invoice response fields: bolt11=${invoice.bolt11}, text=${invoice.text}, hash=${invoice.hash}');
+            debugPrint('[WalletRepository] Invoice response fields: bolt11=$bolt11, text=$text, hash=$hash');
             return const Result.error('Invalid invoice response - no invoice string found');
           }
         },
@@ -154,9 +205,23 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosPaymentResult>> payInvoice(String invoice) async {
+  Map<String, dynamic>? _coinosPaymentResultToMap(dynamic paymentResult) {
+    if (paymentResult == null) return null;
+    if (paymentResult is Map<String, dynamic>) return paymentResult;
     try {
-      debugPrint('[WalletRepository] Attempting to pay invoice: ${invoice.substring(0, 20)}...');
+      return {
+        'isSuccess': (paymentResult as dynamic).isSuccess as bool? ?? false,
+        'error': (paymentResult as dynamic).error as String?,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Result<Map<String, dynamic>>> payInvoice(String invoice) async {
+    try {
+      final invoicePreview = invoice.length > 20 ? invoice.substring(0, 20) : invoice;
+      debugPrint('[WalletRepository] Attempting to pay invoice: $invoicePreview...');
 
       if (invoice.trim().isEmpty) {
         return const Result.error('Invoice cannot be empty');
@@ -167,13 +232,18 @@ class WalletRepository {
       return result.fold(
         (paymentResult) {
           debugPrint('[WalletRepository] Payment result received: $paymentResult');
-          debugPrint('[WalletRepository] Payment isSuccess: ${paymentResult.isSuccess}');
+          final paymentMap = _coinosPaymentResultToMap(paymentResult);
+          if (paymentMap == null) {
+            return const Result.error('Failed to convert payment result');
+          }
+          final isSuccess = paymentMap['isSuccess'] as bool? ?? false;
+          debugPrint('[WalletRepository] Payment isSuccess: $isSuccess');
 
-          if (paymentResult.isSuccess) {
+          if (isSuccess) {
             debugPrint('[WalletRepository] Payment successful');
-            return Result.success(paymentResult);
+            return Result.success(paymentMap);
           } else {
-            final errorMsg = paymentResult.error ?? 'Payment failed - no specific error';
+            final errorMsg = paymentMap['error'] as String? ?? 'Payment failed - no specific error';
             debugPrint('[WalletRepository] Payment failed: $errorMsg');
             return Result.error(errorMsg);
           }
@@ -189,7 +259,7 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosPaymentResult>> payKeysend(String pubkey, int amount) async {
+  Future<Result<Map<String, dynamic>>> payKeysend(String pubkey, int amount) async {
     try {
       if (pubkey.trim().isEmpty) {
         return const Result.error('Pubkey cannot be empty');
@@ -205,7 +275,7 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosInvoice>> lookupInvoice(String invoice) async {
+  Future<Result<Map<String, dynamic>>> lookupInvoice(String invoice) async {
     try {
       if (invoice.trim().isEmpty) {
         return const Result.error('Invoice cannot be empty');
@@ -217,14 +287,40 @@ class WalletRepository {
     }
   }
 
-  Future<Result<List<CoinosPayment>>> listTransactions() async {
+  List<Map<String, dynamic>>? _coinosPaymentsToList(dynamic payments) {
+    if (payments == null) return null;
+    if (payments is List) {
+      return payments
+          .map((p) {
+            if (p is Map<String, dynamic>) return p;
+            try {
+              return {
+                'id': (p as dynamic).id as String? ?? '',
+                'amount': (p as dynamic).amount as int? ?? 0,
+                'memo': (p as dynamic).memo as String? ?? '',
+              };
+            } catch (e) {
+              return <String, dynamic>{};
+            }
+          })
+          .whereType<Map<String, dynamic>>()
+          .toList();
+    }
+    return null;
+  }
+
+  Future<Result<List<Map<String, dynamic>>>> listTransactions() async {
     try {
       final result = await _coinosService.getPaymentHistory(limit: 50);
 
       return result.fold(
         (transactions) {
-          _transactionsController.add(transactions);
-          return Result.success(transactions);
+          final transactionsList = _coinosPaymentsToList(transactions);
+          if (transactionsList != null) {
+            _transactionsController.add(transactionsList);
+            return Result.success(transactionsList);
+          }
+          return const Result.error('Failed to convert transactions');
         },
         (error) => Result.error(error),
       );
@@ -233,12 +329,18 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosUser>> getInfo() async {
+  Future<Result<Map<String, dynamic>>> getInfo() async {
     try {
       final result = await _coinosService.getAccountInfo();
 
       return result.fold(
-        (user) => Result.success(user),
+        (user) {
+          final userMap = _coinosUserToMap(user);
+          if (userMap != null) {
+            return Result.success(userMap);
+          }
+          return const Result.error('Failed to convert user data');
+        },
         (error) => Result.error(error),
       );
     } catch (e) {
@@ -246,7 +348,7 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosPaymentResult>> sendInternalPayment({
+  Future<Result<Map<String, dynamic>>> sendInternalPayment({
     required String username,
     required int amount,
   }) async {
@@ -266,10 +368,15 @@ class WalletRepository {
 
       return result.fold(
         (paymentResult) {
-          if (paymentResult.isSuccess) {
-            return Result.success(paymentResult);
+          final paymentMap = _coinosPaymentResultToMap(paymentResult);
+          if (paymentMap == null) {
+            return const Result.error('Failed to convert payment result');
+          }
+          final isSuccess = paymentMap['isSuccess'] as bool? ?? false;
+          if (isSuccess) {
+            return Result.success(paymentMap);
           } else {
-            return Result.error(paymentResult.error ?? 'Internal payment failed');
+            return Result.error(paymentMap['error'] as String? ?? 'Internal payment failed');
           }
         },
         (error) => Result.error(error),
@@ -279,7 +386,7 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosPaymentResult>> sendBitcoinPayment({
+  Future<Result<Map<String, dynamic>>> sendBitcoinPayment({
     required String address,
     required int amount,
   }) async {
@@ -299,10 +406,15 @@ class WalletRepository {
 
       return result.fold(
         (paymentResult) {
-          if (paymentResult.isSuccess) {
-            return Result.success(paymentResult);
+          final paymentMap = _coinosPaymentResultToMap(paymentResult);
+          if (paymentMap == null) {
+            return const Result.error('Failed to convert payment result');
+          }
+          final isSuccess = paymentMap['isSuccess'] as bool? ?? false;
+          if (isSuccess) {
+            return Result.success(paymentMap);
           } else {
-            return Result.error(paymentResult.error ?? 'Bitcoin payment failed');
+            return Result.error(paymentMap['error'] as String? ?? 'Bitcoin payment failed');
           }
         },
         (error) => Result.error(error),
@@ -312,7 +424,7 @@ class WalletRepository {
     }
   }
 
-  Future<Result<CoinosPaymentResult>> sendToLightningAddress({
+  Future<Result<Map<String, dynamic>>> sendToLightningAddress({
     required String lightningAddress,
     required int amount,
   }) async {
@@ -342,10 +454,15 @@ class WalletRepository {
 
       return result.fold(
         (paymentResult) {
-          if (paymentResult.isSuccess) {
-            return Result.success(paymentResult);
+          final paymentMap = _coinosPaymentResultToMap(paymentResult);
+          if (paymentMap == null) {
+            return const Result.error('Failed to convert payment result');
+          }
+          final isSuccess = paymentMap['isSuccess'] as bool? ?? false;
+          if (isSuccess) {
+            return Result.success(paymentMap);
           } else {
-            return Result.error(paymentResult.error ?? 'Lightning address payment failed');
+            return Result.error(paymentMap['error'] as String? ?? 'Lightning address payment failed');
           }
         },
         (error) => Result.error(error),
@@ -412,8 +529,7 @@ class WalletRepository {
       }
 
       final invoiceData = jsonDecode(invoiceResponse.body) as Map<String, dynamic>;
-      if (invoiceData['status'] != null &&
-          invoiceData['status'].toString().toLowerCase() == 'error') {
+      if (invoiceData['status'] != null && invoiceData['status'].toString().toLowerCase() == 'error') {
         return Result.error(
           'Invoice error: ${invoiceData['reason'] ?? 'Unknown error'}',
         );
@@ -432,7 +548,7 @@ class WalletRepository {
 
   bool get isConnected => true;
 
-  CoinosUser? get currentConnection => null;
+  Map<String, dynamic>? get currentConnection => null;
 
   Future<bool> get hasSavedConnection async {
     try {
