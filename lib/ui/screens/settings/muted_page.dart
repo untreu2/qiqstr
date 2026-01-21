@@ -157,7 +157,8 @@ class MutedPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ...mutedUsers.map((user) => _buildUserTile(context, state, user)),
+                  ...mutedUsers
+                      .map((user) => _buildUserTile(context, state, user)),
                 ],
               ),
             ),
@@ -165,7 +166,8 @@ class MutedPage extends StatelessWidget {
     };
   }
 
-  static Widget _buildUserTile(BuildContext context, MutedLoaded state, Map<String, dynamic> user) {
+  static Widget _buildUserTile(
+      BuildContext context, MutedLoaded state, Map<String, dynamic> user) {
     final userNpub = user['npub'] as String? ?? '';
     final isUnmuting = state.unmutingStates[userNpub] ?? false;
     final profileImage = user['profileImage'] as String? ?? '';
@@ -177,7 +179,7 @@ class MutedPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: context.colors.overlayLight,
-        borderRadius: BorderRadius.circular(40),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
         children: [
@@ -256,7 +258,7 @@ class MutedPage extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(40),
+                borderRadius: BorderRadius.circular(24),
               ),
               child: isUnmuting
                   ? SizedBox(
@@ -264,7 +266,8 @@ class MutedPage extends StatelessWidget {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            context.colors.textPrimary),
                       ),
                     )
                   : Row(

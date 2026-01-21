@@ -146,7 +146,8 @@ class _RelayPageState extends State<RelayPage> {
     setState(() {
       _relayStats.clear();
       if (stats['relayStats'] != null) {
-        _relayStats.addAll(Map<String, Map<String, dynamic>>.from(stats['relayStats'] as Map));
+        _relayStats.addAll(
+            Map<String, Map<String, dynamic>>.from(stats['relayStats'] as Map));
       }
     });
   }
@@ -189,12 +190,13 @@ class _RelayPageState extends State<RelayPage> {
 
     try {
       final uri = Uri.parse(relayUrl).replace(scheme: 'https');
-      final response = await http
-          .get(uri, headers: {'Accept': 'application/nostr+json'})
-          .timeout(const Duration(seconds: 5));
+      final response = await http.get(uri, headers: {
+        'Accept': 'application/nostr+json'
+      }).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final decoded =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         if (mounted && !_disposed) {
           setState(() {
             _relayInfos[relayUrl] = RelayInfo.fromJson(decoded);
@@ -213,7 +215,6 @@ class _RelayPageState extends State<RelayPage> {
     }
   }
 
-
   Future<void> _publishRelays() async {
     if (!mounted) return;
 
@@ -224,7 +225,8 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final privateKeyResult = await _authRepository.getCurrentUserPrivateKey();
       if (privateKeyResult.isError || privateKeyResult.data == null) {
-        AppSnackbar.error(context, 'Private key not found. Please set up your profile first');
+        AppSnackbar.error(
+            context, 'Private key not found. Please set up your profile first');
         return;
       }
 
@@ -255,9 +257,11 @@ class _RelayPageState extends State<RelayPage> {
       await _broadcastRelayListEvent(serializedEvent);
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('published_relay_list', jsonEncode(NostrService.eventToJson(event)));
+      await prefs.setString(
+          'published_relay_list', jsonEncode(NostrService.eventToJson(event)));
 
-      AppSnackbar.success(context, 'Relay list published successfully (${relayTags.length} relays in list)');
+      AppSnackbar.success(context,
+          'Relay list published successfully (${relayTags.length} relays in list)');
 
       if (kDebugMode) {
         print('Relay list event published: ${event.id}');
@@ -266,7 +270,8 @@ class _RelayPageState extends State<RelayPage> {
       if (kDebugMode) {
         print('Error publishing relays: $e');
       }
-      AppSnackbar.error(context, 'Error publishing relay list: ${e.toString()}');
+      AppSnackbar.error(
+          context, 'Error publishing relay list: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() {
@@ -288,7 +293,8 @@ class _RelayPageState extends State<RelayPage> {
       final successfulBroadcasts = results.where((success) => success).length;
 
       if (kDebugMode) {
-        print('Relay list event broadcasted to $successfulBroadcasts/${_relays.length} relays');
+        print(
+            'Relay list event broadcasted to $successfulBroadcasts/${_relays.length} relays');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -335,7 +341,8 @@ class _RelayPageState extends State<RelayPage> {
         await _useUserRelays();
 
         if (mounted) {
-          AppSnackbar.success(context, 'Found and applied ${_userRelays.length} relays from your profile');
+          AppSnackbar.success(context,
+              'Found and applied ${_userRelays.length} relays from your profile');
         }
       } else {
         if (mounted) {
@@ -344,7 +351,8 @@ class _RelayPageState extends State<RelayPage> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.error(context, 'Error fetching user relays: ${e.toString()}');
+        AppSnackbar.error(
+            context, 'Error fetching user relays: ${e.toString()}');
       }
     } finally {
       setState(() {
@@ -353,7 +361,8 @@ class _RelayPageState extends State<RelayPage> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchRelayListMetadata(String npub) async {
+  Future<List<Map<String, dynamic>>> _fetchRelayListMetadata(
+      String npub) async {
     final List<Map<String, dynamic>> relayList = [];
 
     try {
@@ -365,7 +374,8 @@ class _RelayPageState extends State<RelayPage> {
         try {
           if (_disposed) return relayList;
 
-          final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+          final subscriptionId =
+              DateTime.now().millisecondsSinceEpoch.toString();
           final request = jsonEncode([
             "REQ",
             subscriptionId,
@@ -390,13 +400,17 @@ class _RelayPageState extends State<RelayPage> {
             },
           );
 
-          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
+          await completer.future
+              .timeout(const Duration(seconds: 5), onTimeout: () {});
 
           if (eventData != null) {
             final tags = eventData!['tags'] as List<dynamic>? ?? [];
 
             for (final tag in tags) {
-              if (tag is List && tag.isNotEmpty && tag[0] == 'r' && tag.length >= 2) {
+              if (tag is List &&
+                  tag.isNotEmpty &&
+                  tag[0] == 'r' &&
+                  tag.length >= 2) {
                 final relayUrl = tag[1] as String;
                 String marker = '';
 
@@ -436,19 +450,25 @@ class _RelayPageState extends State<RelayPage> {
 
   Future<void> _useUserRelays() async {
     if (_userRelays.isEmpty) {
-      AppSnackbar.info(context, 'No user relays available. Please fetch them first.');
+      AppSnackbar.info(
+          context, 'No user relays available. Please fetch them first.');
       return;
     }
 
     try {
       final previousRelays = Set<String>.from(_relays.map(_normalizeRelayUrl));
-      
+
       final writeRelays = _userRelays
-          .where((relay) => relay['marker'] == '' || relay['marker'].contains('write') || relay['marker'].contains('read,write'))
+          .where((relay) =>
+              relay['marker'] == '' ||
+              relay['marker'].contains('write') ||
+              relay['marker'].contains('read,write'))
           .map((relay) => relay['url'] as String)
           .toList();
 
-      final newRelays = writeRelays.isNotEmpty ? writeRelays : _userRelays.map((relay) => relay['url'] as String).take(4).toList();
+      final newRelays = writeRelays.isNotEmpty
+          ? writeRelays
+          : _userRelays.map((relay) => relay['url'] as String).take(4).toList();
 
       setState(() {
         _relays = newRelays;
@@ -460,12 +480,14 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setBool('using_user_relays', true);
 
       if (mounted) {
-        AppSnackbar.success(context, 'Now using your personal relays (${newRelays.length} main relays)');
-        
+        AppSnackbar.success(context,
+            'Now using your personal relays (${newRelays.length} main relays)');
+
         final newRelayUrls = newRelays
-            .where((relay) => !previousRelays.contains(_normalizeRelayUrl(relay)))
+            .where(
+                (relay) => !previousRelays.contains(_normalizeRelayUrl(relay)))
             .toList();
-        
+
         if (newRelayUrls.isNotEmpty && mounted) {
           final shouldBroadcast = await showBroadcastEventsDialog(
             context: context,
@@ -480,7 +502,8 @@ class _RelayPageState extends State<RelayPage> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.error(context, 'Error applying user relays: ${e.toString()}');
+        AppSnackbar.error(
+            context, 'Error applying user relays: ${e.toString()}');
       }
     }
   }
@@ -543,14 +566,16 @@ class _RelayPageState extends State<RelayPage> {
     }
 
     if (!_isValidRelayUrl(url)) {
-      AppSnackbar.error(context, 'Please enter a valid WebSocket URL (wss:// or ws://)');
+      AppSnackbar.error(
+          context, 'Please enter a valid WebSocket URL (wss:// or ws://)');
       return;
     }
 
     final targetList = _relays;
     final normalizedUrl = _normalizeRelayUrl(url);
 
-    if (targetList.any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
+    if (targetList
+        .any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
       AppSnackbar.error(context, 'Relay already exists in this category');
       return;
     }
@@ -569,7 +594,7 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         context.pop();
         AppSnackbar.success(context, 'Relay added to Main list');
-        
+
         final shouldBroadcast = await showBroadcastEventsDialog(
           context: context,
           relayUrl: normalizedUrl,
@@ -598,8 +623,9 @@ class _RelayPageState extends State<RelayPage> {
     AppSnackbar.info(context, 'Fetching your events...');
 
     try {
-      final result = await EventCountsService.instance.fetchAllEventsForUser(null);
-      
+      final result =
+          await EventCountsService.instance.fetchAllEventsForUser(null);
+
       if (!mounted) return;
 
       if (result == null || result.allEvents.isEmpty) {
@@ -607,7 +633,8 @@ class _RelayPageState extends State<RelayPage> {
         return;
       }
 
-      AppSnackbar.info(context, 'Broadcasting ${result.allEvents.length} events...');
+      AppSnackbar.info(
+          context, 'Broadcasting ${result.allEvents.length} events...');
 
       final success = await EventCountsService.instance.rebroadcastEvents(
         result.allEvents,
@@ -617,7 +644,9 @@ class _RelayPageState extends State<RelayPage> {
       if (!mounted) return;
 
       if (success) {
-        final relayText = relayUrls.length == 1 ? 'the new relay' : '${relayUrls.length} new relays';
+        final relayText = relayUrls.length == 1
+            ? 'the new relay'
+            : '${relayUrls.length} new relays';
         AppSnackbar.success(
           context,
           'Broadcasted ${result.allEvents.length} events to $relayText',
@@ -627,7 +656,8 @@ class _RelayPageState extends State<RelayPage> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.error(context, 'Error broadcasting events: ${e.toString()}');
+        AppSnackbar.error(
+            context, 'Error broadcasting events: ${e.toString()}');
       }
     }
   }
@@ -650,20 +680,22 @@ class _RelayPageState extends State<RelayPage> {
     await showResetRelaysDialog(
       context: context,
       onConfirm: () async {
-        final previousRelays = Set<String>.from(_relays.map(_normalizeRelayUrl));
-        
+        final previousRelays =
+            Set<String>.from(_relays.map(_normalizeRelayUrl));
+
         setState(() {
           _relays = List.from(relaySetMainSockets);
         });
         await _saveRelays();
-        
+
         if (mounted && context.mounted) {
           AppSnackbar.success(context, 'Relays reset to defaults');
-          
+
           final newRelayUrls = _relays
-              .where((relay) => !previousRelays.contains(_normalizeRelayUrl(relay)))
+              .where((relay) =>
+                  !previousRelays.contains(_normalizeRelayUrl(relay)))
               .toList();
-          
+
           if (newRelayUrls.isNotEmpty && mounted) {
             final shouldBroadcast = await showBroadcastEventsDialog(
               context: context,
@@ -695,14 +727,15 @@ class _RelayPageState extends State<RelayPage> {
       currentRelays: _relays,
       onAddRelay: (relayUrl) async {
         final normalizedUrl = _normalizeRelayUrl(relayUrl);
-        if (!_relays.any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
+        if (!_relays.any(
+            (existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
           setState(() {
             _relays.add(normalizedUrl);
           });
           await _saveRelays();
           _fetchRelayInfo(normalizedUrl);
           AppSnackbar.success(context, 'Relay added from following list');
-          
+
           if (mounted) {
             final shouldBroadcast = await showBroadcastEventsDialog(
               context: context,
@@ -791,12 +824,10 @@ class _RelayPageState extends State<RelayPage> {
           Row(
             children: [
               Expanded(
-                child: SecondaryButton(
+                child: PrimaryButton(
                   label: 'Explore Relays',
                   icon: Icons.people,
                   onPressed: _showFollowingRelaysDialog,
-                  backgroundColor: context.colors.overlayLight,
-                  foregroundColor: context.colors.textPrimary,
                   size: ButtonSize.large,
                 ),
               ),
@@ -806,7 +837,6 @@ class _RelayPageState extends State<RelayPage> {
       ),
     );
   }
-
 
   Widget _buildRelayTile(String relay, bool isMainRelay) {
     final manager = WebSocketManager.instance;
@@ -851,26 +881,27 @@ class _RelayPageState extends State<RelayPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-              Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               info?.name ?? relay,
-                  style: TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.textPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                                fontWeight: FontWeight.w600,
+                                color: context.colors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             const SizedBox(height: 4),
                             Row(
                               children: [
                                 if (info?.paymentRequired == true) ...[
                                   const SizedBox(width: 6),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: Colors.amber.withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(8),
@@ -888,7 +919,8 @@ class _RelayPageState extends State<RelayPage> {
                                 if (info?.authRequired == true) ...[
                                   const SizedBox(width: 6),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: Colors.blue.withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(8),
@@ -913,19 +945,19 @@ class _RelayPageState extends State<RelayPage> {
                         isExpanded ? Icons.expand_less : Icons.expand_more,
                         color: context.colors.textSecondary,
                         size: 20,
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () => _removeRelay(relay, isMainRelay),
-                child: Container(
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () => _removeRelay(relay, isMainRelay),
+                        child: Container(
                           width: 36,
                           height: 36,
-                  decoration: BoxDecoration(
+                          decoration: BoxDecoration(
                             color: context.colors.background,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    CarbonIcons.delete,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            CarbonIcons.delete,
                             size: 18,
                             color: context.colors.textPrimary,
                           ),
@@ -978,7 +1010,8 @@ class _RelayPageState extends State<RelayPage> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                        if (info.supportedNips != null && info.supportedNips!.isNotEmpty) ...[
+                        if (info.supportedNips != null &&
+                            info.supportedNips!.isNotEmpty) ...[
                           Text(
                             'Supported NIPs',
                             style: TextStyle(
@@ -993,7 +1026,8 @@ class _RelayPageState extends State<RelayPage> {
                             runSpacing: 6,
                             children: info.supportedNips!.take(20).map((nip) {
                               return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: context.colors.background,
                                   borderRadius: BorderRadius.circular(4),
@@ -1059,15 +1093,20 @@ class _RelayPageState extends State<RelayPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        _buildStatRow('Success Rate', stats['successRate'] ?? 'N/A'),
-                        _buildStatRow('Connections', '${stats['successfulConnections'] ?? 0}'),
-                        _buildStatRow('Messages Sent', '${stats['messagesSent'] ?? 0}'),
-                        _buildStatRow('Messages Received', '${stats['messagesReceived'] ?? 0}'),
-                        _buildStatRow('Disconnections', '${stats['disconnections'] ?? 0}'),
+                        _buildStatRow(
+                            'Success Rate', stats['successRate'] ?? 'N/A'),
+                        _buildStatRow('Connections',
+                            '${stats['successfulConnections'] ?? 0}'),
+                        _buildStatRow(
+                            'Messages Sent', '${stats['messagesSent'] ?? 0}'),
+                        _buildStatRow('Messages Received',
+                            '${stats['messagesReceived'] ?? 0}'),
+                        _buildStatRow('Disconnections',
+                            '${stats['disconnections'] ?? 0}'),
                       ],
                     ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -1128,7 +1167,8 @@ class _RelayPageState extends State<RelayPage> {
             controller: _scrollController,
             slivers: [
               SliverToBoxAdapter(
-                child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                child:
+                    SizedBox(height: MediaQuery.of(context).padding.top + 60),
               ),
               SliverToBoxAdapter(
                 child: _buildHeader(context),

@@ -9,6 +9,7 @@ import '../../../presentation/blocs/dm/dm_state.dart';
 import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/back_button_widget.dart';
 import '../search/users_search_page.dart';
 
 class DmConversationsPage extends StatefulWidget {
@@ -18,7 +19,8 @@ class DmConversationsPage extends StatefulWidget {
   State<DmConversationsPage> createState() => _DmConversationsPageState();
 }
 
-class _DmConversationsPageState extends State<DmConversationsPage> with AutomaticKeepAliveClientMixin {
+class _DmConversationsPageState extends State<DmConversationsPage>
+    with AutomaticKeepAliveClientMixin {
   bool _isInitialized = false;
 
   @override
@@ -78,7 +80,9 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
                   )
                 : RefreshIndicator(
                     onRefresh: () async {
-                      context.read<DmBloc>().add(const dm_events.DmConversationsLoadRequested());
+                      context
+                          .read<DmBloc>()
+                          .add(const dm_events.DmConversationsLoadRequested());
                     },
                     color: context.colors.textPrimary,
                     child: CustomScrollView(
@@ -106,7 +110,8 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
                                 conversations[index],
                               );
                             },
-                            separatorBuilder: (_, __) => const _ConversationSeparator(),
+                            separatorBuilder: (_, __) =>
+                                const _ConversationSeparator(),
                           ),
                         ),
                       ],
@@ -158,12 +163,14 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
                         children: [
                           Text(
                             'Error loading conversations',
-                            style: TextStyle(color: context.colors.textSecondary),
+                            style:
+                                TextStyle(color: context.colors.textSecondary),
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             onPressed: () {
-                              context.read<DmBloc>().add(const dm_events.DmConversationsLoadRequested());
+                              context.read<DmBloc>().add(const dm_events
+                                  .DmConversationsLoadRequested());
                             },
                             child: const Text('Retry'),
                           ),
@@ -198,6 +205,7 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
               ),
           },
           _buildTopBar(context),
+          const BackButtonWidget.floating(topOffset: 16),
         ],
       ),
     );
@@ -207,34 +215,21 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
     final double topPadding = MediaQuery.of(context).padding.top;
 
     return Positioned(
-      top: topPadding + 25,
+      top: topPadding + 16,
       right: 16,
       child: GestureDetector(
         onTap: () => _showUserSearchDialog(context),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
             color: context.colors.textPrimary,
-            borderRadius: BorderRadius.circular(40),
+            borderRadius: BorderRadius.circular(22),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                CarbonIcons.add,
-                size: 22,
-                color: context.colors.background,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'New message',
-                style: TextStyle(
-                  color: context.colors.background,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          child: Icon(
+            Icons.add,
+            color: context.colors.background,
+            size: 24,
           ),
         ),
       ),
@@ -245,8 +240,10 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
     BuildContext context,
     Map<String, dynamic> conversation,
   ) {
-    final otherUserPubkeyHex = conversation['otherUserPubkeyHex'] as String? ?? '';
-    final otherUserProfileImage = conversation['otherUserProfileImage'] as String?;
+    final otherUserPubkeyHex =
+        conversation['otherUserPubkeyHex'] as String? ?? '';
+    final otherUserProfileImage =
+        conversation['otherUserProfileImage'] as String?;
     final displayName = conversation['displayName'] as String? ?? '';
     final lastMessageTime = conversation['lastMessageTime'] as DateTime?;
     final lastMessage = conversation['lastMessage'] as Map<String, dynamic>?;
@@ -256,7 +253,8 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
       child: InkWell(
         onTap: () {
           if (otherUserPubkeyHex.isNotEmpty) {
-            context.push('/home/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
+            context.push(
+                '/home/feed/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
           }
         },
         child: Container(
@@ -269,10 +267,12 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
               CircleAvatar(
                 radius: 26,
                 backgroundColor: context.colors.border,
-                backgroundImage: otherUserProfileImage != null && otherUserProfileImage.isNotEmpty
+                backgroundImage: otherUserProfileImage != null &&
+                        otherUserProfileImage.isNotEmpty
                     ? CachedNetworkImageProvider(otherUserProfileImage)
                     : null,
-                child: otherUserProfileImage == null || otherUserProfileImage.isEmpty
+                child: otherUserProfileImage == null ||
+                        otherUserProfileImage.isEmpty
                     ? Icon(
                         CarbonIcons.user,
                         color: context.colors.textSecondary,
@@ -394,7 +394,8 @@ class _DmConversationsPageState extends State<DmConversationsPage> with Automati
         onUserSelected: (user) {
           final pubkeyHex = user['pubkeyHex'] as String? ?? '';
           if (pubkeyHex.isNotEmpty) {
-            context.push('/home/dm/chat?pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+            context.push(
+                '/home/feed/dm/chat?pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
           }
         },
       ),

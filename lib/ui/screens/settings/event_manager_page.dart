@@ -19,7 +19,7 @@ class EventManagerPage extends StatefulWidget {
 class _EventManagerPageState extends State<EventManagerPage> {
   late ScrollController _scrollController;
   final ValueNotifier<bool> _showTitleBubble = ValueNotifier(false);
-  
+
   bool _isLoading = false;
   bool _isRebroadcasting = false;
   int _totalEventCount = 0;
@@ -58,8 +58,9 @@ class _EventManagerPageState extends State<EventManagerPage> {
     });
 
     try {
-      final result = await EventCountsService.instance.fetchAllEventsForUser(null);
-      
+      final result =
+          await EventCountsService.instance.fetchAllEventsForUser(null);
+
       if (!mounted) return;
 
       if (result != null) {
@@ -92,8 +93,9 @@ class _EventManagerPageState extends State<EventManagerPage> {
     });
 
     try {
-      final success = await EventCountsService.instance.rebroadcastEvents(_allEvents);
-      
+      final success =
+          await EventCountsService.instance.rebroadcastEvents(_allEvents);
+
       if (!mounted) return;
 
       if (success) {
@@ -147,7 +149,6 @@ class _EventManagerPageState extends State<EventManagerPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,25 +159,29 @@ class _EventManagerPageState extends State<EventManagerPage> {
             controller: _scrollController,
             slivers: [
               SliverToBoxAdapter(
-                child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                child:
+                    SizedBox(height: MediaQuery.of(context).padding.top + 60),
               ),
               SliverToBoxAdapter(
                 child: const TitleWidget(
                   title: 'Your Data on Relays',
-                  subtitle: 'Everything you share on Nostr is an event. View your event counts by kind and rebroadcast them to relays.',
+                  subtitle:
+                      'Everything you share on Nostr is an event. View your event counts by kind and rebroadcast them to relays.',
                   padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
                 ),
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: SecondaryButton(
-                    label: _isRebroadcasting ? 'Rebroadcasting...' : 'Rebroadcast',
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: PrimaryButton(
+                    label:
+                        _isRebroadcasting ? 'Rebroadcasting...' : 'Rebroadcast',
                     icon: Icons.send,
-                    onPressed: (_isLoading || _isRebroadcasting) ? null : _rebroadcastAllEvents,
+                    onPressed: (_isLoading || _isRebroadcasting)
+                        ? null
+                        : _rebroadcastAllEvents,
                     isLoading: _isRebroadcasting,
-                    backgroundColor: context.colors.overlayLight,
-                    foregroundColor: context.colors.textPrimary,
                     size: ButtonSize.large,
                   ),
                 ),
@@ -190,8 +195,8 @@ class _EventManagerPageState extends State<EventManagerPage> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
                           child: Text(
-                            _isLoading 
-                                ? 'Loading events...' 
+                            _isLoading
+                                ? 'Loading events...'
                                 : 'You have $_totalEventCount event${_totalEventCount != 1 ? 's' : ''}',
                             style: TextStyle(
                               fontSize: 16,
@@ -202,7 +207,8 @@ class _EventManagerPageState extends State<EventManagerPage> {
                         );
                       }
 
-                      final sortedKinds = _eventCountsByKind.keys.toList()..sort();
+                      final sortedKinds = _eventCountsByKind.keys.toList()
+                        ..sort();
                       if (index - 1 >= sortedKinds.length) {
                         return const SizedBox.shrink();
                       }
@@ -275,4 +281,3 @@ class _EventManagerPageState extends State<EventManagerPage> {
     );
   }
 }
-

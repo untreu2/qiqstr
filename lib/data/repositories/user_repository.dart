@@ -864,9 +864,19 @@ class UserRepository {
             final matchingProfiles =
                 await isarService.searchUserProfiles(trimmedQuery, limit: 50);
 
+            final seenPubkeys = <String>{};
+
             for (final profileData in matchingProfiles) {
+              final pubkeyHex = profileData['pubkeyHex'] ?? '';
+              if (pubkeyHex.isEmpty || seenPubkeys.contains(pubkeyHex)) {
+                continue;
+              }
+              seenPubkeys.add(pubkeyHex);
+
+              final npub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
               final userMap = <String, dynamic>{
-                'pubkeyHex': profileData['pubkeyHex'] ?? '',
+                'pubkeyHex': pubkeyHex,
+                'npub': npub,
                 'name': profileData['name'] ?? '',
                 'about': profileData['about'] ?? '',
                 'profileImage': profileData['profileImage'] ?? '',
@@ -889,7 +899,17 @@ class UserRepository {
         }
       }
 
-      return Result.success(results);
+      final seenPubkeys = <String>{};
+      final deduplicatedResults = <Map<String, dynamic>>[];
+      for (final user in results) {
+        final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+        if (pubkeyHex.isNotEmpty && !seenPubkeys.contains(pubkeyHex)) {
+          seenPubkeys.add(pubkeyHex);
+          deduplicatedResults.add(user);
+        }
+      }
+
+      return Result.success(deduplicatedResults);
     } catch (e) {
       debugPrint('[UserRepository] Search users error: $e');
       return Result.error('Failed to search users: $e');

@@ -19,7 +19,8 @@ Future<void> showAddRelayDialog({
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (modalContext) => Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(modalContext).viewInsets.bottom + 40),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(modalContext).viewInsets.bottom + 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,7 +44,8 @@ Future<void> showAddRelayDialog({
                 borderRadius: BorderRadius.circular(25),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
           const SizedBox(height: 24),

@@ -73,4 +73,3 @@ Future<void> showMuteUserDialog({
     ),
   );
 }
-

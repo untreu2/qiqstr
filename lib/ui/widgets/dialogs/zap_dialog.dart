@@ -38,7 +38,8 @@ Future<bool> _payZapWithWallet(
     }
 
     if (context.mounted) {
-      AppSnackbar.info(context, 'Processing payment...', duration: const Duration(seconds: 5));
+      AppSnackbar.info(context, 'Processing payment...',
+          duration: const Duration(seconds: 5));
     }
 
     final privateKey = await secureStorage.read(key: 'privateKey');
@@ -120,7 +121,8 @@ Future<bool> _payZapWithWallet(
       privateKey: privateKey,
     );
 
-    final encodedZap = Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
+    final encodedZap =
+        Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
     final zapUrl = Uri.parse(
       '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
     );
@@ -136,10 +138,12 @@ Future<bool> _payZapWithWallet(
       throw Exception('Invoice not returned by zap server.');
     }
 
-    debugPrint('[ZapDialog] About to pay invoice: ${invoice.substring(0, 20)}...');
+    debugPrint(
+        '[ZapDialog] About to pay invoice: ${invoice.substring(0, 20)}...');
     final paymentResult = await walletRepository.payInvoice(invoice);
 
-    debugPrint('[ZapDialog] Payment result: ${paymentResult.isSuccess ? 'SUCCESS' : 'FAILED'}');
+    debugPrint(
+        '[ZapDialog] Payment result: ${paymentResult.isSuccess ? 'SUCCESS' : 'FAILED'}');
     if (paymentResult.isError) {
       debugPrint('[ZapDialog] Payment error: ${paymentResult.error}');
       throw Exception(paymentResult.error);
@@ -151,11 +155,13 @@ Future<bool> _payZapWithWallet(
     if (context.mounted) {
       final userName = user['name'] as String? ?? 'User';
       AppSnackbar.hide(context);
-      AppSnackbar.success(context, 'Zapped $sats sats to $userName!', duration: const Duration(seconds: 2));
+      AppSnackbar.success(context, 'Zapped $sats sats to $userName!',
+          duration: const Duration(seconds: 2));
     }
 
     // Publish Nostr events in the background without affecting success status
-    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex, note, comment, privateKey, sats, paymentResult));
+    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex,
+        note, comment, privateKey, sats, paymentResult));
 
     return true;
   } catch (e) {
@@ -185,7 +191,8 @@ Future<void> _publishZapEventsAsync(
     await webSocketManager.priorityBroadcast(serializedZapRequest);
 
     if (kDebugMode) {
-      print('[ZapDialog] Zap request event (kind 9734) published for note: $noteId');
+      print(
+          '[ZapDialog] Zap request event (kind 9734) published for note: $noteId');
     }
 
     final publicKey = Bip340.getPublicKey(privateKey);
@@ -240,7 +247,9 @@ Future<void> _processZapPayment(
         final lud16 = user['lud16'] as String? ?? '';
         if (lud16.isEmpty) {
           if (context.mounted) {
-            AppSnackbar.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
+            AppSnackbar.error(
+                context, 'User does not have a lightning address configured.',
+                duration: const Duration(seconds: 1));
           }
           return;
         }
@@ -249,13 +258,15 @@ Future<void> _processZapPayment(
       },
       (error) {
         if (context.mounted) {
-          AppSnackbar.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
+          AppSnackbar.error(context, 'Error loading user profile: $error',
+              duration: const Duration(seconds: 1));
         }
       },
     );
   } catch (e) {
     if (context.mounted) {
-      AppSnackbar.error(context, 'Failed to process zap: $e', duration: const Duration(seconds: 1));
+      AppSnackbar.error(context, 'Failed to process zap: $e',
+          duration: const Duration(seconds: 1));
     }
   }
 }
@@ -287,21 +298,25 @@ Future<Map<String, dynamic>> showZapDialog({
     builder: (modalContext) => StatefulBuilder(
       builder: (context, setState) {
         return Padding(
-          padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40, top: 16),
+          padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40,
+              top: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               CustomInputField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                  labelText: 'Amount (sats)',
-                  fillColor: colors.inputFill,
+                labelText: 'Amount (sats)',
+                fillColor: colors.inputFill,
               ),
               const SizedBox(height: 16),
               CustomInputField(
                 controller: noteController,
-                  labelText: 'Comment (Optional)',
-                  fillColor: colors.inputFill,
+                labelText: 'Comment (Optional)',
+                fillColor: colors.inputFill,
               ),
               const SizedBox(height: 24),
               SizedBox(
@@ -311,7 +326,8 @@ Future<Map<String, dynamic>> showZapDialog({
                   onPressed: () {
                     final sats = int.tryParse(amountController.text.trim());
                     if (sats == null || sats <= 0) {
-                      AppSnackbar.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
+                      AppSnackbar.error(modalContext, 'Enter a valid amount',
+                          duration: const Duration(seconds: 1));
                       return;
                     }
 
@@ -320,7 +336,8 @@ Future<Map<String, dynamic>> showZapDialog({
                       'amount': sats,
                     });
 
-                    unawaited(_processZapPayment(context, note, sats, noteController.text.trim()));
+                    unawaited(_processZapPayment(
+                        context, note, sats, noteController.text.trim()));
                   },
                   size: ButtonSize.large,
                 ),

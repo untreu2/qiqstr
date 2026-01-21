@@ -5,7 +5,7 @@ import 'package:qiqstr/data/services/auth_service.dart';
 
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
-import '../../widgets/common/brand_widget.dart';
+
 import '../../widgets/common/custom_input_field.dart';
 
 class LoginPage extends StatefulWidget {
@@ -15,44 +15,14 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> {
   final TextEditingController _inputController = TextEditingController();
   String _message = '';
   bool _isLoading = false;
   final AuthService _authService = AuthService.instance;
 
-  late AnimationController _bounceController;
-  late Animation<double> _bounceAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _bounceController = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _bounceAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.03,
-    ).animate(CurvedAnimation(
-      parent: _bounceController,
-      curve: Curves.easeInOut,
-    ));
-
-    _inputController.addListener(_onTextChanged);
-  }
-
-  void _onTextChanged() {
-    if (_inputController.text.isNotEmpty) {
-      _bounceController.forward().then((_) {
-        _bounceController.reverse();
-      });
-    }
-  }
-
   @override
   void dispose() {
-    _bounceController.dispose();
     _inputController.dispose();
     super.dispose();
   }
@@ -92,7 +62,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _message = 'Error: Invalid input. Please check your NSEC or mnemonic phrase.';
+          _message =
+              'Error: Invalid input. Please check your NSEC or mnemonic phrase.';
           _isLoading = false;
         });
       }
@@ -162,35 +133,25 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          AnimatedBuilder(
-            animation: _bounceAnimation,
-            builder: (context, child) {
-              return Transform.scale(
-                scale: _bounceAnimation.value,
-                child: const BrandWidget(),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
           CustomInputField(
             controller: _inputController,
-              labelText: 'Enter your seed phrase or nsec...',
+            labelText: 'Enter your seed phrase or nsec...',
             fillColor: context.colors.inputFill,
-              suffixIcon: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: _pasteFromClipboard,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
+            suffixIcon: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: _pasteFromClipboard,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
                     color: context.colors.textPrimary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.content_paste,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.content_paste,
                     color: context.colors.background,
-                      size: 20,
+                    size: 20,
                   ),
                 ),
               ),
@@ -199,11 +160,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            child: SecondaryButton(
+            child: PrimaryButton(
               label: 'Login',
               onPressed: _isLoading ? null : _loginWithInput,
               size: ButtonSize.large,
               isLoading: _isLoading,
+              backgroundColor: context.colors.inputFill,
+              foregroundColor: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
@@ -213,15 +176,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               label: 'Create a New Account',
               onPressed: _isLoading ? null : _createNewAccount,
               size: ButtonSize.large,
-              backgroundColor: context.colors.accent,
-              foregroundColor: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 20),
           if (_message.isNotEmpty)
             Text(
               _message,
-              style: TextStyle(color: context.colors.error, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: context.colors.error, fontWeight: FontWeight.w600),
             ),
         ],
       ),
@@ -248,7 +210,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       backgroundColor: context.colors.background,
       body: SafeArea(
         child: Center(
-          child: _isLoading ? _buildLoadingScreen() : SingleChildScrollView(child: _buildLoginForm()),
+          child: _isLoading
+              ? _buildLoadingScreen()
+              : SingleChildScrollView(child: _buildLoginForm()),
         ),
       ),
     );

@@ -30,7 +30,8 @@ class FocusedNoteWidget extends StatefulWidget {
   State<FocusedNoteWidget> createState() => _FocusedNoteWidgetState();
 }
 
-class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKeepAliveClientMixin {
+class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -46,7 +47,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
 
   late final Map<String, dynamic> _parsedContent;
 
-  final ValueNotifier<_FocusedNoteState> _stateNotifier = ValueNotifier(_FocusedNoteState.initial());
+  final ValueNotifier<_FocusedNoteState> _stateNotifier =
+      ValueNotifier(_FocusedNoteState.initial());
   final Map<String, Map<String, dynamic>> _locallyLoadedProfiles = {};
 
   bool _isDisposed = false;
@@ -138,9 +140,11 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
     try {
       final currentState = _stateNotifier.value;
 
-      Map<String, dynamic>? authorUser = widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
-      Map<String, dynamic>? reposterUser = _reposterId != null 
-          ? (widget.profiles[_reposterId] ?? _locallyLoadedProfiles[_reposterId])
+      Map<String, dynamic>? authorUser =
+          widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
+      Map<String, dynamic>? reposterUser = _reposterId != null
+          ? (widget.profiles[_reposterId] ??
+              _locallyLoadedProfiles[_reposterId])
           : null;
 
       authorUser ??= {
@@ -160,7 +164,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
         final reposterId = _reposterId;
         reposterUser = {
           'pubkeyHex': reposterId,
-          'name': reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
+          'name':
+              reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
           'about': '',
           'profileImage': '',
           'banner': '',
@@ -193,12 +198,18 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
 
     try {
       if (widget.notesListProvider != null) {
-        final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
-        final reposterPreloaded = _reposterId != null ? widget.notesListProvider.getPreloadedUser(_reposterId) : null;
+        final authorPreloaded =
+            widget.notesListProvider.getPreloadedUser(_authorId);
+        final reposterPreloaded = _reposterId != null
+            ? widget.notesListProvider.getPreloadedUser(_reposterId)
+            : null;
 
         if (authorPreloaded != null &&
             (authorPreloaded['name'] as String? ?? '') != 'Anonymous' &&
-            (_reposterId == null || (reposterPreloaded != null && (reposterPreloaded['name'] as String? ?? '') != 'Anonymous'))) {
+            (_reposterId == null ||
+                (reposterPreloaded != null &&
+                    (reposterPreloaded['name'] as String? ?? '') !=
+                        'Anonymous'))) {
           return;
         }
       }
@@ -212,7 +223,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
             _updateUserData();
           }
         },
-        (error) => debugPrint('[FocusedNoteWidget] Failed to load author: $error'),
+        (error) =>
+            debugPrint('[FocusedNoteWidget] Failed to load author: $error'),
       );
 
       if (_reposterId != null) {
@@ -226,7 +238,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
               _updateUserData();
             }
           },
-          (error) => debugPrint('[FocusedNoteWidget] Failed to load reposter: $error'),
+          (error) =>
+              debugPrint('[FocusedNoteWidget] Failed to load reposter: $error'),
         );
       }
     } catch (e) {
@@ -263,9 +276,10 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
   void _navigateToProfile(String npub) {
     try {
       if (mounted && !_isDisposed) {
-        debugPrint('[FocusedNoteWidget] Attempting to navigate to profile: $npub');
+        debugPrint(
+            '[FocusedNoteWidget] Attempting to navigate to profile: $npub');
 
-        final user = widget.profiles[npub] ?? 
+        final user = widget.profiles[npub] ??
             _locallyLoadedProfiles[npub] ??
             {
               'pubkeyHex': npub,
@@ -284,13 +298,17 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
         final userPubkeyHex = user['pubkeyHex'] as String? ?? npub;
         final currentLocation = GoRouterState.of(context).matchedLocation;
         if (currentLocation.startsWith('/home/feed')) {
-          context.push('/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          context.push(
+              '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
         } else if (currentLocation.startsWith('/home/notifications')) {
-          context.push('/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-        } else if (currentLocation.startsWith('/home/dm')) {
-          context.push('/home/dm/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          context.push(
+              '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+        } else if (currentLocation.startsWith('/home/explore')) {
+          context.push(
+              '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
         } else {
-          context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          context.push(
+              '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
         }
       }
     } catch (e) {
@@ -333,7 +351,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
           margin: EdgeInsets.zero,
           color: colors.background,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
             padding: const EdgeInsets.only(top: 16.0, bottom: 12.0),
             child: Column(
@@ -343,7 +362,9 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                   stateNotifier: _stateNotifier,
                   isRepost: _isRepost,
                   onAuthorTap: () => _navigateToProfile(_authorId),
-                  onReposterTap: _reposterId != null ? () => _navigateToProfile(_reposterId) : null,
+                  onReposterTap: _reposterId != null
+                      ? () => _navigateToProfile(_reposterId)
+                      : null,
                   colors: colors,
                   widgetKey: _widgetKey,
                 ),
@@ -358,7 +379,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                     onMentionTap: _navigateToMentionProfile,
                     notesListProvider: widget.notesListProvider,
                     noteId: _noteId,
-                    authorProfileImageUrl: _stateNotifier.value.authorUser?['profileImage'] as String?,
+                    authorProfileImageUrl: _stateNotifier
+                        .value.authorUser?['profileImage'] as String?,
                     authorId: _authorId,
                     isSelectable: widget.isSelectable,
                   ),
@@ -429,7 +451,10 @@ class _FocusedNoteState {
           replyText == other.replyText;
 
   @override
-  int get hashCode => (authorUser?.hashCode ?? 0) ^ (reposterUser?.hashCode ?? 0) ^ (replyText?.hashCode ?? 0);
+  int get hashCode =>
+      (authorUser?.hashCode ?? 0) ^
+      (reposterUser?.hashCode ?? 0) ^
+      (replyText?.hashCode ?? 0);
 }
 
 class _FocusedProfileSection extends StatelessWidget {
@@ -532,12 +557,16 @@ class _FocusedProfileSection extends StatelessWidget {
                       Flexible(
                         child: Text(
                           () {
-                            final name = state.authorUser?['name'] as String? ?? '';
+                            final name =
+                                state.authorUser?['name'] as String? ?? '';
                             if (name.isNotEmpty) {
                               return name;
                             }
-                            final npub = state.authorUser?['npub'] as String? ?? '';
-                            return npub.length > 8 ? npub.substring(0, 8) : (npub.isEmpty ? 'Anonymous' : npub);
+                            final npub =
+                                state.authorUser?['npub'] as String? ?? '';
+                            return npub.length > 8
+                                ? npub.substring(0, 8)
+                                : (npub.isEmpty ? 'Anonymous' : npub);
                           }(),
                           style: TextStyle(
                             fontSize: 16,

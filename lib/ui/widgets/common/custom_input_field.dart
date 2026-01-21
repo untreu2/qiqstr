@@ -57,25 +57,28 @@ class CustomInputField extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final effectiveFillColor = fillColor ?? colors.overlayLight;
-    final effectiveContentPadding = contentPadding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 14);
-    
+    final effectiveContentPadding = contentPadding ??
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 14);
+
     final inputDecoration = InputDecoration(
       hintText: hintText,
-      hintStyle: hintStyle ?? TextStyle(
-        color: colors.textSecondary,
-        fontSize: 15,
-      ),
+      hintStyle: hintStyle ??
+          TextStyle(
+            color: colors.textSecondary,
+            fontSize: 15,
+          ),
       labelText: labelText,
-      labelStyle: labelStyle ?? TextStyle(
-        fontWeight: FontWeight.w600,
-        color: colors.textSecondary,
-      ),
+      labelStyle: labelStyle ??
+          TextStyle(
+            fontWeight: FontWeight.w600,
+            color: colors.textSecondary,
+          ),
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: effectiveFillColor,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         borderSide: BorderSide.none,
       ),
       contentPadding: effectiveContentPadding,
@@ -83,7 +86,7 @@ class CustomInputField extends StatelessWidget {
     );
 
     Widget inputWidget;
-    
+
     if (validator != null) {
       inputWidget = TextFormField(
         controller: controller,
@@ -99,10 +102,11 @@ class CustomInputField extends StatelessWidget {
         onFieldSubmitted: onSubmitted,
         onTap: onTap,
         validator: validator,
-        style: style ?? TextStyle(
-          color: colors.textPrimary,
-          fontSize: 15,
-        ),
+        style: style ??
+            TextStyle(
+              color: colors.textPrimary,
+              fontSize: 15,
+            ),
         cursorColor: colors.textPrimary,
         decoration: inputDecoration,
       );
@@ -120,10 +124,11 @@ class CustomInputField extends StatelessWidget {
         onEditingComplete: onEditingComplete,
         onSubmitted: onSubmitted,
         onTap: onTap,
-        style: style ?? TextStyle(
-          color: colors.textPrimary,
-          fontSize: 15,
-        ),
+        style: style ??
+            TextStyle(
+              color: colors.textPrimary,
+              fontSize: 15,
+            ),
         cursorColor: colors.textPrimary,
         decoration: inputDecoration,
       );
@@ -139,4 +144,3 @@ class CustomInputField extends StatelessWidget {
     return inputWidget;
   }
 }
-

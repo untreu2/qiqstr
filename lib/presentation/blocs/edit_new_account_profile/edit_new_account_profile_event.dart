@@ -13,10 +13,20 @@ class EditNewAccountProfilePictureUploaded extends EditNewAccountProfileEvent {
   List<Object?> get props => [filePath];
 }
 
+class EditNewAccountProfileBannerUploaded extends EditNewAccountProfileEvent {
+  final String filePath;
+
+  const EditNewAccountProfileBannerUploaded(this.filePath);
+
+  @override
+  List<Object?> get props => [filePath];
+}
+
 class EditNewAccountProfileSaved extends EditNewAccountProfileEvent {
   final String name;
   final String about;
   final String profileImage;
+  final String banner;
   final String lud16;
   final String website;
 
@@ -24,10 +34,12 @@ class EditNewAccountProfileSaved extends EditNewAccountProfileEvent {
     required this.name,
     required this.about,
     required this.profileImage,
+    required this.banner,
     required this.lud16,
     required this.website,
   });
 
   @override
-  List<Object?> get props => [name, about, profileImage, lud16, website];
+  List<Object?> get props =>
+      [name, about, profileImage, banner, lud16, website];
 }

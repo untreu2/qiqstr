@@ -53,22 +53,30 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       if (!mounted) return;
 
       final userNpubValue = user?['npub'];
-      final userNpub = userNpubValue is String ? userNpubValue : (userNpubValue?.toString() ?? npub);
-      
+      final userNpub = userNpubValue is String
+          ? userNpubValue
+          : (userNpubValue?.toString() ?? npub);
+
       final userPubkeyHexValue = user?['pubkeyHex'];
-      final userPubkeyHex = userPubkeyHexValue is String ? userPubkeyHexValue : (userPubkeyHexValue?.toString() ?? '');
+      final userPubkeyHex = userPubkeyHexValue is String
+          ? userPubkeyHexValue
+          : (userPubkeyHexValue?.toString() ?? '');
 
       if (!mounted) return;
 
       final currentLocation = GoRouterState.of(context).matchedLocation;
       if (currentLocation.startsWith('/home/feed')) {
-        context.push('/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+        context.push(
+            '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
       } else if (currentLocation.startsWith('/home/notifications')) {
-        context.push('/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-      } else if (currentLocation.startsWith('/home/dm')) {
-        context.push('/home/dm/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+        context.push(
+            '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+      } else if (currentLocation.startsWith('/home/explore')) {
+        context.push(
+            '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
       } else {
-        context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+        context.push(
+            '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
       }
     } catch (e) {
       debugPrint('[NoteStatisticsPage] Navigate to profile error: $e');
@@ -104,99 +112,111 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     }
 
     final userProfileImageValue = user['profileImage'];
-    final userProfileImage = userProfileImageValue is String ? userProfileImageValue : (userProfileImageValue?.toString() ?? '');
-    
-    final userNameValue = user['name'];
-    final userName = userNameValue is String ? userNameValue : (userNameValue?.toString() ?? '');
-    
-    final userNip05Value = user['nip05'];
-    final userNip05 = userNip05Value is String ? userNip05Value : (userNip05Value?.toString() ?? '');
-    
-    final userNip05VerifiedValue = user['nip05Verified'];
-    final userNip05Verified = userNip05VerifiedValue is bool ? userNip05VerifiedValue : (userNip05VerifiedValue == true || userNip05VerifiedValue == 'true');
+    final userProfileImage = userProfileImageValue is String
+        ? userProfileImageValue
+        : (userProfileImageValue?.toString() ?? '');
 
-        Widget? trailing;
-        if (zapAmount != null || content.isNotEmpty) {
-          trailing = Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (zapAmount != null)
-                Text(
-                  ' $zapAmount sats',
-                  style: TextStyle(
-                    color: context.colors.accent,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
+    final userNameValue = user['name'];
+    final userName = userNameValue is String
+        ? userNameValue
+        : (userNameValue?.toString() ?? '');
+
+    final userNip05Value = user['nip05'];
+    final userNip05 = userNip05Value is String
+        ? userNip05Value
+        : (userNip05Value?.toString() ?? '');
+
+    final userNip05VerifiedValue = user['nip05Verified'];
+    final userNip05Verified = userNip05VerifiedValue is bool
+        ? userNip05VerifiedValue
+        : (userNip05VerifiedValue == true || userNip05VerifiedValue == 'true');
+
+    Widget? trailing;
+    if (zapAmount != null || content.isNotEmpty) {
+      trailing = Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (zapAmount != null)
+            Text(
+              ' $zapAmount sats',
+              style: TextStyle(
+                color: context.colors.accent,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          if (content.isNotEmpty) ...[
+            if (zapAmount != null) const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                content,
+                style: TextStyle(
+                  color: context.colors.textPrimary,
+                  fontSize: content.length <= 5 ? 20 : 15,
                 ),
-              if (content.isNotEmpty) ...[
-                if (zapAmount != null) const SizedBox(width: 12),
-                Flexible(
-                  child: Text(
-                    content,
-                    style: TextStyle(
-                      color: context.colors.textPrimary,
-                      fontSize: content.length <= 5 ? 20 : 15,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ],
-          );
-        }
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
 
     return GestureDetector(
       onTap: () => _navigateToProfile(npub, user),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                _buildAvatar(context, userProfileImage),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: trailing != null ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
-                    children: [
-                      Flexible(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.colors.textPrimary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (userNip05.isNotEmpty && userNip05Verified) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.verified,
-                                size: 16,
-                                color: context.colors.accent,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      if (trailing != null) ...[
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            _buildAvatar(context, userProfileImage),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: trailing != null
+                    ? MainAxisAlignment.spaceBetween
+                    : MainAxisAlignment.start,
+                children: [
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Flexible(
-                          child: trailing,
+                          child: Text(
+                            userName.length > 25
+                                ? '${userName.substring(0, 25)}...'
+                                : userName,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                        if (userNip05.isNotEmpty && userNip05Verified) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.verified,
+                            size: 16,
+                            color: context.colors.accent,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                  if (trailing != null) ...[
+                    Flexible(
+                      child: trailing,
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-        );
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildAvatar(BuildContext context, String imageUrl) {
@@ -267,7 +287,8 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       },
       child: BlocBuilder<NoteStatisticsBloc, NoteStatisticsState>(
         builder: (context, state) {
-          if (state is NoteStatisticsLoading || state is NoteStatisticsInitial) {
+          if (state is NoteStatisticsLoading ||
+              state is NoteStatisticsInitial) {
             return Scaffold(
               backgroundColor: context.colors.background,
               body: const Center(child: CircularProgressIndicator()),
@@ -287,22 +308,27 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
           final interactionWidgets = <Widget>[];
           for (int i = 0; i < interactions.length; i++) {
             final interaction = interactions[i];
-            
+
             final npubValue = interaction['npub'];
-            final npub = npubValue is String ? npubValue : (npubValue?.toString() ?? '');
-            
+            final npub =
+                npubValue is String ? npubValue : (npubValue?.toString() ?? '');
+
             if (npub.isEmpty) {
               continue;
             }
-            
+
             final contentValue = interaction['content'];
-            final content = contentValue is String ? contentValue : (contentValue?.toString() ?? '');
-            
+            final content = contentValue is String
+                ? contentValue
+                : (contentValue?.toString() ?? '');
+
             final zapAmountValue = interaction['zapAmount'];
-            final zapAmount = zapAmountValue is int ? zapAmountValue : (zapAmountValue is num ? zapAmountValue.toInt() : null);
-            
+            final zapAmount = zapAmountValue is int
+                ? zapAmountValue
+                : (zapAmountValue is num ? zapAmountValue.toInt() : null);
+
             final user = users[npub];
-            
+
             interactionWidgets.add(
               _buildEntry(
                 npub: npub,
@@ -324,7 +350,8 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                   controller: _scrollController,
                   slivers: [
                     SliverToBoxAdapter(
-                      child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                      child: SizedBox(
+                          height: MediaQuery.of(context).padding.top + 60),
                     ),
                     SliverToBoxAdapter(
                       child: _buildHeader(context),
@@ -336,7 +363,8 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                                 padding: const EdgeInsets.only(top: 32),
                                 child: Text(
                                   'No interactions yet.',
-                                  style: TextStyle(color: context.colors.textTertiary),
+                                  style: TextStyle(
+                                      color: context.colors.textTertiary),
                                 ),
                               ),
                             )

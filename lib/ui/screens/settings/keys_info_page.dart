@@ -159,10 +159,10 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Text(
           mnemonicWithCommas,
@@ -192,7 +192,7 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
             padding: const EdgeInsets.symmetric(vertical: 18),
             decoration: BoxDecoration(
               color: context.colors.textPrimary,
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(24),
             ),
             child: Text(
               'I have written down my seed phrase',

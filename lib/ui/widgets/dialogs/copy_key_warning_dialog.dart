@@ -68,4 +68,3 @@ Future<bool> showCopyKeyWarningDialog({
   );
   return result ?? false;
 }
-

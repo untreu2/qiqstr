@@ -51,7 +51,14 @@ class QuoteWidget extends StatelessWidget {
                 ),
               ),
             QuoteWidgetError() => const SizedBox.shrink(),
-            QuoteWidgetLoaded(:final note, :final user, :final formattedTime, :final parsedContent, :final shouldTruncate) => _QuoteContent(
+            QuoteWidgetLoaded(
+              :final note,
+              :final user,
+              :final formattedTime,
+              :final parsedContent,
+              :final shouldTruncate
+            ) =>
+              _QuoteContent(
                 note: note,
                 user: user,
                 formattedTime: formattedTime,
@@ -88,9 +95,11 @@ class _QuoteContent extends StatelessWidget {
     final noteId = note['id'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
+      context
+          .push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
+      context.push(
+          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
     } else {
       context.push('/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
     }
@@ -103,13 +112,17 @@ class _QuoteContent extends StatelessWidget {
     final userPubkeyHex = user!['pubkeyHex'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push('/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+      context.push(
+          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push('/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-    } else if (currentLocation.startsWith('/home/dm')) {
-      context.push('/home/dm/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+      context.push(
+          '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+    } else if (currentLocation.startsWith('/home/explore')) {
+      context.push(
+          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     } else {
-      context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+      context.push(
+          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     }
   }
 
@@ -119,8 +132,8 @@ class _QuoteContent extends StatelessWidget {
         ? '/home/feed'
         : currentLocation.startsWith('/home/notifications')
             ? '/home/notifications'
-            : currentLocation.startsWith('/home/dm')
-                ? '/home/dm'
+            : currentLocation.startsWith('/home/explore')
+                ? '/home/feed'
                 : '';
     context.push('$basePath/profile?npub=${Uri.encodeComponent(npub)}');
   }
@@ -147,12 +160,15 @@ class _QuoteContent extends StatelessWidget {
     final noteContent = note['content'] as String? ?? '';
     final noteId = note['id'] as String? ?? '';
     final displayUser = user ?? _createFallbackUser(noteAuthor);
-    final displayParsedContent = parsedContent ?? {
-      'textParts': [{'type': 'text', 'text': noteContent}],
-      'mediaUrls': <String>[],
-      'linkUrls': <String>[],
-      'quoteIds': <String>[],
-    };
+    final displayParsedContent = parsedContent ??
+        {
+          'textParts': [
+            {'type': 'text', 'text': noteContent}
+          ],
+          'mediaUrls': <String>[],
+          'linkUrls': <String>[],
+          'quoteIds': <String>[],
+        };
 
     Map<String, dynamic> contentToShow = displayParsedContent;
     if (shortMode) {
@@ -182,8 +198,11 @@ class _QuoteContent extends StatelessWidget {
                 child: NoteContentWidget(
                   noteId: noteId,
                   parsedContent: contentToShow,
-                  onNavigateToMentionProfile: (npub) => _navigateToMentionProfile(context, npub),
-                  onShowMoreTap: shouldTruncate ? (String noteId) => _navigateToThread(context) : null,
+                  onNavigateToMentionProfile: (npub) =>
+                      _navigateToMentionProfile(context, npub),
+                  onShowMoreTap: shouldTruncate
+                      ? (String noteId) => _navigateToThread(context)
+                      : null,
                   shortMode: shortMode,
                 ),
               ),
@@ -204,8 +223,12 @@ class _QuoteContent extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundColor: userProfileImage.isNotEmpty ? context.colors.surfaceTransparent : context.colors.secondary,
-                backgroundImage: userProfileImage.isNotEmpty ? CachedNetworkImageProvider(userProfileImage) : null,
+                backgroundColor: userProfileImage.isNotEmpty
+                    ? context.colors.surfaceTransparent
+                    : context.colors.secondary,
+                backgroundImage: userProfileImage.isNotEmpty
+                    ? CachedNetworkImageProvider(userProfileImage)
+                    : null,
                 child: userProfileImage.isEmpty
                     ? Icon(
                         Icons.person,
@@ -216,7 +239,9 @@ class _QuoteContent extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
+                userName.length > 25
+                    ? '${userName.substring(0, 25)}...'
+                    : userName,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -243,7 +268,10 @@ class _QuoteContent extends StatelessWidget {
 
   bool _hasContent(Map<String, dynamic> parsedContent) {
     final textParts = parsedContent['textParts'] as List?;
-    final hasText = textParts?.any((p) => p['type'] == 'text' && (p['text'] as String? ?? '').trim().isNotEmpty) ?? false;
+    final hasText = textParts?.any((p) =>
+            p['type'] == 'text' &&
+            (p['text'] as String? ?? '').trim().isNotEmpty) ??
+        false;
     final hasMedia = (parsedContent['mediaUrls'] as List?)?.isNotEmpty ?? false;
     return hasText || hasMedia;
   }
@@ -251,7 +279,8 @@ class _QuoteContent extends StatelessWidget {
   Map<String, dynamic> _createShortModeContent(Map<String, dynamic> original) {
     try {
       const int limit = 120;
-      final textParts = (original['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final textParts =
+          (original['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final truncatedParts = <Map<String, dynamic>>[];
       int currentLength = 0;
 
@@ -292,10 +321,12 @@ class _QuoteContent extends StatelessWidget {
     }
   }
 
-  Map<String, dynamic> _createTruncatedContent(Map<String, dynamic> original, String noteId) {
+  Map<String, dynamic> _createTruncatedContent(
+      Map<String, dynamic> original, String noteId) {
     try {
       const int limit = 140;
-      final textParts = (original['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final textParts =
+          (original['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final truncatedParts = <Map<String, dynamic>>[];
       int currentLength = 0;
 

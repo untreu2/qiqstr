@@ -93,7 +93,8 @@ class AppRouter {
                     name: 'feed-profile',
                     builder: (context, state) {
                       final npubParam = state.uri.queryParameters['npub'] ?? '';
-                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      final pubkeyHexParam =
+                          state.uri.queryParameters['pubkeyHex'] ?? '';
                       String pubkeyHex;
                       if (pubkeyHexParam.isNotEmpty) {
                         pubkeyHex = pubkeyHexParam;
@@ -124,8 +125,10 @@ class AppRouter {
                     path: 'thread',
                     name: 'feed-thread',
                     builder: (context, state) {
-                      final rootNoteId = state.uri.queryParameters['rootNoteId'] ?? '';
-                      final focusedNoteId = state.uri.queryParameters['focusedNoteId'];
+                      final rootNoteId =
+                          state.uri.queryParameters['rootNoteId'] ?? '';
+                      final focusedNoteId =
+                          state.uri.queryParameters['focusedNoteId'];
                       return ThreadPage(
                         rootNoteId: rootNoteId,
                         focusedNoteId: focusedNoteId,
@@ -159,22 +162,44 @@ class AppRouter {
                     name: 'feed-following',
                     builder: (context, state) {
                       final npub = state.uri.queryParameters['npub'] ?? '';
-                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
-                      String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                      final pubkeyHexParam =
+                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex =
+                          pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
                       if (pubkeyHex.startsWith('npub1')) {
                         try {
                           pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
                         } catch (e) {
-                          pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                          pubkeyHex =
+                              pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
                         }
                       }
                       return FollowingPage(pubkeyHex: pubkeyHex);
                     },
                   ),
                   GoRoute(
-                    path: 'explore',
-                    name: 'feed-explore',
-                    builder: (context, state) => const ExplorePage(),
+                    path: 'dm',
+                    name: 'feed-dm',
+                    builder: (context, state) => const DmConversationsPage(),
+                    routes: [
+                      GoRoute(
+                        path: 'chat',
+                        name: 'feed-dm-chat',
+                        builder: (context, state) {
+                          final pubkeyHexParam =
+                              state.uri.queryParameters['pubkeyHex'] ?? '';
+                          String pubkeyHex = pubkeyHexParam;
+                          if (pubkeyHex.startsWith('npub1')) {
+                            try {
+                              pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                            } catch (e) {
+                              pubkeyHex = pubkeyHexParam;
+                            }
+                          }
+                          return DmChatPage(pubkeyHex: pubkeyHex);
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -183,98 +208,9 @@ class AppRouter {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/home/dm',
-                name: 'dm',
-                builder: (context, state) => const DmConversationsPage(),
-                routes: [
-                  GoRoute(
-                    path: 'chat',
-                    name: 'dm-chat',
-                    builder: (context, state) {
-                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
-                      String pubkeyHex = pubkeyHexParam;
-                      if (pubkeyHex.startsWith('npub1')) {
-                        try {
-                          pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
-                        } catch (e) {
-                          pubkeyHex = pubkeyHexParam;
-                        }
-                      }
-                      return DmChatPage(pubkeyHex: pubkeyHex);
-                    },
-                  ),
-                  GoRoute(
-                    path: 'profile',
-                    name: 'dm-profile',
-                    builder: (context, state) {
-                      final npubParam = state.uri.queryParameters['npub'] ?? '';
-                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
-                      String pubkeyHex;
-                      if (pubkeyHexParam.isNotEmpty) {
-                        pubkeyHex = pubkeyHexParam;
-                        if (pubkeyHex.startsWith('npub1')) {
-                          try {
-                            pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
-                          } catch (e) {
-                            pubkeyHex = pubkeyHexParam;
-                          }
-                        }
-                      } else if (npubParam.isNotEmpty) {
-                        if (npubParam.startsWith('npub1')) {
-                          try {
-                            pubkeyHex = decodeBasicBech32(npubParam, 'npub');
-                          } catch (e) {
-                            pubkeyHex = npubParam;
-                          }
-                        } else {
-                          pubkeyHex = npubParam;
-                        }
-                      } else {
-                        pubkeyHex = '';
-                      }
-                      return ProfilePage(pubkeyHex: pubkeyHex);
-                    },
-                  ),
-                  GoRoute(
-                    path: 'note-statistics',
-                    name: 'dm-note-statistics',
-                    builder: (context, state) {
-                      final queryNoteId = state.uri.queryParameters['noteId'];
-                      final extra = state.extra;
-                      String noteId = '';
-                      if (queryNoteId != null && queryNoteId.isNotEmpty) {
-                        noteId = queryNoteId;
-                      } else if (extra is String) {
-                        noteId = extra;
-                      } else if (extra is Map<String, dynamic>) {
-                        noteId = extra['id']?.toString() ?? '';
-                      }
-                      if (noteId.isEmpty) {
-                        return const Scaffold(
-                          body: Center(child: Text('Note not found')),
-                        );
-                      }
-                      return NoteStatisticsPage(noteId: noteId);
-                    },
-                  ),
-                  GoRoute(
-                    path: 'following',
-                    name: 'dm-following',
-                    builder: (context, state) {
-                      final npub = state.uri.queryParameters['npub'] ?? '';
-                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
-                      String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
-                      if (pubkeyHex.startsWith('npub1')) {
-                        try {
-                          pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
-                        } catch (e) {
-                          pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
-                        }
-                      }
-                      return FollowingPage(pubkeyHex: pubkeyHex);
-                    },
-                  ),
-                ],
+                path: '/home/explore',
+                name: 'explore',
+                builder: (context, state) => const ExplorePage(),
               ),
             ],
           ),
@@ -299,7 +235,8 @@ class AppRouter {
                     name: 'notifications-profile',
                     builder: (context, state) {
                       final npubParam = state.uri.queryParameters['npub'] ?? '';
-                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      final pubkeyHexParam =
+                          state.uri.queryParameters['pubkeyHex'] ?? '';
                       String pubkeyHex;
                       if (pubkeyHexParam.isNotEmpty) {
                         pubkeyHex = pubkeyHexParam;
@@ -330,8 +267,10 @@ class AppRouter {
                     path: 'thread',
                     name: 'notifications-thread',
                     builder: (context, state) {
-                      final rootNoteId = state.uri.queryParameters['rootNoteId'] ?? '';
-                      final focusedNoteId = state.uri.queryParameters['focusedNoteId'];
+                      final rootNoteId =
+                          state.uri.queryParameters['rootNoteId'] ?? '';
+                      final focusedNoteId =
+                          state.uri.queryParameters['focusedNoteId'];
                       return ThreadPage(
                         rootNoteId: rootNoteId,
                         focusedNoteId: focusedNoteId,
@@ -365,13 +304,16 @@ class AppRouter {
                     name: 'notifications-following',
                     builder: (context, state) {
                       final npub = state.uri.queryParameters['npub'] ?? '';
-                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
-                      String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                      final pubkeyHexParam =
+                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex =
+                          pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
                       if (pubkeyHex.startsWith('npub1')) {
                         try {
                           pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
                         } catch (e) {
-                          pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                          pubkeyHex =
+                              pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
                         }
                       }
                       return FollowingPage(pubkeyHex: pubkeyHex);
@@ -519,7 +461,8 @@ class AppRouter {
     ],
   );
 
-  static Future<String?> _handleRedirect(BuildContext context, GoRouterState state) async {
+  static Future<String?> _handleRedirect(
+      BuildContext context, GoRouterState state) async {
     final authService = AppDI.get<AuthService>();
     final isAuthResult = await authService.isAuthenticated();
     final isAuthenticated = isAuthResult.isSuccess && isAuthResult.data == true;
@@ -527,9 +470,13 @@ class AppRouter {
     final isLoginRoute = state.matchedLocation == '/login';
     final isKeysInfoRoute = state.matchedLocation == '/keys-info';
     final isProfileSetupRoute = state.matchedLocation == '/profile-setup';
-    final isSuggestedFollowsRoute = state.matchedLocation == '/suggested-follows';
+    final isSuggestedFollowsRoute =
+        state.matchedLocation == '/suggested-follows';
 
-    final isAuthFlow = isLoginRoute || isKeysInfoRoute || isProfileSetupRoute || isSuggestedFollowsRoute;
+    final isAuthFlow = isLoginRoute ||
+        isKeysInfoRoute ||
+        isProfileSetupRoute ||
+        isSuggestedFollowsRoute;
 
     if (!isAuthenticated && !isAuthFlow) {
       return '/login';
@@ -537,7 +484,9 @@ class AppRouter {
 
     if (isAuthenticated && isLoginRoute) {
       final npubResult = await authService.getCurrentUserNpub();
-      if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
+      if (npubResult.isSuccess &&
+          npubResult.data != null &&
+          npubResult.data!.isNotEmpty) {
         return '/home/feed?npub=${Uri.encodeComponent(npubResult.data!)}';
       }
     }

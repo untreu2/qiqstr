@@ -56,7 +56,8 @@ class _FollowingPageState extends State<FollowingPage> {
       create: (context) {
         final bloc = AppDI.get<FollowingBloc>();
         final authService = AppDI.get<AuthService>();
-        final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
+        final npub =
+            authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
         bloc.add(FollowingLoadRequested(userNpub: npub));
         return bloc;
       },
@@ -70,7 +71,8 @@ class _FollowingPageState extends State<FollowingPage> {
                   controller: _scrollController,
                   slivers: [
                     SliverToBoxAdapter(
-                      child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                      child: SizedBox(
+                          height: MediaQuery.of(context).padding.top + 60),
                     ),
                     _buildHeader(context),
                     if (state is FollowingLoading)
@@ -85,15 +87,19 @@ class _FollowingPageState extends State<FollowingPage> {
                             children: [
                               Text(
                                 'Error: ${state.message}',
-                                style: TextStyle(color: context.colors.textSecondary),
+                                style: TextStyle(
+                                    color: context.colors.textSecondary),
                               ),
                               const SizedBox(height: 16),
                               PrimaryButton(
                                 label: 'Retry',
                                 onPressed: () {
                                   final authService = AppDI.get<AuthService>();
-                                  final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
-                                  context.read<FollowingBloc>().add(FollowingLoadRequested(userNpub: npub));
+                                  final npub =
+                                      authService.hexToNpub(widget.pubkeyHex) ??
+                                          widget.pubkeyHex;
+                                  context.read<FollowingBloc>().add(
+                                      FollowingLoadRequested(userNpub: npub));
                                 },
                                 backgroundColor: context.colors.accent,
                                 foregroundColor: context.colors.background,
@@ -108,7 +114,8 @@ class _FollowingPageState extends State<FollowingPage> {
                               child: Center(
                                 child: Text(
                                   'No following users',
-                                  style: TextStyle(color: context.colors.textSecondary),
+                                  style: TextStyle(
+                                      color: context.colors.textSecondary),
                                 ),
                               ),
                             )
@@ -116,9 +123,12 @@ class _FollowingPageState extends State<FollowingPage> {
                               delegate: SliverChildBuilderDelegate(
                                 (context, index) {
                                   final user = state.followingUsers[index];
-                                  final userNpub = user['npub'] as String? ?? '';
-                                  final loadedUser = state.loadedUsers[userNpub] ?? user;
-                                  return _buildUserTile(context, state, loadedUser, index);
+                                  final userNpub =
+                                      user['npub'] as String? ?? '';
+                                  final loadedUser =
+                                      state.loadedUsers[userNpub] ?? user;
+                                  return _buildUserTile(
+                                      context, state, loadedUser, index);
                                 },
                                 childCount: state.followingUsers.length,
                               ),
@@ -166,12 +176,17 @@ class _FollowingPageState extends State<FollowingPage> {
     );
   }
 
-  static Widget _buildUserTile(BuildContext context, FollowingLoaded state, dynamic user, int index) {
+  static Widget _buildUserTile(
+      BuildContext context, FollowingLoaded state, dynamic user, int index) {
     final loadedUser = state.loadedUsers[user.npub] ?? user;
 
     final displayName = loadedUser.name.isNotEmpty
-        ? (loadedUser.name.length > 25 ? '${loadedUser.name.substring(0, 25)}...' : loadedUser.name)
-        : (user.npub.startsWith('npub1') ? '${user.npub.substring(0, 16)}...' : 'Unknown User');
+        ? (loadedUser.name.length > 25
+            ? '${loadedUser.name.substring(0, 25)}...'
+            : loadedUser.name)
+        : (user.npub.startsWith('npub1')
+            ? '${user.npub.substring(0, 16)}...'
+            : 'Unknown User');
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -185,11 +200,12 @@ class _FollowingPageState extends State<FollowingPage> {
             } else if (currentLocation.startsWith('/home/notifications')) {
               context.push(
                   '/home/notifications/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
-            } else if (currentLocation.startsWith('/home/dm')) {
+            } else if (currentLocation.startsWith('/home/explore')) {
               context.push(
-                  '/home/dm/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+                  '/home/feed/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
             } else {
-              context.push('/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+              context.push(
+                  '/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
             }
           },
           child: Padding(
@@ -216,7 +232,8 @@ class _FollowingPageState extends State<FollowingPage> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (loadedUser.nip05.isNotEmpty && loadedUser.nip05Verified) ...[
+                            if (loadedUser.nip05.isNotEmpty &&
+                                loadedUser.nip05Verified) ...[
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.verified,

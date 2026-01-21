@@ -80,7 +80,7 @@ class _WalletPageState extends State<WalletPage>
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: context.colors.textPrimary,
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(24),
             ),
             child: isLoading
                 ? SizedBox(
@@ -427,7 +427,7 @@ class _WalletPageState extends State<WalletPage>
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   color: context.colors.textPrimary,
-                                  borderRadius: BorderRadius.circular(40),
+                                  borderRadius: BorderRadius.circular(24),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -461,7 +461,7 @@ class _WalletPageState extends State<WalletPage>
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   color: context.colors.textPrimary,
-                                  borderRadius: BorderRadius.circular(40),
+                                  borderRadius: BorderRadius.circular(24),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,

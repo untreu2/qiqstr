@@ -130,10 +130,10 @@ class _SettingsPageState extends State<SettingsPage> {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
           children: [
@@ -178,10 +178,10 @@ class _SettingsPageState extends State<SettingsPage> {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           color: context.colors.error.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
           children: [

@@ -52,11 +52,13 @@ class SuggestedFollowsPage extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.error_outline, size: 64, color: context.colors.error),
+                      Icon(Icons.error_outline,
+                          size: 64, color: context.colors.error),
                       const SizedBox(height: 16),
                       Text(
                         'Failed to load suggested users',
-                        style: TextStyle(color: context.colors.error, fontSize: 18),
+                        style: TextStyle(
+                            color: context.colors.error, fontSize: 18),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -67,24 +69,27 @@ class SuggestedFollowsPage extends StatelessWidget {
                       PrimaryButton(
                         label: 'Retry',
                         onPressed: () {
-                          context.read<SuggestedFollowsBloc>().add(const SuggestedFollowsLoadRequested());
+                          context
+                              .read<SuggestedFollowsBloc>()
+                              .add(const SuggestedFollowsLoadRequested());
                         },
                         size: ButtonSize.large,
                       ),
                     ],
                   ),
                 ),
-              SuggestedFollowsLoaded(:final suggestedUsers) => suggestedUsers.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No suggested users available at the moment.',
-                        style: TextStyle(
-                          color: context.colors.textSecondary,
-                          fontSize: 16,
+              SuggestedFollowsLoaded(:final suggestedUsers) =>
+                suggestedUsers.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No suggested users available at the moment.',
+                          style: TextStyle(
+                            color: context.colors.textSecondary,
+                            fontSize: 16,
+                          ),
                         ),
-                      ),
-                    )
-                  : _buildContent(context, state),
+                      )
+                    : _buildContent(context, state),
               _ => const SizedBox(),
             },
           );
@@ -110,7 +115,8 @@ class SuggestedFollowsPage extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildUserItem(context, user, state),
-                      if (index < state.suggestedUsers.length - 1) const _UserSeparator(),
+                      if (index < state.suggestedUsers.length - 1)
+                        const _UserSeparator(),
                     ],
                   );
                 }),
@@ -136,17 +142,20 @@ class SuggestedFollowsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildUserItem(BuildContext context, Map<String, dynamic> user, SuggestedFollowsLoaded state) {
+  Widget _buildUserItem(BuildContext context, Map<String, dynamic> user,
+      SuggestedFollowsLoaded state) {
     final userNpub = user['npub'] as String? ?? '';
     final isSelected = state.selectedUsers.contains(userNpub);
     final profileImage = user['profileImage'] as String? ?? '';
     final userName = user['name'] as String? ?? '';
     final nip05 = user['nip05'] as String? ?? '';
     final nip05Verified = user['nip05Verified'] as bool? ?? false;
-    
+
     return GestureDetector(
       onTap: () {
-        context.read<SuggestedFollowsBloc>().add(SuggestedFollowsUserToggled(userNpub));
+        context
+            .read<SuggestedFollowsBloc>()
+            .add(SuggestedFollowsUserToggled(userNpub));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -159,7 +168,9 @@ class SuggestedFollowsPage extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
+                      userName.length > 25
+                          ? '${userName.substring(0, 25)}...'
+                          : userName,
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -187,7 +198,9 @@ class SuggestedFollowsPage extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: isSelected ? context.colors.accent : Colors.transparent,
                 border: Border.all(
-                  color: isSelected ? context.colors.accent : context.colors.border,
+                  color: isSelected
+                      ? context.colors.accent
+                      : context.colors.border,
                   width: 2,
                 ),
               ),
@@ -252,8 +265,8 @@ class SuggestedFollowsPage extends StatelessWidget {
     );
   }
 
-
-  Widget _buildBottomSection(BuildContext context, SuggestedFollowsLoaded state) {
+  Widget _buildBottomSection(
+      BuildContext context, SuggestedFollowsLoaded state) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
       decoration: BoxDecoration(
@@ -266,7 +279,8 @@ class SuggestedFollowsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildContinueButton(BuildContext context, SuggestedFollowsLoaded state) {
+  Widget _buildContinueButton(
+      BuildContext context, SuggestedFollowsLoaded state) {
     final hasMinimumSelection = state.selectedUsers.length >= 3;
     final isDisabled = state.isProcessing || !hasMinimumSelection;
 
@@ -274,15 +288,19 @@ class SuggestedFollowsPage extends StatelessWidget {
       onTap: isDisabled
           ? null
           : () async {
-              context.read<SuggestedFollowsBloc>().add(const SuggestedFollowsFollowSelectedRequested());
+              context
+                  .read<SuggestedFollowsBloc>()
+                  .add(const SuggestedFollowsFollowSelectedRequested());
               _navigateToHome(context);
             },
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: isDisabled ? context.colors.textPrimary.withValues(alpha: 0.3) : context.colors.textPrimary,
-          borderRadius: BorderRadius.circular(40),
+          color: isDisabled
+              ? context.colors.textPrimary.withValues(alpha: 0.3)
+              : context.colors.textPrimary,
+          borderRadius: BorderRadius.circular(24),
         ),
         child: state.isProcessing
             ? Center(
@@ -299,10 +317,14 @@ class SuggestedFollowsPage extends StatelessWidget {
                 'Continue',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: isDisabled ? context.colors.background.withValues(alpha: 0.5) : context.colors.background,
+                  color: isDisabled
+                      ? context.colors.background.withValues(alpha: 0.5)
+                      : context.colors.background,
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
-                  decoration: hasMinimumSelection ? TextDecoration.none : TextDecoration.lineThrough,
+                  decoration: hasMinimumSelection
+                      ? TextDecoration.none
+                      : TextDecoration.lineThrough,
                 ),
               ),
       ),

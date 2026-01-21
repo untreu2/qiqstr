@@ -34,7 +34,7 @@ Future<void> showFollowingRelaysDialog({
   required List<String> currentRelays,
 }) async {
   final colors = context.colors;
-  
+
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -60,10 +60,12 @@ class _FollowingRelaysDialogContent extends StatefulWidget {
   });
 
   @override
-  State<_FollowingRelaysDialogContent> createState() => _FollowingRelaysDialogContentState();
+  State<_FollowingRelaysDialogContent> createState() =>
+      _FollowingRelaysDialogContentState();
 }
 
-class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogContent> {
+class _FollowingRelaysDialogContentState
+    extends State<_FollowingRelaysDialogContent> {
   bool _isLoading = true;
   List<RelayUsageStats> _relayStats = [];
   final Map<String, bool> _addingRelays = {};
@@ -108,15 +110,18 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
       final relayUsageMap = <String, List<String>>{};
 
       final manager = WebSocketManager.instance;
-      final pubkeyHexList = followingUsers.map((user) {
-        try {
-          final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-          final hex = authRepository.npubToHex(userPubkeyHex);
-          return hex ?? userPubkeyHex;
-        } catch (_) {
-          return user['pubkeyHex'] as String? ?? '';
-        }
-      }).where((hex) => hex.isNotEmpty).toList();
+      final pubkeyHexList = followingUsers
+          .map((user) {
+            try {
+              final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
+              final hex = authRepository.npubToHex(userPubkeyHex);
+              return hex ?? userPubkeyHex;
+            } catch (_) {
+              return user['pubkeyHex'] as String? ?? '';
+            }
+          })
+          .where((hex) => hex.isNotEmpty)
+          .toList();
 
       final processedUsers = <String>{};
       final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -143,7 +148,8 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
 
               try {
                 final eventAuthor = data['pubkey'] as String?;
-                if (eventAuthor == null || processedUsers.contains(eventAuthor)) {
+                if (eventAuthor == null ||
+                    processedUsers.contains(eventAuthor)) {
                   return;
                 }
 
@@ -151,7 +157,10 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
                 final tags = data['tags'] as List<dynamic>? ?? [];
 
                 for (final tag in tags) {
-                  if (tag is List && tag.isNotEmpty && tag[0] == 'r' && tag.length >= 2) {
+                  if (tag is List &&
+                      tag.isNotEmpty &&
+                      tag[0] == 'r' &&
+                      tag.length >= 2) {
                     final relayUrl = tag[1] as String;
                     if (!relayUsageMap.containsKey(relayUrl)) {
                       relayUsageMap[relayUrl] = [];
@@ -165,18 +174,18 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
             },
           );
 
-          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
+          await completer.future
+              .timeout(const Duration(seconds: 5), onTimeout: () {});
         } catch (_) {}
       }
 
-      final normalizedCurrentRelays = widget.currentRelays.map(_normalizeRelayUrl).toSet();
-      
-      final stats = relayUsageMap.entries
-          .where((entry) {
-            final normalizedUrl = _normalizeRelayUrl(entry.key);
-            return !normalizedCurrentRelays.contains(normalizedUrl);
-          })
-          .map((entry) {
+      final normalizedCurrentRelays =
+          widget.currentRelays.map(_normalizeRelayUrl).toSet();
+
+      final stats = relayUsageMap.entries.where((entry) {
+        final normalizedUrl = _normalizeRelayUrl(entry.key);
+        return !normalizedCurrentRelays.contains(normalizedUrl);
+      }).map((entry) {
         return RelayUsageStats(
           relayUrl: entry.key,
           userCount: entry.value.length,
@@ -343,7 +352,9 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
                             width: 80,
                             child: SecondaryButton(
                               label: isAdding ? 'Adding...' : 'Add',
-                              onPressed: isAdding ? null : () => _handleAddRelay(stat.relayUrl),
+                              onPressed: isAdding
+                                  ? null
+                                  : () => _handleAddRelay(stat.relayUrl),
                               isLoading: isAdding,
                               size: ButtonSize.small,
                               backgroundColor: colors.background,
@@ -362,4 +373,3 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
     );
   }
 }
-

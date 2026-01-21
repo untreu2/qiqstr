@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -49,7 +49,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
-        debugPrint('[HomeNavigator] initState: initializing NotificationIndicatorBloc');
+        debugPrint(
+            '[HomeNavigator] initState: initializing NotificationIndicatorBloc');
         indicatorBloc.add(const NotificationIndicatorInitialized());
       }
     });
@@ -63,7 +64,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
   }
 
   Widget _buildCustomBottomBar(bool hasNewNotifications) {
-    debugPrint('[HomeNavigator] _buildCustomBottomBar: hasNewNotifications=$hasNewNotifications');
+    debugPrint(
+        '[HomeNavigator] _buildCustomBottomBar: hasNewNotifications=$hasNewNotifications');
     final themeState = context.themeState;
     final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
 
@@ -75,8 +77,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
         'type': 'svg'
       },
       {
-        'icon': 'assets/chat.svg',
-        'iconSelected': 'assets/chat_fill.svg',
+        'icon': 'assets/newspaper.svg',
+        'iconSelected': 'assets/newspaper_fill.svg',
         'index': 1,
         'type': 'svg'
       },
@@ -133,7 +135,7 @@ class _HomeNavigatorState extends State<HomeNavigator>
                             height: 45,
                             decoration: BoxDecoration(
                               color: context.colors.textPrimary,
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(16),
                             ),
                             child: Icon(
                               Icons.add,
@@ -166,15 +168,16 @@ class _HomeNavigatorState extends State<HomeNavigator>
                       behavior: HitTestBehavior.opaque,
                       child: Center(
                         child: originalIndex == 3
-                            ? _buildNotificationIcon(
-                                item['icon'] as String, isSelected, hasNewNotifications)
+                            ? _buildNotificationIcon(item['icon'] as String,
+                                isSelected, hasNewNotifications)
                             : originalIndex == 2
                                 ? _buildWalletIcon(
                                     item['icon'] as String, isSelected)
                                 : originalIndex == 1
                                     ? _buildExploreIcon(
                                         item['icon'] as String,
-                                        item['iconSelected'] as String?,
+                                        item['iconSelected'] as String? ??
+                                            item['icon'] as String,
                                         isSelected)
                                     : _buildRegularIcon(item, isSelected),
                       ),
@@ -193,55 +196,28 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
   Widget _buildIcon({
     required String iconPath,
+    required String iconSelectedPath,
     required bool isSelected,
-    required IconData carbonIcon,
     required int index,
     String? iconType,
-    String? iconSelectedPath,
-    bool isHome = false,
-    bool isExplore = false,
-    bool isWallet = false,
-    bool isNotification = false,
   }) {
     final iconSize = _iconSize;
+    final currentIconPath = isSelected ? iconSelectedPath : iconPath;
 
     if (_isFirstBuild) {
       return SizedBox(
         width: iconSize,
         height: iconSize,
-        child: isSelected
-            ? (iconSelectedPath != null && iconSelectedPath.isNotEmpty
-                ? SvgPicture.asset(
-                    iconSelectedPath,
-                    width: iconSize,
-                    height: iconSize,
-                    fit: BoxFit.contain,
-                    colorFilter: ColorFilter.mode(
-                      context.colors.textPrimary,
-                      BlendMode.srcIn,
-                    ),
-                  )
-                : Icon(
-                    carbonIcon,
-                    size: iconSize,
-                    color: context.colors.textPrimary,
-                  ))
-            : iconPath.isNotEmpty
-                ? SvgPicture.asset(
-                    iconPath,
-                    width: iconSize,
-                    height: iconSize,
-                    fit: BoxFit.contain,
-                    colorFilter: ColorFilter.mode(
-                      context.colors.textPrimary,
-                      BlendMode.srcIn,
-                    ),
-                  )
-                : Icon(
-                    carbonIcon,
-                    size: iconSize,
-                    color: context.colors.textPrimary,
-                  ),
+        child: SvgPicture.asset(
+          currentIconPath,
+          width: iconSize,
+          height: iconSize,
+          fit: BoxFit.contain,
+          colorFilter: ColorFilter.mode(
+            context.colors.textPrimary,
+            BlendMode.srcIn,
+          ),
+        ),
       );
     }
 
@@ -256,56 +232,31 @@ class _HomeNavigatorState extends State<HomeNavigator>
         );
       },
       child: SizedBox(
-        key: ValueKey(
-            '${isSelected ? (iconSelectedPath ?? iconPath) : iconPath}_${iconType ?? index}'),
+        key: ValueKey('${currentIconPath}_${iconType ?? index}'),
         width: iconSize,
         height: iconSize,
-        child: isSelected
-            ? (iconSelectedPath != null && iconSelectedPath.isNotEmpty
-                ? SvgPicture.asset(
-                    iconSelectedPath,
-                    width: iconSize,
-                    height: iconSize,
-                    fit: BoxFit.contain,
-                    colorFilter: ColorFilter.mode(
-                      context.colors.textPrimary,
-                      BlendMode.srcIn,
-                    ),
-                  )
-                : Icon(
-                    carbonIcon,
-                    size: iconSize,
-                    color: context.colors.textPrimary,
-                  ))
-            : iconPath.isNotEmpty
-                ? SvgPicture.asset(
-                    iconPath,
-                    width: iconSize,
-                    height: iconSize,
-                    fit: BoxFit.contain,
-                    colorFilter: ColorFilter.mode(
-                      context.colors.textPrimary,
-                      BlendMode.srcIn,
-                    ),
-                  )
-                : Icon(
-                    carbonIcon,
-                    size: iconSize,
-                    color: context.colors.textPrimary,
-                  ),
+        child: SvgPicture.asset(
+          currentIconPath,
+          width: iconSize,
+          height: iconSize,
+          fit: BoxFit.contain,
+          colorFilter: ColorFilter.mode(
+            context.colors.textPrimary,
+            BlendMode.srcIn,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildNotificationIcon(String iconPath, bool isSelected, bool hasNewNotifications) {
+  Widget _buildNotificationIcon(
+      String iconPath, bool isSelected, bool hasNewNotifications) {
     final icon = _buildIcon(
       iconPath: iconPath,
+      iconSelectedPath: 'assets/bell_fill.svg',
       isSelected: isSelected,
-      carbonIcon: CarbonIcons.notification,
       index: 3,
       iconType: 'notification',
-      iconSelectedPath: 'assets/bell_fill.svg',
-      isNotification: true,
     );
 
     if (hasNewNotifications) {
@@ -347,47 +298,34 @@ class _HomeNavigatorState extends State<HomeNavigator>
   Widget _buildWalletIcon(String iconPath, bool isSelected) {
     return _buildIcon(
       iconPath: iconPath,
+      iconSelectedPath: 'assets/wallet_fill.svg',
       isSelected: isSelected,
-      carbonIcon: CarbonIcons.wallet,
       index: 2,
       iconType: 'wallet',
-      iconSelectedPath: 'assets/wallet_fill.svg',
-      isWallet: true,
     );
   }
 
   Widget _buildExploreIcon(
-      String iconPath, String? iconSelectedPath, bool isSelected) {
+      String iconPath, String iconSelectedPath, bool isSelected) {
     return _buildIcon(
       iconPath: iconPath,
+      iconSelectedPath: iconSelectedPath,
       isSelected: isSelected,
-      carbonIcon: CarbonIcons.chat,
       index: 1,
       iconType: 'explore',
-      iconSelectedPath: iconSelectedPath,
-      isExplore: true,
     );
   }
 
   Widget _buildRegularIcon(Map<String, dynamic> item, bool isSelected) {
     final String iconPath = item['icon'] as String;
-    final String? iconSelectedPath = item['iconSelected'] as String?;
+    final String iconSelectedPath = item['iconSelected'] as String? ?? iconPath;
     final int index = item['index'] as int;
-
-    IconData carbonIcon;
-    if (index == 0) {
-      carbonIcon = CarbonIcons.home;
-    } else {
-      carbonIcon = CarbonIcons.home;
-    }
 
     return _buildIcon(
       iconPath: iconPath,
-      isSelected: isSelected,
-      carbonIcon: carbonIcon,
-      index: index,
       iconSelectedPath: iconSelectedPath,
-      isHome: index == 0,
+      isSelected: isSelected,
+      index: index,
     );
   }
 
@@ -440,8 +378,9 @@ class _HomeNavigatorState extends State<HomeNavigator>
     }
 
     final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
-    debugPrint('[HomeNavigator] build: indicatorBloc=$indicatorBloc, currentState=${indicatorBloc.state}');
-    
+    debugPrint(
+        '[HomeNavigator] build: indicatorBloc=$indicatorBloc, currentState=${indicatorBloc.state}');
+
     return BlocProvider<NotificationIndicatorBloc>.value(
       value: indicatorBloc,
       child: BlocBuilder<ThemeBloc, ThemeState>(
@@ -453,11 +392,13 @@ class _HomeNavigatorState extends State<HomeNavigator>
               child: widget.navigationShell,
             ),
             bottomNavigationBar: StreamBuilder<bool>(
-              stream: AppDI.get<NotificationRepository>().hasNewNotificationsStream,
+              stream:
+                  AppDI.get<NotificationRepository>().hasNewNotificationsStream,
               initialData: false,
               builder: (context, snapshot) {
                 final hasNewNotifications = snapshot.data ?? false;
-                debugPrint('[HomeNavigator] StreamBuilder: hasNewNotifications=$hasNewNotifications, snapshot.hasData=${snapshot.hasData}');
+                debugPrint(
+                    '[HomeNavigator] StreamBuilder: hasNewNotifications=$hasNewNotifications, snapshot.hasData=${snapshot.hasData}');
                 return _buildCustomBottomBar(hasNewNotifications);
               },
             ),

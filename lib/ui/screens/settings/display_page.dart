@@ -79,10 +79,10 @@ class _DisplayPageState extends State<DisplayPage> {
           context.read<ThemeBloc>().add(const ExpandedNoteModeToggled()),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
           children: [
@@ -127,10 +127,10 @@ class _DisplayPageState extends State<DisplayPage> {
       onTap: () => context.read<ThemeBloc>().add(const ThemeToggled()),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
           children: [
@@ -179,10 +179,10 @@ class _DisplayPageState extends State<DisplayPage> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: context.colors.overlayLight,
-        borderRadius: BorderRadius.circular(40),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

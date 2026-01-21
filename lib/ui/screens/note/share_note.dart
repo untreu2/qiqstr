@@ -32,7 +32,8 @@ class ShareNotePage extends StatefulWidget {
   @override
   State<ShareNotePage> createState() => _ShareNotePageState();
 
-  static Future<bool?> show(BuildContext context, {String? initialText, String? replyToNoteId}) {
+  static Future<bool?> show(BuildContext context,
+      {String? initialText, String? replyToNoteId}) {
     return showModalBottomSheet<bool>(
       context: context,
       useRootNavigator: true,
@@ -61,9 +62,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
   static const String _errorSelectingMedia = 'Error selecting media';
   static const String _errorSelectingUser = 'Error selecting user';
   static const String _errorSharingNote = 'Error sharing note';
-  static const String _maxMediaFilesMessage = 'Maximum $_maxMediaFiles media files allowed';
+  static const String _maxMediaFilesMessage =
+      'Maximum $_maxMediaFiles media files allowed';
   static const String _fileTooLargeMessage = 'File is too large (max 50MB)';
-  static const String _invalidFileTypeMessage = 'Invalid file type. Only images and videos are allowed';
+  static const String _invalidFileTypeMessage =
+      'Invalid file type. Only images and videos are allowed';
   static const String _emptyNoteMessage = 'Please enter a note or add media';
 
   static const List<String> _allowedExtensions = [
@@ -102,18 +105,19 @@ class _ShareNotePageState extends State<ShareNotePage> {
       userRepository: AppDI.get<UserRepository>(),
       dataService: AppDI.get<DataService>(),
     );
-    
+
     if (widget.replyToNoteId != null) {
       _noteBloc.add(NoteReplySetup(
         rootId: widget.replyToNoteId!,
         parentAuthor: 'unknown',
       ));
     }
-    if (widget.initialText != null && widget.initialText!.startsWith('nostr:')) {
+    if (widget.initialText != null &&
+        widget.initialText!.startsWith('nostr:')) {
       final cleanId = widget.initialText!.replaceFirst('nostr:', '');
       _noteBloc.add(NoteQuoteSetup(cleanId));
     }
-    
+
     _initializeController();
     _setupTextListener();
     _requestInitialFocus();
@@ -157,22 +161,26 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _selectMedia() async {
     if (!mounted) return;
-    
+
     try {
       final state = _noteBloc.state;
-      final isUploading = state is NoteComposeState ? state.isUploadingMedia : false;
+      final isUploading =
+          state is NoteComposeState ? state.isUploadingMedia : false;
       if (isUploading || !_canAddMoreMedia()) return;
 
       final result = await _pickMediaFiles();
       if (result == null || result.files.isEmpty) return;
 
-      final filePaths = result.files.where((f) => f.path != null).map((f) => f.path!).toList();
+      final filePaths = result.files
+          .where((f) => f.path != null)
+          .map((f) => f.path!)
+          .toList();
       if (filePaths.isEmpty || !mounted) return;
-      
+
       if (mounted) {
         _noteBloc.add(NoteMediaUploaded(filePaths));
       }
-      
+
       await _processSelectedFiles(result.files);
     } catch (e) {
       if (mounted) {
@@ -183,10 +191,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _selectGif() async {
     if (!mounted) return;
-    
+
     try {
       final state = _noteBloc.state;
-      final isUploading = state is NoteComposeState ? state.isUploadingMedia : false;
+      final isUploading =
+          state is NoteComposeState ? state.isUploadingMedia : false;
       if (isUploading || !_canAddMoreMedia()) return;
 
       final gif = await GiphyGet.getGif(
@@ -261,7 +270,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
     }
   }
 
-
   bool _isFileSizeValid(PlatformFile file) {
     return file.size <= _maxFileSizeBytes;
   }
@@ -292,10 +300,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return videoExtensions.contains(extension);
   }
 
-
   Future<void> _shareNote() async {
     if (!mounted) return;
-    
+
     try {
       final state = _noteBloc.state;
       if (state is! NoteComposeState || state.isUploadingMedia) return;
@@ -325,7 +332,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   bool _hasQuoteContent() {
-    return widget.initialText != null && widget.initialText!.startsWith('nostr:');
+    return widget.initialText != null &&
+        widget.initialText!.startsWith('nostr:');
   }
 
   bool _isNoteLengthValid(String noteText) {
@@ -347,8 +355,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return true;
   }
 
-  String _buildFinalNoteContent(String noteText, bool hasQuote, NoteComposeState state) {
-    final mediaPart = state.mediaUrls.isNotEmpty ? "\n\n${state.mediaUrls.join("\n")}" : "";
+  String _buildFinalNoteContent(
+      String noteText, bool hasQuote, NoteComposeState state) {
+    final mediaPart =
+        state.mediaUrls.isNotEmpty ? "\n\n${state.mediaUrls.join("\n")}" : "";
 
     String quotePart = "";
     if (hasQuote && widget.initialText != null) {
@@ -373,7 +383,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final additionalTags = <List<String>>[];
     additionalTags.addAll(tags);
 
-    if (widget.initialText != null && widget.initialText!.startsWith('nostr:')) {
+    if (widget.initialText != null &&
+        widget.initialText!.startsWith('nostr:')) {
       final cleanId = widget.initialText!.replaceFirst('nostr:', '');
 
       if (cleanId.startsWith('note1')) {
@@ -403,7 +414,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
         String eventIdHex;
         if (widget.replyToNoteId!.startsWith('note1')) {
           eventIdHex = decodeBasicBech32(widget.replyToNoteId!, 'note');
-        } else if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(widget.replyToNoteId!)) {
+        } else if (RegExp(r'^[0-9a-fA-F]{64}$')
+            .hasMatch(widget.replyToNoteId!)) {
           eventIdHex = widget.replyToNoteId!;
         } else {
           eventIdHex = widget.replyToNoteId!;
@@ -411,7 +423,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
         bool hasETag = false;
         for (final tag in additionalTags) {
-          if (tag.isNotEmpty && tag[0] == 'e' && tag.length > 1 && tag[1] == eventIdHex) {
+          if (tag.isNotEmpty &&
+              tag[0] == 'e' &&
+              tag.length > 1 &&
+              tag[1] == eventIdHex) {
             hasETag = true;
             break;
           }
@@ -428,7 +443,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     final state = _noteBloc.state;
     if (state is! NoteComposeState) return;
-    
+
     final mentions = _mentionMap.keys.toList();
     _noteBloc.add(NoteComposed(
       content: content,
@@ -451,7 +466,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final matches = hashtagRegex.allMatches(content);
 
     return matches
-        .map((match) => match.group(1)!.toLowerCase()) // NIP-24 requires lowercase
+        .map((match) =>
+            match.group(1)!.toLowerCase()) // NIP-24 requires lowercase
         .toSet() // Remove duplicates
         .toList();
   }
@@ -538,7 +554,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     final pubkeyHex = user['pubkeyHex'] as String? ?? '';
     final npub = user['npub'] as String? ?? '';
-    
+
     String npubBech32;
     if (pubkeyHex.isNotEmpty) {
       npubBech32 = encodeBasicBech32(pubkeyHex, 'npub');
@@ -561,7 +577,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
     if (mounted) {
       _noteController.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.fromPosition(TextPosition(offset: newCursorPos)),
+        selection:
+            TextSelection.fromPosition(TextPosition(offset: newCursorPos)),
       );
     }
   }
@@ -615,7 +632,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: context.colors.error.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(40),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
             'Cancel',
@@ -658,19 +675,23 @@ class _ShareNotePageState extends State<ShareNotePage> {
         },
         child: BlocBuilder<NoteBloc, NoteState>(
           builder: (context, state) {
-            final composeState = state is NoteComposeState ? state : const NoteComposeState(content: '');
-            
+            final composeState = state is NoteComposeState
+                ? state
+                : const NoteComposeState(content: '');
+
             return Container(
               height: MediaQuery.of(context).size.height * 0.9,
               decoration: BoxDecoration(
                 color: context.colors.background,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 children: [
                   _buildHeader(context),
                   Expanded(child: _buildMainContent(composeState)),
-                  if (composeState.isSearchingUsers) _buildUserSuggestions(composeState),
+                  if (composeState.isSearchingUsers)
+                    _buildUserSuggestions(composeState),
                 ],
               ),
             );
@@ -682,7 +703,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Widget _buildMediaButton() {
     return BlocSelector<NoteBloc, NoteState, bool>(
-      selector: (state) => state is NoteComposeState ? state.isUploadingMedia : false,
+      selector: (state) =>
+          state is NoteComposeState ? state.isUploadingMedia : false,
       builder: (context, isUploading) {
         return Material(
           color: Colors.transparent,
@@ -690,17 +712,20 @@ class _ShareNotePageState extends State<ShareNotePage> {
             ignoring: isUploading,
             child: InkWell(
               onTap: _selectMedia,
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(16),
               child: Semantics(
-                label: isUploading ? 'Uploading media files' : 'Add media files to your post',
+                label: isUploading
+                    ? 'Uploading media files'
+                    : 'Add media files to your post',
                 button: true,
                 enabled: !isUploading,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: context.colors.overlayLight,
-                    borderRadius: BorderRadius.circular(40),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -711,11 +736,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                context.colors.textPrimary),
                           ),
                         )
                       else
-                        Icon(Icons.attach_file, size: 16, color: context.colors.textPrimary),
+                        Icon(Icons.attach_file,
+                            size: 16, color: context.colors.textPrimary),
                       const SizedBox(width: 6),
                       Text(
                         isUploading ? _uploadingText : _addMediaText,
@@ -738,7 +765,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Widget _buildGifButton() {
     return BlocSelector<NoteBloc, NoteState, bool>(
-      selector: (state) => state is NoteComposeState ? state.isUploadingMedia : false,
+      selector: (state) =>
+          state is NoteComposeState ? state.isUploadingMedia : false,
       builder: (context, isUploading) {
         return Material(
           color: Colors.transparent,
@@ -746,17 +774,18 @@ class _ShareNotePageState extends State<ShareNotePage> {
             ignoring: isUploading,
             child: InkWell(
               onTap: _selectGif,
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(16),
               child: Semantics(
                 label: 'Add GIF from Giphy',
                 button: true,
                 enabled: !isUploading,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: context.colors.overlayLight,
-                    borderRadius: BorderRadius.circular(40),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
                     'GIF',
@@ -785,19 +814,24 @@ class _ShareNotePageState extends State<ShareNotePage> {
             ignoring: isLoading,
             child: InkWell(
               onTap: _shareNote,
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(16),
               child: Semantics(
-                label: isLoading ? 'Posting your note, please wait' : 'Post your note',
+                label: isLoading
+                    ? 'Posting your note, please wait'
+                    : 'Post your note',
                 button: true,
                 enabled: !isLoading,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: context.colors.textPrimary,
-                    borderRadius: BorderRadius.circular(40),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: isLoading ? _buildPostingIndicator() : _buildPostButtonText(),
+                  child: isLoading
+                      ? _buildPostingIndicator()
+                      : _buildPostButtonText(),
                 ),
               ),
             ),
@@ -883,7 +917,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
               ? CachedNetworkImageProvider(profileImage)
               : null,
           backgroundColor: context.colors.surfaceTransparent,
-          child: profileImage.isEmpty ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
+          child: profileImage.isEmpty
+              ? Icon(Icons.person, color: context.colors.textPrimary, size: 20)
+              : null,
         );
       },
     );
@@ -896,7 +932,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
     if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
       return null;
     }
-    final userResult = await userRepository.getUserProfile(currentUserNpubResult.data!);
+    final userResult =
+        await userRepository.getUserProfile(currentUserNpubResult.data!);
     return userResult.fold((user) => user, (_) => null);
   }
 
@@ -963,7 +1000,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
             child: SizedBox(
               width: _mediaItemSize,
               height: _mediaItemSize,
-              child: isVideo ? _buildVideoPreview(url) : _buildImagePreview(url),
+              child:
+                  isVideo ? _buildVideoPreview(url) : _buildImagePreview(url),
             ),
           ),
           Positioned(
@@ -1018,7 +1056,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildQuoteWidget() {
-    if (widget.initialText == null || !widget.initialText!.startsWith('nostr:')) {
+    if (widget.initialText == null ||
+        !widget.initialText!.startsWith('nostr:')) {
       return const SizedBox.shrink();
     }
 
@@ -1033,10 +1072,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   String _encodeEventId(String eventId) {
     try {
-      final cleanId = eventId.startsWith('nostr:') ? eventId.substring(6) : eventId;
+      final cleanId =
+          eventId.startsWith('nostr:') ? eventId.substring(6) : eventId;
 
       if (cleanId.startsWith('note1')) {
-        debugPrint('[ShareNotePage] Event ID already in note1 format: $cleanId');
+        debugPrint(
+            '[ShareNotePage] Event ID already in note1 format: $cleanId');
         return cleanId;
       }
 
@@ -1066,7 +1107,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
             borderRadius: BorderRadius.circular(40),
             color: context.colors.textPrimary,
             child: Container(
-              constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
+              constraints:
+                  const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
               child: ListView.builder(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
@@ -1088,7 +1130,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final userName = user['name'] as String? ?? '';
     final userAbout = user['about'] as String? ?? '';
     final userProfileImage = user['profileImage'] as String? ?? '';
-    
+
     return Semantics(
       label: 'Mention $userName, $userAbout',
       button: true,
@@ -1100,9 +1142,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
             children: [
               CircleAvatar(
                 radius: _avatarRadius,
-                backgroundImage: userProfileImage.isNotEmpty ? CachedNetworkImageProvider(userProfileImage) : null,
+                backgroundImage: userProfileImage.isNotEmpty
+                    ? CachedNetworkImageProvider(userProfileImage)
+                    : null,
                 backgroundColor: context.colors.surfaceTransparent,
-                child: userProfileImage.isEmpty ? Icon(Icons.person, color: context.colors.background, size: 20) : null,
+                child: userProfileImage.isEmpty
+                    ? Icon(Icons.person,
+                        color: context.colors.background, size: 20)
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1123,7 +1170,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
                       Text(
                         userAbout,
                         style: TextStyle(
-                          color: context.colors.background.withValues(alpha: 0.7),
+                          color:
+                              context.colors.background.withValues(alpha: 0.7),
                           fontSize: 14,
                         ),
                         overflow: TextOverflow.ellipsis,

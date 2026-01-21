@@ -63,4 +63,3 @@ Future<void> showDeleteNoteDialog({
     ),
   );
 }
-

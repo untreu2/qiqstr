@@ -58,8 +58,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     });
   }
 
-
-
   Future<void> _pasteFromClipboard() async {
     final clipboardData = await Clipboard.getData('text/plain');
     if (clipboardData != null && clipboardData.text != null) {
@@ -110,7 +108,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
               PrimaryButton(
                 label: 'Retry',
                 onPressed: () {
-                  context.read<UserSearchBloc>().add(UserSearchQueryChanged(_searchController.text.trim()));
+                  context.read<UserSearchBloc>().add(
+                      UserSearchQueryChanged(_searchController.text.trim()));
                 },
                 backgroundColor: context.colors.accent,
                 foregroundColor: context.colors.background,
@@ -118,98 +117,109 @@ class _UserSearchPageState extends State<UserSearchPage> {
             ],
           ),
         ),
-      UserSearchLoaded(:final filteredUsers, :final randomUsers, :final isSearching, :final isLoadingRandom) => isSearching
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: context.colors.primary),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Searching for users...',
-                    style: TextStyle(color: context.colors.textSecondary),
-                  ),
-                ],
-              ),
-            )
-          : filteredUsers.isEmpty && _searchController.text.trim().isNotEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.search_off,
-                        size: 48,
-                        color: context.colors.textSecondary,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No users found',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.textPrimary,
+      UserSearchLoaded(
+        :final filteredUsers,
+        :final randomUsers,
+        :final isSearching,
+        :final isLoadingRandom
+      ) =>
+        isSearching
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: context.colors.primary),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Searching for users...',
+                      style: TextStyle(color: context.colors.textSecondary),
+                    ),
+                  ],
+                ),
+              )
+            : filteredUsers.isEmpty && _searchController.text.trim().isNotEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: context.colors.textSecondary,
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Try searching with a different term.',
-                        style: TextStyle(color: context.colors.textSecondary),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                )
-              : filteredUsers.isNotEmpty
-                  ? ListView.builder(
-                      padding: EdgeInsets.zero,
-                      itemCount: filteredUsers.length,
-                      itemBuilder: (context, index) {
-                        final user = filteredUsers[index];
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildUserItem(context, user),
-                            if (index < filteredUsers.length - 1) const _UserSeparator(),
-                          ],
-                        );
-                      },
-                    )
-                  : isLoadingRandom
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(color: context.colors.primary),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Loading users...',
-                                style: TextStyle(color: context.colors.textSecondary),
-                              ),
-                            ],
+                        const SizedBox(height: 16),
+                        Text(
+                          'No users found',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: context.colors.textPrimary,
                           ),
-                        )
-                      : randomUsers.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No users to discover yet',
-                                style: TextStyle(color: context.colors.textSecondary),
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: randomUsers.length,
-                              itemBuilder: (context, index) {
-                                final user = randomUsers[index];
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildUserItem(context, user),
-                                    if (index < randomUsers.length - 1) const _UserSeparator(),
-                                  ],
-                                );
-                              },
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Try searching with a different term.',
+                          style: TextStyle(color: context.colors.textSecondary),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  )
+                : filteredUsers.isNotEmpty
+                    ? ListView.builder(
+                        padding: EdgeInsets.zero,
+                        itemCount: filteredUsers.length,
+                        itemBuilder: (context, index) {
+                          final user = filteredUsers[index];
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildUserItem(context, user),
+                              if (index < filteredUsers.length - 1)
+                                const _UserSeparator(),
+                            ],
+                          );
+                        },
+                      )
+                    : isLoadingRandom
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(
+                                    color: context.colors.primary),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Loading users...',
+                                  style: TextStyle(
+                                      color: context.colors.textSecondary),
+                                ),
+                              ],
                             ),
+                          )
+                        : randomUsers.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No users to discover yet',
+                                  style: TextStyle(
+                                      color: context.colors.textSecondary),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: EdgeInsets.zero,
+                                itemCount: randomUsers.length,
+                                itemBuilder: (context, index) {
+                                  final user = randomUsers[index];
+                                  return Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildUserItem(context, user),
+                                      if (index < randomUsers.length - 1)
+                                        const _UserSeparator(),
+                                    ],
+                                  );
+                                },
+                              ),
       _ => const SizedBox(),
     };
   }
@@ -221,7 +231,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
       parentContext: widget.parentContext,
     );
   }
-
 
   Widget _buildCancelButton() {
     return Semantics(
@@ -245,7 +254,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return BlocProvider<UserSearchBloc>(
@@ -262,7 +270,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
             height: MediaQuery.of(context).size.height * 0.9,
             decoration: BoxDecoration(
               color: context.colors.background,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
               children: [
@@ -372,7 +381,9 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
     if (state.isFollowing == true) {
       final userName = (widget.user['name'] as String? ?? '').isNotEmpty
           ? widget.user['name'] as String
-          : ((widget.user['nip05'] as String? ?? '').isNotEmpty ? (widget.user['nip05'] as String).split('@').first : 'this user');
+          : ((widget.user['nip05'] as String? ?? '').isNotEmpty
+              ? (widget.user['nip05'] as String).split('@').first
+              : 'this user');
 
       showUnfollowUserDialog(
         context: context,
@@ -387,7 +398,8 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
     bloc.add(const UserTileFollowToggled());
   }
 
-  Widget _buildFollowButton(BuildContext context, UserTileLoaded state, UserTileBloc bloc) {
+  Widget _buildFollowButton(
+      BuildContext context, UserTileLoaded state, UserTileBloc bloc) {
     final isFollowing = state.isFollowing ?? false;
     return GestureDetector(
       onTap: state.isLoading ? null : () => _toggleFollow(bloc, state),
@@ -395,8 +407,10 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
-          borderRadius: BorderRadius.circular(40),
+          color: isFollowing
+              ? context.colors.overlayLight
+              : context.colors.textPrimary,
+          borderRadius: BorderRadius.circular(16),
         ),
         child: state.isLoading
             ? SizedBox(
@@ -405,7 +419,9 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    isFollowing ? context.colors.textPrimary : context.colors.background,
+                    isFollowing
+                        ? context.colors.textPrimary
+                        : context.colors.background,
                   ),
                 ),
               )
@@ -413,15 +429,21 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                    isFollowing
+                        ? CarbonIcons.user_admin
+                        : CarbonIcons.user_follow,
                     size: 16,
-                    color: isFollowing ? context.colors.textPrimary : context.colors.background,
+                    color: isFollowing
+                        ? context.colors.textPrimary
+                        : context.colors.background,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     isFollowing ? 'Following' : 'Follow',
                     style: TextStyle(
-                      color: isFollowing ? context.colors.textPrimary : context.colors.background,
+                      color: isFollowing
+                          ? context.colors.textPrimary
+                          : context.colors.background,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -451,94 +473,114 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
         builder: (context, state) {
           final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
           final userNpub = widget.user['npub'] as String? ?? '';
-          final isCurrentUser = _currentUserNpub != null && (_currentUserNpub == userPubkeyHex || _currentUserNpub == userNpub);
-          final loadedState = state is UserTileLoaded ? state : const UserTileLoaded();
+          final isCurrentUser = _currentUserNpub != null &&
+              (_currentUserNpub == userPubkeyHex ||
+                  _currentUserNpub == userNpub);
+          final loadedState =
+              state is UserTileLoaded ? state : const UserTileLoaded();
 
           return GestureDetector(
-          onTap: () {
-            if (widget.onUserSelected != null) {
-              widget.onUserSelected!(widget.user);
-              Navigator.of(context, rootNavigator: true).pop();
-            } else {
-              Navigator.of(context, rootNavigator: true).pop();
-              final navContext = widget.parentContext;
-              if (navContext != null && navContext.mounted) {
-                Future.microtask(() {
-                  try {
-                    final router = GoRouter.of(navContext);
-                    final currentLocation = router.routerDelegate.currentConfiguration.uri.path;
-                    final userNpub = widget.user['npub'] as String? ?? '';
-                    final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
-                    if (userNpub.isEmpty && userPubkeyHex.isEmpty) return;
-                    
-                    final npubParam = userNpub.isNotEmpty ? userNpub : userPubkeyHex;
-                    final pubkeyHexParam = userPubkeyHex.isNotEmpty ? userPubkeyHex : userNpub;
-                    
-                    if (currentLocation.startsWith('/home/feed')) {
-                      navContext.push('/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
-                    } else if (currentLocation.startsWith('/home/notifications')) {
-                      navContext.push('/home/notifications/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
-                    } else if (currentLocation.startsWith('/home/dm')) {
-                      navContext.push('/home/dm/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
-                    } else {
-                      navContext.push('/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+            onTap: () {
+              if (widget.onUserSelected != null) {
+                widget.onUserSelected!(widget.user);
+                Navigator.of(context, rootNavigator: true).pop();
+              } else {
+                Navigator.of(context, rootNavigator: true).pop();
+                final navContext = widget.parentContext;
+                if (navContext != null && navContext.mounted) {
+                  Future.microtask(() {
+                    try {
+                      final router = GoRouter.of(navContext);
+                      final currentLocation =
+                          router.routerDelegate.currentConfiguration.uri.path;
+                      final userNpub = widget.user['npub'] as String? ?? '';
+                      final userPubkeyHex =
+                          widget.user['pubkeyHex'] as String? ?? '';
+                      if (userNpub.isEmpty && userPubkeyHex.isEmpty) return;
+
+                      final npubParam =
+                          userNpub.isNotEmpty ? userNpub : userPubkeyHex;
+                      final pubkeyHexParam =
+                          userPubkeyHex.isNotEmpty ? userPubkeyHex : userNpub;
+
+                      if (currentLocation.startsWith('/home/feed')) {
+                        navContext.push(
+                            '/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                      } else if (currentLocation
+                          .startsWith('/home/notifications')) {
+                        navContext.push(
+                            '/home/notifications/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                      } else if (currentLocation.startsWith('/home/explore')) {
+                        navContext.push(
+                            '/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                      } else {
+                        navContext.push(
+                            '/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                      }
+                    } catch (e) {
+                      debugPrint('[UserItemWidget] Navigation error: $e');
                     }
-                  } catch (e) {
-                    debugPrint('[UserItemWidget] Navigation error: $e');
-                  }
-                });
+                  });
+                }
               }
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                _buildAvatar(context, widget.user['profileImage'] as String? ?? ''),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                () {
-                                  final name = widget.user['name'] as String? ?? '';
-                                  return name.length > 25 ? '${name.substring(0, 25)}...' : name;
-                                }(),
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.colors.textPrimary,
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  _buildAvatar(
+                      context, widget.user['profileImage'] as String? ?? ''),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  () {
+                                    final name =
+                                        widget.user['name'] as String? ?? '';
+                                    return name.length > 25
+                                        ? '${name.substring(0, 25)}...'
+                                        : name;
+                                  }(),
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.textPrimary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                            if ((widget.user['nip05'] as String? ?? '').isNotEmpty && (widget.user['nip05Verified'] as bool? ?? false)) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.verified,
-                                size: 16,
-                                color: context.colors.accent,
-                              ),
+                              if ((widget.user['nip05'] as String? ?? '')
+                                      .isNotEmpty &&
+                                  (widget.user['nip05Verified'] as bool? ??
+                                      false)) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.verified,
+                                  size: 16,
+                                  color: context.colors.accent,
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                if (!isCurrentUser && loadedState.isFollowing != null) ...[
-                  const SizedBox(width: 10),
-                  _buildFollowButton(context, loadedState, context.read<UserTileBloc>()),
+                  if (!isCurrentUser && loadedState.isFollowing != null) ...[
+                    const SizedBox(width: 10),
+                    _buildFollowButton(
+                        context, loadedState, context.read<UserTileBloc>()),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        );
+          );
         },
       ),
     );

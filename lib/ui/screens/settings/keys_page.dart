@@ -149,10 +149,10 @@ class _KeysPageState extends State<KeysPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
               color: context.colors.overlayLight,
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(24),
             ),
             child: Row(
               children: [

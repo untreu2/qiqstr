@@ -107,16 +107,18 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
     if (_invoice != null) {
       return _invoice!;
     }
-    if (widget.lud16 != null && widget.lud16!.isNotEmpty && _amountController.text.trim().isEmpty) {
+    if (widget.lud16 != null &&
+        widget.lud16!.isNotEmpty &&
+        _amountController.text.trim().isEmpty) {
       return widget.lud16!;
     }
     return '';
   }
 
   bool _showLightningAddress() {
-    return widget.lud16 != null && 
-           widget.lud16!.isNotEmpty && 
-           _amountController.text.trim().isEmpty;
+    return widget.lud16 != null &&
+        widget.lud16!.isNotEmpty &&
+        _amountController.text.trim().isEmpty;
   }
 
   @override
@@ -124,7 +126,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
     final colors = context.colors;
     final qrData = _getQrData();
     final showLightningAddress = _showLightningAddress();
-    
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -233,6 +235,5 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
         ),
       ),
     );
-
   }
 }

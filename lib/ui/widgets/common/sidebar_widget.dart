@@ -34,50 +34,47 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         builder: (context, state) {
           final colors = context.colors;
 
-          return Drawer(
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.only(
+          return Container(
+            decoration: BoxDecoration(
+              color: colors.background,
+              borderRadius: const BorderRadius.only(
                 topRight: Radius.circular(24),
                 bottomRight: Radius.circular(24),
               ),
             ),
-            child: Container(
-              color: colors.background,
-              child: state is SidebarLoaded
-                  ? Column(
+            child: state is SidebarLoaded
+                ? Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 68, 20, 0),
+                        child: _UserProfileHeader(
+                          user: state.currentUser,
+                          colors: colors,
+                          followerCount: state.followerCount,
+                          followingCount: state.followingCount,
+                          isLoadingCounts: state.isLoadingCounts,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _SidebarContent(user: state.currentUser, colors: colors),
+                    ],
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(28, 68, 20, 0),
-                          child: _UserProfileHeader(
-                            user: state.currentUser,
-                            colors: colors,
-                            followerCount: state.followerCount,
-                            followingCount: state.followingCount,
-                            isLoadingCounts: state.isLoadingCounts,
+                        CircularProgressIndicator(color: colors.accent),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Loading profile...',
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 14,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        _SidebarContent(
-                            user: state.currentUser, colors: colors),
                       ],
-                    )
-                  : Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(color: colors.accent),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Loading profile...',
-                            style: TextStyle(
-                              color: colors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
-            ),
+                  ),
           );
         },
       ),
@@ -281,9 +278,9 @@ class _SidebarContent extends StatelessWidget {
                                   context.push(
                                       '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
                                 } else if (currentLocation
-                                    .startsWith('/home/dm')) {
+                                    .startsWith('/home/explore')) {
                                   context.push(
-                                      '/home/dm/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                                      '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
                                 } else {
                                   context.push(
                                       '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
@@ -330,10 +327,10 @@ Widget _buildModernSidebarItem({
     onTap: onTap,
     child: Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: colors.overlayLight,
-        borderRadius: BorderRadius.circular(40),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
         children: [

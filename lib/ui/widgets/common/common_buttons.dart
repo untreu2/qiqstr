@@ -114,7 +114,8 @@ class SecondaryButton extends StatelessWidget {
         backgroundColor: backgroundColor ?? colors.textPrimary,
         foregroundColor: foregroundColor ?? colors.background,
         disabledBackgroundColor: backgroundColor ?? colors.textPrimary,
-        disabledForegroundColor: (foregroundColor ?? colors.background).withValues(alpha: 0.5),
+        disabledForegroundColor:
+            (foregroundColor ?? colors.background).withValues(alpha: 0.5),
         padding: config.padding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(config.borderRadius),
@@ -276,7 +277,7 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
     case ButtonSize.small:
       return const _ButtonSizeConfig(
         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        borderRadius: 40,
+        borderRadius: 24,
         fontSize: 13,
         iconSize: 16,
         spacing: 6,
@@ -284,7 +285,7 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
     case ButtonSize.medium:
       return const _ButtonSizeConfig(
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        borderRadius: 40,
+        borderRadius: 24,
         fontSize: 14,
         iconSize: 18,
         spacing: 8,
@@ -292,7 +293,7 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
     case ButtonSize.large:
       return const _ButtonSizeConfig(
         padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        borderRadius: 40,
+        borderRadius: 24,
         fontSize: 17,
         iconSize: 20,
         spacing: 10,

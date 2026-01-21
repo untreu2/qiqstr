@@ -113,7 +113,8 @@ class _SendDialogState extends State<SendDialog> {
             result.fold(
               (paymentResult) {
                 final preimage = paymentResult['preimage'] as String?;
-                _successMessage = 'Payment sent! Preimage: ${preimage ?? 'N/A'}';
+                _successMessage =
+                    'Payment sent! Preimage: ${preimage ?? 'N/A'}';
                 widget.onPaymentSuccess();
               },
               (errorResult) {
@@ -125,7 +126,7 @@ class _SendDialogState extends State<SendDialog> {
       } else if (_paymentMethod == 'lightning_address') {
         final amountText = _amountController.text.trim();
         final amount = int.tryParse(amountText);
-        
+
         if (amount == null || amount <= 0) {
           setState(() {
             _isLoading = false;
@@ -276,12 +277,14 @@ class _SendDialogState extends State<SendDialog> {
           SizedBox(
             width: double.infinity,
             child: SecondaryButton(
-              label: _paymentMethod == 'lightning_address' 
-                  ? 'Pay' 
+              label: _paymentMethod == 'lightning_address'
+                  ? 'Pay'
                   : _paymentMethod == 'invoice'
                       ? 'Pay Invoice'
                       : 'Pay Invoice',
-              onPressed: (_isLoading || _paymentMethod == 'unknown') ? null : _payInvoice,
+              onPressed: (_isLoading || _paymentMethod == 'unknown')
+                  ? null
+                  : _payInvoice,
               isLoading: _isLoading,
               size: ButtonSize.large,
             ),

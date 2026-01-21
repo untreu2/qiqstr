@@ -103,7 +103,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Future<void> _toggleFollow(ProfileInfoLoaded state, ProfileInfoBloc bloc) async {
+  Future<void> _toggleFollow(
+      ProfileInfoLoaded state, ProfileInfoBloc bloc) async {
     if (state.isFollowing == true) {
       final userName = () {
         final name = state.user['name'] as String? ?? '';
@@ -130,7 +131,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   @override
   Widget build(BuildContext context) {
     final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
-    if (_bloc == null || _bloc!.isClosed || _bloc!.userPubkeyHex != userPubkeyHex) {
+    if (_bloc == null ||
+        _bloc!.isClosed ||
+        _bloc!.userPubkeyHex != userPubkeyHex) {
       _bloc?.close();
       _bloc = ProfileInfoBloc(
         authRepository: AppDI.get<AuthRepository>(),
@@ -156,7 +159,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           final user = state.user;
           final screenWidth = MediaQuery.of(context).size.width;
           final website = user['website'] as String? ?? '';
-          final websiteUrl = website.isNotEmpty && !(website.startsWith("http://") || website.startsWith("https://"))
+          final websiteUrl = website.isNotEmpty &&
+                  !(website.startsWith("http://") ||
+                      website.startsWith("https://"))
               ? "https://$website"
               : website;
 
@@ -215,7 +220,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   static final Map<String, Widget> _avatarCache = <String, Widget>{};
 
-  Widget _getCachedAvatar(BuildContext context, String imageUrl, double radius, String cacheKey) {
+  Widget _getCachedAvatar(
+      BuildContext context, String imageUrl, double radius, String cacheKey) {
     return _avatarCache.putIfAbsent(cacheKey, () {
       try {
         Widget avatarWidget;
@@ -328,7 +334,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             children: [
               Flexible(
                 child: Text(
-                  name.isNotEmpty ? name : (nip05.isNotEmpty ? nip05.split('@').first : 'Anonymous'),
+                  name.isNotEmpty
+                      ? name
+                      : (nip05.isNotEmpty
+                          ? nip05.split('@').first
+                          : 'Anonymous'),
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -360,7 +370,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     AppSnackbar.info(context, 'This user is verified by $domain');
   }
 
-  Widget _buildOptimizedBanner(BuildContext context, Map<String, dynamic> user, double screenWidth) {
+  Widget _buildOptimizedBanner(
+      BuildContext context, Map<String, dynamic> user, double screenWidth) {
     final double bannerHeight = screenWidth * (3.5 / 10);
     final banner = user['banner'] as String? ?? '';
     final pubkeyHex = user['pubkeyHex'] as String? ?? '';
@@ -405,12 +416,16 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Widget _buildAvatarAndActionsRow(BuildContext context, ProfileInfoLoaded state) {
+  Widget _buildAvatarAndActionsRow(
+      BuildContext context, ProfileInfoLoaded state) {
     final currentUserNpub = state.currentUserNpub;
     final authRepository = AppDI.get<AuthRepository>();
-    final currentUserHex = currentUserNpub != null ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub) : null;
+    final currentUserHex = currentUserNpub != null
+        ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
+        : null;
     final userPubkeyHex = state.user['pubkeyHex'] as String? ?? '';
-    final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
+    final isOwnProfile = currentUserHex != null &&
+        currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
 
     return Row(
       children: [
@@ -426,7 +441,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   _buildMuteButton(context, state),
                   const SizedBox(width: 8),
                 ],
-                if (state.isFollowing != null) _buildFollowButton(context, state),
+                if (state.isFollowing != null)
+                  _buildFollowButton(context, state),
               ],
             ),
           )
@@ -449,7 +465,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
           'Edit profile',
@@ -463,7 +479,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Future<void> _toggleMute(ProfileInfoLoaded state, ProfileInfoBloc bloc) async {
+  Future<void> _toggleMute(
+      ProfileInfoLoaded state, ProfileInfoBloc bloc) async {
     if (state.isMuted == true) {
       bloc.add(const ProfileInfoMuteToggled());
     } else {
@@ -497,41 +514,45 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           debugPrint('Mute button tapped');
           _toggleMute(state, bloc);
         },
-            borderRadius: BorderRadius.circular(40),
-            child: Ink(
-              padding: isMuted ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8) : const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isMuted ? context.colors.textPrimary : context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: isMuted
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          CarbonIcons.notification_off,
-                          size: 16,
-                          color: context.colors.background,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Muted',
-                          style: TextStyle(
-                            color: context.colors.background,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Icon(
-                      CarbonIcons.notification,
-                      size: 20,
-                      color: context.colors.textPrimary,
-                    ),
-            ),
+        borderRadius: BorderRadius.circular(isMuted ? 16 : 40),
+        child: Ink(
+          padding: isMuted
+              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
+              : const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isMuted
+                ? context.colors.textPrimary
+                : context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(isMuted ? 16 : 40),
           ),
-        );
+          child: isMuted
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CarbonIcons.notification_off,
+                      size: 16,
+                      color: context.colors.background,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Muted',
+                      style: TextStyle(
+                        color: context.colors.background,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                )
+              : Icon(
+                  CarbonIcons.notification,
+                  size: 20,
+                  color: context.colors.textPrimary,
+                ),
+        ),
+      ),
+    );
   }
 
   Widget _buildFollowButton(BuildContext context, ProfileInfoLoaded state) {
@@ -545,44 +566,54 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           debugPrint('Follow button tapped');
           _toggleFollow(state, bloc);
         },
-            borderRadius: BorderRadius.circular(40),
-            child: Ink(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
-                    size: 16,
-                    color: isFollowing ? context.colors.textPrimary : context.colors.background,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isFollowing ? 'Following' : 'Follow',
-                    style: TextStyle(
-                      color: isFollowing ? context.colors.textPrimary : context.colors.background,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isFollowing
+                ? context.colors.overlayLight
+                : context.colors.textPrimary,
+            borderRadius: BorderRadius.circular(16),
           ),
-        );
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                size: 16,
+                color: isFollowing
+                    ? context.colors.textPrimary
+                    : context.colors.background,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isFollowing ? 'Following' : 'Follow',
+                style: TextStyle(
+                  color: isFollowing
+                      ? context.colors.textPrimary
+                      : context.colors.background,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String _formatCount(int count) {
     if (count >= 1000000) {
       final formatted = (count / 1000000).toStringAsFixed(1);
-      return formatted.endsWith('.0') ? '${formatted.substring(0, formatted.length - 2)}M' : '${formatted}M';
+      return formatted.endsWith('.0')
+          ? '${formatted.substring(0, formatted.length - 2)}M'
+          : '${formatted}M';
     } else if (count >= 1000) {
       final formatted = (count / 1000).toStringAsFixed(1);
-      return formatted.endsWith('.0') ? '${formatted.substring(0, formatted.length - 2)}K' : '${formatted}K';
+      return formatted.endsWith('.0')
+          ? '${formatted.substring(0, formatted.length - 2)}K'
+          : '${formatted}K';
     }
     return count.toString();
   }
@@ -598,9 +629,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
     final currentUserNpub = state.currentUserNpub;
     final authRepository = AppDI.get<AuthRepository>();
-    final currentUserHex = currentUserNpub != null ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub) : null;
+    final currentUserHex = currentUserNpub != null
+        ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
+        : null;
     final userPubkeyHex = state.user['pubkeyHex'] as String? ?? '';
-    final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
+    final isOwnProfile = currentUserHex != null &&
+        currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
 
     return Row(
       children: [
@@ -611,8 +645,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               context.push('/home/feed/following', extra: state.user);
             } else if (currentLocation.startsWith('/home/notifications')) {
               context.push('/home/notifications/following', extra: state.user);
-            } else if (currentLocation.startsWith('/home/dm')) {
-              context.push('/home/dm/following', extra: state.user);
+            } else if (currentLocation.startsWith('/home/explore')) {
+              context.push('/home/feed/following', extra: state.user);
             } else {
               context.push('/following', extra: state.user);
             }

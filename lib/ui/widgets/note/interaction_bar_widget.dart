@@ -314,8 +314,8 @@ class _InteractionBarState extends State<InteractionBar> {
       context.push('/home/feed/note-statistics', extra: noteForStats);
     } else if (currentLocation.startsWith('/home/notifications')) {
       context.push('/home/notifications/note-statistics', extra: noteForStats);
-    } else if (currentLocation.startsWith('/home/dm')) {
-      context.push('/home/dm/note-statistics', extra: noteForStats);
+    } else if (currentLocation.startsWith('/home/explore')) {
+      context.push('/home/feed/note-statistics', extra: noteForStats);
     } else {
       context.push('/note-statistics', extra: noteForStats);
     }

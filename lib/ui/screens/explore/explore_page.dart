@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../theme/theme_manager.dart';
-import '../../widgets/common/back_button_widget.dart';
-import '../../widgets/common/title_widget.dart';
 
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
@@ -23,7 +22,6 @@ class ExplorePage extends StatelessWidget {
               ],
             ),
           ),
-          const BackButtonWidget.floating(),
         ],
       ),
     );
@@ -31,12 +29,20 @@ class ExplorePage extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
-      child: const TitleWidget(
-        title: 'Explore',
-        fontSize: 32,
-        subtitle: "Discover new content and users.",
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            'Reads',
+            style: GoogleFonts.poppins(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -57,4 +63,3 @@ class ExplorePage extends StatelessWidget {
     );
   }
 }
-
