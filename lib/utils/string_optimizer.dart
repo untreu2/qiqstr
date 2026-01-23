@@ -24,6 +24,11 @@ class StringOptimizer {
     caseSensitive: false,
   );
 
+  static final RegExp _articleRegExp = RegExp(
+    r'(?:nostr:)?(naddr1[0-9a-z]+)',
+    caseSensitive: false,
+  );
+
   static final RegExp _mentionRegExp = RegExp(
     r'nostr:(npub1[0-9a-z]+|nprofile1[0-9a-z]+)',
     caseSensitive: false,
@@ -77,8 +82,11 @@ class StringOptimizer {
     final quoteMatches = _quoteRegExp.allMatches(content);
     final quoteIds = quoteMatches.map((m) => m.group(1)!).toList();
 
+    final articleMatches = _articleRegExp.allMatches(content);
+    final articleIds = articleMatches.map((m) => m.group(1)!).toList();
+
     String cleanedText = content;
-    for (final m in [...mediaMatches, ...quoteMatches]) {
+    for (final m in [...mediaMatches, ...quoteMatches, ...articleMatches]) {
       cleanedText = cleanedText.replaceFirst(m.group(0)!, '');
     }
     cleanedText = cleanedText.trim();
@@ -115,6 +123,7 @@ class StringOptimizer {
       'mediaUrls': mediaUrls,
       'linkUrls': linkUrls,
       'quoteIds': quoteIds,
+      'articleIds': articleIds,
     };
   }
 

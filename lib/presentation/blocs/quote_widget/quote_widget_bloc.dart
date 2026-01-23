@@ -117,6 +117,7 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
             'mediaUrls': <String>[],
             'linkUrls': <String>[],
             'quoteIds': <String>[],
+            'articleIds': <String>[],
           };
 
           final noteAuthor = note['author'] as String? ?? '';

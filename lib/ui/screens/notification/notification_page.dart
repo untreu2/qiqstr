@@ -220,6 +220,7 @@ class _NotificationPageState extends State<NotificationPage> {
         'mediaUrls': <String>[],
         'linkUrls': <String>[],
         'quoteIds': <String>[],
+        'articleIds': <String>[],
       };
     }
   }

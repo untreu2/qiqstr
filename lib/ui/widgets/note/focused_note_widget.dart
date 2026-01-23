@@ -88,6 +88,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
         'mediaUrls': <String>[],
         'linkUrls': <String>[],
         'quoteIds': <String>[],
+        'articleIds': <String>[],
       };
     }
 

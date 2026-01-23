@@ -1242,6 +1242,88 @@ class NoteRepository {
     }
   }
 
+  Future<Result<List<Map<String, dynamic>>>> getArticles({
+    List<String>? authorHexKeys,
+    int limit = 50,
+    DateTime? until,
+    DateTime? since,
+    bool cacheOnly = false,
+  }) async {
+    try {
+      final result = await _nostrDataService.fetchLongFormContent(
+        authorHexKeys: authorHexKeys,
+        limit: limit,
+        until: until,
+        since: since,
+        cacheOnly: cacheOnly,
+      );
+
+      if (result.isSuccess && result.data != null && result.data!.isNotEmpty) {
+        return Result.success(result.data!);
+      }
+
+      return Result.success([]);
+    } catch (e) {
+      _logger.error('Exception in getArticles', 'NoteRepository', e);
+      return Result.error('Failed to get articles: ${e.toString()}');
+    }
+  }
+
+  Future<Result<List<Map<String, dynamic>>>> getArticlesFromFollowList({
+    required String currentUserNpub,
+    int limit = 50,
+    DateTime? until,
+    DateTime? since,
+    bool cacheOnly = false,
+  }) async {
+    try {
+      final nostrService = _nostrDataService;
+      final currentUserHex =
+          nostrService.authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+
+      final followCacheService = FollowCacheService.instance;
+      final cachedFollowList = followCacheService.getSync(currentUserHex);
+
+      List<String> followedHexKeys = [];
+
+      if (cachedFollowList == null || cachedFollowList.isEmpty) {
+        if (!cacheOnly) {
+          final followingResult =
+              await nostrService.getFollowingList(currentUserNpub);
+
+          if (followingResult.isSuccess &&
+              followingResult.data != null &&
+              followingResult.data!.isNotEmpty) {
+            followedHexKeys = followingResult.data!;
+          }
+        }
+      } else {
+        followedHexKeys = cachedFollowList.toList();
+      }
+
+      if (followedHexKeys.isNotEmpty) {
+        followedHexKeys.add(currentUserHex);
+      }
+
+      final result = await _nostrDataService.fetchLongFormContent(
+        authorHexKeys: followedHexKeys.isNotEmpty ? followedHexKeys : null,
+        limit: limit,
+        until: until,
+        since: since,
+        cacheOnly: cacheOnly,
+      );
+
+      if (result.isSuccess && result.data != null && result.data!.isNotEmpty) {
+        return Result.success(result.data!);
+      }
+
+      return Result.success([]);
+    } catch (e) {
+      _logger.error('Exception in getArticlesFromFollowList', 'NoteRepository', e);
+      return Result.error('Failed to get articles: ${e.toString()}');
+    }
+  }
+
   Future<Result<List<Map<String, dynamic>>>> _getFeedNotesForAuthors({
     required BaseFeedFilter filter,
     required List<String> authorNpubs,

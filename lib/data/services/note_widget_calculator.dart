@@ -182,6 +182,7 @@ class NoteWidgetCalculator {
       'mediaUrls': parsedContent['mediaUrls'] ?? [],
       'linkUrls': parsedContent['linkUrls'] ?? [],
       'quoteIds': parsedContent['quoteIds'] ?? [],
+      'articleIds': parsedContent['articleIds'] ?? [],
     };
   }
 

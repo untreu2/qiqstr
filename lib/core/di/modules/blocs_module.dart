@@ -20,6 +20,7 @@ import '../../../presentation/blocs/user_tile/user_tile_bloc.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/note_content/note_content_bloc.dart';
 import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
+import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/repositories/user_repository.dart';
@@ -150,6 +151,12 @@ class BlocsModule extends DIModule {
           userRepository: AppDI.get<UserRepository>(),
           dataService: AppDI.get<DataService>(),
           userPubkeyHex: '',
+        ));
+
+    AppDI.registerFactory<ArticleBloc>(() => ArticleBloc(
+          authRepository: AppDI.get<AuthRepository>(),
+          userRepository: AppDI.get<UserRepository>(),
+          feedLoader: AppDI.get<FeedLoaderService>(),
         ));
   }
 }

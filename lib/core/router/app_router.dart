@@ -25,6 +25,7 @@ import '../../ui/screens/dm/dm_chat_page.dart';
 import '../../ui/screens/wallet/wallet_page.dart';
 import '../../ui/screens/notification/notification_page.dart';
 import '../../ui/screens/explore/explore_page.dart';
+import '../../ui/screens/article/article_detail_page.dart';
 import '../../core/di/app_di.dart';
 import '../../data/services/auth_service.dart';
 
@@ -201,6 +202,14 @@ class AppRouter {
                       ),
                     ],
                   ),
+                  GoRoute(
+                    path: 'article',
+                    name: 'feed-article',
+                    builder: (context, state) {
+                      final articleId = state.uri.queryParameters['articleId'] ?? '';
+                      return ArticleDetailPage(articleId: articleId);
+                    },
+                  ),
                 ],
               ),
             ],
@@ -211,6 +220,16 @@ class AppRouter {
                 path: '/home/explore',
                 name: 'explore',
                 builder: (context, state) => const ExplorePage(),
+                routes: [
+                  GoRoute(
+                    path: 'article',
+                    name: 'explore-article',
+                    builder: (context, state) {
+                      final articleId = state.uri.queryParameters['articleId'] ?? '';
+                      return ArticleDetailPage(articleId: articleId);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -456,6 +475,14 @@ class AppRouter {
         builder: (context, state) {
           final url = state.uri.queryParameters['url'] ?? '';
           return WebViewPage(url: url);
+        },
+      ),
+      GoRoute(
+        path: '/article',
+        name: 'article',
+        builder: (context, state) {
+          final articleId = state.uri.queryParameters['articleId'] ?? '';
+          return ArticleDetailPage(articleId: articleId);
         },
       ),
     ],

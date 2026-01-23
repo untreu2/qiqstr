@@ -3950,6 +3950,171 @@ class DataService {
     }
   }
 
+  Future<Result<List<Map<String, dynamic>>>> fetchLongFormContent({
+    List<String>? authorHexKeys,
+    int limit = 50,
+    DateTime? until,
+    DateTime? since,
+    bool cacheOnly = false,
+  }) async {
+    try {
+      final articles = <Map<String, dynamic>>[];
+
+      final cachedEvents = await _eventCacheService.getEventsByAuthorsAndKinds(
+        authorHexKeys ?? [],
+        [30023],
+        limit: limit,
+        since: since,
+        until: until,
+      );
+
+      for (final cachedEvent in cachedEvents) {
+        final eventData = cachedEvent.toEventData();
+        final article = _processLongFormEventSync(eventData);
+        if (article != null) {
+          articles.add(article);
+        }
+      }
+
+      if (cacheOnly) {
+        articles.sort((a, b) {
+          final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+          final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
+        return Result.success(articles.take(limit).toList());
+      }
+
+      final eventsToCache = <Map<String, dynamic>>[];
+
+      final filterMap = <String, dynamic>{
+        'kinds': [30023],
+        'limit': limit,
+        if (authorHexKeys != null && authorHexKeys.isNotEmpty) 'authors': authorHexKeys,
+        if (until != null) 'until': until.millisecondsSinceEpoch ~/ 1000,
+        if (since != null) 'since': since.millisecondsSinceEpoch ~/ 1000,
+      };
+
+      final subscriptionId = NostrService.generateUUID();
+      final serializedRequest = jsonEncode(['REQ', subscriptionId, filterMap]);
+
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        timeout: const Duration(seconds: _queryTimeoutSeconds),
+        checkClosed: false,
+        onEvent: (data, url) {
+          try {
+            final eventData = data;
+            final eventId = eventData['id'] as String? ?? '';
+            final eventKind = eventData['kind'] as int? ?? 0;
+
+            if (eventKind == 30023 && eventId.isNotEmpty) {
+              eventsToCache.add(eventData);
+              final article = _processLongFormEventSync(eventData);
+              if (article != null) {
+                final existingIndex = articles.indexWhere((a) => a['id'] == eventId);
+                if (existingIndex == -1) {
+                  articles.add(article);
+                }
+              }
+            }
+          } catch (_) {}
+        },
+      );
+
+      if (eventsToCache.isNotEmpty) {
+        await _eventCacheService.saveEvents(eventsToCache);
+      }
+
+      articles.sort((a, b) {
+        final aTime = a['timestamp'] as DateTime? ?? DateTime(2000);
+        final bTime = b['timestamp'] as DateTime? ?? DateTime(2000);
+        return bTime.compareTo(aTime);
+      });
+
+      final seenIds = <String>{};
+      final uniqueArticles = articles.where((a) {
+        final id = a['id'] as String? ?? '';
+        if (seenIds.contains(id)) return false;
+        seenIds.add(id);
+        return true;
+      }).toList();
+
+      final limitedArticles = uniqueArticles.take(limit).toList();
+
+      return Result.success(limitedArticles);
+    } catch (e) {
+      return Result.error('Failed to fetch long-form content: $e');
+    }
+  }
+
+  Map<String, dynamic>? _processLongFormEventSync(Map<String, dynamic> eventData) {
+    try {
+      final id = eventData['id'] as String;
+      final pubkey = eventData['pubkey'] as String;
+      final content = eventData['content'] as String;
+      final createdAt = eventData['created_at'] as int;
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+
+      final authorNpub = _authService.hexToNpub(pubkey) ?? pubkey;
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+
+      String? title;
+      String? image;
+      String? summary;
+      String? dTag;
+      int? publishedAt;
+      final tTags = <String>[];
+
+      for (final tag in tags) {
+        if (tag is List && tag.isNotEmpty) {
+          final tagName = tag[0] as String?;
+          if (tagName == 'title' && tag.length > 1) {
+            title = tag[1] as String?;
+          } else if (tagName == 'image' && tag.length > 1) {
+            image = tag[1] as String?;
+          } else if (tagName == 'summary' && tag.length > 1) {
+            summary = tag[1] as String?;
+          } else if (tagName == 'd' && tag.length > 1) {
+            dTag = tag[1] as String?;
+          } else if (tagName == 'published_at' && tag.length > 1) {
+            final pubAtStr = tag[1] as String?;
+            if (pubAtStr != null) {
+              publishedAt = int.tryParse(pubAtStr);
+            }
+          } else if (tagName == 't' && tag.length > 1) {
+            final hashtag = tag[1] as String?;
+            if (hashtag != null && hashtag.isNotEmpty) {
+              tTags.add(hashtag.toLowerCase());
+            }
+          }
+        }
+      }
+
+      final article = <String, dynamic>{
+        'id': id,
+        'dTag': dTag ?? id,
+        'content': content,
+        'author': authorNpub,
+        'pubkey': pubkey,
+        'timestamp': timestamp,
+        'title': title ?? '',
+        'image': image ?? '',
+        'summary': summary ?? '',
+        'publishedAt': publishedAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(publishedAt * 1000)
+            : timestamp,
+        'tTags': tTags,
+        'rawWs': jsonEncode(eventData),
+      };
+
+      return article;
+    } catch (e) {
+      return null;
+    }
+  }
+
   void dispose() {
     _isClosed = true;
     _batchProcessingTimer?.cancel();

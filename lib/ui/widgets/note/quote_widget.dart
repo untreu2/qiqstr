@@ -168,6 +168,7 @@ class _QuoteContent extends StatelessWidget {
           'mediaUrls': <String>[],
           'linkUrls': <String>[],
           'quoteIds': <String>[],
+          'articleIds': <String>[],
         };
 
     Map<String, dynamic> contentToShow = displayParsedContent;
@@ -315,6 +316,7 @@ class _QuoteContent extends StatelessWidget {
         'mediaUrls': <String>[],
         'linkUrls': <String>[],
         'quoteIds': <String>[],
+        'articleIds': <String>[],
       };
     } catch (e) {
       return original;
@@ -367,6 +369,7 @@ class _QuoteContent extends StatelessWidget {
         'mediaUrls': original['mediaUrls'] ?? [],
         'linkUrls': original['linkUrls'] ?? [],
         'quoteIds': original['quoteIds'] ?? [],
+        'articleIds': original['articleIds'] ?? [],
       };
     } catch (e) {
       return original;

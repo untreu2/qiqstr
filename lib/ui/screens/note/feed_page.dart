@@ -365,8 +365,8 @@ class FeedPageState extends State<FeedPage> {
                                   },
                                   child: SvgPicture.asset(
                                     'assets/chat.svg',
-                                    width: 22,
-                                    height: 22,
+                                    width: 20,
+                                    height: 20,
                                     colorFilter: ColorFilter.mode(
                                       colors.textPrimary,
                                       BlendMode.srcIn,

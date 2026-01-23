@@ -70,6 +70,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         'mediaUrls': <String>[],
         'linkUrls': <String>[],
         'quoteIds': <String>[],
+        'articleIds': <String>[],
       };
     }
 
@@ -83,6 +84,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       'mediaUrls': <String>[],
       'linkUrls': <String>[],
       'quoteIds': <String>[],
+      'articleIds': <String>[],
     };
   }
 

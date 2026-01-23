@@ -451,6 +451,7 @@ class _NoteWidgetState extends State<NoteWidget> {
         'mediaUrls': _parsedContent['mediaUrls'] ?? [],
         'linkUrls': _parsedContent['linkUrls'] ?? [],
         'quoteIds': _parsedContent['quoteIds'] ?? [],
+        'articleIds': _parsedContent['articleIds'] ?? [],
       };
     } catch (e) {
       debugPrint('[NoteWidget] Create truncated content error: $e');

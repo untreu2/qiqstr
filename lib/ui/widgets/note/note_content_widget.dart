@@ -14,6 +14,7 @@ import '../media/link_preview_widget.dart';
 import '../media/media_preview_widget.dart';
 import '../media/mini_link_preview_widget.dart';
 import 'quote_widget.dart';
+import '../article/article_quote_widget.dart';
 import '../common/snackbar_widget.dart';
 
 enum NoteContentSize { small, big }
@@ -49,6 +50,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   late final List<String> _mediaUrls;
   late final List<String> _linkUrls;
   late final List<String> _quoteIds;
+  late final List<String> _articleIds;
 
   final Map<String, bool> _mentionLoadingStates = {};
   final List<TapGestureRecognizer> _gestureRecognizers = [];
@@ -76,6 +78,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     _mediaUrls = (widget.parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     _linkUrls = (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     _quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
+    _articleIds = (widget.parsedContent['articleIds'] as List<dynamic>?)?.cast<String>() ?? [];
   }
 
 
@@ -403,6 +406,17 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                   .map((quoteId) => Padding(
                         padding: const EdgeInsets.only(top: 8, bottom: 2),
                         child: QuoteWidget(bech32: quoteId),
+                      ))
+                  .toList(),
+            ),
+          if (_articleIds.isNotEmpty && !widget.shortMode)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: _articleIds
+                  .map((articleId) => Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 2),
+                        child: ArticleQuoteWidget(naddr: articleId),
                       ))
                   .toList(),
             ),

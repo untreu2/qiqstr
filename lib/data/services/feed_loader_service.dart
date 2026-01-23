@@ -9,6 +9,7 @@ enum FeedType {
   feed,
   profile,
   hashtag,
+  article,
 }
 
 enum FeedSortMode {
@@ -25,6 +26,7 @@ class FeedLoadParams {
   final DateTime? until;
   final DateTime? since;
   final bool skipCache;
+  final bool cacheOnly;
 
   const FeedLoadParams({
     required this.type,
@@ -35,6 +37,7 @@ class FeedLoadParams {
     this.until,
     this.since,
     this.skipCache = false,
+    this.cacheOnly = false,
   });
 }
 
@@ -110,6 +113,20 @@ class FeedLoaderService {
             limit: params.limit,
             until: params.until,
             since: params.since,
+          );
+          break;
+
+        case FeedType.article:
+          if (params.currentUserNpub == null || params.currentUserNpub!.isEmpty) {
+            return const FeedLoadResult(
+                notes: [], error: 'Current user npub is required for article feed');
+          }
+          result = await _noteRepository.getArticlesFromFollowList(
+            currentUserNpub: params.currentUserNpub!,
+            limit: params.limit,
+            until: params.until,
+            since: params.since,
+            cacheOnly: params.cacheOnly,
           );
           break;
       }
@@ -445,6 +462,7 @@ class FeedLoaderService {
         return _noteRepository.realTimeNotesStream;
       case FeedType.profile:
       case FeedType.hashtag:
+      case FeedType.article:
         return _noteRepository.notesStream;
     }
   }
