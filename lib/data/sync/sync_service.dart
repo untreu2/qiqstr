@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import '../services/isar_database_service.dart';
 import '../services/relay_service.dart';
 import '../services/nostr_service.dart';
@@ -8,6 +7,8 @@ import 'replacement_handler.dart';
 import 'sync_queue.dart';
 import 'sync_task.dart';
 import 'publishers/event_publisher.dart';
+
+final _relayService = RustRelayService.instance;
 
 enum SyncOperationState { idle, syncing, completed, error }
 
@@ -431,57 +432,8 @@ class SyncService {
   }
 
   Future<List<Map<String, dynamic>>> _queryRelays(dynamic filter) async {
-    final request = NostrService.createRequest(filter);
-    final subscriptionId = (jsonDecode(request) as List<dynamic>)[1] as String;
-
-    await _ensureRelayConnection();
-
-    final wsManager = WebSocketManager.instance;
-    final relays = wsManager.healthyRelays.isNotEmpty
-        ? wsManager.healthyRelays
-        : wsManager.relayUrls;
-    if (relays.isEmpty) return [];
-
-    final events = <Map<String, dynamic>>[];
-    final seenIds = <String>{};
-
-    final completers = relays.take(5).map((relayUrl) {
-      return wsManager.sendQuery(
-        relayUrl,
-        request,
-        subscriptionId,
-        onEvent: (eventMap, url) {
-          final id = eventMap['id'] as String?;
-          if (id != null && seenIds.add(id)) {
-            events.add(eventMap);
-          }
-        },
-        timeout: const Duration(seconds: 15),
-      ).then((c) => c.future);
-    }).toList();
-
-    await Future.wait(completers)
-        .timeout(const Duration(seconds: 20), onTimeout: () => []);
-    return events;
-  }
-
-  Future<void> _ensureRelayConnection() async {
-    final wsManager = WebSocketManager.instance;
-    if (wsManager.activeSockets.isNotEmpty) return;
-
-    if (wsManager.relayUrls.isEmpty) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (wsManager.relayUrls.isEmpty) return;
-    }
-
-    await Future.wait(
-      wsManager.relayUrls.map((url) =>
-          wsManager.getOrCreateConnection(url).catchError((_) => null)),
-    ).timeout(const Duration(seconds: 10), onTimeout: () => []);
-
-    for (var i = 0; i < 20 && wsManager.activeSockets.isEmpty; i++) {
-      await Future.delayed(const Duration(milliseconds: 250));
-    }
+    final filterMap = filter as Map<String, dynamic>;
+    return await _relayService.fetchEvents(filterMap);
   }
 
   Future<void> _saveEvents(List<Map<String, dynamic>> events) async {

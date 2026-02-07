@@ -22,7 +22,9 @@ void main() {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
     await RustLib.init();
-    await dotenv.load(fileName: '.env');
+    try {
+      await dotenv.load(fileName: '.env');
+    } catch (_) {}
 
     PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
     PaintingBinding.instance.imageCache.maximumSize = 600;

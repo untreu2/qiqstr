@@ -1,860 +1,242 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
-import 'dart:collection';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/constants/relays.dart';
+import '../../src/rust/api/relay.dart' as rust_relay;
 
-class RelayConnectionStats {
-  int connectAttempts = 0;
-  int successfulConnections = 0;
-  int disconnections = 0;
-  int messagesSent = 0;
-  int messagesReceived = 0;
-  DateTime? lastConnected;
-  DateTime? lastDisconnected;
-  Duration totalUptime = Duration.zero;
-  DateTime? connectionStartTime;
-
-  double get successRate =>
-      connectAttempts > 0 ? successfulConnections / connectAttempts : 0.0;
-  bool get isHealthy => successRate > 0.7 && disconnections < 5;
-}
-
-class RelayConnectionState {
-  WebSocket? socket;
-  bool isConnecting = false;
-  DateTime? lastConnectAttempt;
-  StreamSubscription? subscription;
-  Completer<void>? connectCompleter;
-  final List<Function(List<dynamic>, String)> eventHandlers = [];
-  final List<Function(String)> disconnectHandlers = [];
-
-  bool get isConnected =>
-      socket != null && socket!.readyState == WebSocket.open;
-  bool get isConnectingOrConnected => isConnecting || isConnected;
-}
-
-class WebSocketManager {
-  static WebSocketManager? _instance;
-  static WebSocketManager get instance {
-    _instance ??= WebSocketManager._internal();
+class RustRelayService {
+  static RustRelayService? _instance;
+  static RustRelayService get instance {
+    _instance ??= RustRelayService._internal();
     return _instance!;
   }
 
-  final List<String> relayUrls = [];
-  final Map<String, RelayConnectionState> _connections = {};
-  final Map<String, DateTime> _reconnectTimers = {};
-  final Map<String, RelayConnectionStats> _connectionStats = {};
-  final Duration connectionTimeout = const Duration(seconds: 3);
-  final int maxReconnectAttempts = 5;
-  final Duration maxBackoffDelay = const Duration(minutes: 2);
-  bool _isClosed = false;
-  bool _isInitialized = false;
+  bool _initialized = false;
+  List<String> _currentRelayUrls = [];
 
-  final Queue<String> _messageQueue = Queue();
-  bool _isProcessingMessages = false;
+  RustRelayService._internal();
 
-  final Map<String, Function(List<dynamic> decoded, String relayUrl)?>
-      _globalEventHandlers = {};
-  final Map<String, Function(String relayUrl)?> _globalDisconnectHandlers = {};
+  bool get isInitialized => _initialized;
+  List<String> get relayUrls => List.from(_currentRelayUrls);
 
-  WebSocketManager._internal() {
-    _ensureInitialized();
-  }
-
-  Future<void> _ensureInitialized() async {
-    if (_isInitialized) return;
-
-    try {
-      if (kDebugMode) {
-        print('[WebSocketManager] Initializing relay list...');
-      }
-
-      final customRelays = await getRelaySetMainSockets();
-
-      if (relayUrls.isEmpty) {
-        relayUrls.addAll(customRelays);
-        if (!relayUrls.contains(countRelayUrl)) {
-          relayUrls.add(countRelayUrl);
-        }
-        _initializeStats();
-
-        if (kDebugMode) {
-          print(
-              '[WebSocketManager] Initialized with ${customRelays.length} relays: $customRelays');
-        }
-      }
-
-      _isInitialized = true;
-    } catch (e) {
-      if (kDebugMode) {
-        print('[WebSocketManager] Error initializing relays: $e');
-      }
-
-      if (relayUrls.isEmpty) {
-        relayUrls.addAll(relaySetMainSockets);
-        _initializeStats();
-      }
-      _isInitialized = true;
-    }
-  }
-
-  bool _listEquals(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  void _initializeStats() {
-    for (final url in relayUrls) {
-      _connectionStats[url] = RelayConnectionStats();
-    }
-  }
-
-  List<WebSocket> get activeSockets => _connections.values
-      .where((state) => state.isConnected)
-      .map((state) => state.socket!)
-      .toList();
-
-  Map<String, WebSocket> get webSockets => Map.fromEntries(_connections.entries
-      .where((e) => e.value.isConnected)
-      .map((e) => MapEntry(e.key, e.value.socket!)));
-
-  bool get isConnected => activeSockets.isNotEmpty;
-
-  List<String> get healthyRelays {
-    return relayUrls.where((url) {
-      final stats = _connectionStats[url];
-      final state = _connections[url];
-      return stats != null &&
-          stats.isHealthy &&
-          state != null &&
-          state.isConnected;
-    }).toList();
-  }
-
-  bool isRelayConnected(String url) {
-    final state = _connections[url];
-    return state != null && state.isConnected;
-  }
-
-  bool isRelayConnecting(String url) {
-    final state = _connections[url];
-    return state != null && state.isConnecting;
-  }
-
-  Future<WebSocket?> getOrCreateConnection(
-    String relayUrl, {
-    Function(List<dynamic> decoded, String relayUrl)? onEvent,
-    Function(String relayUrl)? onDisconnected,
+  Future<void> init({
+    List<String>? relayUrls,
+    String? privateKeyHex,
   }) async {
-    await _ensureInitialized();
+    final urls = relayUrls ?? await getRelaySetMainSockets();
+    _currentRelayUrls = List.from(urls);
 
-    if (_isClosed) return null;
-
-    final state = _connections[relayUrl];
-
-    if (state != null && state.isConnected) {
-      if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
-        state.eventHandlers.add(onEvent);
-      }
-      if (onDisconnected != null &&
-          !state.disconnectHandlers.contains(onDisconnected)) {
-        state.disconnectHandlers.add(onDisconnected);
-      }
-      return state.socket;
-    }
-
-    if (state != null && state.isConnecting) {
-      if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
-        state.eventHandlers.add(onEvent);
-      }
-      if (onDisconnected != null &&
-          !state.disconnectHandlers.contains(onDisconnected)) {
-        state.disconnectHandlers.add(onDisconnected);
-      }
-      if (state.connectCompleter != null) {
-        await state.connectCompleter!.future.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {},
-        );
-      }
-      if (state.isConnected) {
-        return state.socket;
-      }
-      return null;
-    }
-
-    return await _connectSingleRelay(relayUrl, onEvent, onDisconnected);
-  }
-
-  Future<void> connectRelays(
-    List<String> targetNpubs, {
-    Function(List<dynamic> decoded, String relayUrl)? onEvent,
-    Function(String relayUrl)? onDisconnected,
-    String? serviceId,
-  }) async {
-    await _ensureInitialized();
-
-    if (serviceId != null) {
-      _globalEventHandlers[serviceId] = onEvent;
-      _globalDisconnectHandlers[serviceId] = onDisconnected;
-    }
-
-    if (_connections.values
-        .any((state) => state.isConnected || state.isConnecting)) {
-      return;
-    }
+    await rust_relay.initClient(
+      relayUrls: urls,
+      privateKeyHex: privateKeyHex,
+    );
+    _initialized = true;
 
     if (kDebugMode) {
-      print(
-          '[WebSocketManager] Connecting to ${relayUrls.length} relays: $relayUrls');
+      print('[RustRelayService] Initialized with ${urls.length} relays');
     }
 
-    final connectionFutures = relayUrls.map((relayUrl) => getOrCreateConnection(
-        relayUrl,
-        onEvent: onEvent,
-        onDisconnected: onDisconnected));
-
-    await Future.wait(connectionFutures, eagerError: false);
+    unawaited(rust_relay.connectRelays().catchError((_) {}));
   }
 
-  Future<WebSocket?> _connectSingleRelay(
-    String relayUrl,
-    Function(List<dynamic> decoded, String relayUrl)? onEvent,
-    Function(String relayUrl)? onDisconnected,
-  ) async {
-    if (_isClosed) return null;
+  Future<void> reinit({
+    List<String>? relayUrls,
+    String? privateKeyHex,
+  }) async {
+    _initialized = false;
+    await init(relayUrls: relayUrls, privateKeyHex: privateKeyHex);
+  }
 
-    var state = _connections[relayUrl];
-    if (state == null) {
-      state = RelayConnectionState();
-      _connections[relayUrl] = state;
-      if (!_connectionStats.containsKey(relayUrl)) {
-        _connectionStats[relayUrl] = RelayConnectionStats();
-      }
+  Future<void> connect() async {
+    await rust_relay.connectRelays();
+  }
+
+  Future<void> disconnect() async {
+    await rust_relay.disconnectRelays();
+  }
+
+  Future<void> updateSigner(String privateKeyHex) async {
+    await rust_relay.updateSigner(privateKeyHex: privateKeyHex);
+  }
+
+  Future<bool> addRelay(String url) async {
+    final added = await rust_relay.addRelay(url: url);
+    if (added && !_currentRelayUrls.contains(url)) {
+      _currentRelayUrls.add(url);
     }
+    return added;
+  }
 
-    if (state.isConnected) {
-      if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
-        state.eventHandlers.add(onEvent);
-      }
-      if (onDisconnected != null &&
-          !state.disconnectHandlers.contains(onDisconnected)) {
-        state.disconnectHandlers.add(onDisconnected);
-      }
-      return state.socket;
+  Future<bool> addRelayWithFlags(String url, {required bool read, required bool write}) async {
+    final added = await rust_relay.addRelayWithFlags(url: url, read: read, write: write);
+    if (added && !_currentRelayUrls.contains(url)) {
+      _currentRelayUrls.add(url);
     }
+    return added;
+  }
 
-    if (state.isConnecting) {
-      if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
-        state.eventHandlers.add(onEvent);
-      }
-      if (onDisconnected != null &&
-          !state.disconnectHandlers.contains(onDisconnected)) {
-        state.disconnectHandlers.add(onDisconnected);
-      }
-      if (state.connectCompleter != null) {
-        await state.connectCompleter!.future.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {},
-        );
-      }
-      if (state.isConnected) {
-        return state.socket;
-      }
-      return null;
-    }
+  Future<void> removeRelay(String url) async {
+    await rust_relay.removeRelay(url: url);
+    _currentRelayUrls.remove(url);
+  }
 
-    state.isConnecting = true;
-    state.connectCompleter = Completer<void>();
-    state.lastConnectAttempt = DateTime.now();
-    final stats = _connectionStats[relayUrl]!;
-    stats.connectAttempts++;
+  Future<List<String>> getRelayList() async {
+    return await rust_relay.getRelayList();
+  }
 
-    WebSocket? ws;
+  Future<int> getConnectedRelayCount() async {
+    return await rust_relay.getConnectedRelayCount();
+  }
+
+  Future<Map<String, dynamic>> getRelayStatus() async {
+    final json = await rust_relay.getRelayStatus();
+    return jsonDecode(json) as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchEvents(
+    Map<String, dynamic> filter, {
+    int timeoutSecs = 15,
+  }) async {
     try {
-      ws = await WebSocket.connect(relayUrl).timeout(connectionTimeout);
-      if (_isClosed) {
-        try {
-          await ws.close();
-        } catch (_) {}
-        state.isConnecting = false;
-        return null;
-      }
-
-      state.socket = ws;
-      state.isConnecting = false;
-      if (state.connectCompleter != null &&
-          !state.connectCompleter!.isCompleted) {
-        state.connectCompleter!.complete();
-      }
-      stats.successfulConnections++;
-      stats.lastConnected = DateTime.now();
-      stats.connectionStartTime = DateTime.now();
-
-      if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
-        state.eventHandlers.add(onEvent);
-      }
-      if (onDisconnected != null &&
-          !state.disconnectHandlers.contains(onDisconnected)) {
-        state.disconnectHandlers.add(onDisconnected);
-      }
-
-      state.subscription = ws.listen(
-        (event) async {
-          try {
-            final currentState = _connections[relayUrl];
-            if (_isClosed ||
-                currentState == null ||
-                !currentState.isConnected) {
-              return;
-            }
-
-            stats.messagesReceived++;
-
-            List<dynamic>? decoded;
-            try {
-              decoded = jsonDecode(event is String ? event : event.toString())
-                  as List<dynamic>?;
-            } catch (_) {}
-
-            if (decoded != null && decoded.isNotEmpty) {
-              _routeEvent(decoded, relayUrl);
-            }
-
-            for (final handler in _globalEventHandlers.values) {
-              if (handler != null && decoded != null) {
-                try {
-                  handler(decoded, relayUrl);
-                } catch (e) {
-                  if (kDebugMode) {
-                    print(
-                        '[WebSocketManager] Error in global event handler: $e');
-                  }
-                }
-              }
-            }
-
-            final currentStateAfter = _connections[relayUrl];
-            if (currentStateAfter != null && decoded != null) {
-              for (final handler in currentStateAfter.eventHandlers) {
-                try {
-                  handler(decoded, relayUrl);
-                } catch (e) {
-                  if (kDebugMode) {
-                    print('[WebSocketManager] Error in event handler: $e');
-                  }
-                }
-              }
-            }
-          } catch (_) {}
-        },
-        onDone: () {
-          try {
-            _handleDisconnection(relayUrl);
-          } catch (e) {}
-        },
-        onError: (error) {
-          try {
-            _handleDisconnection(relayUrl);
-          } catch (e) {}
-        },
-        cancelOnError: false,
+      final filterJson = jsonEncode(filter);
+      final result = await rust_relay.fetchEvents(
+        filterJson: filterJson,
+        timeoutSecs: timeoutSecs,
       );
-
-      return ws;
+      final decoded = jsonDecode(result) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
-      try {
-        await ws?.close();
-      } catch (_) {}
-      state.isConnecting = false;
-      if (state.connectCompleter != null &&
-          !state.connectCompleter!.isCompleted) {
-        state.connectCompleter!.complete();
+      if (kDebugMode) {
+        print('[RustRelayService] fetchEvents error: $e');
       }
-      _handleDisconnection(relayUrl);
-      return null;
+      return [];
     }
   }
 
-  void _handleDisconnection(String relayUrl) {
-    final state = _connections[relayUrl];
-    if (state == null) return;
+  Future<Map<String, dynamic>> sendEvent(String eventJson) async {
+    final result = await rust_relay.sendEvent(eventJson: eventJson);
+    return jsonDecode(result) as Map<String, dynamic>;
+  }
 
+  Future<Map<String, dynamic>> sendEventTo(
+    String eventJson,
+    List<String> relayUrls,
+  ) async {
+    final result = await rust_relay.sendEventTo(
+      eventJson: eventJson,
+      relayUrls: relayUrls,
+    );
+    return jsonDecode(result) as Map<String, dynamic>;
+  }
+
+  Future<bool> broadcastEvent(Map<String, dynamic> event) async {
     try {
-      state.subscription?.cancel();
-    } catch (_) {}
-
-    state.socket = null;
-    state.isConnecting = false;
-
-    final stats = _connectionStats[relayUrl];
-    if (stats != null) {
-      stats.disconnections++;
-      stats.lastDisconnected = DateTime.now();
-
-      if (stats.connectionStartTime != null) {
-        final uptime = DateTime.now().difference(stats.connectionStartTime!);
-        stats.totalUptime = stats.totalUptime + uptime;
-        stats.connectionStartTime = null;
+      final eventJson = jsonEncode(event);
+      await rust_relay.sendEvent(eventJson: eventJson);
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[RustRelayService] broadcastEvent error: $e');
       }
-    }
-
-    for (final handler in _globalDisconnectHandlers.values) {
-      if (handler != null) {
-        try {
-          handler(relayUrl);
-        } catch (e) {
-          if (kDebugMode) {
-            print('[WebSocketManager] Error in global disconnect handler: $e');
-          }
-        }
-      }
-    }
-
-    for (final handler in state.disconnectHandlers) {
-      try {
-        handler(relayUrl);
-      } catch (e) {
-        if (kDebugMode) {
-          print('[WebSocketManager] Error in disconnect handler: $e');
-        }
-      }
-    }
-
-    state.eventHandlers.clear();
-    state.disconnectHandlers.clear();
-  }
-
-  void unregisterService(String serviceId) {
-    _globalEventHandlers.remove(serviceId);
-    _globalDisconnectHandlers.remove(serviceId);
-  }
-
-  Future<bool> sendMessage(String relayUrl, String message) async {
-    final state = _connections[relayUrl];
-    if (state == null || !state.isConnected) {
       return false;
     }
+  }
 
+  Future<Map<String, dynamic>> broadcastEvents(
+    List<Map<String, dynamic>> events, {
+    List<String>? relayUrls,
+  }) async {
+    final eventsJson = jsonEncode(events);
+    final result = await rust_relay.broadcastEvents(
+      eventsJson: eventsJson,
+      relayUrls: relayUrls,
+    );
+    return jsonDecode(result) as Map<String, dynamic>;
+  }
+
+  Future<bool> sendMessage(String relayUrl, String serializedEvent) async {
     try {
-      if (state.socket!.readyState == WebSocket.open) {
-        state.socket!.add(message);
-        final stats = _connectionStats[relayUrl];
-        if (stats != null) {
-          stats.messagesSent++;
-        }
+      final decoded = jsonDecode(serializedEvent) as List<dynamic>;
+      if (decoded.isNotEmpty && decoded[0] == 'EVENT' && decoded.length >= 2) {
+        final eventData = decoded[1] as Map<String, dynamic>;
+        final eventJson = jsonEncode(eventData);
+        await rust_relay.sendEventTo(
+          eventJson: eventJson,
+          relayUrls: [relayUrl],
+        );
         return true;
       }
+      return false;
     } catch (e) {
-      if (e is SocketException) {
-        _handleDisconnection(relayUrl);
+      if (kDebugMode) {
+        print('[RustRelayService] sendMessage error: $e');
       }
-    }
-    return false;
-  }
-
-  final Map<String, Map<String, Function(List<dynamic>, String)>>
-      _subscriptionHandlers = {};
-
-  void registerSubscriptionHandler(String relayUrl, String subscriptionId,
-      Function(List<dynamic>, String) handler) {
-    if (!_subscriptionHandlers.containsKey(relayUrl)) {
-      _subscriptionHandlers[relayUrl] = {};
-    }
-    _subscriptionHandlers[relayUrl]![subscriptionId] = handler;
-  }
-
-  void unregisterSubscriptionHandler(String relayUrl, String subscriptionId) {
-    _subscriptionHandlers[relayUrl]?.remove(subscriptionId);
-    if (_subscriptionHandlers[relayUrl]?.isEmpty ?? false) {
-      _subscriptionHandlers.remove(relayUrl);
+      return false;
     }
   }
 
-  void _routeEvent(List<dynamic> decoded, String relayUrl) {
-    if (decoded.isEmpty) return;
-    final messageType = decoded[0];
-    if ((messageType == 'EVENT' ||
-            messageType == 'EOSE' ||
-            messageType == 'CLOSED') &&
-        decoded.length >= 2) {
-      final subscriptionId = decoded[1] as String;
-      final subs = _subscriptionHandlers[relayUrl];
-      final handler = subs != null ? subs[subscriptionId] : null;
-      if (handler != null) {
-        try {
-          handler(decoded, relayUrl);
-        } catch (_) {}
+  Future<Map<String, dynamic>> discoverAndConnectOutboxRelays(
+      List<String> pubkeysHex) async {
+    try {
+      final resultJson = await rust_relay.discoverAndConnectOutboxRelays(
+        pubkeysHex: pubkeysHex,
+      );
+      final result = jsonDecode(resultJson) as Map<String, dynamic>;
+      if (kDebugMode) {
+        print('[RustRelayService] Outbox discovery: '
+            'discovered=${result['discoveredRelays']}, '
+            'added=${result['addedRelays']}, '
+            'totalConnected=${result['totalConnected']}');
       }
-    }
-  }
-
-  Future<Completer<void>> sendQuery(
-    String relayUrl,
-    String request,
-    String subscriptionId, {
-    required Function(Map<String, dynamic>, String) onEvent,
-    Duration timeout = const Duration(seconds: 30),
-  }) async {
-    final completer = Completer<void>();
-    Timer? timeoutTimer;
-    bool eoseReceived = false;
-
-    final ws = await getOrCreateConnection(relayUrl);
-    if (ws == null || ws.readyState != WebSocket.open) {
-      completer.complete();
-      return completer;
-    }
-
-    Future<void> handler(List<dynamic> decoded, String url) async {
-      try {
-        if (decoded.length >= 2 && decoded[1] == subscriptionId) {
-          if (decoded[0] == 'EVENT' && decoded.length >= 3) {
-            final eventMap = decoded[2] as Map<String, dynamic>;
-            onEvent(eventMap, url);
-          } else if (decoded[0] == 'EOSE') {
-            if (!eoseReceived && !completer.isCompleted) {
-              eoseReceived = true;
-              timeoutTimer?.cancel();
-              completer.complete();
-              unregisterSubscriptionHandler(relayUrl, subscriptionId);
-            }
-          }
-        }
-      } catch (e) {
-        if (!completer.isCompleted) {
-          timeoutTimer?.cancel();
-          completer.complete();
-          unregisterSubscriptionHandler(relayUrl, subscriptionId);
-        }
+      return result;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[RustRelayService] discoverAndConnectOutboxRelays error: $e');
       }
+      return {};
     }
-
-    registerSubscriptionHandler(relayUrl, subscriptionId, handler);
-
-    final sent = await sendMessage(relayUrl, request);
-    if (!sent) {
-      if (!completer.isCompleted) {
-        completer.complete();
-        unregisterSubscriptionHandler(relayUrl, subscriptionId);
-      }
-      return completer;
-    }
-
-    timeoutTimer = Timer(timeout, () {
-      if (!eoseReceived && !completer.isCompleted) {
-        completer.complete();
-        unregisterSubscriptionHandler(relayUrl, subscriptionId);
-      }
-    });
-
-    return completer;
-  }
-
-  Future<void> executeOnActiveSockets(
-      FutureOr<void> Function(WebSocket ws) action) async {
-    final activeWs = activeSockets;
-    if (activeWs.isEmpty) return;
-
-    final futures = activeWs.map((ws) async {
-      try {
-        if (ws.readyState == WebSocket.open) {
-          await action(ws);
-        }
-      } catch (e) {
-        if (e is SocketException) {
-          _connections.removeWhere((key, value) => value.socket == ws);
-        }
-      }
-    });
-
-    await Future.wait(futures, eagerError: false);
-  }
-
-  Future<void> broadcast(String message) async {
-    _messageQueue.add(message);
-
-    if (_messageQueue.length >= 5 || _messageQueue.length == 1) {
-      _processMessageQueue();
-    }
-  }
-
-  Future<void> priorityBroadcast(String message) async {
-    await _broadcastMessage(message);
-  }
-
-  Future<void> priorityBroadcastToAll(String message) async {
-    final activeWs = activeSockets;
-    if (activeWs.isEmpty) return;
-
-    final futures = activeWs.map((ws) async {
-      try {
-        if (ws.readyState == WebSocket.open) {
-          for (final entry in _connections.entries) {
-            if (entry.value.socket == ws) {
-              final stats = _connectionStats[entry.key];
-              if (stats != null) {
-                stats.messagesSent++;
-              }
-              break;
-            }
-          }
-          ws.add(message);
-        }
-      } catch (e) {
-        if (e is SocketException) {
-          _connections.removeWhere((key, value) => value.socket == ws);
-        }
-      }
-    });
-
-    await Future.wait(futures, eagerError: false);
-  }
-
-  void _processMessageQueue() {
-    if (_isProcessingMessages || _messageQueue.isEmpty) return;
-
-    _isProcessingMessages = true;
-
-    Future.microtask(() async {
-      try {
-        final messagesToSend = <String>[];
-        while (_messageQueue.isNotEmpty && messagesToSend.length < 10) {
-          messagesToSend.add(_messageQueue.removeFirst());
-        }
-
-        for (int i = 0; i < messagesToSend.length; i++) {
-          await _broadcastMessage(messagesToSend[i]);
-        }
-      } finally {
-        _isProcessingMessages = false;
-      }
-    });
-  }
-
-  Future<void> _broadcastMessage(String message) async {
-    final healthyRelayUrls = healthyRelays;
-
-    if (healthyRelayUrls.isEmpty) {
-      await executeOnActiveSockets((ws) {
-        for (final entry in _connections.entries) {
-          if (entry.value.socket == ws && entry.value.isConnected) {
-            final stats = _connectionStats[entry.key];
-            if (stats != null) {
-              stats.messagesSent++;
-            }
-            break;
-          }
-        }
-        return ws.add(message);
-      });
-      return;
-    }
-
-    final futures = healthyRelayUrls.map((url) => sendMessage(url, message));
-    await Future.wait(futures, eagerError: false);
-  }
-
-  void reconnectRelay(
-    String relayUrl,
-    List<String> targetNpubs, {
-    int attempt = 1,
-    Function(String relayUrl)? onReconnected,
-  }) {
-    if (_isClosed || attempt > maxReconnectAttempts) return;
-
-    final delay = _calculateBackoffDelay(attempt);
-    final reconnectTime = DateTime.now();
-    _reconnectTimers[relayUrl] = reconnectTime;
-
-    Future.delayed(Duration(seconds: delay), () async {
-      if (_isClosed || _reconnectTimers[relayUrl] != reconnectTime) return;
-
-      final ws = await getOrCreateConnection(relayUrl);
-      if (ws != null && _reconnectTimers[relayUrl] == reconnectTime) {
-        _reconnectTimers.remove(relayUrl);
-        onReconnected?.call(relayUrl);
-      } else if (!_isClosed) {
-        reconnectRelay(relayUrl, targetNpubs,
-            attempt: attempt + 1, onReconnected: onReconnected);
-      }
-    });
-  }
-
-  int _calculateBackoffDelay(int attempt) {
-    const baseDelay = 1;
-    final maxDelaySeconds = maxBackoffDelay.inSeconds;
-    final delay =
-        (baseDelay * pow(2, attempt - 1)).toInt().clamp(1, maxDelaySeconds);
-
-    final maxJitter = (delay ~/ 2).clamp(1, 5);
-    final jitter = (DateTime.now().millisecondsSinceEpoch % maxJitter);
-    return delay + jitter;
-  }
-
-  Future<void> closeConnections() async {
-    for (final entry in _connections.entries) {
-      final state = entry.value;
-      try {
-        state.subscription?.cancel();
-        if (state.socket != null &&
-            state.socket!.readyState == WebSocket.open) {
-          await state.socket!.close();
-        }
-      } catch (_) {}
-    }
-    _connections.clear();
-    _subscriptionHandlers.clear();
-    _messageQueue.clear();
-  }
-
-  Future<void> forceCloseConnections() async {
-    _isClosed = true;
-
-    _reconnectTimers.clear();
-
-    for (final state in _connections.values) {
-      try {
-        state.subscription?.cancel();
-        if (state.socket != null &&
-            (state.socket!.readyState == WebSocket.open ||
-                state.socket!.readyState == WebSocket.connecting)) {
-          await state.socket!.close();
-        }
-      } catch (e) {}
-    }
-
-    _connections.clear();
-    _messageQueue.clear();
-  }
-
-  Map<String, dynamic> getConnectionStats() {
-    final connectedCount =
-        _connections.values.where((s) => s.isConnected).length;
-    final totalStats = {
-      'totalRelays': relayUrls.length,
-      'connectedRelays': connectedCount,
-      'healthyRelays': healthyRelays.length,
-      'queuedMessages': _messageQueue.length,
-      'isProcessingMessages': _isProcessingMessages,
-    };
-
-    final relayStats = <String, Map<String, dynamic>>{};
-    for (final entry in _connectionStats.entries) {
-      final url = entry.key;
-      final stats = entry.value;
-      final state = _connections[url];
-      relayStats[url] = {
-        'connectAttempts': stats.connectAttempts,
-        'successfulConnections': stats.successfulConnections,
-        'disconnections': stats.disconnections,
-        'messagesSent': stats.messagesSent,
-        'messagesReceived': stats.messagesReceived,
-        'successRate': '${(stats.successRate * 100).toStringAsFixed(1)}%',
-        'isHealthy': stats.isHealthy,
-        'isConnected': state != null && state.isConnected,
-        'isConnecting': state != null && state.isConnecting,
-        'totalUptime': stats.totalUptime.inSeconds,
-        'lastConnected': stats.lastConnected?.toIso8601String(),
-        'lastDisconnected': stats.lastDisconnected?.toIso8601String(),
-      };
-    }
-
-    return {
-      'summary': totalStats,
-      'relays': relayStats,
-    };
-  }
-
-  void flushMessageQueue() {
-    _processMessageQueue();
   }
 
   Future<void> reloadCustomRelays() async {
-    await Future.microtask(() async {
-      try {
-        final customRelays = await getRelaySetMainSockets();
+    try {
+      final customRelays = await getRelaySetMainSockets();
+      final prefs = await SharedPreferences.getInstance();
+      final flagsJson = prefs.getString('relay_flags');
 
-        if (kDebugMode) {
-          print('[WebSocketManager] Reloading custom relays...');
-          print(
-              '[WebSocketManager] Current relays: ${relayUrls.length} - $relayUrls');
-          print(
-              '[WebSocketManager] New relays: ${customRelays.length} - $customRelays');
-        }
-
-        if (!_listEquals(relayUrls, customRelays)) {
-          if (kDebugMode) {
-            print('[WebSocketManager] Relay list changed, updating...');
-          }
-
-          final activeConnections =
-              _connections.values.where((s) => s.isConnected).length;
-          final closeFutures = _connections.values.map((state) async {
-            try {
-              state.subscription?.cancel();
-              if (state.socket != null &&
-                  (state.socket!.readyState == WebSocket.open ||
-                      state.socket!.readyState == WebSocket.connecting)) {
-                await state.socket!.close();
-              }
-            } catch (e) {}
-          });
-          await Future.wait(closeFutures, eagerError: false);
-
-          _connections.clear();
-          relayUrls.clear();
-          _connectionStats.clear();
-
-          relayUrls.addAll(customRelays);
-          _initializeStats();
-
-          if (kDebugMode) {
-            print(
-                '[WebSocketManager] Updated to ${customRelays.length} relays');
-          }
-
-          if (activeConnections > 0) {
-            if (kDebugMode) {
-              print(
-                  '[WebSocketManager] Reconnecting to ${relayUrls.length} new relays...');
-            }
-            final connectionFutures =
-                relayUrls.map((relayUrl) => getOrCreateConnection(relayUrl));
-            await Future.wait(connectionFutures, eagerError: false);
-
-            final newConnected =
-                _connections.values.where((s) => s.isConnected).length;
-            if (kDebugMode) {
-              print(
-                  '[WebSocketManager] Reconnection complete: $newConnected active connections');
-            }
-          } else {
-            if (kDebugMode) {
-              print(
-                  '[WebSocketManager] No active connections, will connect on next connectRelays() call');
-            }
-          }
-        } else {
-          if (kDebugMode) {
-            print('[WebSocketManager] Relay list unchanged, no update needed');
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print('[WebSocketManager] Error during relay reload: $e');
+      Map<String, Map<String, bool>> relayFlags = {};
+      if (flagsJson != null) {
+        final decoded = jsonDecode(flagsJson) as Map<String, dynamic>;
+        for (final entry in decoded.entries) {
+          final flags = entry.value as Map<String, dynamic>;
+          relayFlags[entry.key] = {
+            'read': flags['read'] as bool? ?? true,
+            'write': flags['write'] as bool? ?? true,
+          };
         }
       }
-    });
-  }
-}
 
-void unawaited(Future<void> future) {
-  future.catchError((error) {});
+      await reinit(relayUrls: customRelays);
+
+      for (final url in customRelays) {
+        final flags = relayFlags[url];
+        if (flags != null) {
+          final isRead = flags['read'] ?? true;
+          final isWrite = flags['write'] ?? true;
+          if (!isRead || !isWrite) {
+            await rust_relay.addRelayWithFlags(url: url, read: isRead, write: isWrite);
+          }
+        }
+      }
+
+      if (kDebugMode) {
+        print('[RustRelayService] Reloaded with ${customRelays.length} relays');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[RustRelayService] reloadCustomRelays error: $e');
+      }
+    }
+  }
+
 }

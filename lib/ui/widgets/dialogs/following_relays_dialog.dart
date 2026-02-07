@@ -6,8 +6,7 @@ import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/relay_service.dart';
-import '../../../constants/relays.dart';
-import 'dart:convert';
+
 
 class RelayUsageStats {
   final String relayUrl;
@@ -113,7 +112,6 @@ class _FollowingRelaysDialogContentState
 
       final relayUsageMap = <String, List<String>>{};
 
-      final manager = WebSocketManager.instance;
       final pubkeyHexList = followingUsers
           .map((user) {
             try {
@@ -128,58 +126,41 @@ class _FollowingRelaysDialogContentState
           .toList();
 
       final processedUsers = <String>{};
-      final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
 
-      for (final relayUrl in relaySetMainSockets.take(5)) {
-        if (!mounted) return;
+      final filter = {
+        'authors': pubkeyHexList,
+        'kinds': [10002],
+        'limit': pubkeyHexList.length,
+      };
+
+      final events = await RustRelayService.instance.fetchEvents(filter, timeoutSecs: 10);
+
+      for (final data in events) {
+        if (!mounted) break;
 
         try {
-          final filter = {
-            'authors': pubkeyHexList,
-            'kinds': [10002],
-            'limit': pubkeyHexList.length,
-          };
+          final eventAuthor = data['pubkey'] as String?;
+          if (eventAuthor == null || processedUsers.contains(eventAuthor)) {
+            continue;
+          }
 
-          final request = jsonEncode(['REQ', subscriptionId, filter]);
+          processedUsers.add(eventAuthor);
+          final tags = data['tags'] as List<dynamic>? ?? [];
 
-          final completer = await manager.sendQuery(
-            relayUrl,
-            request,
-            subscriptionId,
-            timeout: const Duration(seconds: 5),
-            onEvent: (data, url) {
-              if (!mounted) return;
-
-              try {
-                final eventAuthor = data['pubkey'] as String?;
-                if (eventAuthor == null ||
-                    processedUsers.contains(eventAuthor)) {
-                  return;
-                }
-
-                processedUsers.add(eventAuthor);
-                final tags = data['tags'] as List<dynamic>? ?? [];
-
-                for (final tag in tags) {
-                  if (tag is List &&
-                      tag.isNotEmpty &&
-                      tag[0] == 'r' &&
-                      tag.length >= 2) {
-                    final relayUrl = tag[1] as String;
-                    if (!relayUsageMap.containsKey(relayUrl)) {
-                      relayUsageMap[relayUrl] = [];
-                    }
-                    if (!relayUsageMap[relayUrl]!.contains(eventAuthor)) {
-                      relayUsageMap[relayUrl]!.add(eventAuthor);
-                    }
-                  }
-                }
-              } catch (_) {}
-            },
-          );
-
-          await completer.future
-              .timeout(const Duration(seconds: 5), onTimeout: () {});
+          for (final tag in tags) {
+            if (tag is List &&
+                tag.isNotEmpty &&
+                tag[0] == 'r' &&
+                tag.length >= 2) {
+              final tagRelayUrl = tag[1] as String;
+              if (!relayUsageMap.containsKey(tagRelayUrl)) {
+                relayUsageMap[tagRelayUrl] = [];
+              }
+              if (!relayUsageMap[tagRelayUrl]!.contains(eventAuthor)) {
+                relayUsageMap[tagRelayUrl]!.add(eventAuthor);
+              }
+            }
+          }
         } catch (_) {}
       }
 

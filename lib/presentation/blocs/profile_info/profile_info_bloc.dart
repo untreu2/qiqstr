@@ -161,32 +161,13 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     Future.microtask(() async {
       if (isClosed) return;
       try {
-        var follows = await _followingRepository.getFollowingList(pubkeyHex);
+        final follows = await _followingRepository.getFollowingList(pubkeyHex);
 
         if (isClosed) return;
         if (state is ProfileInfoLoaded) {
           add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
             followingCount: follows?.length ?? 0,
             isLoadingCounts: false,
-          )));
-        }
-
-        await _syncService.syncFollowingList(pubkeyHex);
-        follows = await _followingRepository.getFollowingList(pubkeyHex);
-
-        if (isClosed) return;
-        if (state is ProfileInfoLoaded) {
-          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followingCount: follows?.length ?? 0,
-          )));
-        }
-
-        final followerCount =
-            await _profileRepository.getFollowerCount(pubkeyHex);
-        if (isClosed) return;
-        if (state is ProfileInfoLoaded) {
-          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followerCount: followerCount,
           )));
         }
       } catch (_) {
@@ -199,6 +180,34 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
           )));
         }
       }
+    });
+
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final followerCount =
+            await _profileRepository.getFollowerCount(pubkeyHex);
+        if (isClosed) return;
+        if (state is ProfileInfoLoaded) {
+          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            followerCount: followerCount,
+          )));
+        }
+      } catch (_) {}
+    });
+
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        await _syncService.syncFollowingList(pubkeyHex);
+        final follows = await _followingRepository.getFollowingList(pubkeyHex);
+        if (isClosed) return;
+        if (state is ProfileInfoLoaded) {
+          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            followingCount: follows?.length ?? 0,
+          )));
+        }
+      } catch (_) {}
     });
   }
 

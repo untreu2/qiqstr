@@ -6,7 +6,6 @@ import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../../data/services/event_counts_service.dart';
-import '../../../constants/relays.dart';
 import '../../widgets/common/snackbar_widget.dart';
 
 class EventManagerPage extends StatefulWidget {
@@ -101,7 +100,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
       if (success) {
         AppSnackbar.success(
           context,
-          'Rebroadcasted ${_allEvents.length} events to ${relaySetMainSockets.length} relays',
+          'Rebroadcasted ${_allEvents.length} events to relays',
         );
       } else {
         AppSnackbar.error(context, 'Error rebroadcasting events');

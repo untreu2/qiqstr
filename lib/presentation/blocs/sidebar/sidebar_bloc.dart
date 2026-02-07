@@ -6,6 +6,7 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/relay_service.dart';
 import '../../../models/event_model.dart';
 import 'sidebar_event.dart';
 import 'sidebar_state.dart';
@@ -20,6 +21,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   String? _currentUserHex;
   String? _currentNpub;
   StreamSubscription<EventModel?>? _profileSubscription;
+  Timer? _relayCountTimer;
 
   SidebarBloc({
     required FollowingRepository followingRepository,
@@ -37,6 +39,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     on<SidebarRefreshed>(_onSidebarRefreshed);
     on<_SidebarProfileUpdated>(_onSidebarProfileUpdated);
     on<_SidebarCountsUpdated>(_onSidebarCountsUpdated);
+    on<_SidebarRelayCountUpdated>(_onSidebarRelayCountUpdated);
   }
 
   Future<void> _onSidebarInitialized(
@@ -58,6 +61,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
       _watchProfile(_currentUserHex!);
       _loadFollowerCounts(_currentUserHex!);
       _syncInBackground(_currentUserHex!);
+      _startRelayCountPolling();
     } catch (e) {
       emit(const SidebarLoaded(currentUser: {}));
     }
@@ -155,9 +159,38 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     ));
   }
 
+  void _startRelayCountPolling() {
+    _loadRelayCount();
+    _relayCountTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _loadRelayCount();
+    });
+  }
+
+  void _loadRelayCount() {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final count = await RustRelayService.instance.getConnectedRelayCount();
+        if (isClosed) return;
+        add(_SidebarRelayCountUpdated(count));
+      } catch (_) {}
+    });
+  }
+
+  void _onSidebarRelayCountUpdated(
+    _SidebarRelayCountUpdated event,
+    Emitter<SidebarState> emit,
+  ) {
+    if (state is! SidebarLoaded) return;
+    emit((state as SidebarLoaded).copyWith(
+      connectedRelayCount: event.count,
+    ));
+  }
+
   @override
   Future<void> close() {
     _profileSubscription?.cancel();
+    _relayCountTimer?.cancel();
     return super.close();
   }
 }
@@ -177,4 +210,12 @@ class _SidebarCountsUpdated extends SidebarEvent {
 
   @override
   List<Object?> get props => [followingCount, followerCount];
+}
+
+class _SidebarRelayCountUpdated extends SidebarEvent {
+  final int count;
+  const _SidebarRelayCountUpdated(this.count);
+
+  @override
+  List<Object?> get props => [count];
 }

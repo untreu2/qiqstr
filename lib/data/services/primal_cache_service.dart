@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'relay_service.dart';
 import '../../constants/relays.dart';
 
 const int USER_FOLLOWER_COUNTS = 10000133;
@@ -16,7 +16,8 @@ class PrimalCacheService {
 
   PrimalCacheService._internal();
 
-  final WebSocketManager _webSocketManager = WebSocketManager.instance;
+  WebSocket? _ws;
+  bool _connecting = false;
   final Map<String, Completer<Map<String, int>>> _pendingCountRequests = {};
   final Map<String, Completer<Map<String, Map<String, dynamic>>>>
       _pendingProfileRequests = {};
@@ -24,8 +25,50 @@ class PrimalCacheService {
       _pendingNotificationRequests = {};
   final Map<String, List<Map<String, dynamic>>> _notificationBuffers = {};
   int _subscriptionCounter = 0;
+  StreamSubscription? _subscription;
 
-  void _handleMessage(List<dynamic> decoded, String relayUrl) {
+  Future<WebSocket?> _ensureConnection() async {
+    if (_ws != null && _ws!.readyState == WebSocket.open) return _ws;
+    if (_connecting) {
+      for (int i = 0; i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (_ws != null && _ws!.readyState == WebSocket.open) return _ws;
+      }
+      return null;
+    }
+
+    _connecting = true;
+    try {
+      _ws = await WebSocket.connect(primalCacheUrl)
+          .timeout(const Duration(seconds: 5));
+      _subscription = _ws!.listen(
+        (data) {
+          try {
+            final decoded = jsonDecode(data as String) as List<dynamic>;
+            _handleMessage(decoded);
+          } catch (_) {}
+        },
+        onDone: () {
+          _ws = null;
+          _subscription = null;
+        },
+        onError: (_) {
+          _ws = null;
+          _subscription = null;
+        },
+      );
+      return _ws;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[PrimalCacheService] Connection error: $e');
+      }
+      return null;
+    } finally {
+      _connecting = false;
+    }
+  }
+
+  void _handleMessage(List<dynamic> decoded) {
     try {
       if (decoded.length < 2) return;
       final messageType = decoded[0] as String;
@@ -124,6 +167,28 @@ class PrimalCacheService {
     }
   }
 
+  Future<bool> _send(String message) async {
+    try {
+      final ws = await _ensureConnection();
+      if (ws == null || ws.readyState != WebSocket.open) return false;
+      ws.add(message);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  void _closeSubscription(String subscriptionId) {
+    try {
+      final closeRequest = ['CLOSE', subscriptionId];
+      _send(jsonEncode(closeRequest));
+    } catch (e) {
+      if (kDebugMode) {
+        print('[PrimalCacheService] Close subscription error: $e');
+      }
+    }
+  }
+
   Future<Map<String, int>> fetchFollowerCounts(List<String> pubkeyHexes) async {
     if (pubkeyHexes.isEmpty) return {};
 
@@ -133,15 +198,6 @@ class PrimalCacheService {
     _pendingCountRequests[subscriptionId] = completer;
 
     try {
-      final ws = await _webSocketManager.getOrCreateConnection(primalCacheUrl);
-      if (ws == null) {
-        _pendingCountRequests.remove(subscriptionId);
-        return {};
-      }
-
-      _webSocketManager.registerSubscriptionHandler(
-          primalCacheUrl, subscriptionId, _handleMessage);
-
       final request = [
         'REQ',
         subscriptionId,
@@ -153,12 +209,9 @@ class PrimalCacheService {
         }
       ];
 
-      final sent = await _webSocketManager.sendMessage(
-          primalCacheUrl, jsonEncode(request));
+      final sent = await _send(jsonEncode(request));
       if (!sent) {
         _pendingCountRequests.remove(subscriptionId);
-        _webSocketManager.unregisterSubscriptionHandler(
-            primalCacheUrl, subscriptionId);
         return {};
       }
 
@@ -166,8 +219,6 @@ class PrimalCacheService {
         const Duration(seconds: 10),
         onTimeout: () {
           _pendingCountRequests.remove(subscriptionId);
-          _webSocketManager.unregisterSubscriptionHandler(
-              primalCacheUrl, subscriptionId);
           return <String, int>{};
         },
       );
@@ -194,15 +245,6 @@ class PrimalCacheService {
     _pendingProfileRequests[subscriptionId] = completer;
 
     try {
-      final ws = await _webSocketManager.getOrCreateConnection(primalCacheUrl);
-      if (ws == null) {
-        _pendingProfileRequests.remove(subscriptionId);
-        return {};
-      }
-
-      _webSocketManager.registerSubscriptionHandler(
-          primalCacheUrl, subscriptionId, _handleMessage);
-
       final request = [
         'REQ',
         subscriptionId,
@@ -214,12 +256,9 @@ class PrimalCacheService {
         }
       ];
 
-      final sent = await _webSocketManager.sendMessage(
-          primalCacheUrl, jsonEncode(request));
+      final sent = await _send(jsonEncode(request));
       if (!sent) {
         _pendingProfileRequests.remove(subscriptionId);
-        _webSocketManager.unregisterSubscriptionHandler(
-            primalCacheUrl, subscriptionId);
         return {};
       }
 
@@ -227,8 +266,6 @@ class PrimalCacheService {
         const Duration(seconds: 10),
         onTimeout: () {
           _pendingProfileRequests.remove(subscriptionId);
-          _webSocketManager.unregisterSubscriptionHandler(
-              primalCacheUrl, subscriptionId);
           return <String, Map<String, dynamic>>{};
         },
       );
@@ -242,19 +279,6 @@ class PrimalCacheService {
         print('[PrimalCacheService] User infos request error: $e');
       }
       return {};
-    }
-  }
-
-  void _closeSubscription(String subscriptionId) {
-    try {
-      final closeRequest = ['CLOSE', subscriptionId];
-      _webSocketManager.sendMessage(primalCacheUrl, jsonEncode(closeRequest));
-      _webSocketManager.unregisterSubscriptionHandler(
-          primalCacheUrl, subscriptionId);
-    } catch (e) {
-      if (kDebugMode) {
-        print('[PrimalCacheService] Close subscription error: $e');
-      }
     }
   }
 
@@ -275,16 +299,6 @@ class PrimalCacheService {
     _pendingNotificationRequests[subscriptionId] = completer;
 
     try {
-      final ws = await _webSocketManager.getOrCreateConnection(primalCacheUrl);
-      if (ws == null) {
-        _pendingNotificationRequests.remove(subscriptionId);
-        _notificationBuffers.remove(subscriptionId);
-        return [];
-      }
-
-      _webSocketManager.registerSubscriptionHandler(
-          primalCacheUrl, subscriptionId, _handleMessage);
-
       final requestParams = <String, dynamic>{
         'pubkey': pubkeyHex,
         'limit': limit,
@@ -304,13 +318,10 @@ class PrimalCacheService {
         }
       ];
 
-      final sent = await _webSocketManager.sendMessage(
-          primalCacheUrl, jsonEncode(request));
+      final sent = await _send(jsonEncode(request));
       if (!sent) {
         _pendingNotificationRequests.remove(subscriptionId);
         _notificationBuffers.remove(subscriptionId);
-        _webSocketManager.unregisterSubscriptionHandler(
-            primalCacheUrl, subscriptionId);
         return [];
       }
 
@@ -321,8 +332,6 @@ class PrimalCacheService {
         onTimeout: () {
           _pendingNotificationRequests.remove(subscriptionId);
           _notificationBuffers.remove(subscriptionId);
-          _webSocketManager.unregisterSubscriptionHandler(
-              primalCacheUrl, subscriptionId);
           return <Map<String, dynamic>>[];
         },
       );

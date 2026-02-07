@@ -81,6 +81,7 @@ class RelayPage extends StatefulWidget {
 class _RelayPageState extends State<RelayPage> {
   final TextEditingController _addRelayController = TextEditingController();
   List<String> _relays = [];
+  Map<String, Map<String, bool>> _relayFlags = {};
   List<Map<String, dynamic>> _userRelays = [];
   bool _isLoading = true;
   bool _isAddingRelay = false;
@@ -135,17 +136,25 @@ class _RelayPageState extends State<RelayPage> {
     });
   }
 
-  void _loadRelayStats() {
+  void _loadRelayStats() async {
     if (_disposed) return;
-    final manager = WebSocketManager.instance;
-    final stats = manager.getConnectionStats();
-    setState(() {
-      _relayStats.clear();
-      if (stats['relayStats'] != null) {
-        _relayStats.addAll(
-            Map<String, Map<String, dynamic>>.from(stats['relayStats'] as Map));
+    try {
+      final status = await RustRelayService.instance.getRelayStatus();
+      if (_disposed || !mounted) return;
+      final relays = status['relays'] as List<dynamic>? ?? [];
+      final newStats = <String, Map<String, dynamic>>{};
+      for (final relay in relays) {
+        final r = relay as Map<String, dynamic>;
+        final url = r['url'] as String? ?? '';
+        if (url.isNotEmpty) {
+          newStats[url] = r;
+        }
       }
-    });
+      setState(() {
+        _relayStats.clear();
+        _relayStats.addAll(newStats);
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadRelays() async {
@@ -156,14 +165,34 @@ class _RelayPageState extends State<RelayPage> {
 
       final customMainRelays = prefs.getStringList('custom_main_relays');
       final userRelaysJson = prefs.getString('user_relays');
+      final flagsJson = prefs.getString('relay_flags');
 
       if (userRelaysJson != null) {
         final List<dynamic> decoded = jsonDecode(userRelaysJson);
         _userRelays = decoded.cast<Map<String, dynamic>>();
       }
 
+      Map<String, Map<String, bool>> loadedFlags = {};
+      if (flagsJson != null) {
+        final decoded = jsonDecode(flagsJson) as Map<String, dynamic>;
+        for (final entry in decoded.entries) {
+          final flags = entry.value as Map<String, dynamic>;
+          loadedFlags[entry.key] = {
+            'read': flags['read'] as bool? ?? true,
+            'write': flags['write'] as bool? ?? true,
+          };
+        }
+      }
+
+      final relays = customMainRelays ?? List.from(relaySetMainSockets);
+
+      for (final relay in relays) {
+        loadedFlags.putIfAbsent(relay, () => {'read': true, 'write': true});
+      }
+
       setState(() {
-        _relays = customMainRelays ?? List.from(relaySetMainSockets);
+        _relays = relays;
+        _relayFlags = loadedFlags;
         _isLoading = false;
       });
 
@@ -173,6 +202,10 @@ class _RelayPageState extends State<RelayPage> {
     } catch (e) {
       setState(() {
         _relays = List.from(relaySetMainSockets);
+        _relayFlags = {};
+        for (final relay in _relays) {
+          _relayFlags[relay] = {'read': true, 'write': true};
+        }
         _isLoading = false;
       });
       if (mounted) {
@@ -234,13 +267,23 @@ class _RelayPageState extends State<RelayPage> {
 
       final privateKey = privateKeyResult.data!;
 
-      List<List<String>> relayTags = [];
+      List<String> relayConfigs = [];
       for (String relay in _relays) {
-        relayTags.add(['r', relay]);
+        final flags = _relayFlags[relay] ?? {'read': true, 'write': true};
+        final isRead = flags['read'] ?? true;
+        final isWrite = flags['write'] ?? true;
+
+        if (isRead && isWrite) {
+          relayConfigs.add(relay);
+        } else if (isRead) {
+          relayConfigs.add('$relay|read');
+        } else if (isWrite) {
+          relayConfigs.add('$relay|write');
+        }
       }
 
-      final eventJsonStr = rust_events.createRelayListEvent(
-        relayUrls: _relays,
+      final eventJsonStr = rust_events.createRelayListEventWithMarkers(
+        relayConfigs: relayConfigs,
         privateKeyHex: privateKey,
       );
       final event = jsonDecode(eventJsonStr) as Map<String, dynamic>;
@@ -253,7 +296,7 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setString('published_relay_list', jsonEncode(event));
 
       AppSnackbar.success(context,
-          'Relay list published successfully (${relayTags.length} relays in list)');
+          'Relay list published successfully (${relayConfigs.length} relays in list)');
 
       if (kDebugMode) {
         print('Relay list event published: ${event['id']}');
@@ -274,37 +317,17 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Future<void> _broadcastRelayListEvent(String serializedEvent) async {
-    final List<Future<bool>> broadcastFutures = [];
-
-    for (final relayUrl in _relays) {
-      broadcastFutures.add(_sendToRelay(relayUrl, serializedEvent));
-    }
-
     try {
-      final results = await Future.wait(broadcastFutures, eagerError: false);
-      final successfulBroadcasts = results.where((success) => success).length;
-
-      if (kDebugMode) {
-        print(
-            'Relay list event broadcasted to $successfulBroadcasts/${_relays.length} relays');
+      final decoded = jsonDecode(serializedEvent) as List<dynamic>;
+      if (decoded.isNotEmpty && decoded[0] == 'EVENT' && decoded.length >= 2) {
+        final eventData = decoded[1] as Map<String, dynamic>;
+        final eventJson = jsonEncode(eventData);
+        await RustRelayService.instance.sendEvent(eventJson);
       }
     } catch (e) {
       if (kDebugMode) {
         print('Error during relay list broadcast: $e');
       }
-    }
-  }
-
-  Future<bool> _sendToRelay(String relayUrl, String serializedEvent) async {
-    try {
-      final manager = WebSocketManager.instance;
-      final sent = await manager.sendMessage(relayUrl, serializedEvent);
-      return sent;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Failed to send relay list event to $relayUrl: $e');
-      }
-      return false;
     }
   }
 
@@ -360,74 +383,38 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final pubkeyHex = _authService.npubToHex(npub) ?? npub;
 
-      final manager = WebSocketManager.instance;
+      final filter = {
+        'authors': [pubkeyHex],
+        'kinds': [10002],
+        'limit': 1,
+      };
 
-      for (final relayUrl in relaySetMainSockets) {
-        try {
-          if (_disposed) return relayList;
+      final events = await RustRelayService.instance.fetchEvents(filter, timeoutSecs: 10);
 
-          final subscriptionId =
-              DateTime.now().millisecondsSinceEpoch.toString();
-          final request = jsonEncode([
-            "REQ",
-            subscriptionId,
-            {
-              "authors": [pubkeyHex],
-              "kinds": [10002],
-              "limit": 1
-            }
-          ]);
+      if (events.isNotEmpty) {
+        final eventData = events.first;
+        final tags = eventData['tags'] as List<dynamic>? ?? [];
 
-          Map<String, dynamic>? eventData;
+        for (final tag in tags) {
+          if (tag is List &&
+              tag.isNotEmpty &&
+              tag[0] == 'r' &&
+              tag.length >= 2) {
+            final relayUrl = tag[1] as String;
+            String marker = '';
 
-          final completer = await manager.sendQuery(
-            relayUrl,
-            request,
-            subscriptionId,
-            timeout: const Duration(seconds: 5),
-            onEvent: (data, url) {
-              if (!_disposed) {
-                eventData = data;
-              }
-            },
-          );
-
-          await completer.future
-              .timeout(const Duration(seconds: 5), onTimeout: () {});
-
-          if (eventData != null) {
-            final tags = eventData!['tags'] as List<dynamic>? ?? [];
-
-            for (final tag in tags) {
-              if (tag is List &&
-                  tag.isNotEmpty &&
-                  tag[0] == 'r' &&
-                  tag.length >= 2) {
-                final relayUrl = tag[1] as String;
-                String marker = '';
-
-                if (tag.length >= 3 && tag[2] is String) {
-                  marker = tag[2] as String;
-                }
-
-                if (marker.isEmpty) {
-                  marker = 'read,write';
-                }
-
-                relayList.add({
-                  'url': relayUrl,
-                  'marker': marker,
-                });
-              }
+            if (tag.length >= 3 && tag[2] is String) {
+              marker = tag[2] as String;
             }
 
-            if (relayList.isNotEmpty) {
-              break;
+            if (marker.isEmpty) {
+              marker = 'read,write';
             }
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('Error fetching from relay $relayUrl: $e');
+
+            relayList.add({
+              'url': relayUrl,
+              'marker': marker,
+            });
           }
         }
       }
@@ -450,20 +437,27 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final previousRelays = Set<String>.from(_relays.map(_normalizeRelayUrl));
 
-      final writeRelays = _userRelays
-          .where((relay) =>
-              relay['marker'] == '' ||
-              relay['marker'].contains('write') ||
-              relay['marker'].contains('read,write'))
+      final newRelays = _userRelays
           .map((relay) => relay['url'] as String)
           .toList();
 
-      final newRelays = writeRelays.isNotEmpty
-          ? writeRelays
-          : _userRelays.map((relay) => relay['url'] as String).take(4).toList();
+      final newFlags = <String, Map<String, bool>>{};
+      for (final relay in _userRelays) {
+        final url = relay['url'] as String;
+        final marker = relay['marker'] as String? ?? '';
+
+        if (marker == 'read') {
+          newFlags[url] = {'read': true, 'write': false};
+        } else if (marker == 'write') {
+          newFlags[url] = {'read': false, 'write': true};
+        } else {
+          newFlags[url] = {'read': true, 'write': true};
+        }
+      }
 
       setState(() {
         _relays = newRelays;
+        _relayFlags = newFlags;
       });
 
       await _saveRelays();
@@ -502,22 +496,11 @@ class _RelayPageState extends State<RelayPage> {
 
   Future<void> _saveRelays() async {
     try {
-      if (kDebugMode) {
-        print('[RelayPage] Saving ${_relays.length} relays: $_relays');
-      }
-
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('custom_main_relays', _relays);
+      await prefs.setString('relay_flags', jsonEncode(_relayFlags));
 
-      if (kDebugMode) {
-        final saved = prefs.getStringList('custom_main_relays');
-        print('[RelayPage] Saved to SharedPreferences: $saved');
-      }
-
-      if (kDebugMode) {
-        print('[RelayPage] Calling reloadCustomRelays...');
-      }
-      await WebSocketManager.instance.reloadCustomRelays();
+      await RustRelayService.instance.reloadCustomRelays();
 
       if (mounted) {
         AppSnackbar.success(context, 'Relays saved successfully');
@@ -577,6 +560,7 @@ class _RelayPageState extends State<RelayPage> {
     try {
       setState(() {
         targetList.add(url);
+        _relayFlags[url] = {'read': true, 'write': true};
       });
 
       await _saveRelays();
@@ -657,6 +641,7 @@ class _RelayPageState extends State<RelayPage> {
   Future<void> _removeRelay(String url, bool isMainRelay) async {
     setState(() {
       _relays.remove(url);
+      _relayFlags.remove(url);
       _relayInfos.remove(url);
       _expandedRelays.remove(url);
     });
@@ -675,8 +660,14 @@ class _RelayPageState extends State<RelayPage> {
         final previousRelays =
             Set<String>.from(_relays.map(_normalizeRelayUrl));
 
+        final defaultFlags = <String, Map<String, bool>>{};
+        for (final relay in relaySetMainSockets) {
+          defaultFlags[relay] = {'read': true, 'write': true};
+        }
+
         setState(() {
           _relays = List.from(relaySetMainSockets);
+          _relayFlags = defaultFlags;
         });
         await _saveRelays();
 
@@ -723,6 +714,7 @@ class _RelayPageState extends State<RelayPage> {
             (existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
           setState(() {
             _relays.add(normalizedUrl);
+            _relayFlags[normalizedUrl] = {'read': true, 'write': true};
           });
           await _saveRelays();
           _fetchRelayInfo(normalizedUrl);
@@ -831,10 +823,10 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Widget _buildRelayTile(String relay, bool isMainRelay) {
-    final manager = WebSocketManager.instance;
-    final isConnected = manager.isRelayConnected(relay);
-    final isConnecting = manager.isRelayConnecting(relay);
     final stats = _relayStats[relay];
+    final relayStatus = stats?['status'] as String? ?? 'disconnected';
+    final isConnected = relayStatus == 'connected';
+    final isConnecting = relayStatus == 'connecting' || relayStatus == 'pending';
     final info = _relayInfos[relay];
     final isExpanded = _expandedRelays[relay] ?? false;
 
@@ -886,49 +878,8 @@ class _RelayPageState extends State<RelayPage> {
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                if (info?.paymentRequired == true) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      'Paid',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.amber,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                if (info?.authRequired == true) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      'Auth',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.blue,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
+                            const SizedBox(height: 6),
+                            _buildRelayFlagChips(relay),
                           ],
                         ),
                       ),
@@ -1085,22 +1036,117 @@ class _RelayPageState extends State<RelayPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        _buildStatRow(
-                            'Success Rate', stats['successRate'] ?? 'N/A'),
-                        _buildStatRow('Connections',
-                            '${stats['successfulConnections'] ?? 0}'),
-                        _buildStatRow(
-                            'Messages Sent', '${stats['messagesSent'] ?? 0}'),
-                        _buildStatRow('Messages Received',
-                            '${stats['messagesReceived'] ?? 0}'),
-                        _buildStatRow('Disconnections',
-                            '${stats['disconnections'] ?? 0}'),
+                        _buildStatRow('Status', stats['status'] ?? 'unknown'),
+                        _buildStatRow('Attempts', '${stats['attempts'] ?? 0}'),
+                        _buildStatRow('Successful', '${stats['success'] ?? 0}'),
+                        _buildStatRow('Bytes Sent', '${stats['bytesSent'] ?? 0}'),
+                        _buildStatRow('Bytes Received', '${stats['bytesReceived'] ?? 0}'),
                       ],
                     ],
                   ),
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRelayFlagChips(String relay) {
+    final flags = _relayFlags[relay] ?? {'read': true, 'write': true};
+    final isRead = flags['read'] ?? true;
+    final isWrite = flags['write'] ?? true;
+
+    return Row(
+      children: [
+        _buildFlagChip(
+          label: 'Read',
+          active: isRead,
+          activeColor: const Color(0xFF4CAF50),
+          onTap: () {
+            final newRead = !isRead;
+            if (!newRead && !isWrite) return;
+            setState(() {
+              _relayFlags[relay] = {
+                'read': newRead,
+                'write': isWrite,
+              };
+            });
+            _saveRelays();
+          },
+        ),
+        const SizedBox(width: 6),
+        _buildFlagChip(
+          label: 'Write',
+          active: isWrite,
+          activeColor: const Color(0xFF2196F3),
+          onTap: () {
+            final newWrite = !isWrite;
+            if (!isRead && !newWrite) return;
+            setState(() {
+              _relayFlags[relay] = {
+                'read': isRead,
+                'write': newWrite,
+              };
+            });
+            _saveRelays();
+          },
+        ),
+        if (_relayInfos[relay]?.paymentRequired == true) ...[
+          const SizedBox(width: 6),
+          _buildInfoChip('Paid', Colors.amber),
+        ],
+        if (_relayInfos[relay]?.authRequired == true) ...[
+          const SizedBox(width: 6),
+          _buildInfoChip('Auth', Colors.purple),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFlagChip({
+    required String label,
+    required bool active,
+    required Color activeColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: active ? activeColor.withValues(alpha: 0.15) : context.colors.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active ? activeColor.withValues(alpha: 0.4) : context.colors.textSecondary.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: active ? activeColor : context.colors.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );

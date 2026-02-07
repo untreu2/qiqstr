@@ -31,18 +31,49 @@ class ServicesModule extends DIModule {
           db: AppDI.get<IsarDatabaseService>(),
           publisher: AppDI.get<EventPublisher>(),
         ));
-
     await AuthService.instance.refreshCache();
 
-    _preConnectRelays();
+    _initRelayService();
   }
 
-  void _preConnectRelays() {
+  void _initRelayService() {
     Future.microtask(() async {
       try {
-        final wsManager = WebSocketManager.instance;
-        for (final url in wsManager.relayUrls) {
-          wsManager.getOrCreateConnection(url);
+        final authService = AuthService.instance;
+        String? privateKeyHex;
+        String? userPubkeyHex;
+        try {
+          final pkResult = await authService.getCurrentUserPrivateKey();
+          if (!pkResult.isError && pkResult.data != null) {
+            privateKeyHex = pkResult.data;
+          }
+          final pubResult = await authService.getCurrentUserPublicKeyHex();
+          if (!pubResult.isError && pubResult.data != null) {
+            userPubkeyHex = pubResult.data;
+          }
+        } catch (_) {}
+
+        await RustRelayService.instance.init(privateKeyHex: privateKeyHex);
+
+        if (userPubkeyHex != null) {
+          _discoverOutboxRelays(userPubkeyHex);
+        }
+      } catch (_) {}
+    });
+  }
+
+  void _discoverOutboxRelays(String userPubkeyHex) {
+    Future.microtask(() async {
+      try {
+        final db = IsarDatabaseService.instance;
+        final follows = await db.getFollowingList(userPubkeyHex);
+        if (follows != null && follows.isNotEmpty) {
+          final allPubkeys = [userPubkeyHex, ...follows];
+          await RustRelayService.instance
+              .discoverAndConnectOutboxRelays(allPubkeys);
+        } else {
+          await RustRelayService.instance
+              .discoverAndConnectOutboxRelays([userPubkeyHex]);
         }
       } catch (_) {}
     });

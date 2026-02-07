@@ -5,9 +5,7 @@ import '../../core/base/result.dart';
 import '../../models/event_model.dart';
 import 'auth_service.dart';
 import 'isar_database_service.dart';
-import 'nostr_service.dart';
 import 'relay_service.dart';
-import '../../constants/relays.dart';
 import '../../src/rust/api/nip17.dart' as rust_nip17;
 
 class DmService {
@@ -68,37 +66,20 @@ class DmService {
     required List<Map<String, dynamic>> filters,
     Duration timeout = const Duration(seconds: 10),
   }) async {
-    final wsManager = WebSocketManager.instance;
     final events = <Map<String, dynamic>>[];
     final seenIds = <String>{};
 
     for (final filter in filters) {
-      final request = NostrService.createRequest(filter);
-      final requestJson = jsonDecode(request) as List<dynamic>;
-      final subscriptionId = requestJson[1] as String;
-
-      final relays = wsManager.healthyRelays.isNotEmpty
-          ? wsManager.healthyRelays
-          : wsManager.relayUrls;
-      if (relays.isEmpty) continue;
-
-      final completers = relays.take(5).map((relayUrl) {
-        return wsManager.sendQuery(
-          relayUrl,
-          request,
-          subscriptionId,
-          onEvent: (eventMap, url) {
-            final id = eventMap['id'] as String?;
-            if (id != null && seenIds.add(id)) {
-              events.add(eventMap);
-            }
-          },
-          timeout: timeout,
-        ).then((c) => c.future);
-      }).toList();
-
-      await Future.wait(completers)
-          .timeout(timeout + const Duration(seconds: 5), onTimeout: () => []);
+      final results = await RustRelayService.instance.fetchEvents(
+        filter,
+        timeoutSecs: timeout.inSeconds,
+      );
+      for (final eventMap in results) {
+        final id = eventMap['id'] as String?;
+        if (id != null && seenIds.add(id)) {
+          events.add(eventMap);
+        }
+      }
     }
 
     return events;
@@ -513,12 +494,8 @@ class DmService {
           jsonDecode(recipientWrapJson) as Map<String, dynamic>;
       final senderWrap = jsonDecode(senderWrapJson) as Map<String, dynamic>;
 
-      final wsManager = WebSocketManager.instance;
-      final recipientSerialized = NostrService.serializeEvent(recipientWrap);
-      await wsManager.priorityBroadcastToAll(recipientSerialized);
-
-      final senderSerialized = NostrService.serializeEvent(senderWrap);
-      await wsManager.priorityBroadcastToAll(senderSerialized);
+      await RustRelayService.instance.broadcastEvent(recipientWrap);
+      await RustRelayService.instance.broadcastEvent(senderWrap);
 
       final optimisticMessage = <String, dynamic>{
         'id': recipientWrap['id'] as String? ?? '',

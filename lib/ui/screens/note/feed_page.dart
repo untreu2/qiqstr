@@ -74,12 +74,11 @@ class FeedPageState extends State<FeedPage> {
     });
   }
 
-  void _updateRelayCount() {
+  void _updateRelayCount() async {
     if (!mounted) return;
     try {
-      final manager = WebSocketManager.instance;
-      final count = manager.activeSockets.length;
-      if (_connectedRelaysCount.value != count) {
+      final count = await RustRelayService.instance.getConnectedRelayCount();
+      if (mounted && _connectedRelaysCount.value != count) {
         _connectedRelaysCount.value = count;
       }
     } catch (e) {

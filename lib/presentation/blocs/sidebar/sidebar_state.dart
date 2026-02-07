@@ -17,12 +17,14 @@ class SidebarLoaded extends SidebarState {
   final int followerCount;
   final int followingCount;
   final bool isLoadingCounts;
+  final int connectedRelayCount;
 
   const SidebarLoaded({
     required this.currentUser,
     this.followerCount = 0,
     this.followingCount = 0,
     this.isLoadingCounts = true,
+    this.connectedRelayCount = 0,
   });
 
   SidebarLoaded copyWith({
@@ -30,16 +32,18 @@ class SidebarLoaded extends SidebarState {
     int? followerCount,
     int? followingCount,
     bool? isLoadingCounts,
+    int? connectedRelayCount,
   }) {
     return SidebarLoaded(
       currentUser: currentUser ?? this.currentUser,
       followerCount: followerCount ?? this.followerCount,
       followingCount: followingCount ?? this.followingCount,
       isLoadingCounts: isLoadingCounts ?? this.isLoadingCounts,
+      connectedRelayCount: connectedRelayCount ?? this.connectedRelayCount,
     );
   }
 
   @override
   List<Object?> get props =>
-      [currentUser, followerCount, followingCount, isLoadingCounts];
+      [currentUser, followerCount, followingCount, isLoadingCounts, connectedRelayCount];
 }

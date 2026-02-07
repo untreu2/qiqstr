@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 import 'auth_service.dart';
 import 'relay_service.dart';
-import '../../../constants/relays.dart';
 
 class EventCountsResult {
   final int totalCount;
@@ -34,49 +32,34 @@ class EventCountsService {
         }
       }
 
-      final manager = WebSocketManager.instance;
+      final filter = {
+        'authors': [pubkeyHex],
+      };
+
+      final events = await RustRelayService.instance.fetchEvents(
+        filter,
+        timeoutSecs: 30,
+      );
+
       final processedEventIds = <String>{};
       int totalCount = 0;
       final eventCountsByKind = <int, int>{};
       final allEvents = <Map<String, dynamic>>[];
-      final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
 
-      for (final relayUrl in relaySetMainSockets.take(5)) {
-        try {
-          final filter = {
-            'authors': [pubkeyHex],
-          };
+      for (final data in events) {
+        final eventId = data['id'] as String?;
+        final eventKind = data['kind'] as int?;
 
-          final request = jsonEncode(['REQ', subscriptionId, filter]);
+        if (eventId != null && !processedEventIds.contains(eventId)) {
+          processedEventIds.add(eventId);
+          totalCount++;
+          allEvents.add(data);
 
-          final completer = await manager.sendQuery(
-            relayUrl,
-            request,
-            subscriptionId,
-            timeout: const Duration(seconds: 30),
-            onEvent: (data, url) {
-              try {
-                final eventId = data['id'] as String?;
-                final eventKind = data['kind'] as int?;
-
-                if (eventId != null && !processedEventIds.contains(eventId)) {
-                  processedEventIds.add(eventId);
-                  totalCount++;
-
-                  allEvents.add(data);
-
-                  if (eventKind != null) {
-                    eventCountsByKind[eventKind] =
-                        (eventCountsByKind[eventKind] ?? 0) + 1;
-                  }
-                }
-              } catch (_) {}
-            },
-          );
-
-          await completer.future
-              .timeout(const Duration(seconds: 30), onTimeout: () {});
-        } catch (_) {}
+          if (eventKind != null) {
+            eventCountsByKind[eventKind] =
+                (eventCountsByKind[eventKind] ?? 0) + 1;
+          }
+        }
       }
 
       return EventCountsResult(
@@ -96,22 +79,11 @@ class EventCountsService {
     }
 
     try {
-      final manager = WebSocketManager.instance;
-      final allRelays = relayUrls ?? relaySetMainSockets;
-
-      for (final event in events) {
-        try {
-          final serializedEvent = jsonEncode(['EVENT', event]);
-
-          for (final relayUrl in allRelays) {
-            try {
-              await manager.sendMessage(relayUrl, serializedEvent);
-            } catch (_) {}
-          }
-        } catch (_) {}
-      }
-
-      return true;
+      final result = await RustRelayService.instance.broadcastEvents(
+        events,
+        relayUrls: relayUrls,
+      );
+      return (result['totalSuccess'] as int? ?? 0) > 0;
     } catch (e) {
       return false;
     }

@@ -13,7 +13,6 @@ import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../src/rust/api/events.dart' as rust_events;
-import '../../../constants/relays.dart';
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
@@ -78,7 +77,7 @@ Future<bool> _payZapWithWallet(
 
     final lnurlBech32 = lnurlJson['lnurl'] ?? '';
     final amountMillisats = (sats * 1000).toString();
-    final relays = relaySetMainSockets;
+    final relays = RustRelayService.instance.relayUrls;
 
     if (relays.isEmpty) {
       throw Exception('No relays available for zap.');
@@ -191,11 +190,9 @@ Future<void> _publishZapEventsAsync(
   dynamic paymentResult,
 ) async {
   try {
-    final webSocketManager = WebSocketManager.instance;
     final noteId = note['id'] as String? ?? '';
 
-    final serializedZapRequest = NostrService.serializeEvent(zapRequest);
-    await webSocketManager.priorityBroadcast(serializedZapRequest);
+    await RustRelayService.instance.broadcastEvent(zapRequest);
 
     if (kDebugMode) {
       print(
@@ -215,8 +212,7 @@ Future<void> _publishZapEventsAsync(
     );
     final zapEvent = jsonDecode(zapEventJsonStr) as Map<String, dynamic>;
 
-    final serializedZapEvent = NostrService.serializeEvent(zapEvent);
-    await webSocketManager.priorityBroadcast(serializedZapEvent);
+    await RustRelayService.instance.broadcastEvent(zapEvent);
 
     if (kDebugMode) {
       print('[ZapDialog] Zap event (kind 9735) published for note: $noteId');

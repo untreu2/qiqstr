@@ -42,7 +42,7 @@ class EventPublisher {
     String? replyAuthor,
   }) async {
     final privateKey = await _getPrivateKey();
-    final relays = WebSocketManager.instance.healthyRelays;
+    final relays = await RustRelayService.instance.getRelayList();
     final relayUrl = relays.isNotEmpty ? relays.first : null;
 
     final tags = NostrService.createReplyTags(
@@ -85,7 +85,7 @@ class EventPublisher {
     String content = '+',
   }) async {
     final privateKey = await _getPrivateKey();
-    final relays = WebSocketManager.instance.healthyRelays;
+    final relays = await RustRelayService.instance.getRelayList();
     final relayUrl = relays.isNotEmpty ? relays.first : null;
 
     final event = NostrService.createReactionEvent(
@@ -105,7 +105,7 @@ class EventPublisher {
     required String originalContent,
   }) async {
     final privateKey = await _getPrivateKey();
-    final relays = WebSocketManager.instance.healthyRelays;
+    final relays = await RustRelayService.instance.getRelayList();
     final relayUrl = relays.isNotEmpty ? relays.first : null;
 
     final event = NostrService.createRepostEvent(
@@ -176,9 +176,7 @@ class EventPublisher {
   Future<bool> broadcast(EventModel eventModel) async {
     try {
       final eventJson = eventModel.toEventData();
-      final message = jsonEncode(['EVENT', eventJson]);
-      await WebSocketManager.instance.priorityBroadcastToAll(message);
-      return true;
+      return await RustRelayService.instance.broadcastEvent(eventJson);
     } catch (e) {
       if (kDebugMode) {
         print('[EventPublisher] Broadcast error: $e');
@@ -189,9 +187,7 @@ class EventPublisher {
 
   Future<bool> broadcastRawEvent(Map<String, dynamic> event) async {
     try {
-      final message = NostrService.serializeEvent(event);
-      await WebSocketManager.instance.priorityBroadcastToAll(message);
-      return true;
+      return await RustRelayService.instance.broadcastEvent(event);
     } catch (e) {
       if (kDebugMode) {
         print('[EventPublisher] Broadcast raw event error: $e');

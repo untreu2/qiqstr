@@ -117,6 +117,11 @@ String createRelayListEvent(
     RustLib.instance.api.crateApiEventsCreateRelayListEvent(
         relayUrls: relayUrls, privateKeyHex: privateKeyHex);
 
+String createRelayListEventWithMarkers(
+        {required List<String> relayConfigs, required String privateKeyHex}) =>
+    RustLib.instance.api.crateApiEventsCreateRelayListEventWithMarkers(
+        relayConfigs: relayConfigs, privateKeyHex: privateKeyHex);
+
 String createCoinosAuthEvent(
         {required String challenge, required String privateKeyHex}) =>
     RustLib.instance.api.crateApiEventsCreateCoinosAuthEvent(

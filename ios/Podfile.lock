@@ -45,9 +45,6 @@ PODS:
   - isar_flutter_libs (1.0.0):
     - Flutter
   - MTBBarcodeScanner (5.0.11)
-  - path_provider_foundation (0.0.1):
-    - Flutter
-    - FlutterMacOS
   - qr_code_scanner (0.2.0):
     - Flutter
     - MTBBarcodeScanner
@@ -82,7 +79,6 @@ DEPENDENCIES:
   - gallery_saver_plus (from `.symlinks/plugins/gallery_saver_plus/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - isar_flutter_libs (from `.symlinks/plugins/isar_flutter_libs/ios`)
-  - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - qr_code_scanner (from `.symlinks/plugins/qr_code_scanner/ios`)
   - rust_lib_qiqstr (from `.symlinks/plugins/rust_lib_qiqstr/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
@@ -115,8 +111,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/integration_test/ios"
   isar_flutter_libs:
     :path: ".symlinks/plugins/isar_flutter_libs/ios"
-  path_provider_foundation:
-    :path: ".symlinks/plugins/path_provider_foundation/darwin"
   qr_code_scanner:
     :path: ".symlinks/plugins/qr_code_scanner/ios"
   rust_lib_qiqstr:
@@ -145,7 +139,6 @@ SPEC CHECKSUMS:
   integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
   isar_flutter_libs: b69f437aeab9c521821c3f376198c4371fa21073
   MTBBarcodeScanner: f453b33c4b7dfe545d8c6484ed744d55671788cb
-  path_provider_foundation: 0b743cbb62d8e47eab856f09262bb8c1ddcfe6ba
   qr_code_scanner: bb67d64904c3b9658ada8c402e8b4d406d5d796e
   rust_lib_qiqstr: b8e39f441e535e4536e68954978f1aace990120e
   SDWebImage: 73c6079366fea25fa4bb9640d5fb58f0893facd8

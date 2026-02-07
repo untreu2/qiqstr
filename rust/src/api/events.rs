@@ -171,6 +171,24 @@ pub fn create_relay_list_event(relay_urls: Vec<String>, private_key_hex: String)
 }
 
 #[frb(sync)]
+pub fn create_relay_list_event_with_markers(
+    relay_configs: Vec<String>,
+    private_key_hex: String,
+) -> Result<String> {
+    let tags: Vec<Vec<String>> = relay_configs
+        .iter()
+        .map(|config| {
+            if let Some((url, marker)) = config.split_once('|') {
+                vec!["r".into(), url.to_string(), marker.to_string()]
+            } else {
+                vec!["r".into(), config.clone()]
+            }
+        })
+        .collect();
+    create_signed_event(10002, String::new(), tags, private_key_hex)
+}
+
+#[frb(sync)]
 pub fn create_coinos_auth_event(challenge: String, private_key_hex: String) -> Result<String> {
     let tags = vec![vec!["challenge".into(), challenge]];
     create_signed_event(27235, String::new(), tags, private_key_hex)
