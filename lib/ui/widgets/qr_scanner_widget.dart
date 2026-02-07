@@ -89,4 +89,3 @@ class _QrScannerWidgetState extends State<QrScannerWidget> {
     );
   }
 }
-

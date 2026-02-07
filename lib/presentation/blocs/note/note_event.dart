@@ -123,7 +123,10 @@ class MentionParams {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is MentionParams && runtimeType == other.runtimeType && name == other.name && startIndex == other.startIndex;
+      other is MentionParams &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          startIndex == other.startIndex;
 
   @override
   int get hashCode => name.hashCode ^ startIndex.hashCode;

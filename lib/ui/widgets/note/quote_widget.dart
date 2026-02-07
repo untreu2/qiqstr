@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
+import '../../../data/repositories/feed_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_event.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_state.dart';
@@ -24,8 +26,8 @@ class QuoteWidget extends StatelessWidget {
     return BlocProvider<QuoteWidgetBloc>(
       create: (context) {
         final bloc = QuoteWidgetBloc(
-          noteRepository: AppDI.get(),
-          userRepository: AppDI.get(),
+          feedRepository: AppDI.get<FeedRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
           bech32: bech32,
         );
         bloc.add(QuoteWidgetLoadRequested(bech32: bech32));
@@ -95,13 +97,14 @@ class _QuoteContent extends StatelessWidget {
     final noteId = note['id'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context
-          .push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
+      context.push(
+          '/home/feed/thread?rootNoteId=${Uri.encodeComponent(noteId)}&focusedNoteId=${Uri.encodeComponent(noteId)}');
     } else if (currentLocation.startsWith('/home/notifications')) {
       context.push(
-          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
+          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(noteId)}&focusedNoteId=${Uri.encodeComponent(noteId)}');
     } else {
-      context.push('/thread?rootNoteId=${Uri.encodeComponent(noteId)}');
+      context.push(
+          '/thread?rootNoteId=${Uri.encodeComponent(noteId)}&focusedNoteId=${Uri.encodeComponent(noteId)}');
     }
   }
 
@@ -117,9 +120,6 @@ class _QuoteContent extends StatelessWidget {
     } else if (currentLocation.startsWith('/home/notifications')) {
       context.push(
           '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-    } else if (currentLocation.startsWith('/home/explore')) {
-      context.push(
-          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     } else {
       context.push(
           '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
@@ -132,9 +132,7 @@ class _QuoteContent extends StatelessWidget {
         ? '/home/feed'
         : currentLocation.startsWith('/home/notifications')
             ? '/home/notifications'
-            : currentLocation.startsWith('/home/explore')
-                ? '/home/feed'
-                : '';
+            : '';
     context.push('$basePath/profile?npub=${Uri.encodeComponent(npub)}');
   }
 

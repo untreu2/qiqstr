@@ -21,142 +21,156 @@ import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/note_content/note_content_bloc.dart';
 import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
-import '../../../data/repositories/auth_repository.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/note_repository.dart';
-import '../../../data/repositories/dm_repository.dart';
-import '../../../data/repositories/notification_repository.dart';
-import '../../../data/repositories/wallet_repository.dart';
+import '../../../data/services/dm_service.dart';
 import '../../../data/services/validation_service.dart';
-import '../../../data/services/feed_loader_service.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/repositories/feed_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/interaction_repository.dart';
+import '../../../data/repositories/notification_repository.dart';
+import '../../../data/repositories/article_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/isar_database_service.dart';
 
 class BlocsModule extends DIModule {
   @override
   Future<void> register() async {
     AppDI.registerFactory<AuthBloc>(() => AuthBloc(
-          authRepository: AppDI.get<AuthRepository>(),
+          authService: AppDI.get<AuthService>(),
           validationService: AppDI.get<ValidationService>(),
         ));
 
     AppDI.registerFactory<FeedBloc>(() => FeedBloc(
-          noteRepository: AppDI.get<NoteRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
-          feedLoader: AppDI.get<FeedLoaderService>(),
+          feedRepository: AppDI.get<FeedRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
         ));
 
     AppDI.registerFactory<ProfileBloc>(() => ProfileBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
-          feedLoader: AppDI.get<FeedLoaderService>(),
+          feedRepository: AppDI.get<FeedRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<NoteBloc>(() => NoteBloc(
-          noteRepository: AppDI.get<NoteRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
-          dataService: AppDI.get<DataService>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<DmBloc>(() => DmBloc(
-          dmRepository: AppDI.get<DmRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
+          dmService: AppDI.get<DmService>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
         ));
 
     AppDI.registerFactory<NotificationBloc>(() => NotificationBloc(
           notificationRepository: AppDI.get<NotificationRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
-          nostrDataService: AppDI.get<DataService>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
-    AppDI.registerLazySingleton<WalletBloc>(() => WalletBloc(
-          walletRepository: AppDI.get<WalletRepository>(),
-        ));
+    AppDI.registerLazySingleton<WalletBloc>(() => WalletBloc());
 
     AppDI.registerFactory<ThreadBloc>(() => ThreadBloc(
-          noteRepository: AppDI.get<NoteRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
+          feedRepository: AppDI.get<FeedRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
-    AppDI.registerLazySingleton<NotificationIndicatorBloc>(() => NotificationIndicatorBloc(
-          notificationRepository: AppDI.get<NotificationRepository>(),
-        ));
+    AppDI.registerLazySingleton<NotificationIndicatorBloc>(
+        () => NotificationIndicatorBloc(
+              syncService: AppDI.get<SyncService>(),
+              authService: AppDI.get<AuthService>(),
+              db: AppDI.get<IsarDatabaseService>(),
+            ));
 
     AppDI.registerLazySingleton<SidebarBloc>(() => SidebarBloc(
-          authRepository: AppDI.get<AuthRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
-          dataService: AppDI.get<DataService>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<EditProfileBloc>(() => EditProfileBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
-          dataService: AppDI.get<DataService>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<FollowingBloc>(() => FollowingBloc(
-          userRepository: AppDI.get<UserRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<SuggestedFollowsBloc>(() => SuggestedFollowsBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          nostrDataService: AppDI.get<DataService>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<MutedBloc>(() => MutedBloc(
-          userRepository: AppDI.get<UserRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
           authService: AppDI.get<AuthService>(),
-          dataService: AppDI.get<DataService>(),
         ));
 
     AppDI.registerFactory<UserSearchBloc>(() => UserSearchBloc(
-          userRepository: AppDI.get<UserRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<NoteStatisticsBloc>(() => NoteStatisticsBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          dataService: AppDI.get<DataService>(),
+          interactionRepository: AppDI.get<InteractionRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          authService: AppDI.get<AuthService>(),
           noteId: '',
         ));
 
-    AppDI.registerFactory<EditNewAccountProfileBloc>(() => EditNewAccountProfileBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          dataService: AppDI.get<DataService>(),
-          npub: '',
-        ));
+    AppDI.registerFactory<EditNewAccountProfileBloc>(
+        () => EditNewAccountProfileBloc(
+              syncService: AppDI.get<SyncService>(),
+              npub: '',
+            ));
 
     AppDI.registerFactory<UserTileBloc>(() => UserTileBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
           userNpub: '',
         ));
 
     AppDI.registerFactory<QuoteWidgetBloc>(() => QuoteWidgetBloc(
-          noteRepository: AppDI.get<NoteRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
+          feedRepository: AppDI.get<FeedRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
           bech32: '',
         ));
 
     AppDI.registerFactory<NoteContentBloc>(() => NoteContentBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          authService: AppDI.get<AuthService>(),
         ));
 
     AppDI.registerFactory<ProfileInfoBloc>(() => ProfileInfoBloc(
-          authRepository: AppDI.get<AuthRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
-          dataService: AppDI.get<DataService>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
           userPubkeyHex: '',
         ));
 
     AppDI.registerFactory<ArticleBloc>(() => ArticleBloc(
-          authRepository: AppDI.get<AuthRepository>(),
-          userRepository: AppDI.get<UserRepository>(),
-          feedLoader: AppDI.get<FeedLoaderService>(),
+          articleRepository: AppDI.get<ArticleRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          syncService: AppDI.get<SyncService>(),
         ));
   }
 }

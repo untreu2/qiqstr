@@ -40,5 +40,6 @@ class SidebarLoaded extends SidebarState {
   }
 
   @override
-  List<Object?> get props => [currentUser, followerCount, followingCount, isLoadingCounts];
+  List<Object?> get props =>
+      [currentUser, followerCount, followingCount, isLoadingCounts];
 }

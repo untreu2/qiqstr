@@ -1,22 +1,34 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/services/user_batch_fetcher.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/isar_database_service.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import 'note_content_event.dart';
 import 'note_content_state.dart';
 
 class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
-  final UserRepository _userRepository;
-  final AuthRepository _authRepository;
+  final ProfileRepository _profileRepository;
+  final AuthService _authService;
+  final SyncService? _syncService;
+  final IsarDatabaseService _db;
+
+  final Map<String, StreamSubscription> _profileSubscriptions = {};
 
   NoteContentBloc({
-    required UserRepository userRepository,
-    required AuthRepository authRepository,
-  })  : _userRepository = userRepository,
-        _authRepository = authRepository,
+    required ProfileRepository profileRepository,
+    required AuthService authService,
+    SyncService? syncService,
+    IsarDatabaseService? db,
+  })  : _profileRepository = profileRepository,
+        _authService = authService,
+        _syncService = syncService,
+        _db = db ?? IsarDatabaseService.instance,
         super(const NoteContentInitial()) {
     on<NoteContentInitialized>(_onNoteContentInitialized);
+    on<_MentionProfileUpdated>(_onMentionProfileUpdated);
   }
 
   String? extractPubkey(String bech32) {
@@ -24,8 +36,8 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
       if (bech32.startsWith('npub1')) {
         return decodeBasicBech32(bech32, 'npub');
       } else if (bech32.startsWith('nprofile1')) {
-        final result = decodeTlvBech32Full(bech32, 'nprofile');
-        return result['type_0_main'];
+        final result = decodeTlvBech32Full(bech32);
+        return result['pubkey'] as String?;
       }
     } catch (e) {
       return null;
@@ -36,10 +48,12 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
   static Map<String, dynamic> _createPlaceholderUser(String pubkey) {
     return {
       'pubkeyHex': pubkey,
+      'pubkey': pubkey,
       'npub': pubkey,
       'name': pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey,
       'about': '',
       'profileImage': '',
+      'picture': '',
       'banner': '',
       'website': '',
       'nip05': '',
@@ -60,148 +74,173 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
         .map((part) => part['id'] as String)
         .toSet();
 
+    final pubkeysToFetch = <String>[];
+    final initialProfiles = event.initialProfiles ?? {};
+
     for (final mentionId in mentionIds) {
       final actualPubkey = extractPubkey(mentionId);
       if (actualPubkey == null) continue;
+      pubkeysToFetch.add(actualPubkey);
 
-      try {
-        final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
-        final cachedUser = await _userRepository.getCachedUser(npubEncoded);
-
-        if (cachedUser != null) {
-          mentionUsers[actualPubkey] = cachedUser;
-        } else {
-          mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
-        }
-      } catch (e) {
-        continue;
+      // Use initial profile if available, otherwise placeholder
+      final existingProfile = initialProfiles[actualPubkey];
+      if (existingProfile != null &&
+          (existingProfile['name'] as String?)?.isNotEmpty == true) {
+        mentionUsers[actualPubkey] = existingProfile;
+      } else {
+        mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
       }
     }
 
     emit(NoteContentLoaded(mentionUsers: mentionUsers));
 
-    final pubkeyHexToNpubMap = <String, String>{};
-    final npubsToFetch = <String>[];
+    if (pubkeysToFetch.isEmpty) return;
 
-    for (final mentionId in mentionIds) {
-      final actualPubkey = extractPubkey(mentionId);
-      if (actualPubkey == null) continue;
+    // Find which pubkeys still need to be fetched from DB
+    final pubkeysNeedingFetch = pubkeysToFetch.where((pubkey) {
+      final profile = mentionUsers[pubkey];
+      if (profile == null) return true;
+      final name = profile['name'] as String?;
+      return name == null || name.isEmpty || name == pubkey.substring(0, 8);
+    }).toList();
 
-      try {
-        final existingUser = mentionUsers[actualPubkey];
-        final existingName = existingUser?['name'] as String? ?? '';
-        if (!mentionUsers.containsKey(actualPubkey) ||
-            existingName == actualPubkey.substring(0, 8)) {
-          final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
-          pubkeyHexToNpubMap[actualPubkey] = npubEncoded;
-          npubsToFetch.add(npubEncoded);
-        }
-      } catch (e) {
-        continue;
-      }
+    if (pubkeysNeedingFetch.isEmpty) {
+      _watchProfiles(pubkeysToFetch);
+      return;
     }
 
-    if (npubsToFetch.isEmpty) return;
-
     try {
-      final cachedResults = await _userRepository.getUserProfiles(npubsToFetch,
-          priority: FetchPriority.urgent);
+      final profiles =
+          await _profileRepository.getProfiles(pubkeysNeedingFetch);
 
       final updatedMentionUsers =
           Map<String, Map<String, dynamic>>.from(mentionUsers);
-      bool hasUpdates = false;
 
-      for (final entry in cachedResults.entries) {
-        final npub = entry.key;
-        final result = entry.value;
-
-        final pubkeyHex = pubkeyHexToNpubMap.entries
-            .firstWhere((e) => e.value == npub, orElse: () => MapEntry('', ''))
-            .key;
-
-        if (pubkeyHex.isEmpty) continue;
-
-        result.fold(
-          (user) {
-            final existingUser = updatedMentionUsers[pubkeyHex];
-            final existingName = existingUser?['name'] as String? ?? '';
-            final existingImage =
-                existingUser?['profileImage'] as String? ?? '';
-            if (!updatedMentionUsers.containsKey(pubkeyHex) ||
-                existingName == pubkeyHex.substring(0, 8) ||
-                existingImage.isEmpty) {
-              updatedMentionUsers[pubkeyHex] = user;
-              hasUpdates = true;
-            }
-          },
-          (_) {
-            // Silently handle error - user fetch failure is acceptable
-          },
-        );
+      for (final entry in profiles.entries) {
+        final profile = entry.value;
+        updatedMentionUsers[entry.key] = {
+          'pubkeyHex': entry.key,
+          'pubkey': entry.key,
+          'npub': _authService.hexToNpub(entry.key) ?? entry.key,
+          'name': profile.name ?? profile.displayName ?? '',
+          'about': profile.about ?? '',
+          'profileImage': profile.picture ?? '',
+          'picture': profile.picture ?? '',
+          'banner': profile.banner ?? '',
+          'website': profile.website ?? '',
+          'nip05': profile.nip05 ?? '',
+          'lud16': profile.lud16 ?? '',
+        };
       }
 
-      if (hasUpdates) {
-        emit(NoteContentLoaded(mentionUsers: updatedMentionUsers));
-      }
+      emit(NoteContentLoaded(mentionUsers: updatedMentionUsers));
 
-      final missingNpubs = cachedResults.entries
-          .where((e) => e.value.isError)
-          .map((e) => e.key)
-          .toList();
+      _watchProfiles(pubkeysToFetch);
+      _syncMissingProfiles(pubkeysNeedingFetch, profiles);
+    } catch (e) {}
+  }
 
-      if (missingNpubs.isNotEmpty) {
-        final results = await _userRepository.getUserProfiles(missingNpubs,
-            priority: FetchPriority.normal);
+  void _watchProfiles(List<String> pubkeys) {
+    for (final pubkey in pubkeys) {
+      if (_profileSubscriptions.containsKey(pubkey)) continue;
 
-        final finalMentionUsers =
-            Map<String, Map<String, dynamic>>.from(updatedMentionUsers);
-        bool finalHasUpdates = false;
+      _profileSubscriptions[pubkey] = _db.watchProfile(pubkey).listen((event) {
+        if (isClosed || event == null) return;
 
-        for (final entry in results.entries) {
-          final npub = entry.key;
-          final result = entry.value;
+        final content = event.content;
+        if (content.isEmpty) return;
 
-          final pubkeyHex = pubkeyHexToNpubMap.entries
-              .firstWhere((e) => e.value == npub,
-                  orElse: () => MapEntry('', ''))
-              .key;
+        try {
+          final parsed = _parseProfileContent(content);
+          if (parsed == null) return;
 
-          if (pubkeyHex.isEmpty) continue;
-
-          result.fold(
-            (user) {
-              final existingUser = finalMentionUsers[pubkeyHex];
-              final existingName = existingUser?['name'] as String? ?? '';
-              final existingImage =
-                  existingUser?['profileImage'] as String? ?? '';
-              if (!finalMentionUsers.containsKey(pubkeyHex) ||
-                  existingName == pubkeyHex.substring(0, 8) ||
-                  existingImage.isEmpty) {
-                finalMentionUsers[pubkeyHex] = user;
-                finalHasUpdates = true;
-              }
-            },
-            (_) {
-              if (!finalMentionUsers.containsKey(pubkeyHex)) {
-                finalMentionUsers[pubkeyHex] =
-                    _createPlaceholderUser(pubkeyHex);
-                finalHasUpdates = true;
-              }
-            },
-          );
-        }
-
-        if (finalHasUpdates) {
-          emit(NoteContentLoaded(mentionUsers: finalMentionUsers));
-        }
-      }
-    } catch (e) {
-      // Silently handle error - user fetch failure is acceptable
+          add(_MentionProfileUpdated(pubkey, {
+            'pubkeyHex': pubkey,
+            'pubkey': pubkey,
+            'npub': _authService.hexToNpub(pubkey) ?? pubkey,
+            'name': parsed['name'] ?? '',
+            'about': parsed['about'] ?? '',
+            'profileImage': parsed['profileImage'] ?? parsed['picture'] ?? '',
+            'picture': parsed['picture'] ?? '',
+            'banner': parsed['banner'] ?? '',
+            'website': parsed['website'] ?? '',
+            'nip05': parsed['nip05'] ?? '',
+            'lud16': parsed['lud16'] ?? '',
+          }));
+        } catch (_) {}
+      });
     }
   }
 
-  Future<String?> getCurrentUserNpub() async {
-    final result = await _authRepository.getCurrentUserNpub();
-    return result.fold((npub) => npub, (error) => null);
+  Map<String, String>? _parseProfileContent(String content) {
+    if (content.isEmpty) return null;
+    try {
+      final parsed = jsonDecode(content) as Map<String, dynamic>;
+      final result = <String, String>{};
+      parsed.forEach((key, value) {
+        result[key == 'picture' ? 'profileImage' : key] =
+            value?.toString() ?? '';
+      });
+      return result;
+    } catch (_) {
+      return null;
+    }
   }
+
+  void _syncMissingProfiles(
+      List<String> pubkeys, Map<String, dynamic> existingProfiles) {
+    if (_syncService == null) return;
+
+    final missingPubkeys = pubkeys
+        .where((p) =>
+            !existingProfiles.containsKey(p) ||
+            (existingProfiles[p] as dynamic)?.name == null)
+        .toList();
+
+    if (missingPubkeys.isEmpty) return;
+
+    Future.microtask(() async {
+      try {
+        await _syncService.syncProfiles(missingPubkeys);
+      } catch (_) {}
+    });
+  }
+
+  void _onMentionProfileUpdated(
+    _MentionProfileUpdated event,
+    Emitter<NoteContentState> emit,
+  ) {
+    if (state is! NoteContentLoaded) return;
+    final currentState = state as NoteContentLoaded;
+
+    final updatedMentionUsers =
+        Map<String, Map<String, dynamic>>.from(currentState.mentionUsers);
+    updatedMentionUsers[event.pubkey] = event.profileData;
+
+    emit(NoteContentLoaded(mentionUsers: updatedMentionUsers));
+  }
+
+  @override
+  Future<void> close() {
+    for (final sub in _profileSubscriptions.values) {
+      sub.cancel();
+    }
+    _profileSubscriptions.clear();
+    return super.close();
+  }
+
+  Future<String?> getCurrentUserHex() async {
+    final result = await _authService.getCurrentUserPublicKeyHex();
+    return result.data;
+  }
+}
+
+class _MentionProfileUpdated extends NoteContentEvent {
+  final String pubkey;
+  final Map<String, dynamic> profileData;
+
+  const _MentionProfileUpdated(this.pubkey, this.profileData);
+
+  @override
+  List<Object?> get props => [pubkey, profileData];
 }

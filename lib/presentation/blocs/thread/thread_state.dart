@@ -20,7 +20,7 @@ class ThreadLoaded extends ThreadState {
   final Map<String, Map<String, dynamic>> userProfiles;
   final String rootNoteId;
   final String? focusedNoteId;
-  final String currentUserNpub;
+  final String currentUserHex;
   final Map<String, dynamic>? currentUser;
 
   const ThreadLoaded({
@@ -31,7 +31,7 @@ class ThreadLoaded extends ThreadState {
     required this.userProfiles,
     required this.rootNoteId,
     this.focusedNoteId,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     this.currentUser,
   });
 
@@ -44,7 +44,7 @@ class ThreadLoaded extends ThreadState {
         userProfiles,
         rootNoteId,
         focusedNoteId,
-        currentUserNpub,
+        currentUserHex,
         currentUser,
       ];
 
@@ -56,7 +56,7 @@ class ThreadLoaded extends ThreadState {
     Map<String, Map<String, dynamic>>? userProfiles,
     String? rootNoteId,
     String? focusedNoteId,
-    String? currentUserNpub,
+    String? currentUserHex,
     Map<String, dynamic>? currentUser,
   }) {
     return ThreadLoaded(
@@ -67,7 +67,7 @@ class ThreadLoaded extends ThreadState {
       userProfiles: userProfiles ?? this.userProfiles,
       rootNoteId: rootNoteId ?? this.rootNoteId,
       focusedNoteId: focusedNoteId ?? this.focusedNoteId,
-      currentUserNpub: currentUserNpub ?? this.currentUserNpub,
+      currentUserHex: currentUserHex ?? this.currentUserHex,
       currentUser: currentUser ?? this.currentUser,
     );
   }

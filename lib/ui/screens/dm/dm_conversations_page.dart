@@ -9,7 +9,6 @@ import '../../../presentation/blocs/dm/dm_state.dart';
 import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/title_widget.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../search/users_search_page.dart';
 
 class DmConversationsPage extends StatefulWidget {
@@ -205,7 +204,6 @@ class _DmConversationsPageState extends State<DmConversationsPage>
               ),
           },
           _buildTopBar(context),
-          const BackButtonWidget.floating(topOffset: 16),
         ],
       ),
     );
@@ -244,7 +242,12 @@ class _DmConversationsPageState extends State<DmConversationsPage>
         conversation['otherUserPubkeyHex'] as String? ?? '';
     final otherUserProfileImage =
         conversation['otherUserProfileImage'] as String?;
-    final displayName = conversation['displayName'] as String? ?? '';
+    final otherUserName = conversation['otherUserName'] as String? ?? '';
+    final displayName = otherUserName.isNotEmpty
+        ? otherUserName
+        : (otherUserPubkeyHex.length > 12
+            ? otherUserPubkeyHex.substring(0, 12)
+            : otherUserPubkeyHex);
     final lastMessageTime = conversation['lastMessageTime'] as DateTime?;
     final lastMessage = conversation['lastMessage'] as Map<String, dynamic>?;
     final lastMessageContent = lastMessage?['content'] as String? ?? '';
@@ -254,7 +257,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
         onTap: () {
           if (otherUserPubkeyHex.isNotEmpty) {
             context.push(
-                '/home/feed/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
+                '/home/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
           }
         },
         child: Container(
@@ -395,7 +398,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
           final pubkeyHex = user['pubkeyHex'] as String? ?? '';
           if (pubkeyHex.isNotEmpty) {
             context.push(
-                '/home/feed/dm/chat?pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+                '/home/dm/chat?pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
           }
         },
       ),

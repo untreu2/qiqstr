@@ -1,17 +1,17 @@
 import 'package:bloc/bloc.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../data/services/validation_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  final AuthRepository _authRepository;
+  final AuthService _authService;
   final ValidationService _validationService;
 
   AuthBloc({
-    required AuthRepository authRepository,
+    required AuthService authService,
     required ValidationService validationService,
-  })  : _authRepository = authRepository,
+  })  : _authService = authService,
         _validationService = validationService,
         super(const AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
@@ -28,7 +28,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(const AuthLoading());
 
-    final result = await _authRepository.getAuthStatus();
+    final result = await _authService.getAuthStatus();
 
     result.fold(
       (authStatus) {
@@ -48,7 +48,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(const AuthLoading());
 
-    final result = await _authRepository.loginWithNsec(event.nsec);
+    final result = await _authService.loginWithNsecValidated(event.nsec);
 
     result.fold(
       (authResult) => emit(AuthAuthenticated(
@@ -65,7 +65,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(const AuthLoading());
 
-    final result = await _authRepository.createNewAccount();
+    final result = await _authService.createNewAccountWithResult();
 
     result.fold(
       (authResult) => emit(AuthAuthenticated(
@@ -82,7 +82,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(const AuthLoading());
 
-    final result = await _authRepository.logout();
+    final result = await _authService.logout();
 
     result.fold(
       (_) => emit(const AuthUnauthenticated()),
@@ -95,7 +95,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) {
     final nsec = event.nsec.trim();
-    final currentInputState = state is AuthInputState ? (state as AuthInputState) : const AuthInputState(nsecInput: '', isValid: false);
+    final currentInputState = state is AuthInputState
+        ? (state as AuthInputState)
+        : const AuthInputState(nsecInput: '', isValid: false);
 
     if (nsec.isEmpty) {
       emit(currentInputState.copyWith(
@@ -121,7 +123,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     ToggleNsecVisibilityRequested event,
     Emitter<AuthState> emit,
   ) {
-    final currentInputState = state is AuthInputState ? (state as AuthInputState) : const AuthInputState(nsecInput: '', isValid: false);
+    final currentInputState = state is AuthInputState
+        ? (state as AuthInputState)
+        : const AuthInputState(nsecInput: '', isValid: false);
 
     emit(currentInputState.copyWith(
       obscureNsec: !currentInputState.obscureNsec,

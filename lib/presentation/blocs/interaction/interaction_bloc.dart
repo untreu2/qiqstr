@@ -1,241 +1,192 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/note_repository.dart';
+import '../../../data/repositories/feed_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/interaction_service.dart';
+import '../../../data/services/isar_database_service.dart';
 import 'interaction_event.dart';
 import 'interaction_state.dart';
 
 class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
-  final NoteRepository _noteRepository;
+  final SyncService _syncService;
+  final InteractionService _interactionService;
   final String noteId;
-  final String currentUserNpub;
+  final String currentUserHex;
   Map<String, dynamic>? note;
 
-  StreamSubscription<List<Map<String, dynamic>>>? _notesSubscription;
-  DateTime? _lastUpdateTime;
-  static const Duration _updateDebounce = Duration(milliseconds: 1000);
-  static const Duration _updateDelay = Duration(milliseconds: 500);
+  StreamSubscription<InteractionCounts>? _subscription;
 
   InteractionBloc({
-    required NoteRepository noteRepository,
+    required SyncService syncService,
+    required FeedRepository feedRepository,
     required this.noteId,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     this.note,
-  })  : _noteRepository = noteRepository,
+    InteractionService? interactionService,
+  })  : _syncService = syncService,
+        _interactionService = interactionService ?? InteractionService.instance,
         super(const InteractionInitial()) {
-    on<InteractionInitialized>(_onInteractionInitialized);
-    on<InteractionNoteUpdated>(_onInteractionNoteUpdated);
-    on<InteractionStateRefreshed>(_onInteractionStateRefreshed);
-    on<InteractionReactRequested>(_onInteractionReactRequested);
-    on<InteractionRepostRequested>(_onInteractionRepostRequested);
-    on<InteractionRepostDeleted>(_onInteractionRepostDeleted);
-    on<InteractionNoteDeleted>(_onInteractionNoteDeleted);
+    on<InteractionInitialized>(_onInitialized);
+    on<InteractionNoteUpdated>(_onNoteUpdated);
+    on<InteractionStateRefreshed>(_onRefreshed);
+    on<InteractionReactRequested>(_onReact);
+    on<InteractionRepostRequested>(_onRepost);
+    on<InteractionRepostDeleted>(_onRepostDeleted);
+    on<InteractionNoteDeleted>(_onNoteDeleted);
+    on<InteractionCountsUpdated>(_onCountsUpdated);
   }
 
-  Future<void> _onInteractionInitialized(
-    InteractionInitialized event,
-    Emitter<InteractionState> emit,
-  ) async {
+  Future<void> _onInitialized(
+      InteractionInitialized event, Emitter<InteractionState> emit) async {
     note = event.note;
-    final initialState = _computeState();
-    emit(initialState);
+    _interactionService.setCurrentUser(currentUserHex);
 
-    _notesSubscription?.cancel();
-    _notesSubscription = _noteRepository.notesStream.listen((notes) {
-      final hasRelevantUpdate = notes.any((n) {
-        final id = n['id'] as String? ?? '';
-        return id.isNotEmpty && id == noteId;
-      });
-      if (!hasRelevantUpdate) return;
+    InteractionCounts? initialCounts;
+    if (note != null) {
+      final reactionCount = note!['reactionCount'] as int? ?? 0;
+      final repostCount = note!['repostCount'] as int? ?? 0;
+      final replyCount = note!['replyCount'] as int? ?? 0;
+      final zapCount = note!['zapCount'] as int? ?? 0;
 
-      final updateTime = DateTime.now();
-      if (_lastUpdateTime != null && updateTime.difference(_lastUpdateTime!) < _updateDebounce) {
-        return;
-      }
-
-      _lastUpdateTime = updateTime;
-
-      Future.delayed(_updateDelay, () {
-        if (_lastUpdateTime != updateTime) return;
-        add(const InteractionStateRefreshed());
-      });
-    });
-  }
-
-  void _onInteractionNoteUpdated(
-    InteractionNoteUpdated event,
-    Emitter<InteractionState> emit,
-  ) {
-    if (note != event.note) {
-      note = event.note;
-      final newState = _computeState();
-      if (state != newState) {
-        emit(newState);
-      }
-    }
-  }
-
-  void _onInteractionStateRefreshed(
-    InteractionStateRefreshed event,
-    Emitter<InteractionState> emit,
-  ) {
-    final currentState = state is InteractionLoaded ? (state as InteractionLoaded) : null;
-    final newState = _computeState();
-
-    if (currentState != null) {
-      final safeNewState = InteractionLoaded(
-        reactionCount: newState.reactionCount >= currentState.reactionCount ? newState.reactionCount : currentState.reactionCount,
-        repostCount: newState.repostCount >= currentState.repostCount ? newState.repostCount : currentState.repostCount,
-        replyCount: newState.replyCount >= currentState.replyCount ? newState.replyCount : currentState.replyCount,
-        zapAmount: newState.zapAmount >= currentState.zapAmount ? newState.zapAmount : currentState.zapAmount,
-        hasReacted: newState.hasReacted || currentState.hasReacted,
-        hasReposted: newState.hasReposted || currentState.hasReposted,
-        hasZapped: newState.hasZapped || currentState.hasZapped,
-      );
-
-      if (currentState != safeNewState) {
-        emit(safeNewState);
+      if (reactionCount > 0 ||
+          repostCount > 0 ||
+          replyCount > 0 ||
+          zapCount > 0) {
+        initialCounts = InteractionCounts(
+          reactions: reactionCount,
+          reposts: repostCount,
+          replies: replyCount,
+          zapAmount: zapCount,
+          hasReacted: _interactionService.hasReacted(noteId),
+          hasReposted: _interactionService.hasReposted(noteId),
+          hasZapped: false,
+        );
+        emit(InteractionLoaded(
+          reactionCount: reactionCount,
+          repostCount: repostCount,
+          replyCount: replyCount,
+          zapAmount: zapCount,
+          hasReacted: initialCounts.hasReacted,
+          hasReposted: initialCounts.hasReposted,
+          hasZapped: false,
+        ));
+      } else {
+        emit(const InteractionLoaded());
       }
     } else {
-      emit(newState);
+      emit(const InteractionLoaded());
     }
+
+    _subscription?.cancel();
+    _subscription = _interactionService
+        .streamInteractions(noteId, initialCounts: initialCounts)
+        .listen(
+          (counts) => add(InteractionCountsUpdated(counts)),
+        );
   }
 
-  Future<void> _onInteractionReactRequested(
-    InteractionReactRequested event,
-    Emitter<InteractionState> emit,
-  ) async {
-    final currentState = state is InteractionLoaded ? (state as InteractionLoaded) : null;
+  void _onCountsUpdated(
+      InteractionCountsUpdated event, Emitter<InteractionState> emit) {
+    emit(InteractionLoaded(
+      reactionCount: event.counts.reactions,
+      repostCount: event.counts.reposts,
+      replyCount: event.counts.replies,
+      zapAmount: event.counts.zapAmount,
+      hasReacted: event.counts.hasReacted,
+      hasReposted: event.counts.hasReposted,
+      hasZapped: event.counts.hasZapped,
+    ));
+  }
+
+  void _onNoteUpdated(
+      InteractionNoteUpdated event, Emitter<InteractionState> emit) {
+    note = event.note;
+  }
+
+  Future<void> _onRefreshed(
+      InteractionStateRefreshed event, Emitter<InteractionState> emit) async {
+    await _interactionService.refreshInteractions(noteId);
+  }
+
+  Future<void> _onReact(
+      InteractionReactRequested event, Emitter<InteractionState> emit) async {
+    final currentState =
+        state is InteractionLoaded ? (state as InteractionLoaded) : null;
     if (currentState == null || currentState.hasReacted) return;
 
-    emit(currentState.copyWith(hasReacted: true));
+    _interactionService.markReacted(noteId);
 
-    final result = await _noteRepository.reactToNote(noteId, '+');
-    result.fold(
-      (_) {},
-      (error) {
-        emit(currentState);
-      },
-    );
-  }
-
-  Future<void> _onInteractionRepostRequested(
-    InteractionRepostRequested event,
-    Emitter<InteractionState> emit,
-  ) async {
-    final noteToRepost = _findNote() ?? note;
-    if (noteToRepost == null) return;
-
-    final currentState = state is InteractionLoaded ? (state as InteractionLoaded) : null;
-    if (currentState == null) return;
-
-    emit(currentState.copyWith(hasReposted: true));
-
-    final noteIdToRepost = noteToRepost['id'] as String? ?? '';
-    if (noteIdToRepost.isEmpty) return;
-    final result = await _noteRepository.repostNote(noteIdToRepost);
-    result.fold(
-      (_) {},
-      (error) {
-        emit(currentState);
-      },
-    );
-  }
-
-  Future<void> _onInteractionRepostDeleted(
-    InteractionRepostDeleted event,
-    Emitter<InteractionState> emit,
-  ) async {
-    final currentState = state is InteractionLoaded ? (state as InteractionLoaded) : null;
-    if (currentState == null) return;
-
-    final previousState = currentState;
-
-    final result = await _noteRepository.deleteRepost(noteId);
-    result.fold(
-      (_) {
-        emit(currentState.copyWith(hasReposted: false));
-      },
-      (error) {
-        emit(previousState);
-      },
-    );
-  }
-
-  Future<void> _onInteractionNoteDeleted(
-    InteractionNoteDeleted event,
-    Emitter<InteractionState> emit,
-  ) async {
-    final result = await _noteRepository.deleteNote(noteId);
-    result.fold(
-      (_) {},
-      (error) {},
-    );
-  }
-
-  Map<String, dynamic>? _findNote() {
-    if (note != null) {
-      final noteIdValue = note!['id'] as String? ?? '';
-      if (noteIdValue.isNotEmpty && noteIdValue == noteId) {
-        return note;
-      }
-
-      final isRepost = note!['isRepost'] as bool? ?? false;
-      final rootId = note!['rootId'] as String?;
-      if (isRepost && rootId != null && rootId == noteId) {
-        final allNotes = _noteRepository.currentNotes;
-        for (final n in allNotes) {
-          final nId = n['id'] as String? ?? '';
-          if (nId.isNotEmpty && nId == noteId) {
-            return n;
-          }
-        }
-        return note;
-      }
+    try {
+      final noteAuthor =
+          note?['pubkey'] as String? ?? note?['author'] as String? ?? '';
+      await _syncService.publishReaction(
+        targetEventId: noteId,
+        targetAuthor: noteAuthor,
+        content: '+',
+      );
+    } catch (_) {
+      await _interactionService.refreshInteractions(noteId);
     }
+  }
 
-    final allNotes = _noteRepository.currentNotes;
-    for (final n in allNotes) {
-      final nId = n['id'] as String? ?? '';
-      if (nId.isNotEmpty && nId == noteId) {
-        return n;
+  Future<void> _onRepost(
+      InteractionRepostRequested event, Emitter<InteractionState> emit) async {
+    final currentState =
+        state is InteractionLoaded ? (state as InteractionLoaded) : null;
+    if (currentState == null || currentState.hasReposted) return;
+
+    _interactionService.markReposted(noteId);
+
+    try {
+      final noteAuthor =
+          note?['pubkey'] as String? ?? note?['author'] as String? ?? '';
+      String originalContent = '';
+      final eventModel =
+          await IsarDatabaseService.instance.getEventModel(noteId);
+      if (eventModel != null) {
+        originalContent = eventModel.rawEvent;
       }
-    }
 
-    return null;
+      await _syncService.publishRepost(
+        noteId: noteId,
+        noteAuthor: noteAuthor,
+        originalContent: originalContent,
+      );
+    } catch (e) {
+      debugPrint('[InteractionBloc] Repost failed: $e');
+      _interactionService.markUnreposted(noteId);
+      await _interactionService.refreshInteractions(noteId);
+    }
   }
 
-  InteractionLoaded _computeState() {
-    final foundNote = _findNote();
+  Future<void> _onRepostDeleted(
+      InteractionRepostDeleted event, Emitter<InteractionState> emit) async {
+    _interactionService.markUnreposted(noteId);
 
-    String targetNoteId = noteId;
-    if (foundNote != null) {
-      final isRepost = foundNote['isRepost'] as bool? ?? false;
-      if (isRepost) {
-        final rootId = foundNote['rootId'] as String?;
-        if (rootId != null && rootId.isNotEmpty) {
-          targetNoteId = rootId;
-        }
+    try {
+      final db = IsarDatabaseService.instance;
+      final repostEventId =
+          await db.findUserRepostEventId(currentUserHex, noteId);
+      if (repostEventId != null) {
+        await _syncService.publishDeletion(eventIds: [repostEventId]);
       }
-    }
-
-    return InteractionLoaded(
-      reactionCount: _noteRepository.getReactionCount(targetNoteId),
-      repostCount: _noteRepository.getRepostCount(targetNoteId),
-      replyCount: _noteRepository.getReplyCount(targetNoteId),
-      zapAmount: _noteRepository.getZapAmount(targetNoteId),
-      hasReacted: _noteRepository.hasUserReacted(targetNoteId, currentUserNpub),
-      hasReposted: _noteRepository.hasUserReposted(targetNoteId, currentUserNpub),
-      hasZapped: _noteRepository.hasUserZapped(targetNoteId, currentUserNpub),
-    );
+    } catch (_) {}
   }
 
-  Map<String, dynamic>? getNoteForActions() {
-    return _findNote() ?? note;
+  Future<void> _onNoteDeleted(
+      InteractionNoteDeleted event, Emitter<InteractionState> emit) async {
+    try {
+      await _syncService.publishDeletion(eventIds: [noteId]);
+    } catch (_) {}
   }
+
+  Map<String, dynamic>? getNoteForActions() => note;
 
   @override
   Future<void> close() {
-    _notesSubscription?.cancel();
+    _subscription?.cancel();
+    _interactionService.disposeStream(noteId);
     return super.close();
   }
 }

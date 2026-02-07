@@ -277,10 +277,6 @@ class _SidebarContent extends StatelessWidget {
                                     .startsWith('/home/notifications')) {
                                   context.push(
                                       '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-                                } else if (currentLocation
-                                    .startsWith('/home/explore')) {
-                                  context.push(
-                                      '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
                                 } else {
                                   context.push(
                                       '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');

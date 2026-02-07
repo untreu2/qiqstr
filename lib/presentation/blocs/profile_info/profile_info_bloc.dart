@@ -1,32 +1,50 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/isar_database_service.dart';
+import '../../../models/event_model.dart';
 import 'profile_info_event.dart';
 import 'profile_info_state.dart';
 
-class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
-  final AuthRepository _authRepository;
-  final UserRepository _userRepository;
-  final DataService _dataService;
-  final String userPubkeyHex;
+class _InternalStateUpdate extends ProfileInfoEvent {
+  final ProfileInfoLoaded newState;
+  const _InternalStateUpdate(this.newState);
 
-  StreamSubscription<Map<String, dynamic>>? _userSubscription;
+  @override
+  List<Object?> get props => [newState];
+}
+
+class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
+  final FollowingRepository _followingRepository;
+  final ProfileRepository _profileRepository;
+  final SyncService _syncService;
+  final AuthService _authService;
+  final IsarDatabaseService _db;
+  final String userPubkeyHex;
+  StreamSubscription<EventModel?>? _profileSubscription;
 
   ProfileInfoBloc({
-    required AuthRepository authRepository,
-    required UserRepository userRepository,
-    required DataService dataService,
+    required FollowingRepository followingRepository,
+    required ProfileRepository profileRepository,
+    required SyncService syncService,
+    required AuthService authService,
     required this.userPubkeyHex,
-  })  : _authRepository = authRepository,
-        _userRepository = userRepository,
-        _dataService = dataService,
+    IsarDatabaseService? db,
+  })  : _followingRepository = followingRepository,
+        _profileRepository = profileRepository,
+        _syncService = syncService,
+        _authService = authService,
+        _db = db ?? IsarDatabaseService.instance,
         super(const ProfileInfoInitial()) {
     on<ProfileInfoInitialized>(_onProfileInfoInitialized);
     on<ProfileInfoUserUpdated>(_onProfileInfoUserUpdated);
     on<ProfileInfoFollowToggled>(_onProfileInfoFollowToggled);
     on<ProfileInfoMuteToggled>(_onProfileInfoMuteToggled);
+    on<_InternalStateUpdate>(_onInternalStateUpdate);
   }
 
   Future<void> _onProfileInfoInitialized(
@@ -35,101 +53,192 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   ) async {
     final currentState = state;
     if (currentState is ProfileInfoLoaded) {
+      _loadFollowerCountsInBackground(currentState);
       return;
     }
 
-    emit(const ProfileInfoLoading());
+    final targetHex =
+        _authService.npubToHex(event.userPubkeyHex) ?? event.userPubkeyHex;
+    final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+    final currentUserHex = pubkeyResult.data ?? '';
+    final isCurrentUser =
+        currentUserHex.isNotEmpty && currentUserHex == targetHex;
 
-    final userResult = await _userRepository.getUserProfile(event.userPubkeyHex);
-    await userResult.fold(
-      (user) async {
-        final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-        final currentUserNpub = currentUserNpubResult.fold((n) => n, (_) => null);
+    emit(ProfileInfoLoaded(
+      user: event.user ?? {},
+      currentUserHex: currentUserHex,
+      isLoadingCounts: true,
+    ));
 
-        if (currentUserNpub == null || event.userPubkeyHex == currentUserNpub) {
-          emit(ProfileInfoLoaded(
-            user: user,
-            currentUserNpub: currentUserNpub,
-          ));
-          await _loadFollowerCounts(emit, user);
-          return;
-        }
+    _watchProfile(targetHex);
+    _syncProfileInBackground(targetHex);
 
-        final followStatusResult = await _userRepository.isFollowing(event.userPubkeyHex);
-        final isFollowing = followStatusResult.fold((f) => f, (_) => false);
+    if (!isCurrentUser && currentUserHex.isNotEmpty) {
+      _loadFollowStateInBackground(targetHex, currentUserHex);
+    }
 
-        final muteStatusResult = await _userRepository.isMuted(event.userPubkeyHex);
-        final isMuted = muteStatusResult.fold((m) => m, (_) => false);
-
-        emit(ProfileInfoLoaded(
-          user: user,
-          isFollowing: isFollowing,
-          isMuted: isMuted,
-          currentUserNpub: currentUserNpub,
-        ));
-
-        await _loadFollowerCounts(emit, user);
-        await _refreshDoesUserFollowMe(emit, user, currentUserNpub);
-      },
-      (error) async {
-        final currentState = state;
-        if (currentState is! ProfileInfoLoaded) {
-          emit(ProfileInfoError(error));
-        }
-      },
-    );
-
-    _userSubscription?.cancel();
-    _userSubscription = _userRepository.currentUserStream.listen(
-      (updatedUser) {
-        final pubkeyHex = updatedUser['pubkeyHex'] as String? ?? '';
-        if (pubkeyHex.isNotEmpty && pubkeyHex == event.userPubkeyHex) {
-          add(ProfileInfoUserUpdated(user: updatedUser));
-        }
-      },
-      onError: (_) {
-        // Silently handle error - stream error is acceptable
-      },
-    );
+    _loadFollowerCountsInBackground(state as ProfileInfoLoaded);
   }
 
-  void _onProfileInfoUserUpdated(
+  void _syncProfileInBackground(String pubkey) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        await _syncService.syncProfile(pubkey);
+      } catch (_) {}
+    });
+  }
+
+  void _watchProfile(String pubkey) {
+    _profileSubscription?.cancel();
+    _profileSubscription = _db.watchProfile(pubkey).listen((event) {
+      if (isClosed || event == null) return;
+      final currentState = state;
+      if (currentState is! ProfileInfoLoaded) return;
+
+      final profile = _parseProfileContent(event.content);
+      if (profile == null) return;
+
+      final updatedUser = Map<String, dynamic>.from(currentState.user);
+      updatedUser['name'] = profile['name'] ?? updatedUser['name'];
+      updatedUser['profileImage'] =
+          profile['profileImage'] ?? updatedUser['profileImage'];
+      updatedUser['banner'] = profile['banner'] ?? updatedUser['banner'];
+      updatedUser['about'] = profile['about'] ?? updatedUser['about'];
+      updatedUser['nip05'] = profile['nip05'] ?? updatedUser['nip05'];
+      updatedUser['website'] = profile['website'] ?? updatedUser['website'];
+
+      add(_InternalStateUpdate(currentState.copyWith(user: updatedUser)));
+    });
+  }
+
+  Map<String, String>? _parseProfileContent(String content) {
+    if (content.isEmpty) return null;
+    try {
+      final parsed = jsonDecode(content) as Map<String, dynamic>;
+      final result = <String, String>{};
+      parsed.forEach((key, value) {
+        result[key == 'picture' ? 'profileImage' : key] =
+            value?.toString() ?? '';
+      });
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _loadFollowStateInBackground(String targetHex, String currentUserHex) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final isFollowing =
+            await _followingRepository.isFollowing(currentUserHex, targetHex);
+        final isMuted =
+            await _followingRepository.isMuted(currentUserHex, targetHex);
+
+        if (isClosed) return;
+        final currentState = state;
+        if (currentState is ProfileInfoLoaded) {
+          add(_InternalStateUpdate(currentState.copyWith(
+            isFollowing: isFollowing,
+            isMuted: isMuted,
+          )));
+        }
+
+        await _syncService.syncFollowingList(targetHex);
+        if (isClosed) return;
+        _refreshDoesUserFollowMeInBackground(targetHex, currentUserHex);
+      } catch (_) {}
+    });
+  }
+
+  void _loadFollowerCountsInBackground(ProfileInfoLoaded currentState) {
+    final pubkeyHex = currentState.user['pubkeyHex'] as String? ??
+        currentState.user['pubkey'] as String? ??
+        userPubkeyHex;
+    if (pubkeyHex.isEmpty) return;
+
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        var follows = await _followingRepository.getFollowingList(pubkeyHex);
+
+        if (isClosed) return;
+        if (state is ProfileInfoLoaded) {
+          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            followingCount: follows?.length ?? 0,
+            isLoadingCounts: false,
+          )));
+        }
+
+        await _syncService.syncFollowingList(pubkeyHex);
+        follows = await _followingRepository.getFollowingList(pubkeyHex);
+
+        if (isClosed) return;
+        if (state is ProfileInfoLoaded) {
+          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            followingCount: follows?.length ?? 0,
+          )));
+        }
+
+        final followerCount =
+            await _profileRepository.getFollowerCount(pubkeyHex);
+        if (isClosed) return;
+        if (state is ProfileInfoLoaded) {
+          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            followerCount: followerCount,
+          )));
+        }
+      } catch (_) {
+        if (isClosed) return;
+        if (state is ProfileInfoLoaded) {
+          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            followingCount: 0,
+            followerCount: 0,
+            isLoadingCounts: false,
+          )));
+        }
+      }
+    });
+  }
+
+  void _refreshDoesUserFollowMeInBackground(
+      String targetHex, String currentUserHex) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final targetFollows =
+            await _followingRepository.getFollowingList(targetHex);
+        final doesUserFollowMe = targetFollows
+                ?.any((f) => f.toLowerCase() == currentUserHex.toLowerCase()) ??
+            false;
+
+        if (isClosed) return;
+        final currentState = state;
+        if (currentState is ProfileInfoLoaded) {
+          add(_InternalStateUpdate(
+              currentState.copyWith(doesUserFollowMe: doesUserFollowMe)));
+        }
+      } catch (_) {}
+    });
+  }
+
+  void _onInternalStateUpdate(
+    _InternalStateUpdate event,
+    Emitter<ProfileInfoState> emit,
+  ) {
+    emit(event.newState);
+  }
+
+  Future<void> _onProfileInfoUserUpdated(
     ProfileInfoUserUpdated event,
     Emitter<ProfileInfoState> emit,
   ) async {
     final currentState = state;
     if (currentState is ProfileInfoLoaded) {
-      emit(currentState.copyWith(user: event.user));
-      _loadFollowerCounts(emit, event.user);
-    } else if (currentState is ProfileInfoInitial || currentState is ProfileInfoLoading) {
-      final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-      final currentUserNpub = currentUserNpubResult.fold((n) => n, (_) => null);
-
-      final userPubkeyHex = event.user['pubkeyHex'] as String? ?? '';
-      if (currentUserNpub == null || userPubkeyHex == currentUserNpub) {
-        emit(ProfileInfoLoaded(
-          user: event.user,
-          currentUserNpub: currentUserNpub,
-        ));
-        await _loadFollowerCounts(emit, event.user);
-        return;
-      }
-
-      final followStatusResult = await _userRepository.isFollowing(userPubkeyHex);
-      final isFollowing = followStatusResult.fold((f) => f, (_) => false);
-
-      final muteStatusResult = await _userRepository.isMuted(userPubkeyHex);
-      final isMuted = muteStatusResult.fold((m) => m, (_) => false);
-
-      emit(ProfileInfoLoaded(
-        user: event.user,
-        isFollowing: isFollowing,
-        isMuted: isMuted,
-        currentUserNpub: currentUserNpub,
-      ));
-
-      await _loadFollowerCounts(emit, event.user);
-      await _refreshDoesUserFollowMe(emit, event.user, currentUserNpub);
+      final updated = currentState.copyWith(user: event.user);
+      emit(updated);
+      _loadFollowerCountsInBackground(updated);
     }
   }
 
@@ -140,33 +249,29 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     final currentState = state;
     if (currentState is! ProfileInfoLoaded) return;
 
-    String targetNpub = userPubkeyHex;
-    if (!userPubkeyHex.startsWith('npub1')) {
-      final npubResult = _authRepository.hexToNpub(userPubkeyHex);
-      if (npubResult != null) {
-        targetNpub = npubResult;
-      }
-    }
-
     final currentIsFollowing = currentState.isFollowing ?? false;
 
-    if (currentIsFollowing) {
-      final result = await _userRepository.unfollowUser(targetNpub);
-      result.fold(
-        (_) {
-          emit(currentState.copyWith(isFollowing: false));
-        },
-        (_) {},
-      );
-    } else {
-      final result = await _userRepository.followUser(targetNpub);
-      result.fold(
-        (_) {
-          emit(currentState.copyWith(isFollowing: true));
-        },
-        (_) {},
-      );
-    }
+    try {
+      final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+      if (pubkeyResult.isError || pubkeyResult.data == null) return;
+      final currentUserHex = pubkeyResult.data!;
+
+      final targetHex = _authService.npubToHex(userPubkeyHex) ?? userPubkeyHex;
+
+      final currentFollows =
+          await _followingRepository.getFollowingList(currentUserHex) ?? [];
+
+      List<String> updatedFollows;
+      if (currentIsFollowing) {
+        updatedFollows = currentFollows.where((p) => p != targetHex).toList();
+        emit(currentState.copyWith(isFollowing: false));
+      } else {
+        updatedFollows = [...currentFollows, targetHex];
+        emit(currentState.copyWith(isFollowing: true));
+      }
+
+      await _syncService.publishFollow(followingPubkeys: updatedFollows);
+    } catch (e) {}
   }
 
   Future<void> _onProfileInfoMuteToggled(
@@ -176,167 +281,34 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     final currentState = state;
     if (currentState is! ProfileInfoLoaded) return;
 
-    String targetNpub = userPubkeyHex;
-    if (!userPubkeyHex.startsWith('npub1')) {
-      final npubResult = _authRepository.hexToNpub(userPubkeyHex);
-      if (npubResult != null) {
-        targetNpub = npubResult;
-      }
-    }
-
     final currentIsMuted = currentState.isMuted ?? false;
 
-    if (currentIsMuted) {
-      final result = await _userRepository.unmuteUser(targetNpub);
-      result.fold(
-        (_) {
-          emit(currentState.copyWith(isMuted: false));
-        },
-        (_) {},
-      );
-    } else {
-      final result = await _userRepository.muteUser(targetNpub);
-      result.fold(
-        (_) {
-          emit(currentState.copyWith(isMuted: true));
-        },
-        (_) {},
-      );
-    }
-  }
-
-  Future<void> _loadFollowerCounts(Emitter<ProfileInfoState> emit, Map<String, dynamic> user) async {
-    final currentState = state;
-    if (currentState is! ProfileInfoLoaded) return;
-
     try {
-      final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-      if (userPubkeyHex.isEmpty) return;
-      
-      final followingResult = await _userRepository.getFollowingListForUser(userPubkeyHex);
+      final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+      if (pubkeyResult.isError || pubkeyResult.data == null) return;
+      final currentUserHex = pubkeyResult.data!;
 
-      await followingResult.fold(
-        (followingUsers) async {
-          final followerCount = await _dataService.fetchFollowerCount(userPubkeyHex);
+      final targetHex = _authService.npubToHex(userPubkeyHex) ?? userPubkeyHex;
 
-          if (state is ProfileInfoLoaded) {
-            emit((state as ProfileInfoLoaded).copyWith(
-              followingCount: followingUsers.length,
-              followerCount: followerCount,
-              isLoadingCounts: false,
-            ));
+      final currentMutes =
+          await _followingRepository.getMuteList(currentUserHex) ?? [];
 
-            if (followerCount > 0) {
-              await _userRepository.updateUserFollowerCount(userPubkeyHex, followerCount);
-            }
-          }
-        },
-        (error) async {
-          if (state is ProfileInfoLoaded) {
-            emit((state as ProfileInfoLoaded).copyWith(
-              followingCount: 0,
-              followerCount: 0,
-              isLoadingCounts: false,
-            ));
-          }
-        },
-      );
-    } catch (e) {
-      if (state is ProfileInfoLoaded) {
-        emit((state as ProfileInfoLoaded).copyWith(
-          followingCount: 0,
-          followerCount: 0,
-          isLoadingCounts: false,
-        ));
-      }
-    }
-  }
-
-  Future<void> _refreshDoesUserFollowMe(
-    Emitter<ProfileInfoState> emit,
-    Map<String, dynamic> user,
-    String? currentUserNpub,
-  ) async {
-    if (currentUserNpub == null || userPubkeyHex == currentUserNpub) {
-      return;
-    }
-
-    try {
-      final followingResult = await _userRepository.getFollowingListForUser(userPubkeyHex);
-      followingResult.fold(
-        (followingUsers) {
-          final currentState = state;
-          if (currentState is ProfileInfoLoaded) {
-            final doesUserFollowMe = _checkIfUserFollowsMe(followingUsers, currentUserNpub);
-            emit(currentState.copyWith(doesUserFollowMe: doesUserFollowMe));
-          }
-        },
-        (_) {
-          final currentState = state;
-          if (currentState is ProfileInfoLoaded) {
-            emit(currentState.copyWith(doesUserFollowMe: false));
-          }
-        },
-      );
-    } catch (e) {
-      final currentState = state;
-      if (currentState is ProfileInfoLoaded) {
-        emit(currentState.copyWith(doesUserFollowMe: false));
-      }
-    }
-  }
-
-  bool _checkIfUserFollowsMe(List<Map<String, dynamic>> followingUsers, String currentUserNpub) {
-    String? currentUserHex;
-    try {
-      if (currentUserNpub.startsWith('npub1')) {
-        currentUserHex = _authRepository.npubToHex(currentUserNpub);
+      List<String> updatedMutes;
+      if (currentIsMuted) {
+        updatedMutes = currentMutes.where((p) => p != targetHex).toList();
+        emit(currentState.copyWith(isMuted: false));
       } else {
-        currentUserHex = currentUserNpub;
-      }
-    } catch (e) {
-      currentUserHex = currentUserNpub;
-    }
-
-    currentUserHex ??= currentUserNpub;
-
-    final currentUserNpubNormalized = currentUserNpub.toLowerCase();
-    final currentUserHexNormalized = currentUserHex.toLowerCase();
-
-    return followingUsers.any((user) {
-      final userPubkey = user['pubkeyHex'] as String? ?? '';
-      if (userPubkey.isEmpty) return false;
-      
-      final userPubkeyNormalized = userPubkey.toLowerCase();
-
-      if (userPubkeyNormalized == currentUserNpubNormalized || userPubkeyNormalized == currentUserHexNormalized) {
-        return true;
+        updatedMutes = [...currentMutes, targetHex];
+        emit(currentState.copyWith(isMuted: true));
       }
 
-      String? userHex;
-      try {
-        if (userPubkey.startsWith('npub1')) {
-          userHex = _authRepository.npubToHex(userPubkey);
-        } else {
-          userHex = userPubkey;
-        }
-      } catch (e) {
-        userHex = userPubkey;
-      }
-
-      userHex ??= userPubkey;
-
-      final userHexNormalized = userHex.toLowerCase();
-
-      return userHexNormalized == currentUserHexNormalized ||
-          userHexNormalized == currentUserNpubNormalized ||
-          userPubkeyNormalized == currentUserHexNormalized;
-    });
+      await _syncService.publishMute(mutedPubkeys: updatedMutes);
+    } catch (e) {}
   }
 
   @override
   Future<void> close() {
-    _userSubscription?.cancel();
+    _profileSubscription?.cancel();
     return super.close();
   }
 }

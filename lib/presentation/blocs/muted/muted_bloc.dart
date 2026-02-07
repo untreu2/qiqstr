@@ -1,27 +1,26 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/user_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/data_service.dart';
-import '../../../data/services/mute_cache_service.dart';
-import '../../../data/services/user_batch_fetcher.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import 'muted_event.dart';
 import 'muted_state.dart';
 
 class MutedBloc extends Bloc<MutedEvent, MutedState> {
-  final UserRepository _userRepository;
+  final FollowingRepository _followingRepository;
+  final ProfileRepository _profileRepository;
+  final SyncService _syncService;
   final AuthService _authService;
-  final DataService _dataService;
-  final MuteCacheService _muteCacheService;
 
   MutedBloc({
-    required UserRepository userRepository,
+    required FollowingRepository followingRepository,
+    required ProfileRepository profileRepository,
+    required SyncService syncService,
     required AuthService authService,
-    required DataService dataService,
-  })  : _userRepository = userRepository,
+  })  : _followingRepository = followingRepository,
+        _profileRepository = profileRepository,
+        _syncService = syncService,
         _authService = authService,
-        _dataService = dataService,
-        _muteCacheService = MuteCacheService.instance,
         super(const MutedInitial()) {
     on<MutedLoadRequested>(_onMutedLoadRequested);
     on<MutedUserUnmuted>(_onMutedUserUnmuted);
@@ -32,75 +31,96 @@ class MutedBloc extends Bloc<MutedEvent, MutedState> {
     MutedLoadRequested event,
     Emitter<MutedState> emit,
   ) async {
-    emit(const MutedLoading());
-
-    final currentUserResult = await _authService.getCurrentUserNpub();
-    if (currentUserResult.isError || currentUserResult.data == null) {
+    final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+    if (pubkeyResult.isError || pubkeyResult.data == null) {
       emit(const MutedError('Not authenticated'));
       return;
     }
+    final currentUserHex = pubkeyResult.data!;
 
-    final currentUserNpub = currentUserResult.data!;
-    String currentUserHex = currentUserNpub;
+    final cachedMutedPubkeys =
+        await _followingRepository.getMuteList(currentUserHex);
 
-    if (currentUserNpub.startsWith('npub1')) {
-      final hexResult = _authService.npubToHex(currentUserNpub);
-      if (hexResult != null) {
-        currentUserHex = hexResult;
+    if (cachedMutedPubkeys != null && cachedMutedPubkeys.isNotEmpty) {
+      final cachedProfiles =
+          await _profileRepository.getProfiles(cachedMutedPubkeys);
+      final users = _buildMutedUsers(cachedMutedPubkeys, cachedProfiles);
+      emit(MutedLoaded(mutedUsers: users, unmutingStates: {}));
+      _syncMutedInBackground(currentUserHex, emit);
+    } else {
+      emit(const MutedLoading());
+      await _syncService.syncMuteList(currentUserHex);
+      final freshMutedPubkeys =
+          await _followingRepository.getMuteList(currentUserHex);
+
+      if (freshMutedPubkeys == null || freshMutedPubkeys.isEmpty) {
+        emit(const MutedLoaded(mutedUsers: [], unmutingStates: {}));
+        return;
       }
+
+      await _syncService.syncProfiles(freshMutedPubkeys);
+      final freshProfiles =
+          await _profileRepository.getProfiles(freshMutedPubkeys);
+      final users = _buildMutedUsers(freshMutedPubkeys, freshProfiles);
+      emit(MutedLoaded(mutedUsers: users, unmutingStates: {}));
     }
+  }
 
-    final mutedPubkeys = await _muteCacheService.getOrFetch(currentUserHex, () async {
-      final result = await _dataService.getMuteList(currentUserHex);
-      return result.isSuccess ? result.data : null;
-    });
-
-    if (mutedPubkeys == null || mutedPubkeys.isEmpty) {
-      emit(const MutedLoaded(mutedUsers: [], unmutingStates: {}));
-      return;
-    }
-
-    final npubs = <String>[];
-    for (final pubkey in mutedPubkeys) {
-      String npub = pubkey;
-      try {
-        if (!pubkey.startsWith('npub1')) {
-          npub = encodeBasicBech32(pubkey, 'npub');
-        }
-      } catch (e) {
-        npub = pubkey;
-      }
-      npubs.add(npub);
-    }
-
-    final userResults = await _userRepository.getUserProfiles(npubs, priority: FetchPriority.high);
-
+  List<Map<String, dynamic>> _buildMutedUsers(
+      List<String> pubkeys, Map<String, dynamic> profiles) {
     final users = <Map<String, dynamic>>[];
-    for (final entry in userResults.entries) {
-      entry.value.fold(
-        (user) => users.add(user),
-        (error) {
-          final npub = entry.key;
-          final shortName = npub.length > 8 ? npub.substring(0, 8) : npub;
-          users.add({
-            'pubkeyHex': npub,
-            'npub': npub,
-            'name': shortName,
-            'about': '',
-            'profileImage': '',
-            'banner': '',
-            'website': '',
-            'nip05': '',
-            'lud16': '',
-            'updatedAt': DateTime.now(),
-            'nip05Verified': false,
-            'followerCount': 0,
-          });
-        },
-      );
-    }
+    for (final pubkey in pubkeys) {
+      final profile = profiles[pubkey];
+      final npub = _authService.hexToNpub(pubkey) ?? pubkey;
 
-    emit(MutedLoaded(mutedUsers: users, unmutingStates: {}));
+      if (profile != null) {
+        users.add({
+          'pubkey': pubkey,
+          'npub': npub,
+          'name': profile.name ?? profile.displayName,
+          'display_name': profile.displayName,
+          'about': profile.about ?? '',
+          'picture': profile.picture ?? '',
+          'banner': profile.banner ?? '',
+          'nip05': profile.nip05 ?? '',
+          'lud16': profile.lud16 ?? '',
+          'website': profile.website ?? '',
+        });
+      } else {
+        final shortName = npub.length > 8 ? npub.substring(0, 8) : npub;
+        users.add({
+          'pubkey': pubkey,
+          'npub': npub,
+          'name': shortName,
+          'about': '',
+          'picture': '',
+          'banner': '',
+          'website': '',
+          'nip05': '',
+          'lud16': '',
+        });
+      }
+    }
+    return users;
+  }
+
+  void _syncMutedInBackground(String currentUserHex, Emitter<MutedState> emit) {
+    _syncService.syncMuteList(currentUserHex).then((_) async {
+      final freshMutedPubkeys =
+          await _followingRepository.getMuteList(currentUserHex);
+      if (freshMutedPubkeys == null || freshMutedPubkeys.isEmpty) return;
+
+      await _syncService.syncProfiles(freshMutedPubkeys);
+      final freshProfiles =
+          await _profileRepository.getProfiles(freshMutedPubkeys);
+      final users = _buildMutedUsers(freshMutedPubkeys, freshProfiles);
+
+      if (state is MutedLoaded) {
+        final currentState = state as MutedLoaded;
+        emit(MutedLoaded(
+            mutedUsers: users, unmutingStates: currentState.unmutingStates));
+      }
+    });
   }
 
   Future<void> _onMutedUserUnmuted(
@@ -116,22 +136,38 @@ class MutedBloc extends Bloc<MutedEvent, MutedState> {
     unmutingStates[event.userNpub] = true;
     emit(currentState.copyWith(unmutingStates: unmutingStates));
 
-    final result = await _userRepository.unmuteUser(event.userNpub);
-
-    result.fold(
-      (_) {
-        final updatedUsers = currentState.mutedUsers.where((u) {
-          final npub = u['npub'] as String? ?? '';
-          return npub.isNotEmpty && npub != event.userNpub;
-        }).toList();
-        unmutingStates.remove(event.userNpub);
-        emit(MutedLoaded(mutedUsers: updatedUsers, unmutingStates: unmutingStates));
-      },
-      (error) {
+    try {
+      final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+      if (pubkeyResult.isError || pubkeyResult.data == null) {
         unmutingStates.remove(event.userNpub);
         emit(currentState.copyWith(unmutingStates: unmutingStates));
-      },
-    );
+        return;
+      }
+      final currentUserHex = pubkeyResult.data!;
+
+      final targetHex =
+          _authService.npubToHex(event.userNpub) ?? event.userNpub;
+
+      final currentMuteList =
+          await _followingRepository.getMuteList(currentUserHex);
+      final updatedMuteList =
+          (currentMuteList ?? []).where((p) => p != targetHex).toList();
+
+      await _syncService.publishMute(mutedPubkeys: updatedMuteList);
+
+      final updatedUsers = currentState.mutedUsers.where((u) {
+        final npub = u['npub'] as String? ?? '';
+        final pubkey = u['pubkey'] as String? ?? '';
+        return npub != event.userNpub && pubkey != event.userNpub;
+      }).toList();
+
+      unmutingStates.remove(event.userNpub);
+      emit(MutedLoaded(
+          mutedUsers: updatedUsers, unmutingStates: unmutingStates));
+    } catch (e) {
+      unmutingStates.remove(event.userNpub);
+      emit(currentState.copyWith(unmutingStates: unmutingStates));
+    }
   }
 
   Future<void> _onMutedRefreshed(

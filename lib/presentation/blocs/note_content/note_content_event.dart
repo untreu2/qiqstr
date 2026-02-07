@@ -6,9 +6,13 @@ abstract class NoteContentEvent extends BaseEvent {
 
 class NoteContentInitialized extends NoteContentEvent {
   final List<Map<String, dynamic>> textParts;
+  final Map<String, Map<String, dynamic>>? initialProfiles;
 
-  const NoteContentInitialized({required this.textParts});
+  const NoteContentInitialized({
+    required this.textParts,
+    this.initialProfiles,
+  });
 
   @override
-  List<Object?> get props => [textParts];
+  List<Object?> get props => [textParts, initialProfiles];
 }

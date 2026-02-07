@@ -3,17 +3,16 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:ndk/ndk.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/wallet_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
-import 'package:ndk/shared/nips/nip01/bip340.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../src/rust/api/events.dart' as rust_events;
 import '../../../constants/relays.dart';
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
@@ -26,11 +25,12 @@ Future<bool> _payZapWithWallet(
   int sats,
   String comment,
 ) async {
-  final walletRepository = AppDI.get<WalletRepository>();
+  final coinosService = CoinosService();
   const secureStorage = FlutterSecureStorage();
 
   try {
-    if (!walletRepository.isConnected) {
+    final isAuthResult = await coinosService.isAuthenticated();
+    if (!isAuthResult.isSuccess || isAuthResult.data != true) {
       if (context.mounted) {
         AppSnackbar.warning(context, 'Please connect your wallet first');
       }
@@ -140,7 +140,7 @@ Future<bool> _payZapWithWallet(
 
     debugPrint(
         '[ZapDialog] About to pay invoice: ${invoice.substring(0, 20)}...');
-    final paymentResult = await walletRepository.payInvoice(invoice);
+    final paymentResult = await coinosService.payInvoice(invoice);
 
     debugPrint(
         '[ZapDialog] Payment result: ${paymentResult.isSuccess ? 'SUCCESS' : 'FAILED'}');
@@ -160,8 +160,15 @@ Future<bool> _payZapWithWallet(
     }
 
     // Publish Nostr events in the background without affecting success status
-    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex,
-        note, comment, privateKey, sats, paymentResult));
+    unawaited(_publishZapEventsAsync(
+        NostrService.eventToJson(zapRequest),
+        invoice,
+        recipientPubkeyHex,
+        note,
+        comment,
+        privateKey,
+        sats,
+        paymentResult));
 
     return true;
   } catch (e) {
@@ -174,7 +181,7 @@ Future<bool> _payZapWithWallet(
 }
 
 Future<void> _publishZapEventsAsync(
-  Nip01Event zapRequest,
+  Map<String, dynamic> zapRequest,
   String invoice,
   String recipientPubkeyHex,
   Map<String, dynamic> note,
@@ -195,19 +202,18 @@ Future<void> _publishZapEventsAsync(
           '[ZapDialog] Zap request event (kind 9734) published for note: $noteId');
     }
 
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final zapEvent = Nip01Event(
-      pubKey: publicKey,
+    final zapEventJsonStr = rust_events.createSignedEvent(
       kind: 9735,
+      content: comment,
       tags: [
         ['bolt11', invoice],
-        ['description', jsonEncode(NostrService.eventToJson(zapRequest))],
+        ['description', jsonEncode(zapRequest)],
         ['p', recipientPubkeyHex],
         ['e', noteId],
       ],
-      content: comment,
+      privateKeyHex: privateKey,
     );
-    zapEvent.sig = Bip340.sign(zapEvent.id, privateKey);
+    final zapEvent = jsonDecode(zapEventJsonStr) as Map<String, dynamic>;
 
     final serializedZapEvent = NostrService.serializeEvent(zapEvent);
     await webSocketManager.priorityBroadcast(serializedZapEvent);
@@ -216,9 +222,6 @@ Future<void> _publishZapEventsAsync(
       print('[ZapDialog] Zap event (kind 9735) published for note: $noteId');
     }
 
-    // Mark this zap event as user-published to prevent self-processing
-    final nostrDataService = AppDI.get<DataService>();
-    nostrDataService.markZapAsUserPublished(zapEvent.id);
     if (kDebugMode) {
       final paymentData = paymentResult.data as Map<String, dynamic>?;
       final preimage = paymentData?['preimage'] as String?;
@@ -238,31 +241,35 @@ Future<void> _processZapPayment(
   String comment,
 ) async {
   try {
-    final userRepository = AppDI.get<UserRepository>();
     final noteAuthor = note['author'] as String? ?? '';
-    final userResult = await userRepository.getUserProfile(noteAuthor);
+    final profileRepo = AppDI.get<ProfileRepository>();
+    final profile = await profileRepo.getProfile(noteAuthor);
 
-    await userResult.fold(
-      (user) async {
-        final lud16 = user['lud16'] as String? ?? '';
-        if (lud16.isEmpty) {
-          if (context.mounted) {
-            AppSnackbar.error(
-                context, 'User does not have a lightning address configured.',
-                duration: const Duration(seconds: 1));
-          }
-          return;
-        }
+    if (profile == null) {
+      if (context.mounted) {
+        AppSnackbar.error(context, 'Error loading user profile',
+            duration: const Duration(seconds: 1));
+      }
+      return;
+    }
 
-        await _payZapWithWallet(context, user, note, sats, comment);
-      },
-      (error) {
-        if (context.mounted) {
-          AppSnackbar.error(context, 'Error loading user profile: $error',
-              duration: const Duration(seconds: 1));
-        }
-      },
-    );
+    final lud16 = profile.lud16 ?? '';
+    if (lud16.isEmpty) {
+      if (context.mounted) {
+        AppSnackbar.error(
+            context, 'User does not have a lightning address configured.',
+            duration: const Duration(seconds: 1));
+      }
+      return;
+    }
+
+    final user = {
+      'pubkeyHex': profile.pubkey,
+      'name': profile.name ?? '',
+      'lud16': profile.lud16 ?? '',
+    };
+
+    await _payZapWithWallet(context, user, note, sats, comment);
   } catch (e) {
     if (context.mounted) {
       AppSnackbar.error(context, 'Failed to process zap: $e',

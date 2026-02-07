@@ -2,19 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/time_service.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../theme/theme_manager.dart';
 
 class ArticleWidget extends StatefulWidget {
   final Map<String, dynamic> article;
-  final String currentUserNpub;
+  final String currentUserHex;
   final Map<String, Map<String, dynamic>> profiles;
 
   const ArticleWidget({
     super.key,
     required this.article,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     required this.profiles,
   });
 
@@ -24,11 +23,13 @@ class ArticleWidget extends StatefulWidget {
 
 class _ArticleWidgetState extends State<ArticleWidget> {
   late final String _articleId;
-  late final String _authorId;
+  late final String _authorPubkey;
   late final String _title;
   late final String _summary;
   late final String _imageUrl;
   late final DateTime _timestamp;
+  late final String _authorName;
+  late final String _authorImage;
 
   Map<String, dynamic>? _authorUser;
   bool _isDisposed = false;
@@ -42,37 +43,52 @@ class _ArticleWidgetState extends State<ArticleWidget> {
 
   void _precomputeData() {
     _articleId = widget.article['id'] as String? ?? '';
-    _authorId = widget.article['author'] as String? ?? '';
+    _authorPubkey = widget.article['pubkey'] as String? ?? '';
     _title = widget.article['title'] as String? ?? 'Untitled';
     _summary = widget.article['summary'] as String? ?? '';
     _imageUrl = widget.article['image'] as String? ?? '';
-    _timestamp = widget.article['timestamp'] as DateTime? ?? DateTime.now();
 
-    _authorUser = widget.profiles[_authorId];
+    final createdAt = widget.article['created_at'];
+    if (createdAt is int) {
+      _timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+    } else {
+      _timestamp = widget.article['timestamp'] as DateTime? ?? DateTime.now();
+    }
+
+    _authorName = widget.article['author'] as String? ?? '';
+    _authorImage = widget.article['authorImage'] as String? ?? '';
+
+    _authorUser = widget.profiles[_authorPubkey];
   }
 
   Future<void> _loadAuthorProfile() async {
-    if (_authorUser != null) return;
+    if (_authorUser != null || _authorName.isNotEmpty) return;
 
-    final userRepository = AppDI.get<UserRepository>();
-    final result = await userRepository.getUserProfile(_authorId);
-    result.fold(
-      (user) {
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _authorUser = user;
-          });
-        }
-      },
-      (error) {},
-    );
+    final profileRepo = AppDI.get<ProfileRepository>();
+    final profile = await profileRepo.getProfile(_authorPubkey);
+    if (profile != null && mounted && !_isDisposed) {
+      setState(() {
+        _authorUser = {
+          'pubkeyHex': profile.pubkey,
+          'name': profile.name ?? '',
+          'about': profile.about ?? '',
+          'profileImage': profile.picture ?? '',
+          'banner': profile.banner ?? '',
+          'website': profile.website ?? '',
+          'nip05': profile.nip05 ?? '',
+          'lud16': profile.lud16 ?? '',
+          'updatedAt': DateTime.now(),
+          'nip05Verified': false,
+        };
+      });
+    }
   }
 
   @override
   void didUpdateWidget(ArticleWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.profiles != widget.profiles) {
-      final newAuthor = widget.profiles[_authorId];
+      final newAuthor = widget.profiles[_authorPubkey];
       if (newAuthor != null && _authorUser != newAuthor) {
         setState(() {
           _authorUser = newAuthor;
@@ -88,7 +104,7 @@ class _ArticleWidgetState extends State<ArticleWidget> {
   }
 
   String _formatTimestamp(DateTime timestamp) {
-    final d = timeService.difference(timestamp);
+    final d = DateTime.now().difference(timestamp);
     if (d.inSeconds < 5) return 'now';
     if (d.inSeconds < 60) return '${d.inSeconds}s';
     if (d.inMinutes < 60) return '${d.inMinutes}m';
@@ -105,9 +121,7 @@ class _ArticleWidgetState extends State<ArticleWidget> {
     final currentLocation = GoRouterState.of(context).matchedLocation;
     final articleId = Uri.encodeComponent(_articleId);
 
-    if (currentLocation.startsWith('/home/explore')) {
-      context.push('/home/explore/article?articleId=$articleId');
-    } else if (currentLocation.startsWith('/home/feed')) {
+    if (currentLocation.startsWith('/home/feed')) {
       context.push('/home/feed/article?articleId=$articleId');
     } else {
       context.push('/article?articleId=$articleId');
@@ -117,14 +131,11 @@ class _ArticleWidgetState extends State<ArticleWidget> {
   void _navigateToProfile() {
     if (!mounted || _isDisposed) return;
 
-    final userNpub = _authorUser?['npub'] as String? ?? _authorId;
-    final userPubkeyHex = _authorUser?['pubkeyHex'] as String? ?? _authorId;
+    final userNpub = _authorUser?['npub'] as String? ?? '';
+    final userPubkeyHex = _authorPubkey;
     final currentLocation = GoRouterState.of(context).matchedLocation;
 
-    if (currentLocation.startsWith('/home/explore')) {
-      context.push(
-          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-    } else if (currentLocation.startsWith('/home/feed')) {
+    if (currentLocation.startsWith('/home/feed')) {
       context.push(
           '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
     } else {
@@ -136,11 +147,23 @@ class _ArticleWidgetState extends State<ArticleWidget> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final authorName = _authorUser?['name'] as String? ?? '';
-    final authorImage = _authorUser?['profileImage'] as String? ?? '';
+    final authorNameFromUser = _authorUser?['name'] as String? ??
+        _authorUser?['display_name'] as String? ??
+        '';
+    final authorImageFromUser = _authorUser?['profileImage'] as String? ??
+        _authorUser?['picture'] as String? ??
+        '';
+
+    final authorName =
+        _authorName.isNotEmpty ? _authorName : authorNameFromUser;
+    final authorImage =
+        _authorImage.isNotEmpty ? _authorImage : authorImageFromUser;
+
     final displayName = authorName.isNotEmpty
         ? authorName
-        : (_authorId.length > 8 ? '${_authorId.substring(0, 8)}...' : _authorId);
+        : (_authorPubkey.length > 8
+            ? '${_authorPubkey.substring(0, 8)}...'
+            : _authorPubkey);
 
     return GestureDetector(
       onTap: _navigateToArticle,
@@ -160,7 +183,8 @@ class _ArticleWidgetState extends State<ArticleWidget> {
           children: [
             if (_imageUrl.isNotEmpty)
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
                 child: CachedNetworkImage(
                   imageUrl: _imageUrl,
                   width: double.infinity,
@@ -238,7 +262,8 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                                       color: colors.textSecondary,
                                     ),
                                   ),
-                                  errorWidget: (context, url, error) => Container(
+                                  errorWidget: (context, url, error) =>
+                                      Container(
                                     width: 28,
                                     height: 28,
                                     color: colors.overlayLight,
@@ -294,7 +319,7 @@ class _ArticleWidgetState extends State<ArticleWidget> {
 
 class ArticleListWidget extends StatelessWidget {
   final List<Map<String, dynamic>> articles;
-  final String currentUserNpub;
+  final String currentUserHex;
   final Map<String, Map<String, dynamic>> profiles;
   final bool isLoading;
   final bool canLoadMore;
@@ -305,7 +330,7 @@ class ArticleListWidget extends StatelessWidget {
   const ArticleListWidget({
     super.key,
     required this.articles,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     required this.profiles,
     this.isLoading = false,
     this.canLoadMore = true,
@@ -405,7 +430,7 @@ class ArticleListWidget extends StatelessWidget {
           final article = articles[index];
           return ArticleWidget(
             article: article,
-            currentUserNpub: currentUserNpub,
+            currentUserHex: currentUserHex,
             profiles: profiles,
           );
         },

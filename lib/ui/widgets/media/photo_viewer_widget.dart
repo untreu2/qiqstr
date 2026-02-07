@@ -101,7 +101,8 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: 1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
+      backgroundColor: Colors.black
+          .withValues(alpha: 1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
       extendBodyBehindAppBar: true,
       body: GestureDetector(
         onVerticalDragUpdate: _handleVerticalDragUpdate,
@@ -113,96 +114,104 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                 color: Colors.black,
               ),
             ),
-          Transform.translate(
-            offset: Offset(0, _dragOffset),
-            child: PhotoViewGallery.builder(
-              itemCount: widget.imageUrls.length,
-              pageController: _pageController,
-              onPageChanged: (index) {
-                setState(() {
-                  currentIndex = index;
-                });
-              },
-              builder: (context, index) {
-                final imageUrl = widget.imageUrls[index];
-                return PhotoViewGalleryPageOptions(
-                  imageProvider: CachedNetworkImageProvider(imageUrl),
-                  minScale: PhotoViewComputedScale.contained,
-                  maxScale: PhotoViewComputedScale.covered * 2,
-                  heroAttributes: PhotoViewHeroAttributes(tag: imageUrl),
-                  basePosition: Alignment.center,
-                );
-              },
-              loadingBuilder: (context, event) => const Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
+            Transform.translate(
+              offset: Offset(0, _dragOffset),
+              child: PhotoViewGallery.builder(
+                itemCount: widget.imageUrls.length,
+                pageController: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    currentIndex = index;
+                  });
+                },
+                builder: (context, index) {
+                  final imageUrl = widget.imageUrls[index];
+                  return PhotoViewGalleryPageOptions(
+                    imageProvider: CachedNetworkImageProvider(imageUrl),
+                    minScale: PhotoViewComputedScale.contained,
+                    maxScale: PhotoViewComputedScale.covered * 2,
+                    heroAttributes: PhotoViewHeroAttributes(tag: imageUrl),
+                    basePosition: Alignment.center,
+                  );
+                },
+                loadingBuilder: (context, event) => const Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+                backgroundDecoration: const BoxDecoration(
+                  color: Colors.transparent,
                 ),
               ),
-              backgroundDecoration: const BoxDecoration(
-                color: Colors.transparent,
-              ),
             ),
-          ),
-          Positioned(
-            bottom: 80,
-            left: 0,
-            right: 0,
-            child: Builder(
-              builder: (context) {
-                final colors = context.colors;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(40),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: colors.surface.withValues(alpha: 0.8),
-                          border: Border.all(
-                            color: colors.border.withValues(alpha: 0.5),
-                            width: 1.5,
-                          ),
-                          borderRadius: BorderRadius.circular(40),
-                        ),
-                        child: Row(
-                          children: [
-                            IconActionButton(
-                              icon: CarbonIcons.close,
-                              onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-                              size: ButtonSize.small,
-                              isCircular: true,
+            Positioned(
+              bottom: 80,
+              left: 0,
+              right: 0,
+              child: Builder(
+                builder: (context) {
+                  final colors = context.colors;
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(40),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: colors.surface.withValues(alpha: 0.8),
+                            border: Border.all(
+                              color: colors.border.withValues(alpha: 0.5),
+                              width: 1.5,
                             ),
-                            Expanded(
-                              child: Center(
-                                child: Text(
-                                  '${currentIndex + 1} / ${widget.imageUrls.length}',
-                                  style: TextStyle(
-                                    color: colors.textPrimary,
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 16,
+                            borderRadius: BorderRadius.circular(40),
+                          ),
+                          child: Row(
+                            children: [
+                              IconActionButton(
+                                icon: CarbonIcons.close,
+                                onPressed: () =>
+                                    Navigator.of(context, rootNavigator: true)
+                                        .pop(),
+                                size: ButtonSize.small,
+                                isCircular: true,
+                              ),
+                              Expanded(
+                                child: Center(
+                                  child: Text(
+                                    '${currentIndex + 1} / ${widget.imageUrls.length}',
+                                    style: TextStyle(
+                                      color: colors.textPrimary,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            IconActionButton(
-                              icon: _isDownloading ? CarbonIcons.download : CarbonIcons.download,
-                              onPressed: _isDownloading ? null : () => _downloadImage(widget.imageUrls[currentIndex]),
-                              size: ButtonSize.small,
-                            ),
-                          ],
+                              IconActionButton(
+                                icon: _isDownloading
+                                    ? CarbonIcons.download
+                                    : CarbonIcons.download,
+                                onPressed: _isDownloading
+                                    ? null
+                                    : () => _downloadImage(
+                                        widget.imageUrls[currentIndex]),
+                                size: ButtonSize.small,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }

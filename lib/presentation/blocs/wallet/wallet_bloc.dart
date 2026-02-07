@@ -1,18 +1,19 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/wallet_repository.dart';
+import '../../../data/services/coinos_service.dart';
 import 'wallet_event.dart';
 import 'wallet_state.dart';
 
 class WalletBloc extends Bloc<WalletEvent, WalletState> {
-  final WalletRepository _walletRepository;
+  final CoinosService _coinosService;
 
   Timer? _balanceTimer;
   final List<StreamSubscription> _subscriptions = [];
 
   WalletBloc({
-    required WalletRepository walletRepository,
-  })  : _walletRepository = walletRepository,
+    CoinosService? coinosService,
+  })  : _coinosService = coinosService ?? CoinosService(),
         super(const WalletInitial()) {
     on<WalletAutoConnectRequested>(_onWalletAutoConnectRequested);
     on<WalletConnectWithNostrRequested>(_onWalletConnectWithNostrRequested);
@@ -30,10 +31,22 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   ) async {
     emit(const WalletLoading());
 
-    final result = await _walletRepository.autoConnect();
+    final isAuthResult = await _coinosService.isAuthenticated();
+    if (isAuthResult.isSuccess && isAuthResult.data == true) {
+      final userResult = await _coinosService.getStoredUser();
+      if (userResult.isSuccess && userResult.data != null) {
+        emit(WalletLoaded(user: userResult.data));
+        add(const WalletBalanceRequested());
+        add(const WalletTransactionsLoaded());
+        _startBalanceTimer(emit);
+        return;
+      }
+    }
 
-    result.fold(
-      (user) {
+    final authResult = await _coinosService.autoLogin();
+    authResult.fold(
+      (data) {
+        final user = data['user'] as Map<String, dynamic>?;
         if (user != null) {
           emit(WalletLoaded(user: user));
           add(const WalletBalanceRequested());
@@ -43,7 +56,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
           emit(const WalletLoaded());
         }
       },
-      (error) => emit(WalletError(error)),
+      (error) => emit(const WalletLoaded()),
     );
   }
 
@@ -53,10 +66,11 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   ) async {
     emit(const WalletLoading());
 
-    final result = await _walletRepository.authenticateWithNostr();
+    final result = await _coinosService.authenticateWithNostr();
 
     result.fold(
-      (user) {
+      (data) {
+        final user = data['user'] as Map<String, dynamic>?;
         emit(WalletLoaded(user: user));
         add(const WalletBalanceRequested());
         add(const WalletTransactionsLoaded());
@@ -70,15 +84,15 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletBalanceRequested event,
     Emitter<WalletState> emit,
   ) async {
-    final result = await _walletRepository.getBalance();
+    final result = await _coinosService.getBalance();
 
     result.fold(
-      (balance) {
+      (data) {
         if (state is WalletLoaded) {
           final currentState = state as WalletLoaded;
-          emit(currentState.copyWith(balance: balance));
+          emit(currentState.copyWith(balance: data));
         } else {
-          emit(WalletLoaded(balance: balance));
+          emit(WalletLoaded(balance: data));
         }
       },
       (error) => emit(WalletError('Failed to get balance: $error')),
@@ -89,7 +103,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletPaymentRequested event,
     Emitter<WalletState> emit,
   ) async {
-    final result = await _walletRepository.payInvoice(event.invoice);
+    final result = await _coinosService.payInvoice(event.invoice);
 
     result.fold(
       (_) {
@@ -103,10 +117,22 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletInvoiceGenerated event,
     Emitter<WalletState> emit,
   ) async {
-    final result = await _walletRepository.makeInvoice(event.amount, '');
+    if (event.amount <= 0) {
+      emit(const WalletError('Amount must be greater than 0'));
+      return;
+    }
+
+    final result = await _coinosService.createInvoice(
+      amount: event.amount,
+      type: 'lightning',
+    );
 
     result.fold(
-      (invoice) {},
+      (invoice) {
+        if (kDebugMode) {
+          print('[WalletBloc] Invoice created');
+        }
+      },
       (error) => emit(WalletError('Invoice generation failed: $error')),
     );
   }
@@ -120,7 +146,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       emit(currentState.copyWith(isLoadingTransactions: true));
     }
 
-    final result = await _walletRepository.listTransactions();
+    final result = await _coinosService.getPaymentHistory();
 
     result.fold(
       (transactions) {
@@ -131,7 +157,8 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
             isLoadingTransactions: false,
           ));
         } else {
-          emit(WalletLoaded(transactions: transactions, isLoadingTransactions: false));
+          emit(WalletLoaded(
+              transactions: transactions, isLoadingTransactions: false));
         }
       },
       (error) {

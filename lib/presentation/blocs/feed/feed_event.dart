@@ -1,18 +1,19 @@
 import '../../../core/bloc/base/base_event.dart';
-import '../../../data/services/feed_loader_service.dart';
+import '../../../domain/entities/feed_note.dart';
+import 'feed_state.dart';
 
 abstract class FeedEvent extends BaseEvent {
   const FeedEvent();
 }
 
 class FeedInitialized extends FeedEvent {
-  final String npub;
+  final String userHex;
   final String? hashtag;
 
-  const FeedInitialized({required this.npub, this.hashtag});
+  const FeedInitialized({required this.userHex, this.hashtag});
 
   @override
-  List<Object?> get props => [npub, hashtag];
+  List<Object?> get props => [userHex, hashtag];
 }
 
 class FeedRefreshed extends FeedEvent {
@@ -69,7 +70,33 @@ class FeedNoteDeleted extends FeedEvent {
   List<Object?> get props => [noteId];
 }
 
-enum NoteViewMode {
-  list,
-  grid,
+class FeedUserNotePublished extends FeedEvent {
+  final Map<String, dynamic> note;
+
+  const FeedUserNotePublished(this.note);
+
+  @override
+  List<Object?> get props => [note];
+}
+
+class FeedProfilesLoaded extends FeedEvent {
+  final Map<String, Map<String, dynamic>> profiles;
+
+  const FeedProfilesLoaded(this.profiles);
+
+  @override
+  List<Object?> get props => [profiles];
+}
+
+class FeedNotesUpdated extends FeedEvent {
+  final List<FeedNote> notes;
+
+  const FeedNotesUpdated(this.notes);
+
+  @override
+  List<Object?> get props => [notes];
+}
+
+class FeedSyncCompleted extends FeedEvent {
+  const FeedSyncCompleted();
 }

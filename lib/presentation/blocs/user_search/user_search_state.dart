@@ -14,12 +14,16 @@ class UserSearchLoading extends UserSearchState {
 
 class UserSearchLoaded extends UserSearchState {
   final List<Map<String, dynamic>> filteredUsers;
+  final List<Map<String, dynamic>> filteredNotes;
+  final Map<String, Map<String, dynamic>> noteProfiles;
   final List<Map<String, dynamic>> randomUsers;
   final bool isSearching;
   final bool isLoadingRandom;
 
   const UserSearchLoaded({
     required this.filteredUsers,
+    this.filteredNotes = const [],
+    this.noteProfiles = const {},
     required this.randomUsers,
     this.isSearching = false,
     this.isLoadingRandom = false,
@@ -27,12 +31,16 @@ class UserSearchLoaded extends UserSearchState {
 
   UserSearchLoaded copyWith({
     List<Map<String, dynamic>>? filteredUsers,
+    List<Map<String, dynamic>>? filteredNotes,
+    Map<String, Map<String, dynamic>>? noteProfiles,
     List<Map<String, dynamic>>? randomUsers,
     bool? isSearching,
     bool? isLoadingRandom,
   }) {
     return UserSearchLoaded(
       filteredUsers: filteredUsers ?? this.filteredUsers,
+      filteredNotes: filteredNotes ?? this.filteredNotes,
+      noteProfiles: noteProfiles ?? this.noteProfiles,
       randomUsers: randomUsers ?? this.randomUsers,
       isSearching: isSearching ?? this.isSearching,
       isLoadingRandom: isLoadingRandom ?? this.isLoadingRandom,
@@ -40,7 +48,14 @@ class UserSearchLoaded extends UserSearchState {
   }
 
   @override
-  List<Object?> get props => [filteredUsers, randomUsers, isSearching, isLoadingRandom];
+  List<Object?> get props => [
+        filteredUsers,
+        filteredNotes,
+        noteProfiles,
+        randomUsers,
+        isSearching,
+        isLoadingRandom
+      ];
 }
 
 class UserSearchError extends UserSearchState {

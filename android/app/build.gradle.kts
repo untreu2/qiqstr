@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "com.example.qiqstr"
     compileSdk = 36
+    ndkVersion = "26.1.10909125"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

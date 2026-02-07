@@ -45,16 +45,6 @@ class DmConversationRefreshed extends DmEvent {
   List<Object?> get props => [pubkeyHex];
 }
 
-// Internal events for stream updates
-class DmConversationsUpdated extends DmEvent {
-  final List<Map<String, dynamic>> conversations;
-
-  const DmConversationsUpdated(this.conversations);
-
-  @override
-  List<Object?> get props => [conversations];
-}
-
 class DmMessagesUpdated extends DmEvent {
   final String pubkeyHex;
   final List<Map<String, dynamic>> messages;

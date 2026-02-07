@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
-import 'package:provider/provider.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/edit_profile/edit_profile_bloc.dart';
 import '../../../presentation/blocs/edit_profile/edit_profile_event.dart';
@@ -88,7 +87,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     super.dispose();
   }
 
-
   Future<void> _pickAndUploadMedia({
     required TextEditingController controller,
     required String label,
@@ -146,7 +144,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
 
     bloc.add(const EditProfileSaved());
   }
-
 
   Widget _buildHeader(BuildContext context) {
     return TitleWidget(
@@ -244,7 +241,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     );
   }
 
-  Widget _buildProfilePicturePreview(BuildContext context, EditProfileLoaded state) {
+  Widget _buildProfilePicturePreview(
+      BuildContext context, EditProfileLoaded state) {
     final pictureUrl = _pictureController.text.trim();
     final avatarRadius = 40.0;
     final isUploading = state.isUploadingPicture;
@@ -326,7 +324,9 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         if (state is EditProfileLoading) {
           return Scaffold(
             backgroundColor: context.colors.background,
-            body: Center(child: CircularProgressIndicator(color: context.colors.textPrimary)),
+            body: Center(
+                child: CircularProgressIndicator(
+                    color: context.colors.textPrimary)),
           );
         }
 
@@ -350,7 +350,9 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         if (loadedState == null && state is! EditProfileInitial) {
           return Scaffold(
             backgroundColor: context.colors.background,
-            body: Center(child: CircularProgressIndicator(color: context.colors.textPrimary)),
+            body: Center(
+                child: CircularProgressIndicator(
+                    color: context.colors.textPrimary)),
           );
         }
 
@@ -383,7 +385,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                           transform: Matrix4.translationValues(0, -16, 0),
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: loadedState != null
-                              ? _buildProfilePicturePreview(context, loadedState)
+                              ? _buildProfilePicturePreview(
+                                  context, loadedState)
                               : const SizedBox(),
                         ),
                       ],
@@ -401,7 +404,9 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               labelText: 'Username',
                               fillColor: context.colors.inputFill,
                               onChanged: (value) {
-                                context.read<EditProfileBloc>().add(EditProfileNameChanged(value));
+                                context
+                                    .read<EditProfileBloc>()
+                                    .add(EditProfileNameChanged(value));
                               },
                               validator: (value) {
                                 if (value != null && value.trim().length > 50) {
@@ -418,10 +423,13 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               maxLines: 3,
                               height: null,
                               onChanged: (value) {
-                                context.read<EditProfileBloc>().add(EditProfileAboutChanged(value));
+                                context
+                                    .read<EditProfileBloc>()
+                                    .add(EditProfileAboutChanged(value));
                               },
                               validator: (value) {
-                                if (value != null && value.trim().length > 300) {
+                                if (value != null &&
+                                    value.trim().length > 300) {
                                   return 'Bio must be 300 characters or less';
                                 }
                                 return null;
@@ -433,12 +441,15 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               labelText: 'Lightning address (optional)',
                               fillColor: context.colors.inputFill,
                               onChanged: (value) {
-                                context.read<EditProfileBloc>().add(EditProfileLud16Changed(value));
+                                context
+                                    .read<EditProfileBloc>()
+                                    .add(EditProfileLud16Changed(value));
                               },
                               validator: (value) {
                                 if (value != null && value.trim().isNotEmpty) {
                                   final lud16 = value.trim();
-                                  if (!lud16.contains('@') || lud16.split('@').length != 2) {
+                                  if (!lud16.contains('@') ||
+                                      lud16.split('@').length != 2) {
                                     return 'Please enter a valid lightning address (e.g., user@domain.com)';
                                   }
                                 }
@@ -451,12 +462,15 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               labelText: 'Website (optional)',
                               fillColor: context.colors.inputFill,
                               onChanged: (value) {
-                                context.read<EditProfileBloc>().add(EditProfileWebsiteChanged(value));
+                                context
+                                    .read<EditProfileBloc>()
+                                    .add(EditProfileWebsiteChanged(value));
                               },
                               validator: (value) {
                                 if (value != null && value.trim().isNotEmpty) {
                                   final website = value.trim();
-                                  if (!website.contains('.') || website.contains(' ')) {
+                                  if (!website.contains('.') ||
+                                      website.contains(' ')) {
                                     return 'Please enter a valid website URL';
                                   }
                                 }
@@ -491,7 +505,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    context.colors.background),
                               ),
                             ),
                           )

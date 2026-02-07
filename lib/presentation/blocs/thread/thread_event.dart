@@ -29,3 +29,21 @@ class ThreadFocusedNoteChanged extends ThreadEvent {
   @override
   List<Object?> get props => [noteId];
 }
+
+class ThreadReplyPublished extends ThreadEvent {
+  final Map<String, dynamic> note;
+
+  const ThreadReplyPublished(this.note);
+
+  @override
+  List<Object?> get props => [note];
+}
+
+class ThreadProfilesUpdated extends ThreadEvent {
+  final Map<String, Map<String, dynamic>> profiles;
+
+  const ThreadProfilesUpdated(this.profiles);
+
+  @override
+  List<Object?> get props => [profiles];
+}

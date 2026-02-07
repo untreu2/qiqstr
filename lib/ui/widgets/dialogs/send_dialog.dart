@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../data/repositories/wallet_repository.dart';
+import '../../../data/services/coinos_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
 import '../qr_scanner_widget.dart';
 
 class SendDialog extends StatefulWidget {
-  final WalletRepository walletRepository;
   final VoidCallback onPaymentSuccess;
 
   const SendDialog({
     super.key,
-    required this.walletRepository,
     required this.onPaymentSuccess,
   });
 
@@ -22,48 +20,16 @@ class SendDialog extends StatefulWidget {
 
 class _SendDialogState extends State<SendDialog> {
   final TextEditingController _invoiceController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
+  final CoinosService _coinosService = CoinosService();
 
   bool _isLoading = false;
   String? _error;
   String? _successMessage;
-  String _paymentMethod = 'unknown';
-
-  @override
-  void initState() {
-    super.initState();
-    _invoiceController.addListener(_detectPaymentMethod);
-  }
 
   @override
   void dispose() {
     _invoiceController.dispose();
-    _amountController.dispose();
     super.dispose();
-  }
-
-  void _detectPaymentMethod() {
-    final data = _invoiceController.text.trim();
-    if (data.isEmpty) {
-      setState(() {
-        _paymentMethod = 'unknown';
-      });
-      return;
-    }
-
-    if (data.toLowerCase().startsWith('lnbc') && !data.contains('@')) {
-      setState(() {
-        _paymentMethod = 'invoice';
-      });
-    } else if (data.contains('@') || data.toLowerCase().startsWith('lnurl')) {
-      setState(() {
-        _paymentMethod = 'lightning_address';
-      });
-    } else {
-      setState(() {
-        _paymentMethod = 'unknown';
-      });
-    }
   }
 
   Future<void> _pasteFromClipboard() async {
@@ -92,7 +58,7 @@ class _SendDialogState extends State<SendDialog> {
     final invoice = _invoiceController.text.trim();
     if (invoice.isEmpty) {
       setState(() {
-        _error = 'Please enter an invoice or lightning address';
+        _error = 'Please enter an invoice';
       });
       return;
     }
@@ -104,60 +70,21 @@ class _SendDialogState extends State<SendDialog> {
     });
 
     try {
-      if (_paymentMethod == 'invoice') {
-        final result = await widget.walletRepository.payInvoice(invoice);
+      final result = await _coinosService.payInvoice(invoice);
 
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            result.fold(
-              (paymentResult) {
-                final preimage = paymentResult['preimage'] as String?;
-                _successMessage =
-                    'Payment sent! Preimage: ${preimage ?? 'N/A'}';
-                widget.onPaymentSuccess();
-              },
-              (errorResult) {
-                _error = 'Payment failed: $errorResult';
-              },
-            );
-          });
-        }
-      } else if (_paymentMethod == 'lightning_address') {
-        final amountText = _amountController.text.trim();
-        final amount = int.tryParse(amountText);
-
-        if (amount == null || amount <= 0) {
-          setState(() {
-            _isLoading = false;
-            _error = 'Please enter a valid amount';
-          });
-          return;
-        }
-
-        final result = await widget.walletRepository.sendToLightningAddress(
-          lightningAddress: invoice,
-          amount: amount,
-        );
-
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            result.fold(
-              (paymentResult) {
-                _successMessage = 'Payment sent!';
-                widget.onPaymentSuccess();
-              },
-              (errorResult) {
-                _error = 'Payment failed: $errorResult';
-              },
-            );
-          });
-        }
-      } else {
+      if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Please enter a valid Lightning invoice or address';
+          result.fold(
+            (paymentResult) {
+              final preimage = paymentResult['preimage'] as String?;
+              _successMessage = 'Payment sent! Preimage: ${preimage ?? 'N/A'}';
+              widget.onPaymentSuccess();
+            },
+            (errorResult) {
+              _error = 'Payment failed: $errorResult';
+            },
+          );
         });
       }
     } catch (e) {
@@ -210,11 +137,7 @@ class _SendDialogState extends State<SendDialog> {
           CustomInputField(
             controller: _invoiceController,
             enabled: !_isLoading,
-            hintText: _paymentMethod == 'invoice'
-                ? 'Paste invoice here...'
-                : _paymentMethod == 'lightning_address'
-                    ? 'Enter lightning address (user@domain.com)...'
-                    : 'Paste invoice or lightning address...',
+            hintText: 'Paste invoice here...',
             suffixIcon: Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Row(
@@ -257,15 +180,6 @@ class _SendDialogState extends State<SendDialog> {
               ),
             ),
           ),
-          if (_paymentMethod == 'lightning_address') ...[
-            const SizedBox(height: 16),
-            CustomInputField(
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              enabled: !_isLoading,
-              hintText: 'Amount (sats)',
-            ),
-          ],
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(
@@ -277,14 +191,8 @@ class _SendDialogState extends State<SendDialog> {
           SizedBox(
             width: double.infinity,
             child: SecondaryButton(
-              label: _paymentMethod == 'lightning_address'
-                  ? 'Pay'
-                  : _paymentMethod == 'invoice'
-                      ? 'Pay Invoice'
-                      : 'Pay Invoice',
-              onPressed: (_isLoading || _paymentMethod == 'unknown')
-                  ? null
-                  : _payInvoice,
+              label: 'Pay Invoice',
+              onPressed: _isLoading ? null : _payInvoice,
               isLoading: _isLoading,
               size: ButtonSize.large,
             ),

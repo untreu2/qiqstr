@@ -1,24 +1,101 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/note_repository.dart';
-import '../../../data/repositories/user_repository.dart';
+import '../../../data/repositories/feed_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/isar_database_service.dart';
 import '../../../utils/string_optimizer.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import 'quote_widget_event.dart';
 import 'quote_widget_state.dart';
 
+class _InternalProfileUpdate extends QuoteWidgetEvent {
+  final Map<String, dynamic> user;
+  const _InternalProfileUpdate(this.user);
+
+  @override
+  List<Object?> get props => [user];
+}
+
 class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
-  final NoteRepository _noteRepository;
-  final UserRepository _userRepository;
+  final FeedRepository _feedRepository;
+  final ProfileRepository _profileRepository;
+  final IsarDatabaseService _db;
   final String bech32;
 
+  StreamSubscription? _profileSubscription;
+  String? _authorPubkey;
+
   QuoteWidgetBloc({
-    required NoteRepository noteRepository,
-    required UserRepository userRepository,
+    required FeedRepository feedRepository,
+    required ProfileRepository profileRepository,
     required this.bech32,
-  })  : _noteRepository = noteRepository,
-        _userRepository = userRepository,
+    IsarDatabaseService? db,
+  })  : _feedRepository = feedRepository,
+        _profileRepository = profileRepository,
+        _db = db ?? IsarDatabaseService.instance,
         super(const QuoteWidgetInitial()) {
     on<QuoteWidgetLoadRequested>(_onQuoteWidgetLoadRequested);
+    on<_InternalProfileUpdate>(_onInternalProfileUpdate);
+  }
+
+  void _onInternalProfileUpdate(
+    _InternalProfileUpdate event,
+    Emitter<QuoteWidgetState> emit,
+  ) {
+    final currentState = state;
+    if (currentState is QuoteWidgetLoaded) {
+      emit(QuoteWidgetLoaded(
+        note: currentState.note,
+        user: event.user,
+        formattedTime: currentState.formattedTime,
+        parsedContent: currentState.parsedContent,
+        shouldTruncate: currentState.shouldTruncate,
+      ));
+    }
+  }
+
+  void _watchProfile(String pubkey) {
+    _authorPubkey = pubkey;
+    _profileSubscription?.cancel();
+    _profileSubscription = _db.watchProfile(pubkey).listen((event) {
+      if (isClosed || event == null) return;
+
+      final profile = _parseProfileContent(event.content);
+      if (profile == null) return;
+
+      final user = {
+        'pubkeyHex': pubkey,
+        'npub': pubkey,
+        'name': profile['name'] ?? '',
+        'profileImage': profile['profileImage'] ?? '',
+        'picture': profile['profileImage'] ?? '',
+        'nip05': profile['nip05'] ?? '',
+      };
+
+      add(_InternalProfileUpdate(user));
+    });
+  }
+
+  Map<String, String>? _parseProfileContent(String content) {
+    if (content.isEmpty) return null;
+    try {
+      final parsed = jsonDecode(content) as Map<String, dynamic>;
+      final result = <String, String>{};
+      parsed.forEach((key, value) {
+        result[key == 'picture' ? 'profileImage' : key] =
+            value?.toString() ?? '';
+      });
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> close() {
+    _profileSubscription?.cancel();
+    return super.close();
   }
 
   String? _extractEventId(String bech32) {
@@ -26,8 +103,8 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
       if (bech32.startsWith('note1')) {
         return decodeBasicBech32(bech32, 'note');
       } else if (bech32.startsWith('nevent1')) {
-        final result = decodeTlvBech32Full(bech32, 'nevent');
-        return result['type_0_main'];
+        final result = decodeTlvBech32Full(bech32);
+        return result['id'] as String?;
       }
     } catch (e) {
       return null;
@@ -35,10 +112,11 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
     return null;
   }
 
-  String _formatTime(DateTime timestamp) {
+  String _formatTime(int timestamp) {
     try {
+      final noteTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
       final now = DateTime.now();
-      final difference = now.difference(timestamp);
+      final difference = now.difference(noteTime);
 
       if (difference.inMinutes < 60) {
         return '${difference.inMinutes}m';
@@ -81,61 +159,51 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
       return;
     }
 
-    final result = await _noteRepository.getNoteById(eventId);
+    try {
+      final feedNote = await _feedRepository.getNote(eventId);
 
-    await result.fold(
-      (note) async {
-        if (note == null) {
-          emit(const QuoteWidgetError());
-          return;
-        }
-
-        try {
-          final noteTimestamp = note['timestamp'] as DateTime? ?? DateTime.now();
-          final formattedTime = _formatTime(noteTimestamp);
-          final noteContent = note['content'] as String? ?? '';
-          final parsedContent = stringOptimizer.parseContentOptimized(noteContent);
-          final shouldTruncate = _checkTruncation(parsedContent);
-
-          final noteAuthor = note['author'] as String? ?? '';
-          final userResult = await _userRepository.getUserProfile(noteAuthor);
-          final user = userResult.fold((u) => u, (_) => null);
-
-          emit(QuoteWidgetLoaded(
-            note: note,
-            user: user,
-            formattedTime: formattedTime,
-            parsedContent: parsedContent,
-            shouldTruncate: shouldTruncate,
-          ));
-        } catch (e) {
-          final noteContent = note['content'] as String? ?? '';
-          final parsedContent = {
-            'textParts': [
-              {'type': 'text', 'text': noteContent}
-            ],
-            'mediaUrls': <String>[],
-            'linkUrls': <String>[],
-            'quoteIds': <String>[],
-            'articleIds': <String>[],
-          };
-
-          final noteAuthor = note['author'] as String? ?? '';
-          final userResult = await _userRepository.getUserProfile(noteAuthor);
-          final user = userResult.fold((u) => u, (_) => null);
-
-          emit(QuoteWidgetLoaded(
-            note: note,
-            user: user,
-            formattedTime: '',
-            parsedContent: parsedContent,
-            shouldTruncate: false,
-          ));
-        }
-      },
-      (_) async {
+      if (feedNote == null) {
         emit(const QuoteWidgetError());
-      },
-    );
+        return;
+      }
+
+      final note = feedNote.toMap();
+      note['pubkey'] = feedNote.pubkey;
+
+      final noteTimestamp = feedNote.createdAt;
+      final formattedTime = noteTimestamp > 0 ? _formatTime(noteTimestamp) : '';
+      final noteContent = feedNote.content;
+      final parsedContent = stringOptimizer.parseContentOptimized(noteContent);
+      final shouldTruncate = _checkTruncation(parsedContent);
+
+      final noteAuthor = feedNote.pubkey;
+      Map<String, dynamic>? user;
+      if (noteAuthor.isNotEmpty) {
+        final profile = await _profileRepository.getProfile(noteAuthor);
+        if (profile != null) {
+          user = {
+            'pubkeyHex': noteAuthor,
+            'npub': noteAuthor,
+            'name': profile.name ?? profile.displayName ?? '',
+            'profileImage': profile.picture ?? '',
+            'picture': profile.picture ?? '',
+            'nip05': profile.nip05 ?? '',
+          };
+        }
+
+        // Start watching profile for updates
+        _watchProfile(noteAuthor);
+      }
+
+      emit(QuoteWidgetLoaded(
+        note: note,
+        user: user,
+        formattedTime: formattedTime,
+        parsedContent: parsedContent,
+        shouldTruncate: shouldTruncate,
+      ));
+    } catch (e) {
+      emit(const QuoteWidgetError());
+    }
   }
 }

@@ -8,7 +8,9 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_event.dart';
 import '../../../presentation/blocs/user_search/user_search_state.dart';
@@ -348,33 +350,22 @@ class _UserItemWidget extends StatefulWidget {
 }
 
 class _UserItemWidgetState extends State<_UserItemWidget> {
-  String? _currentUserNpub;
+  String? _currentUserHex;
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentUserNpub();
+    _loadCurrentUserHex();
   }
 
-  Future<void> _loadCurrentUserNpub() async {
-    final authRepository = AppDI.get<AuthRepository>();
-    final result = await authRepository.getCurrentUserNpub();
-    result.fold(
-      (npub) {
-        if (mounted) {
-          setState(() {
-            _currentUserNpub = npub;
-          });
-        }
-      },
-      (error) {
-        if (mounted) {
-          setState(() {
-            _currentUserNpub = null;
-          });
-        }
-      },
-    );
+  Future<void> _loadCurrentUserHex() async {
+    final authService = AppDI.get<AuthService>();
+    final hex = authService.currentUserPubkeyHex;
+    if (mounted) {
+      setState(() {
+        _currentUserHex = hex;
+      });
+    }
   }
 
   Future<void> _toggleFollow(UserTileBloc bloc, UserTileLoaded state) async {
@@ -460,8 +451,9 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
       create: (context) {
         final userNpub = widget.user['npub'] as String? ?? '';
         final bloc = UserTileBloc(
-          userRepository: AppDI.get(),
-          authRepository: AppDI.get(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
           userNpub: userNpub,
         );
         if (userNpub.isNotEmpty) {
@@ -471,11 +463,11 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
       },
       child: BlocBuilder<UserTileBloc, UserTileState>(
         builder: (context, state) {
-          final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
-          final userNpub = widget.user['npub'] as String? ?? '';
-          final isCurrentUser = _currentUserNpub != null &&
-              (_currentUserNpub == userPubkeyHex ||
-                  _currentUserNpub == userNpub);
+          final userPubkeyHex = widget.user['pubkeyHex'] as String? ??
+              widget.user['pubkey'] as String? ??
+              '';
+          final isCurrentUser =
+              _currentUserHex != null && _currentUserHex == userPubkeyHex;
           final loadedState =
               state is UserTileLoaded ? state : const UserTileLoaded();
 
@@ -510,9 +502,6 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                           .startsWith('/home/notifications')) {
                         navContext.push(
                             '/home/notifications/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
-                      } else if (currentLocation.startsWith('/home/explore')) {
-                        navContext.push(
-                            '/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
                       } else {
                         navContext.push(
                             '/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');

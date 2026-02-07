@@ -1,275 +1,179 @@
-import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/repositories/interaction_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/interaction_service.dart';
+import '../../../data/remote/relay_query_service.dart';
 import 'note_statistics_event.dart';
 import 'note_statistics_state.dart';
 
 class NoteStatisticsBloc
     extends Bloc<NoteStatisticsEvent, NoteStatisticsState> {
-  final UserRepository _userRepository;
-  final DataService _dataService;
+  final InteractionRepository _interactionRepository;
+  final ProfileRepository _profileRepository;
+  final AuthService _authService;
+  final InteractionService _interactionService;
+  final RelayQueryService _relayQueryService;
   final String noteId;
 
-  StreamSubscription<List<Map<String, dynamic>>>? _notesSubscription;
-  String? _lastNoteId;
-
   NoteStatisticsBloc({
-    required UserRepository userRepository,
-    required DataService dataService,
+    required InteractionRepository interactionRepository,
+    required ProfileRepository profileRepository,
+    required AuthService authService,
     required this.noteId,
-  })  : _userRepository = userRepository,
-        _dataService = dataService,
+  })  : _interactionRepository = interactionRepository,
+        _profileRepository = profileRepository,
+        _authService = authService,
+        _interactionService = InteractionService.instance,
+        _relayQueryService = RelayQueryService(),
         super(const NoteStatisticsInitial()) {
     on<NoteStatisticsInitialized>(_onNoteStatisticsInitialized);
     on<NoteStatisticsRefreshed>(_onNoteStatisticsRefreshed);
-
-    _notesSubscription = _dataService.notesStream.listen((notes) {
-      final hasRelevantNote = notes.any((n) {
-        final id = n['id'] as String? ?? '';
-        return id.isNotEmpty && id == noteId;
-      });
-      if (hasRelevantNote && _lastNoteId != noteId) {
-        _lastNoteId = null;
-        add(const NoteStatisticsRefreshed());
-      }
-    });
   }
 
   Future<void> _onNoteStatisticsInitialized(
     NoteStatisticsInitialized event,
     Emitter<NoteStatisticsState> emit,
   ) async {
-    await _buildInteractionsList(emit);
+    emit(const NoteStatisticsLoading());
+
+    if (kDebugMode) {
+      debugPrint(
+          '[NoteStatisticsBloc] Loading interactions for noteId: $noteId');
+    }
+
+    var interactions =
+        await _interactionRepository.getDetailedInteractions(noteId);
+
+    if (kDebugMode) {
+      debugPrint(
+          '[NoteStatisticsBloc] Cache returned ${interactions.length} interactions');
+    }
+
+    if (interactions.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('[NoteStatisticsBloc] Cache empty, fetching from relays...');
+      }
+      await _interactionService.refreshInteractions(noteId);
+      await Future.delayed(const Duration(milliseconds: 1000));
+      interactions =
+          await _interactionRepository.getDetailedInteractions(noteId);
+      if (kDebugMode) {
+        debugPrint(
+            '[NoteStatisticsBloc] After refresh: ${interactions.length} interactions');
+      }
+    }
+
+    await _buildInteractionsList(emit, interactions);
   }
 
   Future<void> _onNoteStatisticsRefreshed(
     NoteStatisticsRefreshed event,
     Emitter<NoteStatisticsState> emit,
   ) async {
-    await _buildInteractionsList(emit);
+    await _interactionService.refreshInteractions(noteId);
+    await Future.delayed(const Duration(milliseconds: 300));
+    final interactions =
+        await _interactionRepository.getDetailedInteractions(noteId);
+    await _buildInteractionsList(emit, interactions);
   }
 
-  Future<void> _buildInteractionsList(Emitter<NoteStatisticsState> emit) async {
-    if (_lastNoteId == noteId && state is NoteStatisticsLoaded) {
-      return;
-    }
+  Future<void> _buildInteractionsList(
+    Emitter<NoteStatisticsState> emit,
+    List<Map<String, dynamic>> detailedInteractions,
+  ) async {
+    try {
+      final allInteractions = <Map<String, dynamic>>[];
+      final uniquePubkeys = <String>{};
 
-    String targetNoteId = noteId;
+      for (final interaction in detailedInteractions) {
+        final pubkey = interaction['pubkey'] as String? ?? '';
+        if (pubkey.isEmpty) continue;
 
-    final cachedNotes = _dataService.cachedNotes;
-    final note = cachedNotes.firstWhere(
-      (n) => (n['id'] as String? ?? '') == noteId,
-      orElse: () => <String, dynamic>{},
-    );
+        uniquePubkeys.add(pubkey);
 
-    final isRepost = note['isRepost'] as bool? ?? false;
-    if (isRepost) {
-      final rawWs = note['rawWs'] as String? ?? '';
-      if (rawWs.isNotEmpty) {
-        try {
-          final eventData = jsonDecode(rawWs) as Map<String, dynamic>;
-          final tags = eventData['tags'] as List<dynamic>? ?? [];
-          for (final tag in tags) {
-            if (tag is List &&
-                tag.isNotEmpty &&
-                tag[0] == 'e' &&
-                tag.length >= 2) {
-              final originalEventId = tag[1] as String?;
-              if (originalEventId != null && originalEventId.isNotEmpty) {
-                targetNoteId = originalEventId;
-                break;
+        final npub = _authService.hexToNpub(pubkey) ?? pubkey;
+
+        allInteractions.add({
+          'type': interaction['type'],
+          'npub': npub,
+          'pubkey': pubkey,
+          'content': interaction['content'] ?? '',
+          'zapAmount': interaction['zapAmount'],
+          'createdAt': interaction['createdAt'],
+        });
+      }
+
+      final users = <String, Map<String, dynamic>>{};
+
+      if (uniquePubkeys.isNotEmpty) {
+        final pubkeysList = uniquePubkeys.toList();
+
+        var profiles = await _profileRepository.getProfiles(pubkeysList);
+
+        final missingPubkeys =
+            pubkeysList.where((pk) => !profiles.containsKey(pk)).toList();
+
+        if (missingPubkeys.isNotEmpty) {
+          try {
+            final fetchedProfiles =
+                await _relayQueryService.fetchProfiles(missingPubkeys);
+
+            if (fetchedProfiles.isNotEmpty) {
+              final profilesToSave = <String, Map<String, String>>{};
+
+              for (final event in fetchedProfiles) {
+                final pubkey = event['pubkey'] as String?;
+                if (pubkey == null) continue;
+
+                final contentStr = event['content'] as String? ?? '{}';
+                final content =
+                    jsonDecode(contentStr) as Map<String, dynamic>? ?? {};
+
+                profilesToSave[pubkey] = {
+                  'name': content['name']?.toString() ?? '',
+                  'display_name': content['display_name']?.toString() ?? '',
+                  'about': content['about']?.toString() ?? '',
+                  'profileImage': content['picture']?.toString() ?? '',
+                  'banner': content['banner']?.toString() ?? '',
+                  'nip05': content['nip05']?.toString() ?? '',
+                  'lud16': content['lud16']?.toString() ?? '',
+                  'website': content['website']?.toString() ?? '',
+                };
+              }
+
+              if (profilesToSave.isNotEmpty) {
+                await _profileRepository.saveProfiles(profilesToSave);
+                profiles = await _profileRepository.getProfiles(pubkeysList);
               }
             }
-          }
-        } catch (e) {
-          final rootId = note['rootId'] as String?;
-          if (rootId != null && rootId.isNotEmpty) {
-            targetNoteId = rootId;
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint(
+                  '[NoteStatisticsBloc] Error fetching missing profiles: $e');
+            }
           }
         }
-      } else {
-        final rootId = note['rootId'] as String?;
-        if (rootId != null && rootId.isNotEmpty) {
-          targetNoteId = rootId;
-        }
-      }
-    }
 
-    final reactions = _dataService.getReactionsForNote(targetNoteId);
-    final reposts = _dataService.getRepostsForNote(targetNoteId);
-    final zaps = _dataService.getZapsForNote(targetNoteId);
-
-    final allInteractions = <Map<String, dynamic>>[];
-    final seenReactions = <String>{};
-
-    for (final reaction in reactions) {
-      final authorValue = reaction['author'];
-      final author =
-          authorValue is String ? authorValue : (authorValue?.toString() ?? '');
-      final contentValue = reaction['content'];
-      final content = contentValue is String
-          ? contentValue
-          : (contentValue?.toString() ?? '');
-      final reactionKey = '$author:$content';
-      if (!seenReactions.contains(reactionKey)) {
-        seenReactions.add(reactionKey);
-        final timestampValue = reaction['timestamp'];
-        final timestamp =
-            timestampValue is DateTime ? timestampValue : DateTime.now();
-        allInteractions.add({
-          'type': 'reaction',
-          'data': reaction,
-          'timestamp': timestamp,
-          'npub': author,
-          'content': content,
-        });
-      }
-    }
-
-    final seenReposts = <String>{};
-    for (final repost in reposts) {
-      final authorValue = repost['author'];
-      final author =
-          authorValue is String ? authorValue : (authorValue?.toString() ?? '');
-      if (author.isNotEmpty && !seenReposts.contains(author)) {
-        seenReposts.add(author);
-        final timestampValue = repost['timestamp'];
-        final timestamp =
-            timestampValue is DateTime ? timestampValue : DateTime.now();
-        allInteractions.add({
-          'type': 'repost',
-          'data': repost,
-          'timestamp': timestamp,
-          'npub': author,
-          'content': 'Reposted',
-        });
-      }
-    }
-
-    final seenZaps = <String>{};
-    for (final zap in zaps) {
-      final senderValue = zap['sender'];
-      final sender =
-          senderValue is String ? senderValue : (senderValue?.toString() ?? '');
-      if (sender.isNotEmpty && !seenZaps.contains(sender)) {
-        seenZaps.add(sender);
-        final timestampValue = zap['timestamp'];
-        final timestamp =
-            timestampValue is DateTime ? timestampValue : DateTime.now();
-        final commentValue = zap['comment'];
-        final comment = commentValue is String
-            ? commentValue
-            : (commentValue?.toString() ?? '');
-        final amountValue = zap['amount'];
-        final amount = amountValue is int
-            ? amountValue
-            : (amountValue is num ? amountValue.toInt() : 0);
-        allInteractions.add({
-          'type': 'zap',
-          'data': zap,
-          'timestamp': timestamp,
-          'npub': sender,
-          'content': comment,
-          'zapAmount': amount,
-        });
-      }
-    }
-
-    allInteractions.sort((a, b) {
-      final aTimestampValue = a['timestamp'];
-      final bTimestampValue = b['timestamp'];
-      final aTimestamp =
-          aTimestampValue is DateTime ? aTimestampValue : DateTime.now();
-      final bTimestamp =
-          bTimestampValue is DateTime ? bTimestampValue : DateTime.now();
-      return bTimestamp.compareTo(aTimestamp);
-    });
-
-    final uniqueNpubs = <String>{};
-    for (final interaction in allInteractions) {
-      final npubValue = interaction['npub'];
-      final npub =
-          npubValue is String ? npubValue : (npubValue?.toString() ?? '');
-      if (npub.isNotEmpty) {
-        uniqueNpubs.add(npub);
-      }
-    }
-
-    final users = <String, Map<String, dynamic>>{};
-    final missingNpubs = <String>[];
-
-    for (final npub in uniqueNpubs) {
-      final cachedUser = await _userRepository.getCachedUser(npub);
-      if (cachedUser != null) {
-        users[npub] = cachedUser;
-      } else {
-        users[npub] = {
-          'npub': npub,
-          'name': npub.length > 8 ? npub.substring(0, 8) : npub,
-          'profileImage': '',
-          'nip05': '',
-          'nip05Verified': false,
-        };
-        missingNpubs.add(npub);
-      }
-    }
-
-    _lastNoteId = noteId;
-    emit(NoteStatisticsLoaded(interactions: allInteractions, users: users));
-
-    if (missingNpubs.isNotEmpty) {
-      final updatedUsers = Map<String, Map<String, dynamic>>.from(users);
-      for (final npub in missingNpubs) {
-        try {
-          final result = await _userRepository.getUserProfile(npub);
-          result.fold(
-            (user) {
-              final userValue = user;
-              updatedUsers[npub] = userValue;
-            },
-            (error) {},
-          );
-        } catch (e) {}
-      }
-
-      if (state is NoteStatisticsLoaded) {
-        final currentState = state as NoteStatisticsLoaded;
-        emit(currentState.copyWith(users: updatedUsers));
-      }
-    }
-  }
-
-  Future<Map<String, dynamic>> getUser(String npub) async {
-    try {
-      final result = await _userRepository.getUserProfile(npub);
-      return result.fold(
-        (user) {
-          final userValue = user;
-          return {
-            'user': userValue,
-            'success': true,
+        for (final entry in profiles.entries) {
+          final profile = entry.value;
+          final userMap = {
+            'pubkeyHex': entry.key,
+            'npub': _authService.hexToNpub(entry.key) ?? entry.key,
+            'name': profile.name ?? profile.displayName ?? '',
+            'profileImage': profile.picture ?? '',
+            'nip05': profile.nip05 ?? '',
+            'nip05Verified': false,
           };
-        },
-        (error) => {
-          'user': null,
-          'error': error,
-          'success': false,
-        },
-      );
-    } catch (e) {
-      return {
-        'user': null,
-        'error': e.toString(),
-        'success': false,
-      };
-    }
-  }
+          users[entry.key] = userMap;
+        }
+      }
 
-  @override
-  Future<void> close() {
-    _notesSubscription?.cancel();
-    return super.close();
+      emit(NoteStatisticsLoaded(interactions: allInteractions, users: users));
+    } catch (e) {
+      emit(NoteStatisticsLoaded(interactions: const [], users: const {}));
+    }
   }
 }

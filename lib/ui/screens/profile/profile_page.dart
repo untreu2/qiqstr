@@ -1,20 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../theme/theme_manager.dart';
-import '../../widgets/user/profile_info_widget.dart';
-import '../../widgets/common/common_buttons.dart';
-import '../../widgets/common/top_action_bar_widget.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import '../../../core/di/app_di.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/profile/profile_bloc.dart';
 import '../../../presentation/blocs/profile/profile_event.dart';
 import '../../../presentation/blocs/profile/profile_state.dart';
-import '../../../data/services/user_cache_service.dart';
-import '../../../data/services/auth_service.dart';
-import 'dart:async';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../theme/theme_manager.dart';
+import '../../widgets/common/common_buttons.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
+import '../../widgets/user/profile_info_widget.dart';
 
 class ProfilePage extends StatefulWidget {
   final String pubkeyHex;
@@ -28,37 +27,25 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   late ScrollController _scrollController;
 
-  final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier = ValueNotifier([]);
-  final ValueNotifier<bool> _showUsernameBubbleNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier =
+      ValueNotifier([]);
+  final ValueNotifier<bool> _showUsernameBubbleNotifier =
+      ValueNotifier<bool>(false);
   Timer? _scrollDebounceTimer;
-  bool _hasCheckedCache = false;
-  bool _shouldRefresh = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
-    _checkCacheAndScheduleRefresh();
-  }
-
-  Future<void> _checkCacheAndScheduleRefresh() async {
-    if (_hasCheckedCache) return;
-    _hasCheckedCache = true;
-
-    final isCached = await UserCacheService.instance.contains(widget.pubkeyHex);
-
-    if (!isCached) {
-      _shouldRefresh = true;
-    }
   }
 
   void _scrollListener() {
     if (!_scrollController.hasClients) return;
-    
+
     _scrollDebounceTimer?.cancel();
     _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
       if (!mounted || !_scrollController.hasClients) return;
-      
+
       final shouldShow = _scrollController.offset > 100;
       if (_showUsernameBubbleNotifier.value != shouldShow) {
         _showUsernameBubbleNotifier.value = shouldShow;
@@ -83,59 +70,36 @@ class _ProfilePageState extends State<ProfilePage> {
     return BlocProvider<ProfileBloc>(
       create: (context) {
         final bloc = AppDI.get<ProfileBloc>();
-        final authService = AppDI.get<AuthService>();
-        final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
-        if (npub.isNotEmpty) {
-          bloc.add(ProfileLoadRequested(npub));
+        if (widget.pubkeyHex.isNotEmpty) {
+          bloc.add(ProfileLoadRequested(widget.pubkeyHex));
         }
         return bloc;
       },
-      child: BlocListener<ProfileBloc, ProfileState>(
-        listener: (context, state) {
-          if (_shouldRefresh && state is ProfileLoaded) {
-            if (state.notes.isEmpty) {
-              _shouldRefresh = false;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                Future.delayed(const Duration(milliseconds: 800), () {
-                  if (mounted && context.mounted) {
-                    final bloc = context.read<ProfileBloc>();
-                    final currentState = bloc.state;
-                    if (currentState is ProfileLoaded) {
-                      bloc.add(const ProfileRefreshed());
-                    }
-                  }
-                });
-              });
-            } else {
-              _shouldRefresh = false;
-            }
-          }
-        },
-        child: BlocBuilder<ProfileBloc, ProfileState>(
-          builder: (context, state) {
-            if (state is! ProfileLoaded) {
-              if (state is ProfileLoading) {
-                return Scaffold(
-                  backgroundColor: colors.background,
-                  body: const Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (state is ProfileError) {
-                return Scaffold(
-                  backgroundColor: colors.background,
-                  body: Center(child: Text('Error: ${state.message}')),
-                );
-              }
+      child: BlocBuilder<ProfileBloc, ProfileState>(
+        builder: (context, state) {
+          if (state is! ProfileLoaded) {
+            if (state is ProfileLoading) {
               return Scaffold(
                 backgroundColor: colors.background,
                 body: const Center(child: CircularProgressIndicator()),
               );
             }
-            final currentUser = state.user;
-            
+            if (state is ProfileError) {
+              return Scaffold(
+                backgroundColor: colors.background,
+                body: Center(child: Text('Error: ${state.message}')),
+              );
+            }
             return Scaffold(
               backgroundColor: colors.background,
-              body: Stack(
+              body: const Center(child: CircularProgressIndicator()),
+            );
+          }
+          final currentUser = state.user;
+
+          return Scaffold(
+            backgroundColor: colors.background,
+            body: Stack(
               children: [
                 _buildContent(context, state),
                 TopActionBarWidget(
@@ -151,17 +115,20 @@ class _ProfilePageState extends State<ProfilePage> {
                           shape: BoxShape.circle,
                           color: colors.avatarPlaceholder,
                           image: () {
-                            final profileImage = currentUser['profileImage'] as String? ?? '';
+                            final profileImage =
+                                currentUser['profileImage'] as String? ?? '';
                             return profileImage.isNotEmpty
                                 ? DecorationImage(
-                                    image: CachedNetworkImageProvider(profileImage),
+                                    image: CachedNetworkImageProvider(
+                                        profileImage),
                                     fit: BoxFit.cover,
                                   )
                                 : null;
                           }(),
                         ),
                         child: () {
-                          final profileImage = currentUser['profileImage'] as String? ?? '';
+                          final profileImage =
+                              currentUser['profileImage'] as String? ?? '';
                           return profileImage.isEmpty
                               ? Icon(
                                   Icons.person,
@@ -176,10 +143,10 @@ class _ProfilePageState extends State<ProfilePage> {
                         () {
                           final name = currentUser['name'] as String? ?? '';
                           final nip05 = currentUser['nip05'] as String? ?? '';
-                          return name.isNotEmpty 
-                              ? name 
-                              : (nip05.isNotEmpty 
-                                  ? nip05.split('@').first 
+                          return name.isNotEmpty
+                              ? name
+                              : (nip05.isNotEmpty
+                                  ? nip05.split('@').first
                                   : 'Anonymous');
                         }(),
                         style: TextStyle(
@@ -203,8 +170,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           );
-          },
-        ),
+        },
       ),
     );
   }
@@ -241,7 +207,8 @@ class _ProfilePageState extends State<ProfilePage> {
       key: ValueKey(pubkeyHex),
       user: user,
       onNavigateToProfile: (npub) {
-        context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
+        context.push(
+            '/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
       },
     );
   }
@@ -252,17 +219,21 @@ class _ProfilePageState extends State<ProfilePage> {
 
       return widgets.NoteListWidget(
         notes: state.notes,
-        currentUserNpub: state.currentUserNpub,
+        currentUserHex: state.currentUserHex,
         notesNotifier: _notesNotifier,
         profiles: state.profiles,
         isLoading: state.isLoadingMore,
         canLoadMore: state.canLoadMore,
         onLoadMore: () {
-          context.read<ProfileBloc>().add(const ProfileLoadMoreNotesRequested());
+          context
+              .read<ProfileBloc>()
+              .add(const ProfileLoadMoreNotesRequested());
         },
         onEmptyRefresh: () {
-          if (state.currentProfileNpub.isNotEmpty) {
-            context.read<ProfileBloc>().add(ProfileNotesLoaded(state.currentProfileNpub));
+          if (state.currentProfileHex.isNotEmpty) {
+            context
+                .read<ProfileBloc>()
+                .add(ProfileNotesLoaded(state.currentProfileHex));
           }
         },
         scrollController: _scrollController,
@@ -337,14 +308,13 @@ class _ProfilePageState extends State<ProfilePage> {
       final authService = AppDI.get<AuthService>();
       final npub = authService.hexToNpub(widget.pubkeyHex) ?? widget.pubkeyHex;
       final nostrLink = 'nostr:$npub';
-      
+
       final box = context.findRenderObject() as RenderBox?;
       await SharePlus.instance.share(
         ShareParams(
           text: nostrLink,
-          sharePositionOrigin: box != null 
-              ? box.localToGlobal(Offset.zero) & box.size 
-              : null,
+          sharePositionOrigin:
+              box != null ? box.localToGlobal(Offset.zero) & box.size : null,
         ),
       );
     } catch (e) {

@@ -1,23 +1,24 @@
-import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
 import 'user_tile_event.dart';
 import 'user_tile_state.dart';
 
 class UserTileBloc extends Bloc<UserTileEvent, UserTileState> {
-  final UserRepository _userRepository;
-  final AuthRepository _authRepository;
+  final FollowingRepository _followingRepository;
+  final SyncService _syncService;
+  final AuthService _authService;
   final String userNpub;
 
-  StreamSubscription<List<Map<String, dynamic>>>? _followingSubscription;
-
   UserTileBloc({
-    required UserRepository userRepository,
-    required AuthRepository authRepository,
+    required FollowingRepository followingRepository,
+    required SyncService syncService,
+    required AuthService authService,
     required this.userNpub,
-  })  : _userRepository = userRepository,
-        _authRepository = authRepository,
+  })  : _followingRepository = followingRepository,
+        _syncService = syncService,
+        _authService = authService,
         super(const UserTileInitial()) {
     on<UserTileInitialized>(_onUserTileInitialized);
     on<UserTileFollowToggled>(_onUserTileFollowToggled);
@@ -27,41 +28,21 @@ class UserTileBloc extends Bloc<UserTileEvent, UserTileState> {
     UserTileInitialized event,
     Emitter<UserTileState> emit,
   ) async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
+    final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+    if (pubkeyResult.isError || pubkeyResult.data == null) {
       return;
     }
+    final currentUserHex = pubkeyResult.data!;
 
-    final followStatusResult = await _userRepository.isFollowing(event.userNpub);
-    followStatusResult.fold(
-      (isFollowing) {
-        emit(UserTileLoaded(isFollowing: isFollowing));
-      },
-      (_) {
-        emit(const UserTileLoaded());
-      },
-    );
-
-    _followingSubscription?.cancel();
-    _followingSubscription = _userRepository.followingListStream.listen(
-      (followingList) {
-        final targetUserHex = event.userNpub;
-        final isFollowing = followingList.any((u) {
-          final pubkeyHex = u['pubkeyHex'] as String? ?? '';
-          final npub = u['npub'] as String? ?? '';
-          return (pubkeyHex.isNotEmpty && pubkeyHex == targetUserHex) ||
-              (npub.isNotEmpty && npub == targetUserHex);
-        });
-
-        final currentState = state;
-        if (currentState is UserTileLoaded && currentState.isFollowing != isFollowing) {
-          emit(currentState.copyWith(isFollowing: isFollowing, isLoading: false));
-        }
-      },
-      onError: (_) {
-        // Silently handle error - stream error is acceptable
-      },
-    );
+    try {
+      final targetHex =
+          _authService.npubToHex(event.userNpub) ?? event.userNpub;
+      final isFollowing =
+          await _followingRepository.isFollowing(currentUserHex, targetHex);
+      emit(UserTileLoaded(isFollowing: isFollowing));
+    } catch (e) {
+      emit(const UserTileLoaded());
+    }
   }
 
   Future<void> _onUserTileFollowToggled(
@@ -75,38 +56,32 @@ class UserTileBloc extends Bloc<UserTileEvent, UserTileState> {
 
     emit(currentState.copyWith(isLoading: true));
 
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      emit(currentState.copyWith(isLoading: false));
-      return;
-    }
+    try {
+      final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+      if (pubkeyResult.isError || pubkeyResult.data == null) {
+        emit(currentState.copyWith(isLoading: false));
+        return;
+      }
+      final currentUserHex = pubkeyResult.data!;
 
-    if (currentIsFollowing) {
-      final result = await _userRepository.unfollowUser(userNpub);
-      result.fold(
-        (_) {
-          emit(currentState.copyWith(isFollowing: false, isLoading: false));
-        },
-        (_) {
-          emit(currentState.copyWith(isFollowing: true, isLoading: false));
-        },
-      );
-    } else {
-      final result = await _userRepository.followUser(userNpub);
-      result.fold(
-        (_) {
-          emit(currentState.copyWith(isFollowing: true, isLoading: false));
-        },
-        (_) {
-          emit(currentState.copyWith(isFollowing: false, isLoading: false));
-        },
-      );
-    }
-  }
+      final targetHex = _authService.npubToHex(userNpub) ?? userNpub;
 
-  @override
-  Future<void> close() {
-    _followingSubscription?.cancel();
-    return super.close();
+      final currentFollows =
+          await _followingRepository.getFollowingList(currentUserHex) ?? [];
+
+      List<String> updatedFollows;
+      if (currentIsFollowing) {
+        updatedFollows = currentFollows.where((p) => p != targetHex).toList();
+        emit(currentState.copyWith(isFollowing: false, isLoading: false));
+      } else {
+        updatedFollows = [...currentFollows, targetHex];
+        emit(currentState.copyWith(isFollowing: true, isLoading: false));
+      }
+
+      await _syncService.publishFollow(followingPubkeys: updatedFollows);
+    } catch (e) {
+      emit(currentState.copyWith(
+          isFollowing: currentIsFollowing, isLoading: false));
+    }
   }
 }

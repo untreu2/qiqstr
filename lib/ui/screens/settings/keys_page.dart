@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:ndk/ndk.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';

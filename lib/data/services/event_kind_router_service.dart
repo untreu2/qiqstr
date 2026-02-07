@@ -1,10 +1,12 @@
 import 'dart:async';
 
-typedef EventProcessor = FutureOr<void> Function(Map<String, dynamic> eventData);
+typedef EventProcessor = FutureOr<void> Function(
+    Map<String, dynamic> eventData);
 
 class EventKindRouterService {
   static EventKindRouterService? _instance;
-  static EventKindRouterService get instance => _instance ??= EventKindRouterService._internal();
+  static EventKindRouterService get instance =>
+      _instance ??= EventKindRouterService._internal();
 
   EventKindRouterService._internal();
 
@@ -17,7 +19,12 @@ class EventKindRouterService {
   static const int kindZap = 9735;
   static const int kindMute = 10000;
 
-  static const List<int> notificationKinds = [kindNote, kindRepost, kindReaction, kindZap];
+  static const List<int> notificationKinds = [
+    kindNote,
+    kindRepost,
+    kindReaction,
+    kindZap
+  ];
 
   Future<void> routeByKind(
     Map<String, dynamic> eventData,

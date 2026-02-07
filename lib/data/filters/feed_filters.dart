@@ -1,18 +1,22 @@
 abstract class BaseFeedFilter {
   String get filterKey;
-  
+
   int get limit => 500;
-  
+
   List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events);
-  
+
   bool accepts(Map<String, dynamic> event);
-  
+
   List<Map<String, dynamic>> sort(List<Map<String, dynamic>> events) {
     events.sort((a, b) {
       final aIsRepost = _isRepost(a);
       final bIsRepost = _isRepost(b);
-      final aTime = aIsRepost ? _getRepostTimestamp(a) ?? _getTimestamp(a) : _getTimestamp(a);
-      final bTime = bIsRepost ? _getRepostTimestamp(b) ?? _getTimestamp(b) : _getTimestamp(b);
+      final aTime = aIsRepost
+          ? _getRepostTimestamp(a) ?? _getTimestamp(a)
+          : _getTimestamp(a);
+      final bTime = bIsRepost
+          ? _getRepostTimestamp(b) ?? _getTimestamp(b)
+          : _getTimestamp(b);
       final result = bTime.compareTo(aTime);
       return result == 0 ? _getEventId(a).compareTo(_getEventId(b)) : result;
     });
@@ -77,19 +81,19 @@ abstract class BaseFeedFilter {
 }
 
 class HomeFeedFilter extends BaseFeedFilter {
-  final String currentUserNpub;
+  final String currentUserHex;
   final Set<String> followedUsers;
   final bool showReplies;
-  
+
   HomeFeedFilter({
-    required this.currentUserNpub,
+    required this.currentUserHex,
     required this.followedUsers,
     this.showReplies = false,
   });
-  
+
   @override
-  String get filterKey => '$currentUserNpub-home-${followedUsers.length}';
-  
+  String get filterKey => '$currentUserHex-home-${followedUsers.length}';
+
   @override
   bool accepts(Map<String, dynamic> event) {
     final isRepost = _isRepost(event);
@@ -104,14 +108,14 @@ class HomeFeedFilter extends BaseFeedFilter {
         return false;
       }
     }
-    
+
     if (!showReplies && _isReply(event) && !isRepost) {
       return false;
     }
-    
+
     return true;
   }
-  
+
   @override
   List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
     final filtered = events.where(accepts).toList();
@@ -120,44 +124,44 @@ class HomeFeedFilter extends BaseFeedFilter {
 }
 
 class ProfileFeedFilter extends BaseFeedFilter {
-  final String targetUserNpub;
-  final String currentUserNpub;
+  final String targetUserHex;
+  final String currentUserHex;
   final bool showReplies;
-  
+
   ProfileFeedFilter({
-    required this.targetUserNpub,
-    required this.currentUserNpub,
+    required this.targetUserHex,
+    required this.currentUserHex,
     this.showReplies = false,
   });
-  
+
   @override
-  String get filterKey => '$currentUserNpub-profile-$targetUserNpub';
-  
+  String get filterKey => '$currentUserHex-profile-$targetUserHex';
+
   @override
   int get limit => 200;
-  
+
   @override
   bool accepts(Map<String, dynamic> event) {
     final isRepost = _isRepost(event);
     if (isRepost) {
       final repostedBy = _getRepostedBy(event);
-      if (repostedBy != targetUserNpub) {
+      if (repostedBy != targetUserHex) {
         return false;
       }
     } else {
       final author = _getAuthor(event);
-      if (author != targetUserNpub) {
+      if (author != targetUserHex) {
         return false;
       }
     }
-    
+
     if (!showReplies && _isReply(event) && !isRepost) {
       return false;
     }
-    
+
     return true;
   }
-  
+
   @override
   List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
     final filtered = events.where(accepts).toList();
@@ -166,38 +170,38 @@ class ProfileFeedFilter extends BaseFeedFilter {
 }
 
 class ProfileRepliesFilter extends BaseFeedFilter {
-  final String targetUserNpub;
-  final String currentUserNpub;
-  
+  final String targetUserHex;
+  final String currentUserHex;
+
   ProfileRepliesFilter({
-    required this.targetUserNpub,
-    required this.currentUserNpub,
+    required this.targetUserHex,
+    required this.currentUserHex,
   });
-  
+
   @override
-  String get filterKey => '$currentUserNpub-profile-replies-$targetUserNpub';
-  
+  String get filterKey => '$currentUserHex-profile-replies-$targetUserHex';
+
   @override
   int get limit => 200;
-  
+
   @override
   bool accepts(Map<String, dynamic> event) {
     if (_isRepost(event)) {
       return false;
     }
-    
+
     final author = _getAuthor(event);
-    if (author != targetUserNpub) {
+    if (author != targetUserHex) {
       return false;
     }
-    
+
     if (!_isReply(event)) {
       return false;
     }
-    
+
     return true;
   }
-  
+
   @override
   List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
     final filtered = events.where(accepts).toList();
@@ -207,42 +211,42 @@ class ProfileRepliesFilter extends BaseFeedFilter {
 
 class HashtagFilter extends BaseFeedFilter {
   final String hashtag;
-  final String currentUserNpub;
-  
+  final String currentUserHex;
+
   HashtagFilter({
     required this.hashtag,
-    required this.currentUserNpub,
+    required this.currentUserHex,
   });
-  
+
   @override
-  String get filterKey => '$currentUserNpub-hashtag-${hashtag.toLowerCase()}';
-  
+  String get filterKey => '$currentUserHex-hashtag-${hashtag.toLowerCase()}';
+
   @override
   int get limit => 100;
-  
+
   @override
   bool accepts(Map<String, dynamic> event) {
     final targetHashtag = hashtag.toLowerCase();
-    
+
     final tTags = _getTTags(event);
     if (tTags.isNotEmpty) {
       return tTags.any((tag) => tag.toLowerCase() == targetHashtag);
     }
-    
+
     final content = (event['content'] as String? ?? '').toLowerCase();
     final hashtagRegex = RegExp(r'#(\w+)');
     final matches = hashtagRegex.allMatches(content);
-    
+
     for (final match in matches) {
       final extractedHashtag = match.group(1)?.toLowerCase();
       if (extractedHashtag == targetHashtag) {
         return true;
       }
     }
-    
+
     return false;
   }
-  
+
   @override
   List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
     final filtered = events.where(accepts).toList();
@@ -251,34 +255,33 @@ class HashtagFilter extends BaseFeedFilter {
 }
 
 class GlobalFeedFilter extends BaseFeedFilter {
-  final String currentUserNpub;
+  final String currentUserHex;
   final bool showReplies;
-  
+
   GlobalFeedFilter({
-    required this.currentUserNpub,
+    required this.currentUserHex,
     this.showReplies = false,
   });
-  
+
   @override
-  String get filterKey => '$currentUserNpub-global';
-  
+  String get filterKey => '$currentUserHex-global';
+
   @override
   int get limit => 100;
-  
+
   @override
   bool accepts(Map<String, dynamic> event) {
     final isRepost = _isRepost(event);
     if (!showReplies && _isReply(event) && !isRepost) {
       return false;
     }
-    
+
     return true;
   }
-  
+
   @override
   List<Map<String, dynamic>> apply(List<Map<String, dynamic>> events) {
     final filtered = events.where(accepts).toList();
     return sort(filtered);
   }
 }
-

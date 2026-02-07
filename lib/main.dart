@@ -11,18 +11,17 @@ import 'presentation/blocs/theme/theme_state.dart';
 
 import 'data/services/logging_service.dart';
 import 'core/di/app_di.dart';
-import 'data/services/memory_trimming_service.dart';
-import 'data/services/lifecycle_manager.dart';
-import 'data/services/event_parser_isolate.dart';
 import 'core/router/app_router.dart';
 import 'core/bloc/observers/app_bloc_observer.dart';
 import 'package:bloc/bloc.dart';
+import 'src/rust/frb_generated.dart';
 
 void main() {
   runZonedGuarded(() async {
     final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
+    await RustLib.init();
     await dotenv.load(fileName: '.env');
 
     PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
@@ -58,12 +57,6 @@ void main() {
     await AppDI.initialize();
 
     Bloc.observer = AppBlocObserver();
-
-    unawaited(EventParserIsolate.instance.initialize());
-    MemoryTrimmingService().startPeriodicTrimming();
-
-    final lifecycleManager = LifecycleManager();
-    lifecycleManager.initialize();
 
     FlutterNativeSplash.remove();
 

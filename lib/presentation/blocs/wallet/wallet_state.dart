@@ -26,7 +26,8 @@ class WalletLoaded extends WalletState {
   });
 
   @override
-  List<Object?> get props => [user, balance, transactions, isLoadingTransactions];
+  List<Object?> get props =>
+      [user, balance, transactions, isLoadingTransactions];
 
   WalletLoaded copyWith({
     Map<String, dynamic>? user,
@@ -38,7 +39,8 @@ class WalletLoaded extends WalletState {
       user: user ?? this.user,
       balance: balance ?? this.balance,
       transactions: transactions ?? this.transactions,
-      isLoadingTransactions: isLoadingTransactions ?? this.isLoadingTransactions,
+      isLoadingTransactions:
+          isLoadingTransactions ?? this.isLoadingTransactions,
     );
   }
 }

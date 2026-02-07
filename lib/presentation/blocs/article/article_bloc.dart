@@ -1,70 +1,222 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/feed_loader_service.dart';
+import '../../../data/repositories/article_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/isar_database_service.dart';
+import '../../../models/event_model.dart';
+import '../../../domain/mappers/event_mapper.dart' as mappers;
 import 'article_event.dart';
 import 'article_state.dart';
 
+class _InternalArticlesUpdate extends ArticleEvent {
+  final List<Map<String, dynamic>> articles;
+  const _InternalArticlesUpdate(this.articles);
+
+  @override
+  List<Object?> get props => [articles];
+}
+
+class _InternalProfilesUpdate extends ArticleEvent {
+  final Map<String, Map<String, dynamic>> profiles;
+  const _InternalProfilesUpdate(this.profiles);
+
+  @override
+  List<Object?> get props => [profiles];
+}
+
 class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
-  final AuthRepository _authRepository;
-  final UserRepository _userRepository;
-  final FeedLoaderService _feedLoader;
+  final ArticleRepository _articleRepository;
+  final ProfileRepository _profileRepository;
+  final FollowingRepository _followingRepository;
+  final SyncService _syncService;
+  final IsarDatabaseService _db;
+  final mappers.EventMapper _mapper;
 
   static const int _pageSize = 50;
-  bool _isLoadingArticles = false;
-  final List<StreamSubscription> _subscriptions = [];
+  StreamSubscription<List<EventModel>>? _articlesSubscription;
+  String _currentUserHex = '';
+  List<String>? _followingList;
 
   ArticleBloc({
-    required AuthRepository authRepository,
-    required UserRepository userRepository,
-    required FeedLoaderService feedLoader,
-  })  : _authRepository = authRepository,
-        _userRepository = userRepository,
-        _feedLoader = feedLoader,
+    required ArticleRepository articleRepository,
+    required ProfileRepository profileRepository,
+    required FollowingRepository followingRepository,
+    required SyncService syncService,
+    IsarDatabaseService? db,
+    mappers.EventMapper? mapper,
+  })  : _articleRepository = articleRepository,
+        _profileRepository = profileRepository,
+        _followingRepository = followingRepository,
+        _syncService = syncService,
+        _db = db ?? IsarDatabaseService.instance,
+        _mapper = mapper ?? mappers.EventMapper(),
         super(const ArticleInitial()) {
     on<ArticleInitialized>(_onArticleInitialized);
     on<ArticleRefreshed>(_onArticleRefreshed);
     on<ArticleLoadMoreRequested>(_onArticleLoadMoreRequested);
     on<ArticleSearchQueryChanged>(_onArticleSearchQueryChanged);
     on<ArticleUserProfileUpdated>(_onArticleUserProfileUpdated);
+    on<_InternalArticlesUpdate>(_onInternalArticlesUpdate);
+    on<_InternalProfilesUpdate>(_onInternalProfilesUpdate);
   }
 
   Future<void> _onArticleInitialized(
     ArticleInitialized event,
     Emitter<ArticleState> emit,
   ) async {
-    final currentUserHex = _authRepository.npubToHex(event.npub);
-    if (currentUserHex == null) {
-      emit(const ArticleError('Could not convert npub to hex'));
+    _currentUserHex = event.userHex;
+    emit(const ArticleLoading());
+
+    _followingList =
+        await _followingRepository.getFollowingList(_currentUserHex);
+
+    _watchArticles();
+  }
+
+  void _watchArticles() {
+    _articlesSubscription?.cancel();
+    _articlesSubscription =
+        _db.watchArticles(limit: _pageSize).listen((events) {
+      if (isClosed) return;
+
+      final filteredEvents = _filterByFollowing(events);
+      final articleMaps = _eventsToArticleMaps(filteredEvents);
+
+      articleMaps.sort((a, b) {
+        final aTime = a['created_at'] as int? ?? 0;
+        final bTime = b['created_at'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
+
+      add(_InternalArticlesUpdate(articleMaps));
+      _loadAuthorProfilesInBackground(articleMaps);
+    });
+  }
+
+  List<EventModel> _filterByFollowing(List<EventModel> events) {
+    if (_followingList == null || _followingList!.isEmpty) {
+      return events;
+    }
+    return events.where((e) => _followingList!.contains(e.pubkey)).toList();
+  }
+
+  List<Map<String, dynamic>> _eventsToArticleMaps(List<EventModel> events) {
+    return events.map<Map<String, dynamic>>((event) {
+      final article = _mapper.toArticle(event);
+      return article.toMap();
+    }).toList();
+  }
+
+  void _loadAuthorProfilesInBackground(List<Map<String, dynamic>> articles) {
+    Future.microtask(() async {
+      if (isClosed) return;
+
+      final pubkeys = articles
+          .map((a) => a['pubkey'] as String?)
+          .where((p) => p != null && p.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+
+      if (pubkeys.isEmpty) return;
+
+      try {
+        final profiles = await _profileRepository.getProfiles(pubkeys);
+
+        if (isClosed) return;
+
+        final profileMaps = <String, Map<String, dynamic>>{};
+        for (final entry in profiles.entries) {
+          profileMaps[entry.key] = entry.value.toMap();
+        }
+
+        add(_InternalProfilesUpdate(profileMaps));
+      } catch (_) {}
+    });
+  }
+
+  void _onInternalArticlesUpdate(
+    _InternalArticlesUpdate event,
+    Emitter<ArticleState> emit,
+  ) {
+    final articles = event.articles;
+
+    if (articles.isEmpty) {
+      emit(const ArticleEmpty());
       return;
     }
 
-    final initialState = ArticleLoaded(
-      articles: const [],
-      filteredArticles: const [],
-      profiles: const {},
-      currentUserNpub: event.npub,
+    final currentState = state;
+    final currentProfiles = currentState is ArticleLoaded
+        ? currentState.profiles
+        : <String, Map<String, dynamic>>{};
+    final searchQuery =
+        currentState is ArticleLoaded ? currentState.searchQuery : '';
+
+    final articlesWithAuthors =
+        _enrichArticlesWithProfiles(articles, currentProfiles);
+    final filteredArticles = _filterArticles(articlesWithAuthors, searchQuery);
+
+    emit(ArticleLoaded(
+      articles: articlesWithAuthors,
+      filteredArticles: filteredArticles,
+      profiles: currentProfiles,
+      currentUserHex: _currentUserHex,
+    ));
+  }
+
+  void _onInternalProfilesUpdate(
+    _InternalProfilesUpdate event,
+    Emitter<ArticleState> emit,
+  ) {
+    final currentState = state;
+    if (currentState is! ArticleLoaded) return;
+
+    final updatedProfiles =
+        Map<String, Map<String, dynamic>>.from(currentState.profiles);
+    updatedProfiles.addAll(event.profiles);
+
+    final articlesWithAuthors = _enrichArticlesWithProfiles(
+      currentState.articles,
+      updatedProfiles,
     );
-    emit(initialState);
+    final filteredArticles =
+        _filterArticles(articlesWithAuthors, currentState.searchQuery);
 
-    await _loadArticlesFromCache(emit, event.npub);
+    emit(currentState.copyWith(
+      articles: articlesWithAuthors,
+      filteredArticles: filteredArticles,
+      profiles: updatedProfiles,
+    ));
+  }
 
-    await _loadArticlesFromNetwork(emit, event.npub);
-    await _loadCurrentUserProfile(emit, event.npub);
+  List<Map<String, dynamic>> _enrichArticlesWithProfiles(
+    List<Map<String, dynamic>> articles,
+    Map<String, Map<String, dynamic>> profiles,
+  ) {
+    return articles.map((article) {
+      final pubkey = article['pubkey'] as String?;
+      if (pubkey != null && profiles.containsKey(pubkey)) {
+        final profile = profiles[pubkey]!;
+        return {
+          ...article,
+          'author': profile['name'] ?? profile['displayName'] ?? '',
+          'authorImage': profile['picture'] ?? profile['profileImage'] ?? '',
+        };
+      }
+      return article;
+    }).toList();
   }
 
   Future<void> _onArticleRefreshed(
     ArticleRefreshed event,
     Emitter<ArticleState> emit,
   ) async {
-    if (state is! ArticleLoaded) return;
-
-    final currentState = state as ArticleLoaded;
-    if (_isLoadingArticles) return;
-
-    await _loadArticlesFromNetwork(emit, currentState.currentUserNpub);
-    _loadCurrentUserProfile(emit, currentState.currentUserNpub);
+    _followingList =
+        await _followingRepository.getFollowingList(_currentUserHex);
+    await _syncService.syncFeed(_currentUserHex);
   }
 
   Future<void> _onArticleLoadMoreRequested(
@@ -74,67 +226,63 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     if (state is! ArticleLoaded) return;
 
     final currentState = state as ArticleLoaded;
-    if (_isLoadingArticles || currentState.isLoadingMore || !currentState.canLoadMore) return;
+    if (currentState.isLoadingMore || !currentState.canLoadMore) return;
 
     emit(currentState.copyWith(isLoadingMore: true));
 
-    final currentArticles = currentState.articles;
-    if (currentArticles.isEmpty) {
-      emit(currentState.copyWith(isLoadingMore: false));
-      return;
-    }
+    try {
+      final currentCount = currentState.articles.length;
+      final moreArticles = await _articleRepository.getArticles(
+        limit: _pageSize + currentCount,
+      );
 
-    final oldestArticle = currentArticles.reduce((a, b) {
-      final aTimestamp = a['timestamp'] as DateTime? ?? DateTime(2000);
-      final bTimestamp = b['timestamp'] as DateTime? ?? DateTime(2000);
-      return aTimestamp.isBefore(bTimestamp) ? a : b;
-    });
-
-    final oldestTimestamp = oldestArticle['timestamp'] as DateTime? ?? DateTime(2000);
-    final until = oldestTimestamp.subtract(const Duration(milliseconds: 100));
-
-    final params = FeedLoadParams(
-      type: FeedType.article,
-      currentUserNpub: currentState.currentUserNpub,
-      limit: _pageSize,
-      until: until,
-      skipCache: true,
-    );
-
-    final result = await _feedLoader.loadFeed(params);
-
-    if (result.isSuccess && result.notes.isNotEmpty) {
-      final currentIds = currentArticles.map((a) => a['id'] as String? ?? '').where((id) => id.isNotEmpty).toSet();
-      final uniqueNewArticles = result.notes.where((a) {
-        final articleId = a['id'] as String? ?? '';
-        return articleId.isNotEmpty && !currentIds.contains(articleId);
+      final filteredMore = moreArticles.where((a) {
+        if (_followingList == null || _followingList!.isEmpty) return true;
+        return _followingList!.contains(a.pubkey);
       }).toList();
 
-      if (uniqueNewArticles.isNotEmpty) {
-        final updatedArticles = [...currentArticles, ...uniqueNewArticles];
-        final sortedArticles = _feedLoader.sortNotes(updatedArticles, FeedSortMode.latest);
-        final filteredArticles = _filterArticles(sortedArticles, currentState.searchQuery);
+      final moreArticleMaps = filteredMore.map((a) => a.toMap()).toList();
 
-        emit(currentState.copyWith(
-          articles: sortedArticles,
-          filteredArticles: filteredArticles,
-          isLoadingMore: false,
-        ));
+      if (moreArticleMaps.length > currentCount) {
+        final currentIds = currentState.articles
+            .map((a) => a['id'] as String? ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
 
-        _feedLoader.loadProfilesAndInteractionsForNotes(
-          uniqueNewArticles,
-          Map.from(currentState.profiles),
-          (profiles) {
-            if (state is ArticleLoaded) {
-              final updatedState = state as ArticleLoaded;
-              emit(updatedState.copyWith(profiles: profiles));
-            }
-          },
-        );
-      } else {
-        emit(currentState.copyWith(isLoadingMore: false));
+        final uniqueNewArticles = moreArticleMaps.where((a) {
+          final articleId = a['id'] as String? ?? '';
+          return articleId.isNotEmpty && !currentIds.contains(articleId);
+        }).toList();
+
+        if (uniqueNewArticles.isNotEmpty) {
+          final updatedArticles = [
+            ...currentState.articles,
+            ...uniqueNewArticles
+          ];
+          updatedArticles.sort((a, b) {
+            final aTime = a['created_at'] as int? ?? 0;
+            final bTime = b['created_at'] as int? ?? 0;
+            return bTime.compareTo(aTime);
+          });
+
+          final enriched = _enrichArticlesWithProfiles(
+              updatedArticles, currentState.profiles);
+          final filteredArticles =
+              _filterArticles(enriched, currentState.searchQuery);
+
+          emit(currentState.copyWith(
+            articles: enriched,
+            filteredArticles: filteredArticles,
+            isLoadingMore: false,
+          ));
+
+          _loadAuthorProfilesInBackground(uniqueNewArticles);
+          return;
+        }
       }
-    } else {
+
+      emit(currentState.copyWith(isLoadingMore: false, canLoadMore: false));
+    } catch (e) {
       emit(currentState.copyWith(isLoadingMore: false));
     }
   }
@@ -156,7 +304,8 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     ));
   }
 
-  List<Map<String, dynamic>> _filterArticles(List<Map<String, dynamic>> articles, String query) {
+  List<Map<String, dynamic>> _filterArticles(
+      List<Map<String, dynamic>> articles, String query) {
     if (query.isEmpty) {
       return articles;
     }
@@ -184,149 +333,32 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   ) {
     if (state is ArticleLoaded) {
       final currentState = state as ArticleLoaded;
-      final updatedProfiles = Map<String, Map<String, dynamic>>.from(currentState.profiles);
+      final updatedProfiles =
+          Map<String, Map<String, dynamic>>.from(currentState.profiles);
       final existingProfile = updatedProfiles[event.userId];
-      final existingImage = existingProfile?['profileImage'] as String? ?? '';
+      final existingImage = existingProfile?['profileImage'] as String? ??
+          existingProfile?['picture'] as String? ??
+          '';
       if (!updatedProfiles.containsKey(event.userId) || existingImage.isEmpty) {
         updatedProfiles[event.userId] = event.user;
-        emit(currentState.copyWith(profiles: updatedProfiles));
-      }
-    }
-  }
 
-  Future<void> _loadArticlesFromCache(
-    Emitter<ArticleState> emit,
-    String npub,
-  ) async {
-    try {
-      final params = FeedLoadParams(
-        type: FeedType.article,
-        currentUserNpub: npub,
-        limit: _pageSize,
-        cacheOnly: true,
-      );
+        final enriched =
+            _enrichArticlesWithProfiles(currentState.articles, updatedProfiles);
+        final filteredArticles =
+            _filterArticles(enriched, currentState.searchQuery);
 
-      final result = await _feedLoader.loadFeed(params);
-
-      if (result.isSuccess && result.notes.isNotEmpty) {
-        final sortedArticles = _feedLoader.sortNotes(result.notes, FeedSortMode.latest);
-        final existingState = state is ArticleLoaded ? (state as ArticleLoaded) : null;
-
-        emit(ArticleLoaded(
-          articles: sortedArticles,
-          filteredArticles: sortedArticles,
-          profiles: existingState?.profiles ?? const {},
-          currentUserNpub: npub,
-        ));
-
-        _feedLoader.loadProfilesAndInteractionsForNotes(
-          sortedArticles,
-          existingState?.profiles ?? const {},
-          (profiles) {
-            if (state is ArticleLoaded) {
-              final updatedState = state as ArticleLoaded;
-              emit(updatedState.copyWith(profiles: profiles));
-            }
-          },
-        );
-      }
-    } catch (e) {
-      // Silently fail cache load, network will handle it
-    }
-  }
-
-  Future<void> _loadArticlesFromNetwork(
-    Emitter<ArticleState> emit,
-    String npub,
-  ) async {
-    if (_isLoadingArticles) return;
-
-    _isLoadingArticles = true;
-
-    try {
-      final params = FeedLoadParams(
-        type: FeedType.article,
-        currentUserNpub: npub,
-        limit: _pageSize,
-        skipCache: true,
-        cacheOnly: false,
-      );
-
-      final result = await _feedLoader.loadFeed(params);
-
-      if (result.isSuccess && result.notes.isNotEmpty) {
-        final sortedArticles = _feedLoader.sortNotes(result.notes, FeedSortMode.latest);
-        final existingState = state is ArticleLoaded ? (state as ArticleLoaded) : null;
-        final searchQuery = existingState?.searchQuery ?? '';
-
-        final currentArticles = existingState?.articles ?? [];
-        final mergedArticles = _feedLoader.mergeNotesWithUpdates(
-          currentArticles,
-          sortedArticles,
-          FeedSortMode.latest,
-        );
-
-        final finalArticles = mergedArticles.length >= currentArticles.length ? mergedArticles : currentArticles;
-        final filteredArticles = _filterArticles(finalArticles, searchQuery);
-
-        emit(ArticleLoaded(
-          articles: finalArticles,
+        emit(currentState.copyWith(
+          articles: enriched,
           filteredArticles: filteredArticles,
-          profiles: existingState?.profiles ?? const {},
-          currentUserNpub: npub,
-          searchQuery: searchQuery,
+          profiles: updatedProfiles,
         ));
-
-        _feedLoader.loadProfilesAndInteractionsForNotes(
-          finalArticles,
-          existingState?.profiles ?? const {},
-          (profiles) {
-            if (state is ArticleLoaded) {
-              final updatedState = state as ArticleLoaded;
-              emit(updatedState.copyWith(profiles: profiles));
-            }
-          },
-        );
-      }
-    } catch (e) {
-      // Network errors are non-fatal if we have cached data
-    } finally {
-      _isLoadingArticles = false;
-    }
-  }
-
-  Future<void> _loadCurrentUserProfile(Emitter<ArticleState> emit, String npub) async {
-    if (state is! ArticleLoaded) return;
-
-    final currentState = state as ArticleLoaded;
-    if (currentState.profiles.containsKey(npub)) {
-      final existingUser = currentState.profiles[npub];
-      final existingImage = existingUser?['profileImage'] as String? ?? '';
-      if (existingUser != null && existingImage.isNotEmpty) {
-        return;
       }
     }
-
-    final userResult = await _userRepository.getUserProfile(npub);
-    userResult.fold(
-      (user) {
-        if (state is ArticleLoaded) {
-          final updatedState = state as ArticleLoaded;
-          final updatedProfiles = Map<String, Map<String, dynamic>>.from(updatedState.profiles);
-          updatedProfiles[npub] = user;
-          emit(updatedState.copyWith(profiles: updatedProfiles));
-        }
-      },
-      (error) {},
-    );
   }
 
   @override
   Future<void> close() {
-    for (final subscription in _subscriptions) {
-      subscription.cancel();
-    }
-    _subscriptions.clear();
+    _articlesSubscription?.cancel();
     return super.close();
   }
 }

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
+import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
 import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
@@ -26,15 +27,16 @@ import '../../../presentation/blocs/user_tile/user_tile_event.dart';
 import '../../../presentation/blocs/user_tile/user_tile_state.dart';
 import '../../widgets/common/custom_input_field.dart';
 import 'package:flutter/services.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 
 class FeedPage extends StatefulWidget {
-  final String npub;
+  final String userHex;
   final String? hashtag;
-  const FeedPage({super.key, required this.npub, this.hashtag});
+  const FeedPage({super.key, required this.userHex, this.hashtag});
 
   @override
   FeedPageState createState() => FeedPageState();
@@ -66,7 +68,7 @@ class FeedPageState extends State<FeedPage> {
         .addListener(() => _onSearchChanged(_searchController.text));
     _updateRelayCount();
     _relayCountTimer =
-        Timer.periodic(const Duration(seconds: 2), (_) => _updateRelayCount());
+        Timer.periodic(const Duration(seconds: 10), (_) => _updateRelayCount());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
@@ -195,6 +197,82 @@ class FeedPageState extends State<FeedPage> {
     final isHashtagMode = widget.hashtag != null;
     final userProfileImage = user?['profileImage'] as String? ?? '';
 
+    if (_isSearchMode) {
+      return ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            width: double.infinity,
+            color: colors.background.withValues(alpha: 0.95),
+            padding: EdgeInsets.fromLTRB(16, topPadding + 8, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _exitSearchMode,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colors.overlayLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.arrow_back,
+                          size: 22,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: CustomInputField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        autofocus: true,
+                        hintText: 'Search by name or npub...',
+                        height: 48,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 0),
+                        onChanged: _onSearchChanged,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () async {
+                        final clipboardData =
+                            await Clipboard.getData('text/plain');
+                        if (clipboardData != null &&
+                            clipboardData.text != null) {
+                          _searchController.text = clipboardData.text!;
+                          _onSearchChanged(clipboardData.text!);
+                        }
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colors.overlayLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.content_paste,
+                          size: 20,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
@@ -209,170 +287,101 @@ class FeedPageState extends State<FeedPage> {
                 child: !isHashtagMode
                     ? Row(
                         children: [
-                          _isSearchMode
-                              ? GestureDetector(
-                                  onTap: _exitSearchMode,
-                                  child: Container(
+                          GestureDetector(
+                            onTap: () {
+                              _advancedDrawerController.showDrawer();
+                            },
+                            child: user != null
+                                ? Container(
                                     width: 36,
                                     height: 36,
                                     decoration: BoxDecoration(
-                                      color: colors.overlayLight,
                                       shape: BoxShape.circle,
+                                      color: colors.avatarPlaceholder,
+                                      image: userProfileImage.isNotEmpty
+                                          ? DecorationImage(
+                                              image: CachedNetworkImageProvider(
+                                                  userProfileImage),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
                                     ),
-                                    child: Icon(
-                                      Icons.close,
-                                      size: 20,
-                                      color: colors.textPrimary,
-                                    ),
-                                  ),
-                                )
-                              : GestureDetector(
-                                  onTap: () {
-                                    _advancedDrawerController.showDrawer();
-                                  },
-                                  child: user != null
-                                      ? Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: colors.avatarPlaceholder,
-                                            image: userProfileImage.isNotEmpty
-                                                ? DecorationImage(
-                                                    image:
-                                                        CachedNetworkImageProvider(
-                                                            userProfileImage),
-                                                    fit: BoxFit.cover,
-                                                  )
-                                                : null,
-                                          ),
-                                          child: userProfileImage.isEmpty
-                                              ? Icon(
-                                                  Icons.person,
-                                                  size: 20,
-                                                  color: colors.textSecondary,
-                                                )
-                                              : null,
-                                        )
-                                      : Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: colors.avatarPlaceholder,
-                                          ),
-                                          child: CircularProgressIndicator(
-                                            color: colors.accent,
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _isSearchMode
-                                ? Row(
-                                    children: [
-                                      Expanded(
-                                        child: CustomInputField(
-                                          controller: _searchController,
-                                          focusNode: _searchFocusNode,
-                                          autofocus: true,
-                                          hintText: 'Search by name or npub...',
-                                          height: 36,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 16, vertical: 4),
-                                          onChanged: _onSearchChanged,
-                                        ),
-                                      ),
-                                    ],
+                                    child: userProfileImage.isEmpty
+                                        ? Icon(
+                                            Icons.person,
+                                            size: 20,
+                                            color: colors.textSecondary,
+                                          )
+                                        : null,
                                   )
-                                : GestureDetector(
-                                    onTap: _enterSearchMode,
-                                    child: Container(
-                                      height: 36,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 16),
-                                      decoration: BoxDecoration(
-                                        color: colors.overlayLight,
-                                        borderRadius: BorderRadius.circular(25),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.start,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            CarbonIcons.search,
-                                            size: 18,
-                                            color: colors.textPrimary,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'Search...',
-                                            style: TextStyle(
-                                              color: colors.textPrimary,
-                                              fontSize: 15,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                : Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: colors.avatarPlaceholder,
+                                    ),
+                                    child: CircularProgressIndicator(
+                                      color: colors.accent,
+                                      strokeWidth: 2,
                                     ),
                                   ),
                           ),
                           const SizedBox(width: 12),
-                          _isSearchMode
-                              ? GestureDetector(
-                                  onTap: () async {
-                                    final clipboardData =
-                                        await Clipboard.getData('text/plain');
-                                    if (clipboardData != null &&
-                                        clipboardData.text != null) {
-                                      _searchController.text =
-                                          clipboardData.text!;
-                                      _onSearchChanged(clipboardData.text!);
-                                    }
-                                  },
-                                  child: Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: colors.overlayLight,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.content_paste,
-                                      size: 20,
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: _enterSearchMode,
+                              child: Container(
+                                height: 36,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: colors.overlayLight,
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      CarbonIcons.search,
+                                      size: 18,
                                       color: colors.textPrimary,
                                     ),
-                                  ),
-                                )
-                              : GestureDetector(
-                                  onTap: () {
-                                    final currentLocation =
-                                        GoRouterState.of(context)
-                                            .matchedLocation;
-                                    if (currentLocation
-                                        .startsWith('/home/feed')) {
-                                      context.push('/home/feed/dm');
-                                    } else if (currentLocation
-                                        .startsWith('/home/notifications')) {
-                                      context.push('/home/notifications/dm');
-                                    } else {
-                                      context.push('/dm');
-                                    }
-                                  },
-                                  child: SvgPicture.asset(
-                                    'assets/chat.svg',
-                                    width: 20,
-                                    height: 20,
-                                    colorFilter: ColorFilter.mode(
-                                      colors.textPrimary,
-                                      BlendMode.srcIn,
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Search...',
+                                      style: TextStyle(
+                                        color: colors.textPrimary,
+                                        fontSize: 15,
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () {
+                              final currentLocation =
+                                  GoRouterState.of(context).matchedLocation;
+                              if (currentLocation.startsWith('/home/feed')) {
+                                context.push('/home/feed/explore');
+                              } else {
+                                context.push('/home/feed/explore');
+                              }
+                            },
+                            child: SvgPicture.asset(
+                              'assets/newspaper.svg',
+                              width: 20,
+                              height: 20,
+                              colorFilter: ColorFilter.mode(
+                                colors.textPrimary,
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                          ),
                         ],
                       )
                     : Stack(
@@ -413,7 +422,8 @@ class FeedPageState extends State<FeedPage> {
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 55;
+    final double headerHeight =
+        _isSearchMode ? topPadding + 72 : topPadding + 55;
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
 
@@ -422,8 +432,8 @@ class FeedPageState extends State<FeedPage> {
         BlocProvider<FeedBloc>(
           create: (context) {
             final bloc = AppDI.get<FeedBloc>();
-            bloc.add(
-                FeedInitialized(npub: widget.npub, hashtag: widget.hashtag));
+            bloc.add(FeedInitialized(
+                userHex: widget.userHex, hashtag: widget.hashtag));
             return bloc;
           },
         ),
@@ -510,7 +520,7 @@ class FeedPageState extends State<FeedPage> {
       FeedLoaded(
         :final notes,
         :final profiles,
-        :final currentUserNpub,
+        :final currentUserHex,
         :final isLoadingMore,
         :final canLoadMore
       ) =>
@@ -522,7 +532,7 @@ class FeedPageState extends State<FeedPage> {
               }
             });
 
-            final user = profiles[currentUserNpub];
+            final user = profiles[currentUserHex];
 
             return RefreshIndicator(
               onRefresh: () async {
@@ -556,7 +566,7 @@ class FeedPageState extends State<FeedPage> {
                   else
                     widgets.NoteListWidget(
                       notes: notes,
-                      currentUserNpub: currentUserNpub,
+                      currentUserHex: currentUserHex,
                       notesNotifier: _notesNotifier,
                       profiles: profiles,
                       isLoading: isLoadingMore,
@@ -675,6 +685,8 @@ class FeedPageState extends State<FeedPage> {
             ),
           UserSearchLoaded(
             :final filteredUsers,
+            :final filteredNotes,
+            :final noteProfiles,
             :final randomUsers,
             :final isSearching,
             :final isLoadingRandom
@@ -691,7 +703,7 @@ class FeedPageState extends State<FeedPage> {
                                 color: context.colors.primary),
                             const SizedBox(height: 16),
                             Text(
-                              'Searching for users...',
+                              'Searching...',
                               style: TextStyle(
                                   color: context.colors.textSecondary),
                             ),
@@ -700,7 +712,7 @@ class FeedPageState extends State<FeedPage> {
                       ),
                     ),
                   )
-                : filteredUsers.isEmpty &&
+                : (filteredUsers.isEmpty && filteredNotes.isEmpty) &&
                         _searchController.text.trim().isNotEmpty
                     ? SliverToBoxAdapter(
                         child: Center(
@@ -716,7 +728,7 @@ class FeedPageState extends State<FeedPage> {
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'No users found',
+                                  'No results found',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w600,
@@ -735,23 +747,9 @@ class FeedPageState extends State<FeedPage> {
                           ),
                         ),
                       )
-                    : filteredUsers.isNotEmpty
-                        ? SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final user = filteredUsers[index];
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _FeedUserItemWidget(user: user),
-                                    if (index < filteredUsers.length - 1)
-                                      const _FeedUserSeparator(),
-                                  ],
-                                );
-                              },
-                              childCount: filteredUsers.length,
-                            ),
-                          )
+                    : (filteredUsers.isNotEmpty || filteredNotes.isNotEmpty)
+                        ? _buildSearchResultsList(
+                            context, filteredUsers, filteredNotes, noteProfiles)
                         : isLoadingRandom
                             ? SliverToBoxAdapter(
                                 child: Center(
@@ -810,6 +808,138 @@ class FeedPageState extends State<FeedPage> {
       },
     );
   }
+
+  Widget _buildSearchResultsList(
+    BuildContext context,
+    List<Map<String, dynamic>> users,
+    List<Map<String, dynamic>> notes,
+    Map<String, Map<String, dynamic>> noteProfiles,
+  ) {
+    final colors = context.colors;
+    final items = <_SearchResultItem>[];
+
+    // Add users section
+    if (users.isNotEmpty) {
+      items.add(_SearchResultItem(
+          type: _SearchResultType.header, data: {'title': 'Users'}));
+      for (final user in users) {
+        items.add(_SearchResultItem(type: _SearchResultType.user, data: user));
+      }
+    }
+
+    // Add notes section
+    if (notes.isNotEmpty) {
+      items.add(_SearchResultItem(
+          type: _SearchResultType.header, data: {'title': 'Notes'}));
+      for (final note in notes) {
+        items.add(_SearchResultItem(
+            type: _SearchResultType.note, data: note, profiles: noteProfiles));
+      }
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final item = items[index];
+
+          switch (item.type) {
+            case _SearchResultType.header:
+              final isFirst = index == 0;
+              return Padding(
+                padding: EdgeInsets.fromLTRB(16, isFirst ? 4 : 16, 16, 8),
+                child: Text(
+                  item.data['title'] as String,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              );
+            case _SearchResultType.user:
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _FeedUserItemWidget(user: item.data),
+                  const _FeedUserSeparator(),
+                ],
+              );
+            case _SearchResultType.note:
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _SearchNoteItemWidget(
+                    note: item.data,
+                    profiles: item.profiles ?? {},
+                    currentUserHex: widget.userHex,
+                  ),
+                  const _FeedUserSeparator(),
+                ],
+              );
+          }
+        },
+        childCount: items.length,
+      ),
+    );
+  }
+}
+
+enum _SearchResultType { header, user, note }
+
+class _SearchResultItem {
+  final _SearchResultType type;
+  final Map<String, dynamic> data;
+  final Map<String, Map<String, dynamic>>? profiles;
+
+  _SearchResultItem({
+    required this.type,
+    required this.data,
+    this.profiles,
+  });
+}
+
+class _SearchNoteItemWidget extends StatefulWidget {
+  final Map<String, dynamic> note;
+  final Map<String, Map<String, dynamic>> profiles;
+  final String currentUserHex;
+
+  const _SearchNoteItemWidget({
+    required this.note,
+    required this.profiles,
+    required this.currentUserHex,
+  });
+
+  @override
+  State<_SearchNoteItemWidget> createState() => _SearchNoteItemWidgetState();
+}
+
+class _SearchNoteItemWidgetState extends State<_SearchNoteItemWidget> {
+  late final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _notesNotifier = ValueNotifier<List<Map<String, dynamic>>>([]);
+  }
+
+  @override
+  void dispose() {
+    _notesNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NoteWidget(
+      note: widget.note,
+      currentUserHex: widget.currentUserHex,
+      notesNotifier: _notesNotifier,
+      profiles: widget.profiles,
+      containerColor: Colors.transparent,
+      isSmallView: true,
+      isVisible: true,
+    );
+  }
 }
 
 class _FeedUserItemWidget extends StatefulWidget {
@@ -822,33 +952,22 @@ class _FeedUserItemWidget extends StatefulWidget {
 }
 
 class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
-  String? _currentUserNpub;
+  String? _currentUserHex;
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentUserNpub();
+    _loadCurrentUserHex();
   }
 
-  Future<void> _loadCurrentUserNpub() async {
-    final authRepository = AppDI.get<AuthRepository>();
-    final result = await authRepository.getCurrentUserNpub();
-    result.fold(
-      (npub) {
-        if (mounted) {
-          setState(() {
-            _currentUserNpub = npub;
-          });
-        }
-      },
-      (_) {
-        if (mounted) {
-          setState(() {
-            _currentUserNpub = null;
-          });
-        }
-      },
-    );
+  Future<void> _loadCurrentUserHex() async {
+    final authService = AppDI.get<AuthService>();
+    final hex = authService.currentUserPubkeyHex;
+    if (mounted) {
+      setState(() {
+        _currentUserHex = hex;
+      });
+    }
   }
 
   Future<void> _toggleFollow(UserTileBloc bloc, UserTileLoaded state) async {
@@ -934,8 +1053,9 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
       create: (context) {
         final userNpub = widget.user['npub'] as String? ?? '';
         final bloc = UserTileBloc(
-          userRepository: AppDI.get<UserRepository>(),
-          authRepository: AppDI.get<AuthRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
           userNpub: userNpub,
         );
         if (userNpub.isNotEmpty) {
@@ -945,33 +1065,27 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
       },
       child: BlocBuilder<UserTileBloc, UserTileState>(
         builder: (context, state) {
-          final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
-          final userNpub = widget.user['npub'] as String? ?? '';
-          final isCurrentUser = _currentUserNpub != null &&
-              (_currentUserNpub == userPubkeyHex ||
-                  _currentUserNpub == userNpub);
+          final userPubkeyHex = widget.user['pubkeyHex'] as String? ??
+              widget.user['pubkey'] as String? ??
+              '';
+          final isCurrentUser =
+              _currentUserHex != null && _currentUserHex == userPubkeyHex;
           final loadedState =
               state is UserTileLoaded ? state : const UserTileLoaded();
 
           return GestureDetector(
             onTap: () {
               final currentLocation = GoRouterState.of(context).matchedLocation;
-              final npubParam = userNpub.isNotEmpty ? userNpub : userPubkeyHex;
-              final pubkeyHexParam =
-                  userPubkeyHex.isNotEmpty ? userPubkeyHex : userNpub;
 
               if (currentLocation.startsWith('/home/feed')) {
                 context.push(
-                    '/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                    '/home/feed/profile?pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
               } else if (currentLocation.startsWith('/home/notifications')) {
                 context.push(
-                    '/home/notifications/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
-              } else if (currentLocation.startsWith('/home/explore')) {
-                context.push(
-                    '/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                    '/home/notifications/profile?pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
               } else {
                 context.push(
-                    '/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                    '/profile?pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
               }
             },
             child: Padding(

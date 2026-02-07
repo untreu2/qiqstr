@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../presentation/blocs/edit_new_account_profile/edit_new_account_profile_bloc.dart';
 import '../../../presentation/blocs/edit_new_account_profile/edit_new_account_profile_event.dart';
 import '../../../presentation/blocs/edit_new_account_profile/edit_new_account_profile_state.dart';
@@ -293,8 +294,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
   Widget build(BuildContext context) {
     return BlocProvider<EditNewAccountProfileBloc>(
       create: (context) => EditNewAccountProfileBloc(
-        userRepository: AppDI.get(),
-        dataService: AppDI.get(),
+        syncService: AppDI.get<SyncService>(),
         npub: widget.npub,
       ),
       child:

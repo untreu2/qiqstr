@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../theme/theme_manager.dart';
+import '../../widgets/note/quote_widget.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../presentation/blocs/notification/notification_bloc.dart';
-import '../../../presentation/blocs/notification/notification_event.dart' as notification_events;
+import '../../../presentation/blocs/notification/notification_event.dart'
+    as notification_events;
 import '../../../presentation/blocs/notification/notification_state.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/notification_repository.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../widgets/note/note_content_widget.dart';
-import '../../widgets/note/quote_widget.dart';
-import '../../widgets/common/common_buttons.dart';
-import '../../../utils/string_optimizer.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/auth_service.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -25,32 +23,6 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
-  bool _isSelfNotification(dynamic item, String currentUserNpub) {
-    if (currentUserNpub.isEmpty) return false;
-
-    if (item is NotificationGroup) {
-      return item.notifications.any((notification) {
-        final author = notification['author'] as String? ?? '';
-        return author == currentUserNpub;
-      });
-    } else if (item is Map<String, dynamic>) {
-      final author = item['author'] as String? ?? '';
-      return author == currentUserNpub;
-    }
-
-    return false;
-  }
-
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final notificationRepository = AppDI.get<NotificationRepository>();
-      notificationRepository.saveLastVisitTimestamp();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return BlocProvider<NotificationBloc>(
@@ -65,192 +37,85 @@ class _NotificationPageState extends State<NotificationPage> {
         builder: (context, state) {
           return Scaffold(
             backgroundColor: context.colors.background,
-            body: switch (state) {
-              NotificationLoading() => _buildLoadingContent(context),
-              NotificationError(:final message) => _buildErrorContent(context, message),
-              NotificationsLoaded(:final notifications, :final currentUserNpub) => notifications.isEmpty
-                  ? _buildEmptyContent(context)
-                  : RefreshIndicator(
-                      onRefresh: () async {
-                        context.read<NotificationBloc>().add(const notification_events.NotificationsRefreshRequested());
-                      },
-                      color: context.colors.textPrimary,
-                      child: CustomScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: _buildHeader(context, state),
-                          ),
-                          SliverPadding(
-                            padding: const EdgeInsets.only(bottom: 80),
-                            sliver: SliverList.separated(
-                              itemCount: notifications.where((item) => !_isSelfNotification(item, currentUserNpub)).length,
-                              itemBuilder: (context, index) {
-                                final filteredNotifications = notifications.where((item) => !_isSelfNotification(item, currentUserNpub)).toList();
-                                return _buildNotificationTile(
-                                  filteredNotifications[index],
-                                  state,
-                                  index,
-                                );
-                              },
-                              separatorBuilder: (_, __) => SizedBox(
-                                height: 24,
-                                child: Center(
-                                  child: Container(
-                                    height: 0.5,
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-              _ => _buildLoadingContent(context),
-            },
+            body: _buildBody(context, state),
           );
         },
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, NotificationsLoaded state) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            'Notifications',
-            style: GoogleFonts.poppins(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
+  Widget _buildBody(BuildContext context, NotificationState state) {
+    if (state is NotificationLoading || state is NotificationInitial) {
+      return _buildLoadingContent(context);
+    }
+
+    if (state is NotificationError) {
+      return _buildErrorContent(context, state.message);
+    }
+
+    if (state is NotificationsLoaded) {
+      final notifications = state.notifications
+          .where((n) => n['author'] != state.currentUserHex)
+          .toList();
+
+      if (notifications.isEmpty) {
+        return _buildEmptyContent(context);
+      }
+
+      return RefreshIndicator(
+        onRefresh: () async {
+          context
+              .read<NotificationBloc>()
+              .add(const notification_events.NotificationsRefreshRequested());
+        },
+        color: context.colors.textPrimary,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: _buildHeader(context)),
+            SliverPadding(
+              padding: const EdgeInsets.only(bottom: 100),
+              sliver: SliverList.separated(
+                itemCount: notifications.length,
+                itemBuilder: (context, index) {
+                  return _NotificationTile(
+                    notification: notifications[index],
+                  );
+                },
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  color: context.colors.divider.withValues(alpha: 0.3),
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
+      );
+    }
+
+    return _buildLoadingContent(context);
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
+      child: Text(
+        'Notifications',
+        style: GoogleFonts.poppins(
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
+          color: context.colors.textPrimary,
+          letterSpacing: -0.5,
+        ),
       ),
     );
   }
 
-  Widget _buildNotificationTile(dynamic item, NotificationsLoaded state, int index) {
-    return _NotificationTileWidget(
-      item: item,
-      onNavigateToTargetNote: _navigateToTargetNote,
-      onNavigateToAuthorProfile: _navigateToAuthorProfile,
-      onNavigateToProfileFromContent: _navigateToProfileFromContent,
-      parseContent: _parseContent,
-      encodeEventId: _encodeEventId,
-      formatTimestamp: _formatTimestamp,
-    );
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inSeconds < 60) {
-      return 'just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
-    }
-  }
-
-  void _navigateToProfileFromContent(String npub) {
-    _openUserProfile(context, npub);
-  }
-
-  void _navigateToAuthorProfile(String npub) {
-    if (npub.isNotEmpty) {
-      _openUserProfile(context, npub);
-    }
-  }
-
-  void _openUserProfile(BuildContext context, String npub) async {
-    try {
-      final userRepository = AppDI.get<UserRepository>();
-      final userResult = await userRepository.getUserProfile(npub);
-
-      userResult.fold(
-        (user) {
-          if (context.mounted) {
-            final userNpub = user['npub'] as String? ?? '';
-            final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-            context.push('/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-          }
-        },
-        (error) {
-          debugPrint('Error navigating to profile: $error');
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to load profile: $error')),
-            );
-          }
-        },
-      );
-    } catch (e) {
-      debugPrint('Error navigating to profile: $e');
-    }
-  }
-
-  void _navigateToTargetNote(String targetEventId) {
-    if (targetEventId.isNotEmpty) {
-      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetEventId)}');
-    }
-  }
-
-  Map<String, dynamic> _parseContent(String content) {
-    try {
-      return StringOptimizer.instance.parseContentOptimized(content);
-    } catch (e) {
-      return {
-        'textParts': [
-          {'type': 'text', 'text': content}
-        ],
-        'mediaUrls': <String>[],
-        'linkUrls': <String>[],
-        'quoteIds': <String>[],
-        'articleIds': <String>[],
-      };
-    }
-  }
-
-  String _encodeEventId(String eventId) {
-    try {
-      return encodeBasicBech32(eventId, 'note');
-    } catch (e) {
-      return eventId;
-    }
-  }
-
   Widget _buildLoadingContent(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            color: context.colors.textPrimary,
-            strokeWidth: 2,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Loading notifications...',
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
-        ],
+      child: CircularProgressIndicator(
+        color: context.colors.textPrimary,
+        strokeWidth: 2,
       ),
     );
   }
@@ -271,7 +136,7 @@ class _NotificationPageState extends State<NotificationPage> {
             Text(
               'Failed to load notifications',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: context.colors.textPrimary,
               ),
@@ -285,14 +150,16 @@ class _NotificationPageState extends State<NotificationPage> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
-            PrimaryButton(
-              label: 'Retry',
+            const SizedBox(height: 24),
+            TextButton(
               onPressed: () {
-                context.read<NotificationBloc>().add(const notification_events.NotificationsLoadRequested());
+                context.read<NotificationBloc>().add(
+                    const notification_events.NotificationsLoadRequested());
               },
-              backgroundColor: context.colors.textPrimary,
-              foregroundColor: context.colors.background,
+              child: Text(
+                'Retry',
+                style: TextStyle(color: context.colors.textPrimary),
+              ),
             ),
           ],
         ),
@@ -316,7 +183,7 @@ class _NotificationPageState extends State<NotificationPage> {
             Text(
               'No notifications yet',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: context.colors.textPrimary,
               ),
@@ -337,470 +204,232 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 }
 
-class _NotificationTileWidget extends StatefulWidget {
-  final dynamic item;
-  final void Function(String) onNavigateToTargetNote;
-  final void Function(String) onNavigateToAuthorProfile;
-  final void Function(String) onNavigateToProfileFromContent;
-  final Map<String, dynamic> Function(String) parseContent;
-  final String Function(String) encodeEventId;
-  final String Function(DateTime) formatTimestamp;
+class _NotificationTile extends StatefulWidget {
+  final Map<String, dynamic> notification;
 
-  const _NotificationTileWidget({
-    required this.item,
-    required this.onNavigateToTargetNote,
-    required this.onNavigateToAuthorProfile,
-    required this.onNavigateToProfileFromContent,
-    required this.parseContent,
-    required this.encodeEventId,
-    required this.formatTimestamp,
-  });
+  const _NotificationTile({required this.notification});
 
   @override
-  State<_NotificationTileWidget> createState() => _NotificationTileWidgetState();
+  State<_NotificationTile> createState() => _NotificationTileState();
 }
 
-class _NotificationTileWidgetState extends State<_NotificationTileWidget> {
-  final Map<String, Map<String, dynamic>> _locallyLoadedProfiles = {};
-  bool _isDisposed = false;
+class _NotificationTileState extends State<_NotificationTile> {
+  Map<String, dynamic>? _profile;
 
   @override
   void initState() {
     super.initState();
-    _loadProfilesAsync();
+    _loadProfile();
   }
 
-  Future<void> _loadProfilesAsync() async {
-    if (_isDisposed || !mounted) return;
+  Future<void> _loadProfile() async {
+    final author = widget.notification['author'] as String? ?? '';
+    if (author.isEmpty) return;
+
+    final fromName = widget.notification['fromName'] as String? ?? '';
+    final fromImage = widget.notification['fromImage'] as String? ?? '';
+
+    if (fromName.isNotEmpty || fromImage.isNotEmpty) {
+      setState(() {
+        _profile = {
+          'name': fromName,
+          'profileImage': fromImage,
+        };
+      });
+    }
 
     try {
-      final authorNpubs = <String>{};
-      
-      if (widget.item is NotificationGroup) {
-        for (final notification in (widget.item as NotificationGroup).notifications) {
-          final author = notification['author'] as String? ?? '';
-          if (author.isNotEmpty) authorNpubs.add(author);
-        }
-      } else if (widget.item is Map<String, dynamic>) {
-        final author = (widget.item as Map<String, dynamic>)['author'] as String? ?? '';
-        if (author.isNotEmpty) authorNpubs.add(author);
-      }
-
-      final userRepository = AppDI.get<UserRepository>();
-      for (final npub in authorNpubs) {
-        if (_isDisposed || !mounted) return;
-        
-        final currentProfile = _locallyLoadedProfiles[npub];
-        final shouldLoad = currentProfile == null ||
-            (currentProfile['profileImage'] as String? ?? '').isEmpty ||
-            (currentProfile['name'] as String? ?? '').isEmpty ||
-            (currentProfile['name'] as String? ?? '') ==
-                (npub.length > 8 ? npub.substring(0, 8) : npub);
-
-        if (shouldLoad) {
-          final userResult = await userRepository.getUserProfile(npub);
-          userResult.fold(
-            (user) {
-              if (mounted && !_isDisposed) {
-                setState(() {
-                  _locallyLoadedProfiles[npub] = user;
-                });
-              }
-            },
-            (_) {},
-          );
-        }
+      final profileRepo = AppDI.get<ProfileRepository>();
+      final profile = await profileRepo.getProfile(author);
+      if (profile != null && mounted) {
+        setState(() {
+          _profile = {
+            'name': profile.name ?? profile.displayName ?? '',
+            'profileImage': profile.picture ?? '',
+          };
+        });
       }
     } catch (e) {
-      debugPrint('[NotificationTile] Load profiles error: $e');
+      debugPrint('[NotificationTile] Error loading profile: $e');
     }
   }
 
-  Map<String, dynamic> _getProfile(String npub) {
-    return _locallyLoadedProfiles[npub] ?? {
-      'pubkeyHex': npub,
-      'name': npub.length > 8 ? npub.substring(0, 8) : npub,
-      'about': '',
-      'profileImage': '',
-      'banner': '',
-      'website': '',
-      'nip05': '',
-      'lud16': '',
-      'updatedAt': DateTime.now(),
-      'nip05Verified': false,
-    };
-  }
-
-  String _buildGroupTitle(dynamic item, Map<String, Map<String, dynamic>> userProfiles) {
-    if (item is NotificationGroup) {
-      final notifications = item.notifications;
-      final first = notifications.first;
-      final count = notifications.length;
-      final firstType = first['type'] as String? ?? '';
-      final firstAuthor = first['author'] as String? ?? '';
-
-      switch (firstType) {
-        case 'reaction':
-          if (count == 1) {
-            final profile = userProfiles[firstAuthor] ?? _getProfile(firstAuthor);
-            final name = (profile['name'] as String? ?? '').isNotEmpty ? profile['name'] as String : 'Someone';
-            return '$name reacted to your post';
-          } else {
-            final personWord = count == 1 ? 'person' : 'people';
-            return '$count $personWord reacted to your post';
-          }
-        case 'mention':
-          if (count == 1) {
-            final profile = userProfiles[firstAuthor] ?? _getProfile(firstAuthor);
-            final name = (profile['name'] as String? ?? '').isNotEmpty ? profile['name'] as String : 'Someone';
-            return '$name mentioned you';
-          } else {
-            final personWord = count == 1 ? 'person' : 'people';
-            return '$count $personWord mentioned you';
-          }
-        case 'repost':
-          if (count == 1) {
-            final profile = userProfiles[firstAuthor] ?? _getProfile(firstAuthor);
-            final name = (profile['name'] as String? ?? '').isNotEmpty ? profile['name'] as String : 'Someone';
-            return '$name reposted your post';
-          } else {
-            final personWord = count == 1 ? 'person' : 'people';
-            return '$count $personWord reposted your post';
-          }
-        default:
-          return 'Notification';
-      }
-    } else if (item is Map<String, dynamic>) {
-      final itemAuthor = item['author'] as String? ?? '';
-      final itemType = item['type'] as String? ?? '';
-      final profile = userProfiles[itemAuthor] ?? _getProfile(itemAuthor);
-      final name = (profile['name'] as String? ?? '').isNotEmpty ? profile['name'] as String : 'Someone';
-
-      switch (itemType) {
-        case 'zap':
-          return '$name zapped your post ${item['amount'] as int? ?? 0} sats';
-        case 'reaction':
-          return '$name reacted to your post';
-        case 'mention':
-          return '$name mentioned you';
-        case 'repost':
-          return '$name reposted your post';
-        case 'follow':
-          return '$name started following you';
-        case 'unfollow':
-          return '$name unfollowed you';
-        default:
-          return 'Notification from $name';
-      }
+  String _getTypeText(String type) {
+    switch (type) {
+      case 'reaction':
+        return 'reacted to your post';
+      case 'repost':
+        return 'reposted your post';
+      case 'reply':
+        return 'replied to your post';
+      case 'mention':
+        return 'mentioned you';
+      case 'zap':
+        return 'zapped you';
+      default:
+        return 'interacted with you';
     }
-
-    return 'Notification';
   }
 
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
+  String _formatTimestamp(int? createdAt) {
+    if (createdAt == null || createdAt == 0) return '';
+
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inSeconds < 60) {
+      return 'now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d';
+    } else {
+      return '${timestamp.day}/${timestamp.month}';
+    }
+  }
+
+  void _onTap() {
+    final targetEventId = widget.notification['targetEventId'] as String? ?? '';
+    final type = widget.notification['type'] as String? ?? '';
+
+    if (type == 'follow' || type == 'unfollow') {
+      final author = widget.notification['author'] as String? ?? '';
+      if (author.isNotEmpty) {
+        _navigateToProfile(author);
+      }
+    } else if (targetEventId.isNotEmpty) {
+      context.push(
+          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetEventId)}&focusedNoteId=${Uri.encodeComponent(targetEventId)}');
+    }
+  }
+
+  void _navigateToProfile(String pubkeyHex) async {
+    try {
+      final authService = AppDI.get<AuthService>();
+      final npub = authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
+      context.push(
+          '/home/notifications/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+    } catch (e) {
+      debugPrint('[NotificationTile] Error navigating to profile: $e');
+    }
+  }
+
+  Widget _buildTargetNote(BuildContext context) {
+    final targetEventId = widget.notification['targetEventId'] as String? ?? '';
+    if (targetEventId.isEmpty) return const SizedBox.shrink();
+
+    try {
+      final noteBech32 = encodeBasicBech32(targetEventId, 'note');
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: QuoteWidget(bech32: noteBech32, shortMode: true),
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.item is NotificationGroup) {
-      final first = (widget.item as NotificationGroup).notifications.first;
-      final firstAuthor = first['author'] as String? ?? '';
-      final profile = _getProfile(firstAuthor);
-      final image = profile['profileImage'] as String? ?? '';
-      final targetEventId = first['targetEventId'] as String? ?? '';
+    final type = widget.notification['type'] as String? ?? '';
+    final author = widget.notification['author'] as String? ?? '';
+    final createdAt = widget.notification['createdAt'] as int?;
+    final content = widget.notification['content'] as String? ?? '';
 
-      return GestureDetector(
-        onTap: () => widget.onNavigateToTargetNote(targetEventId),
-        child: Container(
-          color: context.colors.background,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => widget.onNavigateToAuthorProfile(firstAuthor),
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: context.colors.grey800,
-                        backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                        child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
+    final name = _profile?['name'] as String? ?? '';
+    final image = _profile?['profileImage'] as String? ?? '';
+    final displayName = name.isNotEmpty
+        ? name
+        : (author.length > 8 ? '${author.substring(0, 8)}...' : author);
+
+    return GestureDetector(
+      onTap: _onTap,
+      child: Container(
+        color: context.colors.background,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: () => _navigateToProfile(author),
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: context.colors.avatarPlaceholder,
+                backgroundImage:
+                    image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                child: image.isEmpty
+                    ? Icon(Icons.person,
+                        size: 22, color: context.colors.textSecondary)
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: displayName,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                  color: context.colors.textPrimary,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' ${_getTypeText(type)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 15,
+                                  color: context.colors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Builder(
-                            builder: (context) {
-                              final titleText = _buildGroupTitle(widget.item, _locallyLoadedProfiles);
-                              final titleStyle = TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                                color: context.colors.textPrimary,
-                                height: 1.3,
-                              );
-                              if ((widget.item as NotificationGroup).notifications.length == 1) {
-                                return GestureDetector(
-                                  onTap: () => widget.onNavigateToAuthorProfile(firstAuthor),
-                                  child: Text(titleText, style: titleStyle),
-                                );
-                              } else {
-                                return Text(titleText, style: titleStyle);
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.formatTimestamp(() {
-                              final timestamp = first['timestamp'];
-                              if (timestamp is DateTime) return timestamp;
-                              if (timestamp is int) return DateTime.fromMillisecondsSinceEpoch(timestamp);
-                              final createdAt = first['created_at'] as int? ?? 0;
-                              return DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-                            }()),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                          if (() {
-                            final content = first['content'] as String? ?? '';
-                            final type = first['type'] as String? ?? '';
-                            return content.trim().isNotEmpty && type != 'repost' && type != 'reaction';
-                          }()) ...[
-                            const SizedBox(height: 4),
-                            NoteContentWidget(
-                              parsedContent: widget.parseContent(first['content'] as String? ?? ''),
-                              noteId: first['id'] as String? ?? '',
-                              onNavigateToMentionProfile: widget.onNavigateToProfileFromContent,
-                            ),
-                          ],
-                          const SizedBox(height: 2),
-                          QuoteWidget(
-                            bech32: widget.encodeEventId(targetEventId),
-                          ),
-                        ],
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatTimestamp(createdAt),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.colors.textSecondary,
+                        ),
                       ),
+                    ],
+                  ),
+                  if (content.isNotEmpty &&
+                      type != 'reaction' &&
+                      type != 'repost') ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      content.length > 100
+                          ? '${content.substring(0, 100)}...'
+                          : content,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: context.colors.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                ),
-              ],
+                  _buildTargetNote(context),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
-      );
-    } else if (widget.item is Map<String, dynamic> && ((widget.item as Map<String, dynamic>)['type'] as String? ?? '') == 'zap') {
-      final item = widget.item as Map<String, dynamic>;
-      final itemAuthor = item['author'] as String? ?? '';
-      final profile = _getProfile(itemAuthor);
-      final image = profile['profileImage'] as String? ?? '';
-      final profileName = profile['name'] as String? ?? '';
-      final displayName = profileName.isNotEmpty ? profileName : 'Anonymous';
-      final targetEventId = item['targetEventId'] as String? ?? '';
-
-      return GestureDetector(
-        onTap: () => widget.onNavigateToTargetNote(targetEventId),
-        child: Container(
-          color: context.colors.background,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => widget.onNavigateToAuthorProfile(itemAuthor),
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: context.colors.accent,
-                        backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                        child: image.isEmpty ? Icon(Icons.flash_on, size: 20, color: context.colors.background) : null,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          GestureDetector(
-                            onTap: () => widget.onNavigateToAuthorProfile(itemAuthor),
-                            child: RichText(
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: displayName,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15,
-                                      color: context.colors.textPrimary,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: ' zapped your post ',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w400,
-                                      fontSize: 15,
-                                      color: context.colors.textPrimary,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: '${item['amount'] as int? ?? 0} sats',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 15,
-                                      color: context.colors.accent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.formatTimestamp(() {
-                              final timestamp = item['timestamp'];
-                              if (timestamp is DateTime) return timestamp;
-                              if (timestamp is int) return DateTime.fromMillisecondsSinceEpoch(timestamp);
-                              final createdAt = item['created_at'] as int? ?? 0;
-                              return DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-                            }()),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                          if (() {
-                            final content = item['content'] as String? ?? '';
-                            return content.trim().isNotEmpty;
-                          }()) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              item['content'] as String? ?? '',
-                              style: TextStyle(
-                                color: context.colors.textPrimary,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 2),
-                          QuoteWidget(
-                            bech32: widget.encodeEventId(targetEventId),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    } else if (widget.item is Map<String, dynamic>) {
-      final item = widget.item as Map<String, dynamic>;
-      final itemAuthor = item['author'] as String? ?? '';
-      final itemType = item['type'] as String? ?? '';
-      final profile = _getProfile(itemAuthor);
-      final image = profile['profileImage'] as String? ?? '';
-      final targetEventId = item['targetEventId'] as String? ?? '';
-
-      return GestureDetector(
-        onTap: () {
-          if (itemType == 'follow' || itemType == 'unfollow') {
-            widget.onNavigateToAuthorProfile(itemAuthor);
-          } else {
-            widget.onNavigateToTargetNote(targetEventId);
-          }
-        },
-        child: Container(
-          color: context.colors.background,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => widget.onNavigateToAuthorProfile(itemAuthor),
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: context.colors.grey800,
-                        backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                        child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          GestureDetector(
-                            onTap: () => widget.onNavigateToAuthorProfile(itemAuthor),
-                            child: Text(
-                              _buildGroupTitle(widget.item, _locallyLoadedProfiles),
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                                color: context.colors.textPrimary,
-                                height: 1.3,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.formatTimestamp(() {
-                              final timestamp = item['timestamp'];
-                              if (timestamp is DateTime) return timestamp;
-                              if (timestamp is int) return DateTime.fromMillisecondsSinceEpoch(timestamp);
-                              final createdAt = item['created_at'] as int? ?? 0;
-                              return DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-                            }()),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                          if (() {
-                            final content = item['content'] as String? ?? '';
-                            return content.trim().isNotEmpty && itemType != 'repost' && itemType != 'reaction' && itemType != 'follow' && itemType != 'unfollow';
-                          }()) ...[
-                            const SizedBox(height: 4),
-                            NoteContentWidget(
-                              parsedContent: widget.parseContent(item['content'] as String? ?? ''),
-                              noteId: item['id'] as String? ?? '',
-                              onNavigateToMentionProfile: widget.onNavigateToProfileFromContent,
-                            ),
-                          ],
-                          if (itemType != 'follow' && itemType != 'unfollow') ...[
-                            const SizedBox(height: 2),
-                            QuoteWidget(
-                              bech32: widget.encodeEventId(targetEventId),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return const SizedBox.shrink();
+      ),
+    );
   }
 }

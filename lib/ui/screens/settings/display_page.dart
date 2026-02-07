@@ -169,7 +169,7 @@ class _DisplayPageState extends State<DisplayPage> {
       BuildContext context, ThemeState themeState) {
     final navItems = [
       {'index': 0, 'name': 'Home', 'icon': 'assets/house.svg'},
-      {'index': 1, 'name': 'Search', 'icon': 'assets/chat.svg'},
+      {'index': 1, 'name': 'DM', 'icon': 'assets/chat.svg'},
       {'index': 2, 'name': 'Wallet', 'icon': 'assets/wallet.svg'},
       {'index': 3, 'name': 'Notifications', 'icon': 'assets/bell.svg'},
     ];
@@ -242,7 +242,8 @@ class _DisplayPageState extends State<DisplayPage> {
                     ),
                   ),
                   child: DragTarget<int>(
-                    onAccept: (draggedIndex) {
+                    onAcceptWithDetails: (details) {
+                      final draggedIndex = details.data;
                       if (draggedIndex != originalIndex) {
                         final newOrder = List<int>.from(currentOrder);
                         final oldPos = newOrder.indexOf(draggedIndex);

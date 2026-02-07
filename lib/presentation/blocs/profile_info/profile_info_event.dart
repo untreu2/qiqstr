@@ -6,11 +6,12 @@ abstract class ProfileInfoEvent extends BaseEvent {
 
 class ProfileInfoInitialized extends ProfileInfoEvent {
   final String userPubkeyHex;
+  final Map<String, dynamic>? user;
 
-  const ProfileInfoInitialized({required this.userPubkeyHex});
+  const ProfileInfoInitialized({required this.userPubkeyHex, this.user});
 
   @override
-  List<Object?> get props => [userPubkeyHex];
+  List<Object?> get props => [userPubkeyHex, user];
 }
 
 class ProfileInfoUserUpdated extends ProfileInfoEvent {

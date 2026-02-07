@@ -6,7 +6,7 @@ import '../common/common_buttons.dart';
 
 class NoteListWidget extends StatefulWidget {
   final List<Map<String, dynamic>> notes;
-  final String? currentUserNpub;
+  final String? currentUserHex;
   final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
   final Map<String, Map<String, dynamic>> profiles;
   final bool isLoading;
@@ -21,7 +21,7 @@ class NoteListWidget extends StatefulWidget {
   const NoteListWidget({
     super.key,
     required this.notes,
-    this.currentUserNpub,
+    this.currentUserHex,
     required this.notesNotifier,
     required this.profiles,
     this.isLoading = false,
@@ -53,7 +53,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   void didUpdateWidget(NoteListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.notes.length != widget.notes.length || 
+    if (oldWidget.notes.length != widget.notes.length ||
         oldWidget.isLoading != widget.isLoading) {
       if (widget.notes.isNotEmpty) {
         _hasTriggeredEmptyRefresh = false;
@@ -64,9 +64,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _checkAndTriggerEmptyRefresh() {
-    if (widget.notes.isEmpty && 
-        !widget.isLoading && 
-        !_hasTriggeredEmptyRefresh && 
+    if (widget.notes.isEmpty &&
+        !widget.isLoading &&
+        !_hasTriggeredEmptyRefresh &&
         widget.onEmptyRefresh != null) {
       _hasTriggeredEmptyRefresh = true;
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -86,7 +86,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _onScroll() {
     if (widget.scrollController == null) return;
-    
+
     if (!_hasTriggeredLoadMore && widget.canLoadMore && !widget.isLoading) {
       final maxScroll = widget.scrollController!.position.maxScrollExtent;
       final currentScroll = widget.scrollController!.position.pixels;
@@ -144,7 +144,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     return _NoteListContent(
       notes: widget.notes,
-      currentUserNpub: widget.currentUserNpub ?? '',
+      currentUserHex: widget.currentUserHex ?? '',
       notesNotifier: widget.notesNotifier,
       profiles: widget.profiles,
       notesListProvider: widget.notesListProvider,
@@ -156,7 +156,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
 class _NoteListContent extends StatelessWidget {
   final List<Map<String, dynamic>> notes;
-  final String currentUserNpub;
+  final String currentUserHex;
   final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
   final Map<String, Map<String, dynamic>> profiles;
   final dynamic notesListProvider;
@@ -165,7 +165,7 @@ class _NoteListContent extends StatelessWidget {
 
   const _NoteListContent({
     required this.notes,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     required this.notesNotifier,
     required this.profiles,
     this.notesListProvider,
@@ -179,7 +179,8 @@ class _NoteListContent extends StatelessWidget {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           if (index >= notes.length) {
-            return SizedBox(height: MediaQuery.of(context).padding.bottom + 120);
+            return SizedBox(
+                height: MediaQuery.of(context).padding.bottom + 120);
           }
 
           final note = notes[index];
@@ -190,7 +191,7 @@ class _NoteListContent extends StatelessWidget {
             child: _NoteItemWidget(
               key: ValueKey('note_item_$noteId'),
               note: note,
-              currentUserNpub: currentUserNpub,
+              currentUserHex: currentUserHex,
               notesNotifier: notesNotifier,
               profiles: profiles,
               notesListProvider: notesListProvider,
@@ -209,7 +210,7 @@ class _NoteListContent extends StatelessWidget {
 
 class _NoteItemWidget extends StatefulWidget {
   final Map<String, dynamic> note;
-  final String currentUserNpub;
+  final String currentUserHex;
   final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
   final Map<String, Map<String, dynamic>> profiles;
   final dynamic notesListProvider;
@@ -218,7 +219,7 @@ class _NoteItemWidget extends StatefulWidget {
   const _NoteItemWidget({
     super.key,
     required this.note,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     required this.notesNotifier,
     required this.profiles,
     this.notesListProvider,
@@ -229,20 +230,21 @@ class _NoteItemWidget extends StatefulWidget {
   State<_NoteItemWidget> createState() => _NoteItemWidgetState();
 }
 
-class _NoteItemWidgetState extends State<_NoteItemWidget> with AutomaticKeepAliveClientMixin {
+class _NoteItemWidgetState extends State<_NoteItemWidget>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         NoteWidget(
           note: widget.note,
-          currentUserNpub: widget.currentUserNpub,
+          currentUserHex: widget.currentUserHex,
           notesNotifier: widget.notesNotifier,
           profiles: widget.profiles,
           containerColor: null,

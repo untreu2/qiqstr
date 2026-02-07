@@ -100,7 +100,8 @@ class _WebViewPageState extends State<WebViewPage> {
             children: [
               Expanded(
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(20)),
                   child: WebViewWidget(
                     controller: _controller,
                     gestureRecognizers: {
@@ -124,7 +125,8 @@ class _WebViewPageState extends State<WebViewPage> {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(colors.accent),
                       ),
                     ),
                   ),
@@ -145,13 +147,13 @@ class _WebViewPageState extends State<WebViewPage> {
             onSharePressed: () async {
               try {
                 final url = _currentUrl.isNotEmpty ? _currentUrl : widget.url;
-                
+
                 final box = context.findRenderObject() as RenderBox?;
                 await SharePlus.instance.share(
                   ShareParams(
                     text: url,
-                    sharePositionOrigin: box != null 
-                        ? box.localToGlobal(Offset.zero) & box.size 
+                    sharePositionOrigin: box != null
+                        ? box.localToGlobal(Offset.zero) & box.size
                         : null,
                   ),
                 );
@@ -165,4 +167,3 @@ class _WebViewPageState extends State<WebViewPage> {
     );
   }
 }
-

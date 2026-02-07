@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../../data/services/rust_nostr_bridge.dart';
 import '../../ui/screens/auth/login_page.dart';
 import '../../ui/screens/auth/edit_new_account_profile.dart';
 import '../../ui/screens/settings/keys_info_page.dart';
@@ -30,6 +30,18 @@ import '../../core/di/app_di.dart';
 import '../../data/services/auth_service.dart';
 
 class AppRouter {
+  static String _normalizeToHex(String? pubkey) {
+    if (pubkey == null || pubkey.isEmpty) return '';
+    if (pubkey.startsWith('npub1')) {
+      try {
+        return decodeBasicBech32(pubkey, 'npub');
+      } catch (e) {
+        return pubkey;
+      }
+    }
+    return pubkey;
+  }
+
   static final GoRouter router = GoRouter(
     initialLocation: '/login',
     redirect: _handleRedirect,
@@ -84,9 +96,9 @@ class AppRouter {
                 builder: (context, state) {
                   final location = state.uri.toString();
                   final uri = Uri.parse(location);
-                  final npub = uri.queryParameters['npub'] ?? '';
+                  final userHex = _normalizeToHex(uri.queryParameters['npub']);
                   final hashtag = uri.queryParameters['hashtag'];
-                  return FeedPage(npub: npub, hashtag: hashtag);
+                  return FeedPage(userHex: userHex, hashtag: hashtag);
                 },
                 routes: [
                   GoRoute(
@@ -179,25 +191,17 @@ class AppRouter {
                     },
                   ),
                   GoRoute(
-                    path: 'dm',
-                    name: 'feed-dm',
-                    builder: (context, state) => const DmConversationsPage(),
+                    path: 'explore',
+                    name: 'feed-explore',
+                    builder: (context, state) => const ExplorePage(),
                     routes: [
                       GoRoute(
-                        path: 'chat',
-                        name: 'feed-dm-chat',
+                        path: 'article',
+                        name: 'feed-explore-article',
                         builder: (context, state) {
-                          final pubkeyHexParam =
-                              state.uri.queryParameters['pubkeyHex'] ?? '';
-                          String pubkeyHex = pubkeyHexParam;
-                          if (pubkeyHex.startsWith('npub1')) {
-                            try {
-                              pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
-                            } catch (e) {
-                              pubkeyHex = pubkeyHexParam;
-                            }
-                          }
-                          return DmChatPage(pubkeyHex: pubkeyHex);
+                          final articleId =
+                              state.uri.queryParameters['articleId'] ?? '';
+                          return ArticleDetailPage(articleId: articleId);
                         },
                       ),
                     ],
@@ -206,7 +210,8 @@ class AppRouter {
                     path: 'article',
                     name: 'feed-article',
                     builder: (context, state) {
-                      final articleId = state.uri.queryParameters['articleId'] ?? '';
+                      final articleId =
+                          state.uri.queryParameters['articleId'] ?? '';
                       return ArticleDetailPage(articleId: articleId);
                     },
                   ),
@@ -217,16 +222,25 @@ class AppRouter {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/home/explore',
-                name: 'explore',
-                builder: (context, state) => const ExplorePage(),
+                path: '/home/dm',
+                name: 'dm-tab',
+                builder: (context, state) => const DmConversationsPage(),
                 routes: [
                   GoRoute(
-                    path: 'article',
-                    name: 'explore-article',
+                    path: 'chat',
+                    name: 'dm-tab-chat',
                     builder: (context, state) {
-                      final articleId = state.uri.queryParameters['articleId'] ?? '';
-                      return ArticleDetailPage(articleId: articleId);
+                      final pubkeyHexParam =
+                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex = pubkeyHexParam;
+                      if (pubkeyHex.startsWith('npub1')) {
+                        try {
+                          pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                        } catch (e) {
+                          pubkeyHex = pubkeyHexParam;
+                        }
+                      }
+                      return DmChatPage(pubkeyHex: pubkeyHex);
                     },
                   ),
                 ],

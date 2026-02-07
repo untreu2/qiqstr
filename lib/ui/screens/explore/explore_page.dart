@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/article/article_widget.dart';
+import '../../widgets/common/back_button_widget.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../presentation/blocs/article/article_event.dart';
 import '../../../presentation/blocs/article/article_state.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/services/auth_service.dart';
 
 class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key});
@@ -21,28 +21,23 @@ class ExplorePage extends StatefulWidget {
 class _ExplorePageState extends State<ExplorePage> {
   late ScrollController _scrollController;
   Timer? _scrollDebounceTimer;
-  String? _currentUserNpub;
+  String? _currentUserHex;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    _loadCurrentUserNpub();
+    _loadCurrentUserHex();
   }
 
-  Future<void> _loadCurrentUserNpub() async {
-    final authRepository = AppDI.get<AuthRepository>();
-    final result = await authRepository.getCurrentUserNpub();
-    result.fold(
-      (npub) {
-        if (mounted) {
-          setState(() {
-            _currentUserNpub = npub;
-          });
-        }
-      },
-      (_) {},
-    );
+  Future<void> _loadCurrentUserHex() async {
+    final authService = AppDI.get<AuthService>();
+    final hex = authService.currentUserPubkeyHex;
+    if (hex != null && mounted) {
+      setState(() {
+        _currentUserHex = hex;
+      });
+    }
   }
 
   @override
@@ -63,8 +58,9 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 4),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -86,7 +82,7 @@ class _ExplorePageState extends State<ExplorePage> {
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    if (_currentUserNpub == null) {
+    if (_currentUserHex == null) {
       return Scaffold(
         backgroundColor: colors.background,
         body: Center(
@@ -98,17 +94,22 @@ class _ExplorePageState extends State<ExplorePage> {
     return BlocProvider<ArticleBloc>(
       create: (context) {
         final bloc = AppDI.get<ArticleBloc>();
-        bloc.add(ArticleInitialized(npub: _currentUserNpub!));
+        bloc.add(ArticleInitialized(userHex: _currentUserHex!));
         return bloc;
       },
       child: BlocBuilder<ArticleBloc, ArticleState>(
         builder: (context, articleState) {
           return Scaffold(
             backgroundColor: colors.background,
-            body: _buildArticleContent(
-              context,
-              articleState,
-              colors,
+            body: Stack(
+              children: [
+                _buildArticleContent(
+                  context,
+                  articleState,
+                  colors,
+                ),
+                const BackButtonWidget.floating(),
+              ],
             ),
           );
         },
@@ -131,7 +132,7 @@ class _ExplorePageState extends State<ExplorePage> {
       ArticleLoaded(
         :final filteredArticles,
         :final profiles,
-        :final currentUserNpub,
+        :final currentUserHex,
         :final isLoadingMore,
         :final canLoadMore
       ) =>
@@ -155,12 +156,14 @@ class _ExplorePageState extends State<ExplorePage> {
               ),
               ArticleListWidget(
                 articles: filteredArticles,
-                currentUserNpub: currentUserNpub,
+                currentUserHex: currentUserHex,
                 profiles: profiles,
                 isLoading: isLoadingMore,
                 canLoadMore: canLoadMore,
                 onLoadMore: () {
-                  context.read<ArticleBloc>().add(const ArticleLoadMoreRequested());
+                  context
+                      .read<ArticleBloc>()
+                      .add(const ArticleLoadMoreRequested());
                 },
                 onEmptyRefresh: () {
                   context.read<ArticleBloc>().add(const ArticleRefreshed());

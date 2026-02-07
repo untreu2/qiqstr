@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/wallet/wallet_bloc.dart';
 import '../../../presentation/blocs/wallet/wallet_event.dart';
 import '../../../presentation/blocs/wallet/wallet_state.dart';
-import '../../../data/repositories/wallet_repository.dart';
-import '../../../core/di/app_di.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/dialogs/receive_dialog.dart';
 import '../../widgets/dialogs/send_dialog.dart';
@@ -283,7 +281,6 @@ class _WalletPageState extends State<WalletPage>
   }
 
   void _showReceiveDialog(BuildContext context, WalletLoaded state) {
-    final walletRepository = AppDI.get<WalletRepository>();
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -293,14 +290,12 @@ class _WalletPageState extends State<WalletPage>
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => ReceiveDialog(
-        walletRepository: walletRepository,
         lud16: state.user?['lud16'] as String? ?? '',
       ),
     );
   }
 
   void _showSendDialog(BuildContext context, WalletLoaded state) {
-    final walletRepository = AppDI.get<WalletRepository>();
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -310,7 +305,6 @@ class _WalletPageState extends State<WalletPage>
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => SendDialog(
-        walletRepository: walletRepository,
         onPaymentSuccess: () {
           context.read<WalletBloc>().add(const WalletBalanceRequested());
         },

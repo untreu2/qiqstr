@@ -21,7 +21,6 @@ class MediaPreviewWidget extends StatefulWidget {
 }
 
 class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
-
   late final List<String> _videoUrls;
   late final List<String> _imageUrls;
   late final bool _hasVideo;
@@ -36,7 +35,9 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
   void _processUrls() {
     _videoUrls = widget.mediaUrls.where((url) {
       final lower = url.toLowerCase();
-      return lower.endsWith('.mp4') || lower.endsWith('.mkv') || lower.endsWith('.mov');
+      return lower.endsWith('.mp4') ||
+          lower.endsWith('.mkv') ||
+          lower.endsWith('.mov');
     }).toList();
 
     _imageUrls = widget.mediaUrls.where((url) {
@@ -89,12 +90,12 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
                 topLeft: Radius.circular(MediaPreviewWidget.borderRadius),
                 bottomLeft: Radius.circular(MediaPreviewWidget.borderRadius),
               ),
-            child: _buildImage(
-              context,
-              imageUrls[0],
-              0,
-              imageUrls,
-              aspectRatio: 3 / 4,
+              child: _buildImage(
+                context,
+                imageUrls[0],
+                0,
+                imageUrls,
+                aspectRatio: 3 / 4,
               ),
             ),
           ),
@@ -105,12 +106,12 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
                 topRight: Radius.circular(MediaPreviewWidget.borderRadius),
                 bottomRight: Radius.circular(MediaPreviewWidget.borderRadius),
               ),
-            child: _buildImage(
-              context,
-              imageUrls[1],
-              1,
-              imageUrls,
-              aspectRatio: 3 / 4,
+              child: _buildImage(
+                context,
+                imageUrls[1],
+                1,
+                imageUrls,
+                aspectRatio: 3 / 4,
               ),
             ),
           ),
@@ -129,58 +130,61 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
 
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 2,
+            children: [
+              Expanded(
+                flex: 2,
                 child: ClipRRect(
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(MediaPreviewWidget.borderRadius),
-                    bottomLeft: Radius.circular(MediaPreviewWidget.borderRadius),
+                    bottomLeft:
+                        Radius.circular(MediaPreviewWidget.borderRadius),
                   ),
-            child: _buildImage(
-              context,
-              imageUrls[0],
-              0,
-              imageUrls,
+                  child: _buildImage(
+                    context,
+                    imageUrls[0],
+                    0,
+                    imageUrls,
                     aspectRatio: leftAspectRatio,
                   ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            flex: 1,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                flex: 1,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(MediaPreviewWidget.borderRadius),
+                        topRight:
+                            Radius.circular(MediaPreviewWidget.borderRadius),
                       ),
                       child: _buildImage(
-                  context,
-                  imageUrls[1],
-                  1,
-                  imageUrls,
-                  aspectRatio: 1.0,
+                        context,
+                        imageUrls[1],
+                        1,
+                        imageUrls,
+                        aspectRatio: 1.0,
                       ),
-                ),
-                const SizedBox(height: 4),
+                    ),
+                    const SizedBox(height: 4),
                     ClipRRect(
                       borderRadius: const BorderRadius.only(
-                        bottomRight: Radius.circular(MediaPreviewWidget.borderRadius),
+                        bottomRight:
+                            Radius.circular(MediaPreviewWidget.borderRadius),
                       ),
                       child: _buildImage(
-                  context,
-                  imageUrls[2],
-                  2,
-                  imageUrls,
-                  aspectRatio: 1.0,
+                        context,
+                        imageUrls[2],
+                        2,
+                        imageUrls,
+                        aspectRatio: 1.0,
                       ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
           );
         },
       );
@@ -190,42 +194,42 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
       return ClipRRect(
         borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
         child: GridView.builder(
-        shrinkWrap: true,
-        padding: EdgeInsets.zero,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: itemCount,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 4,
-          mainAxisSpacing: 4,
-        ),
-        itemBuilder: (context, index) {
-          return Stack(
-            children: [
-              _buildImage(
-                context,
-                imageUrls[index],
-                index,
-                imageUrls,
-                aspectRatio: 1.0,
-              ),
-              if (index == 3 && imageUrls.length > 4)
-                Container(
-                  color: context.colors.overlayDark,
-                  alignment: Alignment.center,
-                  child: Text(
-                    '+${imageUrls.length - 4}',
-                    style: TextStyle(
-                      color: context.colors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: itemCount,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
+          ),
+          itemBuilder: (context, index) {
+            return Stack(
+              children: [
+                _buildImage(
+                  context,
+                  imageUrls[index],
+                  index,
+                  imageUrls,
+                  aspectRatio: 1.0,
+                ),
+                if (index == 3 && imageUrls.length > 4)
+                  Container(
+                    color: context.colors.overlayDark,
+                    alignment: Alignment.center,
+                    child: Text(
+                      '+${imageUrls.length - 4}',
+                      style: TextStyle(
+                        color: context.colors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-            ],
-          );
-        },
-      ),
+              ],
+            );
+          },
+        ),
       );
     }
   }
@@ -267,7 +271,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
         child: Icon(Icons.broken_image, color: context.colors.textSecondary),
       ),
     );
-    
+
     if (useAspectRatio && aspectRatio != null) {
       image = AspectRatio(aspectRatio: aspectRatio, child: image);
     }

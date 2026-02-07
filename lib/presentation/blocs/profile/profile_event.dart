@@ -54,3 +54,25 @@ class ProfileUserUpdated extends ProfileEvent {
   @override
   List<Object?> get props => [user];
 }
+
+class ProfileUserNotePublished extends ProfileEvent {
+  final Map<String, dynamic> note;
+
+  const ProfileUserNotePublished(this.note);
+
+  @override
+  List<Object?> get props => [note];
+}
+
+class ProfileProfilesLoaded extends ProfileEvent {
+  final Map<String, Map<String, dynamic>> profiles;
+
+  const ProfileProfilesLoaded(this.profiles);
+
+  @override
+  List<Object?> get props => [profiles];
+}
+
+class ProfileSyncCompleted extends ProfileEvent {
+  const ProfileSyncCompleted();
+}

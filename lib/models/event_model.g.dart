@@ -37,38 +37,54 @@ const EventModelSchema = CollectionSchema(
       name: r'createdAtDateTime',
       type: IsarType.dateTime,
     ),
-    r'eventId': PropertySchema(
+    r'dTag': PropertySchema(
       id: 4,
+      name: r'dTag',
+      type: IsarType.string,
+    ),
+    r'eventId': PropertySchema(
+      id: 5,
       name: r'eventId',
       type: IsarType.string,
     ),
     r'kind': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'kind',
       type: IsarType.long,
     ),
+    r'lastSyncedAt': PropertySchema(
+      id: 7,
+      name: r'lastSyncedAt',
+      type: IsarType.dateTime,
+    ),
     r'pubkey': PropertySchema(
-      id: 6,
+      id: 8,
       name: r'pubkey',
       type: IsarType.string,
     ),
     r'rawEvent': PropertySchema(
-      id: 7,
+      id: 9,
       name: r'rawEvent',
       type: IsarType.string,
     ),
     r'relayUrl': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'relayUrl',
       type: IsarType.string,
     ),
     r'sig': PropertySchema(
-      id: 9,
+      id: 11,
       name: r'sig',
       type: IsarType.string,
     ),
+    r'syncStatus': PropertySchema(
+      id: 12,
+      name: r'syncStatus',
+      type: IsarType.byte,
+      enumMap: _EventModelsyncStatusEnumValueMap,
+    ),
     r'tags': PropertySchema(
-      id: 10,
+      id: 13,
       name: r'tags',
       type: IsarType.stringList,
     )
@@ -158,6 +174,19 @@ const EventModelSchema = CollectionSchema(
           caseSensitive: false,
         )
       ],
+    ),
+    r'dTag': IndexSchema(
+      id: -4849607525363452568,
+      name: r'dTag',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'dTag',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
     )
   },
   links: {},
@@ -175,6 +204,12 @@ int _eventModelEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.content.length * 3;
+  {
+    final value = object.dTag;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.eventId.length * 3;
   bytesCount += 3 + object.pubkey.length * 3;
   bytesCount += 3 + object.rawEvent.length * 3;
@@ -205,13 +240,16 @@ void _eventModelSerialize(
   writer.writeString(offsets[1], object.content);
   writer.writeLong(offsets[2], object.createdAt);
   writer.writeDateTime(offsets[3], object.createdAtDateTime);
-  writer.writeString(offsets[4], object.eventId);
-  writer.writeLong(offsets[5], object.kind);
-  writer.writeString(offsets[6], object.pubkey);
-  writer.writeString(offsets[7], object.rawEvent);
-  writer.writeString(offsets[8], object.relayUrl);
-  writer.writeString(offsets[9], object.sig);
-  writer.writeStringList(offsets[10], object.tags);
+  writer.writeString(offsets[4], object.dTag);
+  writer.writeString(offsets[5], object.eventId);
+  writer.writeLong(offsets[6], object.kind);
+  writer.writeDateTime(offsets[7], object.lastSyncedAt);
+  writer.writeString(offsets[8], object.pubkey);
+  writer.writeString(offsets[9], object.rawEvent);
+  writer.writeString(offsets[10], object.relayUrl);
+  writer.writeString(offsets[11], object.sig);
+  writer.writeByte(offsets[12], object.syncStatus.index);
+  writer.writeStringList(offsets[13], object.tags);
 }
 
 EventModel _eventModelDeserialize(
@@ -224,14 +262,19 @@ EventModel _eventModelDeserialize(
   object.cachedAt = reader.readDateTime(offsets[0]);
   object.content = reader.readString(offsets[1]);
   object.createdAt = reader.readLong(offsets[2]);
-  object.eventId = reader.readString(offsets[4]);
+  object.dTag = reader.readStringOrNull(offsets[4]);
+  object.eventId = reader.readString(offsets[5]);
   object.id = id;
-  object.kind = reader.readLong(offsets[5]);
-  object.pubkey = reader.readString(offsets[6]);
-  object.rawEvent = reader.readString(offsets[7]);
-  object.relayUrl = reader.readStringOrNull(offsets[8]);
-  object.sig = reader.readString(offsets[9]);
-  object.tags = reader.readStringList(offsets[10]) ?? [];
+  object.kind = reader.readLong(offsets[6]);
+  object.lastSyncedAt = reader.readDateTimeOrNull(offsets[7]);
+  object.pubkey = reader.readString(offsets[8]);
+  object.rawEvent = reader.readString(offsets[9]);
+  object.relayUrl = reader.readStringOrNull(offsets[10]);
+  object.sig = reader.readString(offsets[11]);
+  object.syncStatus =
+      _EventModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[12])] ??
+          SyncStatus.pending;
+  object.tags = reader.readStringList(offsets[13]) ?? [];
   return object;
 }
 
@@ -251,23 +294,42 @@ P _eventModelDeserializeProp<P>(
     case 3:
       return (reader.readDateTime(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
-    case 5:
-      return (reader.readLong(offset)) as P;
-    case 6:
-      return (reader.readString(offset)) as P;
-    case 7:
-      return (reader.readString(offset)) as P;
-    case 8:
       return (reader.readStringOrNull(offset)) as P;
+    case 5:
+      return (reader.readString(offset)) as P;
+    case 6:
+      return (reader.readLong(offset)) as P;
+    case 7:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 8:
+      return (reader.readString(offset)) as P;
     case 9:
       return (reader.readString(offset)) as P;
     case 10:
+      return (reader.readStringOrNull(offset)) as P;
+    case 11:
+      return (reader.readString(offset)) as P;
+    case 12:
+      return (_EventModelsyncStatusValueEnumMap[
+              reader.readByteOrNull(offset)] ??
+          SyncStatus.pending) as P;
+    case 13:
       return (reader.readStringList(offset) ?? []) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
 }
+
+const _EventModelsyncStatusEnumValueMap = {
+  'pending': 0,
+  'synced': 1,
+  'failed': 2,
+};
+const _EventModelsyncStatusValueEnumMap = {
+  0: SyncStatus.pending,
+  1: SyncStatus.synced,
+  2: SyncStatus.failed,
+};
 
 Id _eventModelGetId(EventModel object) {
   return object.id;
@@ -1090,6 +1152,71 @@ extension EventModelQueryWhere
       ));
     });
   }
+
+  QueryBuilder<EventModel, EventModel, QAfterWhereClause> dTagIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'dTag',
+        value: [null],
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterWhereClause> dTagIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'dTag',
+        lower: [null],
+        includeLower: false,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterWhereClause> dTagEqualTo(
+      String? dTag) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'dTag',
+        value: [dTag],
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterWhereClause> dTagNotEqualTo(
+      String? dTag) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dTag',
+              lower: [],
+              upper: [dTag],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dTag',
+              lower: [dTag],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dTag',
+              lower: [dTag],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dTag',
+              lower: [],
+              upper: [dTag],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
 }
 
 extension EventModelQueryFilter
@@ -1390,6 +1517,152 @@ extension EventModelQueryFilter
     });
   }
 
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'dTag',
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'dTag',
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'dTag',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'dTag',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'dTag',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'dTag',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'dTag',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'dTag',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'dTag',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'dTag',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'dTag',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> dTagIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'dTag',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<EventModel, EventModel, QAfterFilterCondition> eventIdEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1620,6 +1893,80 @@ extension EventModelQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'kind',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      lastSyncedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'lastSyncedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      lastSyncedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'lastSyncedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      lastSyncedAtEqualTo(DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'lastSyncedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      lastSyncedAtGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'lastSyncedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      lastSyncedAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'lastSyncedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      lastSyncedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'lastSyncedAt',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -2174,6 +2521,61 @@ extension EventModelQueryFilter
     });
   }
 
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> syncStatusEqualTo(
+      SyncStatus value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'syncStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      syncStatusGreaterThan(
+    SyncStatus value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'syncStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
+      syncStatusLessThan(
+    SyncStatus value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'syncStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterFilterCondition> syncStatusBetween(
+    SyncStatus lower,
+    SyncStatus upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'syncStatus',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<EventModel, EventModel, QAfterFilterCondition>
       tagsElementEqualTo(
     String value, {
@@ -2454,6 +2856,18 @@ extension EventModelQuerySortBy
     });
   }
 
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> sortByDTag() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dTag', Sort.asc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> sortByDTagDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dTag', Sort.desc);
+    });
+  }
+
   QueryBuilder<EventModel, EventModel, QAfterSortBy> sortByEventId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'eventId', Sort.asc);
@@ -2475,6 +2889,18 @@ extension EventModelQuerySortBy
   QueryBuilder<EventModel, EventModel, QAfterSortBy> sortByKindDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'kind', Sort.desc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> sortByLastSyncedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastSyncedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> sortByLastSyncedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastSyncedAt', Sort.desc);
     });
   }
 
@@ -2523,6 +2949,18 @@ extension EventModelQuerySortBy
   QueryBuilder<EventModel, EventModel, QAfterSortBy> sortBySigDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sig', Sort.desc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> sortBySyncStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> sortBySyncStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.desc);
     });
   }
 }
@@ -2578,6 +3016,18 @@ extension EventModelQuerySortThenBy
     });
   }
 
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> thenByDTag() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dTag', Sort.asc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> thenByDTagDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dTag', Sort.desc);
+    });
+  }
+
   QueryBuilder<EventModel, EventModel, QAfterSortBy> thenByEventId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'eventId', Sort.asc);
@@ -2611,6 +3061,18 @@ extension EventModelQuerySortThenBy
   QueryBuilder<EventModel, EventModel, QAfterSortBy> thenByKindDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'kind', Sort.desc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> thenByLastSyncedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastSyncedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> thenByLastSyncedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastSyncedAt', Sort.desc);
     });
   }
 
@@ -2661,6 +3123,18 @@ extension EventModelQuerySortThenBy
       return query.addSortBy(r'sig', Sort.desc);
     });
   }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> thenBySyncStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QAfterSortBy> thenBySyncStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.desc);
+    });
+  }
 }
 
 extension EventModelQueryWhereDistinct
@@ -2691,6 +3165,13 @@ extension EventModelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<EventModel, EventModel, QDistinct> distinctByDTag(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'dTag', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<EventModel, EventModel, QDistinct> distinctByEventId(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -2701,6 +3182,12 @@ extension EventModelQueryWhereDistinct
   QueryBuilder<EventModel, EventModel, QDistinct> distinctByKind() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'kind');
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QDistinct> distinctByLastSyncedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'lastSyncedAt');
     });
   }
 
@@ -2729,6 +3216,12 @@ extension EventModelQueryWhereDistinct
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'sig', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<EventModel, EventModel, QDistinct> distinctBySyncStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'syncStatus');
     });
   }
 
@@ -2772,6 +3265,12 @@ extension EventModelQueryProperty
     });
   }
 
+  QueryBuilder<EventModel, String?, QQueryOperations> dTagProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'dTag');
+    });
+  }
+
   QueryBuilder<EventModel, String, QQueryOperations> eventIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'eventId');
@@ -2781,6 +3280,12 @@ extension EventModelQueryProperty
   QueryBuilder<EventModel, int, QQueryOperations> kindProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'kind');
+    });
+  }
+
+  QueryBuilder<EventModel, DateTime?, QQueryOperations> lastSyncedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'lastSyncedAt');
     });
   }
 
@@ -2805,6 +3310,12 @@ extension EventModelQueryProperty
   QueryBuilder<EventModel, String, QQueryOperations> sigProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'sig');
+    });
+  }
+
+  QueryBuilder<EventModel, SyncStatus, QQueryOperations> syncStatusProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'syncStatus');
     });
   }
 

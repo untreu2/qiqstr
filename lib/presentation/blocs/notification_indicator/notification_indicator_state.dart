@@ -10,9 +10,13 @@ class NotificationIndicatorInitial extends NotificationIndicatorState {
 
 class NotificationIndicatorLoaded extends NotificationIndicatorState {
   final bool hasNewNotifications;
+  final int notificationCount;
 
-  const NotificationIndicatorLoaded({required this.hasNewNotifications});
+  const NotificationIndicatorLoaded({
+    required this.hasNewNotifications,
+    this.notificationCount = 0,
+  });
 
   @override
-  List<Object?> get props => [hasNewNotifications];
+  List<Object?> get props => [hasNewNotifications, notificationCount];
 }

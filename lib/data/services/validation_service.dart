@@ -1,6 +1,5 @@
-import 'package:ndk/ndk.dart';
-
 import '../../core/base/result.dart';
+import 'rust_nostr_bridge.dart';
 
 class ValidationService {
   static final ValidationService _instance = ValidationService._internal();
@@ -46,23 +45,18 @@ class ValidationService {
       } catch (e) {
         return const Result.error('Invalid NPUB format');
       }
-    }
-
-    else if (npub.length == 64) {
+    } else if (npub.length == 64) {
       try {
         int.parse(npub, radix: 16);
         return const Result.success(null);
       } catch (e) {
         return const Result.error('Invalid hex public key format');
       }
-    }
-
-    else if (npub.length >= 8) {
+    } else if (npub.length >= 8) {
       return const Result.success(null);
-    }
-
-    else {
-      return const Result.error('NPUB must be in npub1 bech32 format or valid hex format');
+    } else {
+      return const Result.error(
+          'NPUB must be in npub1 bech32 format or valid hex format');
     }
   }
 
@@ -106,7 +100,8 @@ class ValidationService {
     }
 
     if (content.length > 2000) {
-      return const Result.error('Note content is too long (max 2000 characters)');
+      return const Result.error(
+          'Note content is too long (max 2000 characters)');
     }
 
     return const Result.success(null);
@@ -126,7 +121,8 @@ class ValidationService {
 
   Result<void> validateProfileAbout(String about) {
     if (about.length > 500) {
-      return const Result.error('About section is too long (max 500 characters)');
+      return const Result.error(
+          'About section is too long (max 500 characters)');
     }
 
     return const Result.success(null);
@@ -140,7 +136,8 @@ class ValidationService {
     try {
       final uri = Uri.parse(url);
       if (!uri.hasScheme) {
-        return const Result.error('URL must include protocol (http:// or https://)');
+        return const Result.error(
+            'URL must include protocol (http:// or https://)');
       }
       if (!['http', 'https'].contains(uri.scheme.toLowerCase())) {
         return const Result.error('URL must use HTTP or HTTPS protocol');
@@ -157,19 +154,22 @@ class ValidationService {
     }
 
     if (!nip05.contains('@')) {
-      return const Result.error('NIP-05 must be in format: username@domain.com');
+      return const Result.error(
+          'NIP-05 must be in format: username@domain.com');
     }
 
     final parts = nip05.split('@');
     if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
-      return const Result.error('NIP-05 must be in format: username@domain.com');
+      return const Result.error(
+          'NIP-05 must be in format: username@domain.com');
     }
 
     final username = parts[0];
     final domain = parts[1];
 
     if (username.length > 64) {
-      return const Result.error('NIP-05 username is too long (max 64 characters)');
+      return const Result.error(
+          'NIP-05 username is too long (max 64 characters)');
     }
 
     if (!domain.contains('.')) {
@@ -185,12 +185,14 @@ class ValidationService {
     }
 
     if (!lud16.contains('@')) {
-      return const Result.error('Lightning address must be in format: username@domain.com');
+      return const Result.error(
+          'Lightning address must be in format: username@domain.com');
     }
 
     final parts = lud16.split('@');
     if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
-      return const Result.error('Lightning address must be in format: username@domain.com');
+      return const Result.error(
+          'Lightning address must be in format: username@domain.com');
     }
 
     return const Result.success(null);
@@ -205,7 +207,8 @@ class ValidationService {
       final uri = Uri.parse(relayUrl);
 
       if (!['ws', 'wss'].contains(uri.scheme.toLowerCase())) {
-        return const Result.error('Relay URL must use WebSocket protocol (ws:// or wss://)');
+        return const Result.error(
+            'Relay URL must use WebSocket protocol (ws:// or wss://)');
       }
 
       if (uri.host.isEmpty) {
@@ -246,7 +249,8 @@ class ValidationService {
     }
 
     if (text.length > maxLength) {
-      return Result.error('$fieldName must be no more than $maxLength characters');
+      return Result.error(
+          '$fieldName must be no more than $maxLength characters');
     }
 
     return const Result.success(null);
@@ -261,7 +265,8 @@ class ValidationResult {
 
   factory ValidationResult.valid() => const ValidationResult._(true, null);
 
-  factory ValidationResult.invalid(String message) => ValidationResult._(false, message);
+  factory ValidationResult.invalid(String message) =>
+      ValidationResult._(false, message);
 
   factory ValidationResult.fromResult(Result<void> result) {
     return result.fold(

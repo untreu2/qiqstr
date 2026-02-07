@@ -87,7 +87,8 @@ final class InitialState<T> extends UIState<T> {
   const InitialState();
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is InitialState<T>;
+  bool operator ==(Object other) =>
+      identical(this, other) || other is InitialState<T>;
 
   @override
   int get hashCode => runtimeType.hashCode;
@@ -102,7 +103,8 @@ final class LoadingState<T> extends UIState<T> {
   final LoadingType type;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is LoadingState<T> && type == other.type;
+  bool operator ==(Object other) =>
+      identical(this, other) || other is LoadingState<T> && type == other.type;
 
   @override
   int get hashCode => type.hashCode;
@@ -118,7 +120,8 @@ final class LoadedState<T> extends UIState<T> {
   final T data;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is LoadedState<T> && data == other.data;
+  bool operator ==(Object other) =>
+      identical(this, other) || other is LoadedState<T> && data == other.data;
 
   @override
   int get hashCode => data.hashCode;
@@ -133,7 +136,9 @@ final class ErrorState<T> extends UIState<T> {
   final String message;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is ErrorState<T> && message == other.message;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ErrorState<T> && message == other.message;
 
   @override
   int get hashCode => message.hashCode;
@@ -148,7 +153,9 @@ final class EmptyState<T> extends UIState<T> {
   final String? message;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is EmptyState<T> && message == other.message;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EmptyState<T> && message == other.message;
 
   @override
   int get hashCode => message.hashCode;

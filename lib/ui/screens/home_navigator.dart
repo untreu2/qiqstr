@@ -13,7 +13,7 @@ import '../../presentation/blocs/theme/theme_bloc.dart';
 import '../../presentation/blocs/theme/theme_state.dart';
 import '../../presentation/blocs/notification_indicator/notification_indicator_bloc.dart';
 import '../../presentation/blocs/notification_indicator/notification_indicator_event.dart';
-import '../../../data/repositories/notification_repository.dart';
+import '../../presentation/blocs/notification_indicator/notification_indicator_state.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -77,8 +77,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
         'type': 'svg'
       },
       {
-        'icon': 'assets/newspaper.svg',
-        'iconSelected': 'assets/newspaper_fill.svg',
+        'icon': 'assets/chat.svg',
+        'iconSelected': 'assets/chat_fill.svg',
         'index': 1,
         'type': 'svg'
       },
@@ -391,14 +391,15 @@ class _HomeNavigatorState extends State<HomeNavigator>
               bucket: PageStorageBucket(),
               child: widget.navigationShell,
             ),
-            bottomNavigationBar: StreamBuilder<bool>(
-              stream:
-                  AppDI.get<NotificationRepository>().hasNewNotificationsStream,
-              initialData: false,
-              builder: (context, snapshot) {
-                final hasNewNotifications = snapshot.data ?? false;
+            bottomNavigationBar: BlocBuilder<NotificationIndicatorBloc,
+                NotificationIndicatorState>(
+              bloc: AppDI.get<NotificationIndicatorBloc>(),
+              builder: (context, state) {
+                final hasNewNotifications =
+                    state is NotificationIndicatorLoaded &&
+                        state.hasNewNotifications;
                 debugPrint(
-                    '[HomeNavigator] StreamBuilder: hasNewNotifications=$hasNewNotifications, snapshot.hasData=${snapshot.hasData}');
+                    '[HomeNavigator] BlocBuilder: hasNewNotifications=$hasNewNotifications');
                 return _buildCustomBottomBar(hasNewNotifications);
               },
             ),

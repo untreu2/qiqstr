@@ -1,9 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../presentation/blocs/note_content/note_content_bloc.dart';
 import '../../../presentation/blocs/note_content/note_content_event.dart';
 import '../../../presentation/blocs/note_content/note_content_state.dart';
@@ -28,6 +31,7 @@ class NoteContentWidget extends StatefulWidget {
   final String? authorProfileImageUrl;
   final bool isSelectable;
   final bool shortMode;
+  final Map<String, Map<String, dynamic>>? initialProfiles;
 
   const NoteContentWidget({
     super.key,
@@ -39,6 +43,7 @@ class NoteContentWidget extends StatefulWidget {
     this.authorProfileImageUrl,
     this.isSelectable = false,
     this.shortMode = false,
+    this.initialProfiles,
   });
 
   @override
@@ -54,7 +59,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   final Map<String, bool> _mentionLoadingStates = {};
   final List<TapGestureRecognizer> _gestureRecognizers = [];
-  
+
   List<InlineSpan>? _cachedSpans;
   int _cachedSpansHash = 0;
 
@@ -74,14 +79,22 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   }
 
   void _processParsedContent() {
-    _textParts = (widget.parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
-    _mediaUrls = (widget.parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ?? [];
-    _linkUrls = (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
-    _quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
-    _articleIds = (widget.parsedContent['articleIds'] as List<dynamic>?)?.cast<String>() ?? [];
+    _textParts = (widget.parsedContent['textParts'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    _mediaUrls =
+        (widget.parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ??
+            [];
+    _linkUrls =
+        (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ??
+            [];
+    _quoteIds =
+        (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ??
+            [];
+    _articleIds = (widget.parsedContent['articleIds'] as List<dynamic>?)
+            ?.cast<String>() ??
+        [];
   }
-
-
 
   double _fontSize(BuildContext context) {
     final textScaler = MediaQuery.textScalerOf(context);
@@ -112,11 +125,12 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   Future<void> _onHashtagTap(String hashtag, NoteContentBloc bloc) async {
     try {
-      final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
+      final cleanHashtag =
+          hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
 
-      final npub = await bloc.getCurrentUserNpub();
+      final userHex = await bloc.getCurrentUserHex();
 
-      if (npub == null) {
+      if (userHex == null) {
         if (mounted) {
           AppSnackbar.error(context, 'Could not load hashtag feed');
         }
@@ -127,7 +141,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => FeedPage(
-              npub: npub,
+              userHex: userHex,
               hashtag: cleanHashtag,
             ),
           ),
@@ -140,11 +154,13 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     }
   }
 
-  List<InlineSpan> _buildSpans(BuildContext context, Map<String, Map<String, dynamic>> mentionUsers) {
+  List<InlineSpan> _buildSpans(
+      BuildContext context, Map<String, Map<String, dynamic>> mentionUsers) {
     final mentionUsersHash = mentionUsers.entries
-        .map((e) => Object.hash(e.key, e.value['name'] as String? ?? '', e.value['profileImage'] as String? ?? ''))
+        .map((e) => Object.hash(e.key, e.value['name'] as String? ?? '',
+            e.value['profileImage'] as String? ?? ''))
         .fold(0, (prev, hash) => Object.hash(prev, hash));
-    
+
     final currentHash = Object.hash(
       mentionUsersHash,
       _mentionLoadingStates.length,
@@ -188,7 +204,8 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           final hashtagMatch = m.group(2);
 
           if (urlMatch != null) {
-            final recognizer = TapGestureRecognizer()..onTap = () => _onOpenLink(LinkableElement(urlMatch, urlMatch));
+            final recognizer = TapGestureRecognizer()
+              ..onTap = () => _onOpenLink(LinkableElement(urlMatch, urlMatch));
             _gestureRecognizers.add(recognizer);
             spans.add(TextSpan(
               text: urlMatch,
@@ -201,7 +218,8 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             ));
           } else if (hashtagMatch != null) {
             final bloc = context.read<NoteContentBloc>();
-            final recognizer = TapGestureRecognizer()..onTap = () => _onHashtagTap(hashtagMatch, bloc);
+            final recognizer = TapGestureRecognizer()
+              ..onTap = () => _onHashtagTap(hashtagMatch, bloc);
             _gestureRecognizers.add(recognizer);
             spans.add(TextSpan(
               text: hashtagMatch,
@@ -212,7 +230,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               ),
               recognizer: recognizer,
             ));
-            
+
             final cleanHashtag = hashtagMatch.toLowerCase().replaceAll('#', '');
             if (cleanHashtag == 'bitcoin') {
               final fontSize = _fontSize(context);
@@ -254,14 +272,14 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           if (id.startsWith('npub1')) {
             actualPubkey = decodeBasicBech32(id, 'npub');
           } else if (id.startsWith('nprofile1')) {
-            final result = decodeTlvBech32Full(id, 'nprofile');
-            actualPubkey = result['type_0_main'];
+            final result = decodeTlvBech32Full(id);
+            actualPubkey = result['pubkey'] as String?;
           }
         } catch (e) {
           continue;
         }
         if (actualPubkey == null) continue;
-        
+
         final pubkey = actualPubkey;
         final user = mentionUsers[pubkey];
         final isLoading = _mentionLoadingStates[pubkey] == true;
@@ -278,9 +296,12 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             final pubkeyHex = user['pubkeyHex'] as String? ?? '';
             return pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
           }();
-          displayText = userName.length > 25 ? '@${userName.substring(0, 25)}...' : '@$userName';
+          displayText = userName.length > 25
+              ? '@${userName.substring(0, 25)}...'
+              : '@$userName';
         } else {
-          final fallbackName = pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey;
+          final fallbackName =
+              pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey;
           displayText = '@$fallbackName';
         }
 
@@ -291,9 +312,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                   ? pubkey
                   : encodeBasicBech32(pubkey, 'npub');
               widget.onNavigateToMentionProfile?.call(npubForNavigation);
-            } catch (e) {
-              // Ignore encoding errors
-            }
+            } catch (e) {}
           };
         _gestureRecognizers.add(recognizer);
 
@@ -309,7 +328,8 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           recognizer: recognizer,
         ));
       } else if (p['type'] == 'show_more') {
-        final recognizer = TapGestureRecognizer()..onTap = () => widget.onShowMoreTap?.call(widget.noteId);
+        final recognizer = TapGestureRecognizer()
+          ..onTap = () => widget.onShowMoreTap?.call(widget.noteId);
         _gestureRecognizers.add(recognizer);
         spans.add(TextSpan(
           text: p['text'] as String,
@@ -322,7 +342,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         ));
       }
     }
-    
+
     _cachedSpans = spans;
     _cachedSpansHash = currentHash;
     return spans;
@@ -333,94 +353,107 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     return BlocProvider<NoteContentBloc>(
       create: (context) {
         final bloc = NoteContentBloc(
-          userRepository: AppDI.get(),
-          authRepository: AppDI.get(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          authService: AppDI.get<AuthService>(),
+          syncService: AppDI.get<SyncService>(),
         );
-        bloc.add(NoteContentInitialized(textParts: _textParts.cast<Map<String, dynamic>>()));
+        bloc.add(NoteContentInitialized(
+          textParts: _textParts.cast<Map<String, dynamic>>(),
+          initialProfiles: widget.initialProfiles,
+        ));
         return bloc;
       },
       child: BlocBuilder<NoteContentBloc, NoteContentState>(
         builder: (context, state) {
-          final mentionUsers = state is NoteContentLoaded ? state.mentionUsers : <String, Map<String, dynamic>>{};
+          final mentionUsers = state is NoteContentLoaded
+              ? state.mentionUsers
+              : <String, Map<String, dynamic>>{};
 
           return RepaintBoundary(
             key: ValueKey('content_${widget.noteId}'),
             child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_textParts.isNotEmpty)
-            RepaintBoundary(
-              child: widget.isSelectable
-                  ? SelectableText.rich(
-                      TextSpan(children: _buildSpans(context, mentionUsers)),
-                      style: TextStyle(
-                        fontSize: _fontSize(context),
-                        height: 1.2,
-                      ),
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
-                      ),
-                    )
-                  : RichText(
-                      text: TextSpan(children: _buildSpans(context, mentionUsers)),
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_textParts.isNotEmpty)
+                  RepaintBoundary(
+                    child: widget.isSelectable
+                        ? SelectableText.rich(
+                            TextSpan(
+                                children: _buildSpans(context, mentionUsers)),
+                            style: TextStyle(
+                              fontSize: _fontSize(context),
+                              height: 1.2,
+                            ),
+                            textHeightBehavior: const TextHeightBehavior(
+                              applyHeightToFirstAscent: false,
+                              applyHeightToLastDescent: false,
+                            ),
+                          )
+                        : RichText(
+                            text: TextSpan(
+                                children: _buildSpans(context, mentionUsers)),
+                            textHeightBehavior: const TextHeightBehavior(
+                              applyHeightToFirstAscent: false,
+                              applyHeightToLastDescent: false,
+                            ),
+                          ),
+                  ),
+                if (_mediaUrls.isNotEmpty && !widget.shortMode)
+                  RepaintBoundary(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: MediaPreviewWidget(
+                        key: ValueKey(
+                            'media_${widget.noteId}_${_mediaUrls.length}'),
+                        mediaUrls: _mediaUrls,
+                        authorProfileImageUrl: widget.authorProfileImageUrl,
                       ),
                     ),
-            ),
-          if (_mediaUrls.isNotEmpty && !widget.shortMode)
-            RepaintBoundary(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: MediaPreviewWidget(
-                  key: ValueKey('media_${widget.noteId}_${_mediaUrls.length}'),
-                  mediaUrls: _mediaUrls,
-                  authorProfileImageUrl: widget.authorProfileImageUrl,
-                ),
-              ),
-            ),
-          if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty && !widget.shortMode)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: _linkUrls.length > 1
-                    ? _linkUrls
-                        .map((url) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: MiniLinkPreviewWidget(url: url),
+                  ),
+                if (_linkUrls.isNotEmpty &&
+                    _mediaUrls.isEmpty &&
+                    !widget.shortMode)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: _linkUrls.length > 1
+                          ? _linkUrls
+                              .map((url) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: MiniLinkPreviewWidget(url: url),
+                                  ))
+                              .toList()
+                          : _linkUrls
+                              .map((url) => LinkPreviewWidget(url: url))
+                              .toList(),
+                    ),
+                  ),
+                if (_quoteIds.isNotEmpty && !widget.shortMode)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: _quoteIds
+                        .map((quoteId) => Padding(
+                              padding: const EdgeInsets.only(top: 8, bottom: 2),
+                              child: QuoteWidget(bech32: quoteId),
                             ))
-                        .toList()
-                    : _linkUrls.map((url) => LinkPreviewWidget(url: url)).toList(),
-              ),
-            ),
-          if (_quoteIds.isNotEmpty && !widget.shortMode)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: _quoteIds
-                  .map((quoteId) => Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 2),
-                        child: QuoteWidget(bech32: quoteId),
-                      ))
-                  .toList(),
-            ),
-          if (_articleIds.isNotEmpty && !widget.shortMode)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: _articleIds
-                  .map((articleId) => Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 2),
-                        child: ArticleQuoteWidget(naddr: articleId),
-                      ))
-                  .toList(),
-            ),
-        ],
+                        .toList(),
+                  ),
+                if (_articleIds.isNotEmpty && !widget.shortMode)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: _articleIds
+                        .map((articleId) => Padding(
+                              padding: const EdgeInsets.only(top: 8, bottom: 2),
+                              child: ArticleQuoteWidget(naddr: articleId),
+                            ))
+                        .toList(),
+                  ),
+              ],
             ),
           );
         },

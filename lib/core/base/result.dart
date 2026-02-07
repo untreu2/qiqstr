@@ -60,7 +60,8 @@ final class Success<T> extends Result<T> {
   final T data;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is Success<T> && data == other.data;
+  bool operator ==(Object other) =>
+      identical(this, other) || other is Success<T> && data == other.data;
 
   @override
   int get hashCode => data.hashCode;
@@ -76,7 +77,8 @@ final class Error<T> extends Result<T> {
   final String error;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is Error<T> && error == other.error;
+  bool operator ==(Object other) =>
+      identical(this, other) || other is Error<T> && error == other.error;
 
   @override
   int get hashCode => error.hashCode;
@@ -94,7 +96,8 @@ extension FutureResultExtensions<T> on Future<Result<T>> {
     };
   }
 
-  Future<Result<R>> flatMapAsync<R>(Future<Result<R>> Function(T) mapper) async {
+  Future<Result<R>> flatMapAsync<R>(
+      Future<Result<R>> Function(T) mapper) async {
     final result = await this;
     return switch (result) {
       Success<T>(data: final d) => await mapper(d),

@@ -82,7 +82,7 @@ class CustomInputField extends StatelessWidget {
         borderSide: BorderSide.none,
       ),
       contentPadding: effectiveContentPadding,
-      isDense: maxLines == 1,
+      isCollapsed: false,
     );
 
     Widget inputWidget;
@@ -102,6 +102,7 @@ class CustomInputField extends StatelessWidget {
         onFieldSubmitted: onSubmitted,
         onTap: onTap,
         validator: validator,
+        textAlignVertical: TextAlignVertical.center,
         style: style ??
             TextStyle(
               color: colors.textPrimary,
@@ -124,6 +125,7 @@ class CustomInputField extends StatelessWidget {
         onEditingComplete: onEditingComplete,
         onSubmitted: onSubmitted,
         onTap: onTap,
+        textAlignVertical: TextAlignVertical.center,
         style: style ??
             TextStyle(
               color: colors.textPrimary,

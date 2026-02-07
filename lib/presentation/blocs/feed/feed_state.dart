@@ -1,5 +1,9 @@
 import '../../../core/bloc/base/base_state.dart';
-import '../../../data/services/feed_loader_service.dart';
+
+enum FeedSortMode {
+  latest,
+  mostInteracted,
+}
 
 abstract class FeedState extends BaseState {
   const FeedState();
@@ -16,55 +20,60 @@ class FeedLoading extends FeedState {
 class FeedLoaded extends FeedState {
   final List<Map<String, dynamic>> notes;
   final Map<String, Map<String, dynamic>> profiles;
-  final String currentUserNpub;
+  final String currentUserHex;
   final bool canLoadMore;
   final NoteViewMode viewMode;
   final FeedSortMode sortMode;
   final String? hashtag;
   final bool isLoadingMore;
+  final bool isSyncing;
 
   const FeedLoaded({
     required this.notes,
     required this.profiles,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     this.canLoadMore = true,
     this.viewMode = NoteViewMode.list,
     this.sortMode = FeedSortMode.latest,
     this.hashtag,
     this.isLoadingMore = false,
+    this.isSyncing = false,
   });
 
   @override
   List<Object?> get props => [
         notes,
         profiles,
-        currentUserNpub,
+        currentUserHex,
         canLoadMore,
         viewMode,
         sortMode,
         hashtag,
         isLoadingMore,
+        isSyncing,
       ];
 
   FeedLoaded copyWith({
     List<Map<String, dynamic>>? notes,
     Map<String, Map<String, dynamic>>? profiles,
-    String? currentUserNpub,
+    String? currentUserHex,
     bool? canLoadMore,
     NoteViewMode? viewMode,
     FeedSortMode? sortMode,
     String? hashtag,
     bool? isLoadingMore,
+    bool? isSyncing,
   }) {
     return FeedLoaded(
       notes: notes ?? this.notes,
       profiles: profiles ?? this.profiles,
-      currentUserNpub: currentUserNpub ?? this.currentUserNpub,
+      currentUserHex: currentUserHex ?? this.currentUserHex,
       canLoadMore: canLoadMore ?? this.canLoadMore,
       viewMode: viewMode ?? this.viewMode,
       sortMode: sortMode ?? this.sortMode,
       hashtag: hashtag ?? this.hashtag,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      isSyncing: isSyncing ?? this.isSyncing,
     );
   }
 }

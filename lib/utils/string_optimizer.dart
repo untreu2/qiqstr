@@ -76,7 +76,10 @@ class StringOptimizer {
     final linkMatches = _linkRegExp.allMatches(content);
     final linkUrls = linkMatches
         .map((m) => m.group(0)!)
-        .where((u) => !mediaUrls.contains(u) && !u.toLowerCase().endsWith('.mp4') && !u.toLowerCase().endsWith('.mov'))
+        .where((u) =>
+            !mediaUrls.contains(u) &&
+            !u.toLowerCase().endsWith('.mp4') &&
+            !u.toLowerCase().endsWith('.mov'))
         .toList();
 
     final quoteMatches = _quoteRegExp.allMatches(content);
@@ -131,7 +134,8 @@ class StringOptimizer {
     return value.length == 64 && _hexRegExp.hasMatch(value);
   }
 
-  String truncateOptimized(String text, int maxLength, [String suffix = '...']) {
+  String truncateOptimized(String text, int maxLength,
+      [String suffix = '...']) {
     if (text.length <= maxLength) return text;
 
     final truncatedLength = maxLength - suffix.length;
@@ -139,13 +143,14 @@ class StringOptimizer {
 
     return '${text.substring(0, truncatedLength)}$suffix';
   }
-
 }
 
 final stringOptimizer = StringOptimizer.instance;
 
-String optimizedJsonEncode(dynamic object) => stringOptimizer.encodeJsonOptimized(object);
-dynamic optimizedJsonDecode(String json) => stringOptimizer.decodeJsonOptimized(json);
+String optimizedJsonEncode(dynamic object) =>
+    stringOptimizer.encodeJsonOptimized(object);
+dynamic optimizedJsonDecode(String json) =>
+    stringOptimizer.decodeJsonOptimized(json);
 
 extension OptimizedStringOperations on String {
   Map<String, dynamic> parseContentOptimized() {

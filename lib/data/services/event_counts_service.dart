@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import '../../../core/di/app_di.dart';
-import '../../../data/repositories/auth_repository.dart';
+import 'auth_service.dart';
 import 'relay_service.dart';
 import '../../../constants/relays.dart';
 
@@ -24,17 +23,12 @@ class EventCountsService {
 
   static EventCountsService get instance => _instance;
 
-  Future<EventCountsResult?> fetchAllEventsForUser(String? targetPubkeyHex) async {
+  Future<EventCountsResult?> fetchAllEventsForUser(
+      String? targetPubkeyHex) async {
     try {
-      final authRepository = AppDI.get<AuthRepository>();
-      
       String? pubkeyHex = targetPubkeyHex;
       if (pubkeyHex == null) {
-        final npubResult = await authRepository.getCurrentUserNpub();
-        if (npubResult.isError || npubResult.data == null) {
-          return null;
-        }
-        pubkeyHex = authRepository.npubToHex(npubResult.data!);
+        pubkeyHex = AuthService.instance.currentUserPubkeyHex;
         if (pubkeyHex == null) {
           return null;
         }
@@ -64,22 +58,24 @@ class EventCountsService {
               try {
                 final eventId = data['id'] as String?;
                 final eventKind = data['kind'] as int?;
-                
+
                 if (eventId != null && !processedEventIds.contains(eventId)) {
                   processedEventIds.add(eventId);
                   totalCount++;
-                  
+
                   allEvents.add(data);
-                  
+
                   if (eventKind != null) {
-                    eventCountsByKind[eventKind] = (eventCountsByKind[eventKind] ?? 0) + 1;
+                    eventCountsByKind[eventKind] =
+                        (eventCountsByKind[eventKind] ?? 0) + 1;
                   }
                 }
               } catch (_) {}
             },
           );
 
-          await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
+          await completer.future
+              .timeout(const Duration(seconds: 30), onTimeout: () {});
         } catch (_) {}
       }
 
@@ -93,7 +89,8 @@ class EventCountsService {
     }
   }
 
-  Future<bool> rebroadcastEvents(List<Map<String, dynamic>> events, {List<String>? relayUrls}) async {
+  Future<bool> rebroadcastEvents(List<Map<String, dynamic>> events,
+      {List<String>? relayUrls}) async {
     if (events.isEmpty) {
       return false;
     }
@@ -105,7 +102,7 @@ class EventCountsService {
       for (final event in events) {
         try {
           final serializedEvent = jsonEncode(['EVENT', event]);
-          
+
           for (final relayUrl in allRelays) {
             try {
               await manager.sendMessage(relayUrl, serializedEvent);
@@ -120,4 +117,3 @@ class EventCountsService {
     }
   }
 }
-

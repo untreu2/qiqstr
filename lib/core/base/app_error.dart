@@ -34,7 +34,8 @@ class NetworkError extends AppError {
   final int? statusCode;
 
   @override
-  String toString() => 'NetworkError(type: $type, message: $message, statusCode: $statusCode)';
+  String toString() =>
+      'NetworkError(type: $type, message: $message, statusCode: $statusCode)';
 }
 
 enum NetworkErrorType {

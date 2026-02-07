@@ -68,14 +68,12 @@ class TopActionBarWidget extends StatelessWidget {
             )
           else
             const SizedBox(width: 44 + 16),
-
           if (centerBubble != null)
             Expanded(
               child: Center(
                 child: _buildCenterBubble(colors),
               ),
             ),
-
           if (showShareButton)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -110,7 +108,7 @@ class TopActionBarWidget extends StatelessWidget {
 
   Widget _buildCenterBubble(dynamic colors) {
     final processedBubble = _processCenterBubble(centerBubble!);
-    
+
     final bubbleWidget = GestureDetector(
       onTap: onCenterBubbleTap,
       child: Container(
@@ -167,16 +165,18 @@ class TopActionBarWidget extends StatelessWidget {
       }
       return widget;
     }
-    
+
     if (widget is Row) {
       return Row(
         mainAxisSize: widget.mainAxisSize,
         mainAxisAlignment: widget.mainAxisAlignment,
         crossAxisAlignment: widget.crossAxisAlignment,
-        children: widget.children.map((child) => _processWidgetRecursively(child)).toList(),
+        children: widget.children
+            .map((child) => _processWidgetRecursively(child))
+            .toList(),
       );
     }
-    
+
     if (widget is Flexible) {
       return Flexible(
         flex: widget.flex,
@@ -184,22 +184,24 @@ class TopActionBarWidget extends StatelessWidget {
         child: _processWidgetRecursively(widget.child),
       );
     }
-    
+
     if (widget is Expanded) {
       return Expanded(
         flex: widget.flex,
         child: _processWidgetRecursively(widget.child),
       );
     }
-    
+
     if (widget is Padding) {
       final padding = widget;
       return Padding(
         padding: padding.padding,
-        child: padding.child != null ? _processWidgetRecursively(padding.child!) : null,
+        child: padding.child != null
+            ? _processWidgetRecursively(padding.child!)
+            : null,
       );
     }
-    
+
     if (widget is Container) {
       final container = widget;
       if (container.child != null) {
@@ -218,8 +220,7 @@ class TopActionBarWidget extends StatelessWidget {
         );
       }
     }
-    
+
     return widget;
   }
 }
-

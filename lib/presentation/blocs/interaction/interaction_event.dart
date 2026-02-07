@@ -1,4 +1,5 @@
 import '../../../core/bloc/base/base_event.dart';
+import '../../../data/services/interaction_service.dart';
 
 abstract class InteractionEvent extends BaseEvent {
   const InteractionEvent();
@@ -6,17 +7,17 @@ abstract class InteractionEvent extends BaseEvent {
 
 class InteractionInitialized extends InteractionEvent {
   final String noteId;
-  final String currentUserNpub;
+  final String currentUserHex;
   final Map<String, dynamic>? note;
 
   const InteractionInitialized({
     required this.noteId,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     this.note,
   });
 
   @override
-  List<Object?> get props => [noteId, currentUserNpub, note];
+  List<Object?> get props => [noteId, currentUserHex, note];
 }
 
 class InteractionNoteUpdated extends InteractionEvent {
@@ -46,4 +47,13 @@ class InteractionRepostDeleted extends InteractionEvent {
 
 class InteractionNoteDeleted extends InteractionEvent {
   const InteractionNoteDeleted();
+}
+
+class InteractionCountsUpdated extends InteractionEvent {
+  final InteractionCounts counts;
+
+  const InteractionCountsUpdated(this.counts);
+
+  @override
+  List<Object?> get props => [counts];
 }

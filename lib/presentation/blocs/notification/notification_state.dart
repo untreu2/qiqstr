@@ -13,32 +13,28 @@ class NotificationLoading extends NotificationState {
 }
 
 class NotificationsLoaded extends NotificationState {
-  final List<dynamic> notifications;
+  final List<Map<String, dynamic>> notifications;
   final int unreadCount;
-  final Map<String, Map<String, dynamic>> userProfiles;
-  final String currentUserNpub;
+  final String currentUserHex;
 
   const NotificationsLoaded({
     required this.notifications,
     required this.unreadCount,
-    required this.userProfiles,
-    required this.currentUserNpub,
+    required this.currentUserHex,
   });
 
   @override
-  List<Object?> get props => [notifications, unreadCount, userProfiles, currentUserNpub];
+  List<Object?> get props => [notifications, unreadCount, currentUserHex];
 
   NotificationsLoaded copyWith({
-    List<dynamic>? notifications,
+    List<Map<String, dynamic>>? notifications,
     int? unreadCount,
-    Map<String, Map<String, dynamic>>? userProfiles,
-    String? currentUserNpub,
+    String? currentUserHex,
   }) {
     return NotificationsLoaded(
       notifications: notifications ?? this.notifications,
       unreadCount: unreadCount ?? this.unreadCount,
-      userProfiles: userProfiles ?? this.userProfiles,
-      currentUserNpub: currentUserNpub ?? this.currentUserNpub,
+      currentUserHex: currentUserHex ?? this.currentUserHex,
     );
   }
 }

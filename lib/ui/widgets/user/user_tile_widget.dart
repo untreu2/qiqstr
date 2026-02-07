@@ -4,7 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/user_tile/user_tile_bloc.dart';
 import '../../../presentation/blocs/user_tile/user_tile_event.dart';
 import '../../../presentation/blocs/user_tile/user_tile_state.dart';
@@ -58,15 +60,15 @@ class _UserTileState extends State<UserTile> {
     bloc.add(const UserTileFollowToggled());
   }
 
-
   @override
   Widget build(BuildContext context) {
     return BlocProvider<UserTileBloc>(
       create: (context) {
         final userNpub = widget.user['npub'] as String? ?? '';
         final bloc = UserTileBloc(
-          userRepository: AppDI.get(),
-          authRepository: AppDI.get(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
           userNpub: userNpub,
         );
         bloc.add(UserTileInitialized(userNpub: userNpub));
@@ -74,29 +76,39 @@ class _UserTileState extends State<UserTile> {
       },
       child: BlocBuilder<UserTileBloc, UserTileState>(
         builder: (context, state) {
-          return FutureBuilder(
-            future: AppDI.get<AuthRepository>().getCurrentUserNpub(),
-            builder: (context, snapshot) {
-              final currentUserNpub = snapshot.data?.fold((data) => data, (error) => null);
-              final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
-              final userNpub = widget.user['npub'] as String? ?? '';
-              final isCurrentUser = currentUserNpub == userPubkeyHex || currentUserNpub == userNpub;
-              final loadedState = state is UserTileLoaded ? state : const UserTileLoaded();
-              final userProfileImage = widget.user['profileImage'] as String? ?? '';
+          final authService = AppDI.get<AuthService>();
+          final currentUserHex = authService.currentUserPubkeyHex;
+          final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+          final userNpub = widget.user['npub'] as String? ?? '';
+          final userHex = authService.npubToHex(userNpub) ?? userPubkeyHex;
+          final isCurrentUser =
+              currentUserHex == userHex || currentUserHex == userPubkeyHex;
+
+          return Builder(
+            builder: (context) {
+              final loadedState =
+                  state is UserTileLoaded ? state : const UserTileLoaded();
+              final userProfileImage =
+                  widget.user['profileImage'] as String? ?? '';
               final userName = widget.user['name'] as String? ?? '';
               final userNip05 = widget.user['nip05'] as String? ?? '';
-              final userNip05Verified = widget.user['nip05Verified'] as bool? ?? false;
+              final userNip05Verified =
+                  widget.user['nip05Verified'] as bool? ?? false;
 
               return RepaintBoundary(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: GestureDetector(
-                    onTap: widget.onTap ?? () {
-                      context.push('/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-                    },
+                    onTap: widget.onTap ??
+                        () {
+                          context.push(
+                              '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                        },
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
                         color: context.colors.overlayLight,
                         borderRadius: BorderRadius.circular(40),
@@ -110,7 +122,9 @@ class _UserTileState extends State<UserTile> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Row(
-                              mainAxisAlignment: widget.trailing != null ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
+                              mainAxisAlignment: widget.trailing != null
+                                  ? MainAxisAlignment.spaceBetween
+                                  : MainAxisAlignment.start,
                               children: [
                                 Flexible(
                                   child: Row(
@@ -118,7 +132,9 @@ class _UserTileState extends State<UserTile> {
                                     children: [
                                       Flexible(
                                         child: Text(
-                                          userName.length > 25 ? '${userName.substring(0, 25)}...' : userName,
+                                          userName.length > 25
+                                              ? '${userName.substring(0, 25)}...'
+                                              : userName,
                                           style: TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w600,
@@ -127,7 +143,8 @@ class _UserTileState extends State<UserTile> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      if (userNip05.isNotEmpty && userNip05Verified) ...[
+                                      if (userNip05.isNotEmpty &&
+                                          userNip05Verified) ...[
                                         const SizedBox(width: 3),
                                         Icon(
                                           Icons.verified,
@@ -153,9 +170,13 @@ class _UserTileState extends State<UserTile> {
                               height: 20,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: widget.isSelected ? context.colors.accent : Colors.transparent,
+                                color: widget.isSelected
+                                    ? context.colors.accent
+                                    : Colors.transparent,
                                 border: Border.all(
-                                  color: widget.isSelected ? context.colors.accent : context.colors.border,
+                                  color: widget.isSelected
+                                      ? context.colors.accent
+                                      : context.colors.border,
                                   width: 2,
                                 ),
                               ),
@@ -168,23 +189,34 @@ class _UserTileState extends State<UserTile> {
                                   : null,
                             ),
                           ],
-                          if (widget.showFollowButton && !isCurrentUser && loadedState.isFollowing != null && !widget.showSelectionIndicator) ...[
+                          if (widget.showFollowButton &&
+                              !isCurrentUser &&
+                              loadedState.isFollowing != null &&
+                              !widget.showSelectionIndicator) ...[
                             const SizedBox(width: 10),
                             Builder(
                               builder: (context) {
-                                final followBgColor = context.colors.textPrimary;
-                                final followIconColor = context.colors.background;
-                                final unfollowBgColor = context.colors.background;
-                                final unfollowIconColor = context.colors.textPrimary;
+                                final followBgColor =
+                                    context.colors.textPrimary;
+                                final followIconColor =
+                                    context.colors.background;
+                                final unfollowBgColor =
+                                    context.colors.background;
+                                final unfollowIconColor =
+                                    context.colors.textPrimary;
                                 final bloc = context.read<UserTileBloc>();
 
                                 return GestureDetector(
-                                  onTap: loadedState.isLoading ? null : () => _toggleFollow(bloc, loadedState),
+                                  onTap: loadedState.isLoading
+                                      ? null
+                                      : () => _toggleFollow(bloc, loadedState),
                                   child: Container(
                                     width: 40,
                                     height: 40,
                                     decoration: BoxDecoration(
-                                      color: loadedState.isFollowing == true ? unfollowBgColor : followBgColor,
+                                      color: loadedState.isFollowing == true
+                                          ? unfollowBgColor
+                                          : followBgColor,
                                       shape: BoxShape.circle,
                                     ),
                                     child: loadedState.isLoading
@@ -193,15 +225,23 @@ class _UserTileState extends State<UserTile> {
                                             height: 18,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(
-                                                loadedState.isFollowing == true ? unfollowIconColor : followIconColor,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                loadedState.isFollowing == true
+                                                    ? unfollowIconColor
+                                                    : followIconColor,
                                               ),
                                             ),
                                           )
                                         : Icon(
-                                            loadedState.isFollowing == true ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                                            loadedState.isFollowing == true
+                                                ? CarbonIcons.user_admin
+                                                : CarbonIcons.user_follow,
                                             size: 18,
-                                            color: loadedState.isFollowing == true ? unfollowIconColor : followIconColor,
+                                            color:
+                                                loadedState.isFollowing == true
+                                                    ? unfollowIconColor
+                                                    : followIconColor,
                                           ),
                                   ),
                                 );

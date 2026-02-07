@@ -4,10 +4,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:ndk/ndk.dart';
-import 'package:ndk/shared/nips/nip01/bip340.dart';
 
 import '../../core/base/result.dart';
+import '../../src/rust/api/events.dart' as rust_events;
 
 class CoinosService {
   static const String _baseUrl = 'https://coinos.io/api';
@@ -37,10 +36,12 @@ class CoinosService {
       );
 
       if (challengeResponse.statusCode != 200) {
-        return Result.error('Failed to get challenge: ${challengeResponse.statusCode}');
+        return Result.error(
+            'Failed to get challenge: ${challengeResponse.statusCode}');
       }
 
-      final challengeData = jsonDecode(challengeResponse.body) as Map<String, dynamic>;
+      final challengeData =
+          jsonDecode(challengeResponse.body) as Map<String, dynamic>;
       final challenge = challengeData['challenge'] as String?;
 
       if (challenge == null || challenge.isEmpty) {
@@ -49,29 +50,16 @@ class CoinosService {
 
       debugPrint('[CoinosService] Got challenge: $challenge');
 
-      final publicKey = Bip340.getPublicKey(privateKey);
-      final authEvent = Nip01Event(
-        pubKey: publicKey,
-        kind: 27235,
-        tags: [
-          ['challenge', challenge]
-        ],
-        content: '',
+      final authEventJson = rust_events.createCoinosAuthEvent(
+        challenge: challenge,
+        privateKeyHex: privateKey,
       );
-      authEvent.sig = Bip340.sign(authEvent.id, privateKey);
+      final authEvent = jsonDecode(authEventJson) as Map<String, dynamic>;
       final authResponse = await _httpClient.post(
         Uri.parse('$_baseUrl/nostrAuth'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'event': {
-            'id': authEvent.id,
-            'pubkey': authEvent.pubKey,
-            'created_at': authEvent.createdAt,
-            'kind': authEvent.kind,
-            'tags': authEvent.tags,
-            'content': authEvent.content,
-            'sig': authEvent.sig,
-          },
+          'event': authEvent,
           'challenge': challenge,
         }),
       );
@@ -95,16 +83,19 @@ class CoinosService {
         ]);
 
         final username = user['username'] as String? ?? '';
-        debugPrint('[CoinosService] Nostr authentication successful for user: $username');
+        debugPrint(
+            '[CoinosService] Nostr authentication successful for user: $username');
 
         return Result.success({
           'user': user,
           'token': token,
         });
       } else {
-        debugPrint('[CoinosService] Nostr auth failed: ${authResponse.statusCode}');
+        debugPrint(
+            '[CoinosService] Nostr auth failed: ${authResponse.statusCode}');
         debugPrint('[CoinosService] Response body: ${authResponse.body}');
-        return Result.error('Nostr authentication failed: ${authResponse.statusCode}');
+        return Result.error(
+            'Nostr authentication failed: ${authResponse.statusCode}');
       }
     } catch (e) {
       debugPrint('[CoinosService] Nostr authentication error: $e');
@@ -275,7 +266,8 @@ class CoinosService {
         body: jsonEncode({'invoice': invoiceData}),
       );
 
-      debugPrint('[CoinosService] Invoice response status: ${response.statusCode}');
+      debugPrint(
+          '[CoinosService] Invoice response status: ${response.statusCode}');
       debugPrint('[CoinosService] Invoice response body: ${response.body}');
 
       if (response.statusCode == 200) {
@@ -286,7 +278,8 @@ class CoinosService {
         await clearAuthData();
         return const Result.error('Authentication token expired');
       } else {
-        debugPrint('[CoinosService] Invoice creation failed: ${response.statusCode}');
+        debugPrint(
+            '[CoinosService] Invoice creation failed: ${response.statusCode}');
         return Result.error('Invoice creation failed: ${response.statusCode}');
       }
     } catch (e) {
@@ -305,7 +298,8 @@ class CoinosService {
 
   Future<Result<Map<String, dynamic>>> payInvoice(String payreq) async {
     try {
-      debugPrint('[CoinosService] Attempting to pay invoice: ${payreq.substring(0, 20)}...');
+      debugPrint(
+          '[CoinosService] Attempting to pay invoice: ${payreq.substring(0, 20)}...');
 
       final headersResult = await _getAuthHeaders();
       if (headersResult.isError) {
@@ -324,14 +318,16 @@ class CoinosService {
         body: jsonEncode(body),
       );
 
-      debugPrint('[CoinosService] Payment response status: ${response.statusCode}');
+      debugPrint(
+          '[CoinosService] Payment response status: ${response.statusCode}');
       debugPrint('[CoinosService] Payment response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         debugPrint('[CoinosService] Parsed payment data: $data');
 
-        final isSuccess = (data['success'] as bool?) ?? ((data['status'] as String?) == 'success');
+        final isSuccess = (data['success'] as bool?) ??
+            ((data['status'] as String?) == 'success');
         final paymentResult = Map<String, dynamic>.from(data);
         paymentResult['isSuccess'] = isSuccess;
         paymentResult['error'] = data['error'] as String?;
@@ -344,7 +340,8 @@ class CoinosService {
         return const Result.error('Authentication token expired');
       } else {
         debugPrint('[CoinosService] Payment failed: ${response.statusCode}');
-        return Result.error('Payment failed: ${response.statusCode} - ${response.body}');
+        return Result.error(
+            'Payment failed: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       debugPrint('[CoinosService] Payment error: $e');
@@ -412,7 +409,9 @@ class CoinosService {
     if (limit != null) queryParams['limit'] = limit.toString();
     if (offset != null) queryParams['offset'] = offset.toString();
 
-    final queryString = queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : '';
+    final queryString = queryParams.isNotEmpty
+        ? '?${Uri(queryParameters: queryParams).query}'
+        : '';
     final endpoint = '/payments$queryString';
 
     return _makeAuthenticatedRequest(

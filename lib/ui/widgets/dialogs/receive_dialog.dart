@@ -2,18 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../../../data/repositories/wallet_repository.dart';
+import '../../../data/services/coinos_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
 
 class ReceiveDialog extends StatefulWidget {
-  final WalletRepository walletRepository;
   final String? lud16;
 
   const ReceiveDialog({
     super.key,
-    required this.walletRepository,
     this.lud16,
   });
 
@@ -23,6 +21,7 @@ class ReceiveDialog extends StatefulWidget {
 
 class _ReceiveDialogState extends State<ReceiveDialog> {
   final TextEditingController _amountController = TextEditingController();
+  final CoinosService _coinosService = CoinosService();
 
   bool _isUpdating = false;
   String? _invoice;
@@ -73,9 +72,9 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
     });
 
     try {
-      final result = await widget.walletRepository.makeInvoice(
-        amountValue,
-        'Receive $amountValue sats',
+      final result = await _coinosService.createInvoice(
+        amount: amountValue,
+        type: 'lightning',
       );
 
       if (mounted) {
@@ -83,7 +82,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
           _isUpdating = false;
           result.fold(
             (invoiceResult) {
-              _invoice = invoiceResult;
+              _invoice = invoiceResult['hash'] as String?;
             },
             (errorResult) {
               _error = 'Failed to create invoice: $errorResult';

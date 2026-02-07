@@ -4,14 +4,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:giphy_get/giphy_get.dart';
 
 import '../../../core/di/app_di.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/note/note_bloc.dart';
 import '../../../presentation/blocs/note/note_event.dart';
 import '../../../presentation/blocs/note/note_state.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/repositories/note_repository.dart';
-import '../../../data/services/data_service.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../constants/giphy_api_key.dart';
 import '../../theme/theme_manager.dart';
@@ -100,10 +99,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
   void initState() {
     super.initState();
     _noteBloc = NoteBloc(
-      noteRepository: AppDI.get<NoteRepository>(),
-      authRepository: AppDI.get<AuthRepository>(),
-      userRepository: AppDI.get<UserRepository>(),
-      dataService: AppDI.get<DataService>(),
+      profileRepository: AppDI.get<ProfileRepository>(),
+      syncService: AppDI.get<SyncService>(),
+      authService: AppDI.get<AuthService>(),
     );
 
     if (widget.replyToNoteId != null) {
@@ -112,16 +110,20 @@ class _ShareNotePageState extends State<ShareNotePage> {
         parentAuthor: 'unknown',
       ));
     }
+    bool isQuote = false;
     if (widget.initialText != null &&
         widget.initialText!.startsWith('nostr:')) {
       final cleanId = widget.initialText!.replaceFirst('nostr:', '');
       _noteBloc.add(NoteQuoteSetup(cleanId));
+      isQuote = true;
     }
 
     _initializeController();
     _setupTextListener();
     _requestInitialFocus();
-    if (widget.initialText != null && widget.initialText!.isNotEmpty) {
+    if (!isQuote &&
+        widget.initialText != null &&
+        widget.initialText!.isNotEmpty) {
       _noteController.text = widget.initialText!;
     }
   }
@@ -171,15 +173,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       final result = await _pickMediaFiles();
       if (result == null || result.files.isEmpty) return;
 
-      final filePaths = result.files
-          .where((f) => f.path != null)
-          .map((f) => f.path!)
-          .toList();
-      if (filePaths.isEmpty || !mounted) return;
-
-      if (mounted) {
-        _noteBloc.add(NoteMediaUploaded(filePaths));
-      }
+      if (!mounted) return;
 
       await _processSelectedFiles(result.files);
     } catch (e) {
@@ -360,20 +354,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final mediaPart =
         state.mediaUrls.isNotEmpty ? "\n\n${state.mediaUrls.join("\n")}" : "";
 
-    String quotePart = "";
-    if (hasQuote && widget.initialText != null) {
-      final hexId = widget.initialText!.replaceFirst('nostr:', '');
-      try {
-        final note1Id = encodeBasicBech32(hexId, 'note');
-        quotePart = "\n\nnostr:$note1Id";
-        debugPrint('[ShareNotePage] Added quote as text: nostr:$note1Id');
-      } catch (e) {
-        debugPrint('[ShareNotePage] Error encoding hex to note1: $e');
-        quotePart = "\n\nnostr:$hexId";
-      }
-    }
-
-    return "$noteText$mediaPart$quotePart".trim();
+    return "$noteText$mediaPart".trim();
   }
 
   void _sendNote(String content) {
@@ -382,32 +363,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     final additionalTags = <List<String>>[];
     additionalTags.addAll(tags);
-
-    if (widget.initialText != null &&
-        widget.initialText!.startsWith('nostr:')) {
-      final cleanId = widget.initialText!.replaceFirst('nostr:', '');
-
-      if (cleanId.startsWith('note1')) {
-        try {
-          final eventIdHex = decodeBasicBech32(cleanId, 'note');
-          additionalTags.add(['e', eventIdHex]);
-          debugPrint('[ShareNotePage] Added e tag for note: $eventIdHex');
-        } catch (e) {
-          debugPrint('[ShareNotePage] Error decoding note1 to hex: $e');
-        }
-      } else if (cleanId.startsWith('npub1')) {
-        try {
-          final pubkeyHex = decodeBasicBech32(cleanId, 'npub');
-          additionalTags.add(['p', pubkeyHex]);
-          debugPrint('[ShareNotePage] Added p tag for profile: $pubkeyHex');
-        } catch (e) {
-          debugPrint('[ShareNotePage] Error decoding npub1 to hex: $e');
-        }
-      } else if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(cleanId)) {
-        additionalTags.add(['e', cleanId]);
-        debugPrint('[ShareNotePage] Added e tag for hex event ID: $cleanId');
-      }
-    }
 
     if (_isReply() && widget.replyToNoteId != null) {
       try {
@@ -926,15 +881,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<Map<String, dynamic>?> _loadCurrentUser() async {
-    final authRepository = AppDI.get<AuthRepository>();
-    final userRepository = AppDI.get<UserRepository>();
-    final currentUserNpubResult = await authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return null;
-    }
-    final userResult =
-        await userRepository.getUserProfile(currentUserNpubResult.data!);
-    return userResult.fold((user) => user, (_) => null);
+    final authService = AppDI.get<AuthService>();
+    final profileRepository = AppDI.get<ProfileRepository>();
+    final currentUserHex = authService.currentUserPubkeyHex;
+    if (currentUserHex == null) return null;
+    final profile = await profileRepository.getProfile(currentUserHex);
+    return profile?.toMap();
   }
 
   Widget _buildTextInputStack() {

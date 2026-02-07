@@ -1,21 +1,17 @@
-import 'package:bloc/bloc.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/sync/sync_service.dart';
 import 'edit_new_account_profile_event.dart';
 import 'edit_new_account_profile_state.dart';
 
 class EditNewAccountProfileBloc
     extends Bloc<EditNewAccountProfileEvent, EditNewAccountProfileState> {
-  final UserRepository _userRepository;
-  final DataService _dataService;
+  final SyncService _syncService;
   final String npub;
 
   EditNewAccountProfileBloc({
-    required UserRepository userRepository,
-    required DataService dataService,
+    required SyncService syncService,
     required this.npub,
-  })  : _userRepository = userRepository,
-        _dataService = dataService,
+  })  : _syncService = syncService,
         super(const EditNewAccountProfileInitial()) {
     on<EditNewAccountProfilePictureUploaded>(
         _onEditNewAccountProfilePictureUploaded);
@@ -37,24 +33,16 @@ class EditNewAccountProfileBloc
     emit(currentState.copyWith(
         isUploadingPicture: true, uploadedPictureUrl: null));
 
-    try {
-      const blossomUrl = 'https://blossom.primal.net';
-      final mediaResult =
-          await _dataService.sendMedia(event.filePath, blossomUrl);
+    final url = await _syncService.uploadMedia(event.filePath);
 
-      if (mediaResult.isSuccess && mediaResult.data != null) {
-        emit(currentState.copyWith(
-          uploadedPictureUrl: mediaResult.data!,
-          isUploadingPicture: false,
-        ));
-      } else {
-        emit(currentState.copyWith(isUploadingPicture: false));
-        emit(EditNewAccountProfileError('Failed to upload picture'));
-      }
-    } catch (e) {
+    if (url != null) {
+      emit(currentState.copyWith(
+        uploadedPictureUrl: url,
+        isUploadingPicture: false,
+      ));
+    } else {
       emit(currentState.copyWith(isUploadingPicture: false));
-      emit(EditNewAccountProfileError(
-          'Failed to upload picture: ${e.toString()}'));
+      emit(const EditNewAccountProfileError('Failed to upload picture'));
     }
   }
 
@@ -71,24 +59,16 @@ class EditNewAccountProfileBloc
     emit(currentState.copyWith(
         isUploadingBanner: true, uploadedBannerUrl: null));
 
-    try {
-      const blossomUrl = 'https://blossom.primal.net';
-      final mediaResult =
-          await _dataService.sendMedia(event.filePath, blossomUrl);
+    final url = await _syncService.uploadMedia(event.filePath);
 
-      if (mediaResult.isSuccess && mediaResult.data != null) {
-        emit(currentState.copyWith(
-          uploadedBannerUrl: mediaResult.data!,
-          isUploadingBanner: false,
-        ));
-      } else {
-        emit(currentState.copyWith(isUploadingBanner: false));
-        emit(EditNewAccountProfileError('Failed to upload banner'));
-      }
-    } catch (e) {
+    if (url != null) {
+      emit(currentState.copyWith(
+        uploadedBannerUrl: url,
+        isUploadingBanner: false,
+      ));
+    } else {
       emit(currentState.copyWith(isUploadingBanner: false));
-      emit(EditNewAccountProfileError(
-          'Failed to upload banner: ${e.toString()}'));
+      emit(const EditNewAccountProfileError('Failed to upload banner'));
     }
   }
 
@@ -105,30 +85,17 @@ class EditNewAccountProfileBloc
     emit(currentState.copyWith(isSaving: true));
 
     try {
-      final updatedUser = <String, dynamic>{
-        'pubkeyHex': npub,
+      final profile = {
         'name': event.name.trim().isNotEmpty ? event.name.trim() : 'New User',
         'about': event.about.trim(),
-        'profileImage': event.profileImage.trim(),
-        'nip05': '',
+        'picture': event.profileImage.trim(),
         'banner': event.banner.trim(),
         'lud16': event.lud16.trim(),
         'website': event.website.trim(),
-        'updatedAt': DateTime.now(),
-        'nip05Verified': false,
-        'followerCount': 0,
       };
 
-      final result = await _userRepository.updateUserProfile(updatedUser);
-
-      result.fold(
-        (_) {
-          emit(const EditNewAccountProfileSaveSuccess());
-        },
-        (error) {
-          emit(EditNewAccountProfileError(error));
-        },
-      );
+      await _syncService.publishProfileUpdate(profileContent: profile);
+      emit(const EditNewAccountProfileSaveSuccess());
     } catch (e) {
       emit(EditNewAccountProfileError(
           'Failed to save profile: ${e.toString()}'));

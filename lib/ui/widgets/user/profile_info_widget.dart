@@ -12,13 +12,14 @@ import '../note/note_content_widget.dart';
 import '../common/snackbar_widget.dart';
 import '../dialogs/unfollow_user_dialog.dart';
 import '../dialogs/mute_user_dialog.dart';
-import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
 import '../../../presentation/blocs/profile_info/profile_info_event.dart';
 import '../../../presentation/blocs/profile_info/profile_info_state.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
@@ -138,27 +139,24 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         _bloc!.userPubkeyHex != userPubkeyHex) {
       _bloc?.close();
       _bloc = ProfileInfoBloc(
-        authRepository: AppDI.get<AuthRepository>(),
-        userRepository: AppDI.get<UserRepository>(),
-        dataService: AppDI.get<DataService>(),
+        followingRepository: AppDI.get<FollowingRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
         userPubkeyHex: userPubkeyHex,
       );
-      _bloc!.add(ProfileInfoUserUpdated(user: widget.user));
-      _bloc!.add(ProfileInfoInitialized(userPubkeyHex: userPubkeyHex));
+      _bloc!.add(ProfileInfoInitialized(
+        userPubkeyHex: userPubkeyHex,
+        user: widget.user,
+      ));
     }
 
     return BlocProvider<ProfileInfoBloc>.value(
       value: _bloc!,
       child: BlocBuilder<ProfileInfoBloc, ProfileInfoState>(
         builder: (context, state) {
-          if (state is! ProfileInfoLoaded) {
-            return Container(
-              color: context.colors.background,
-              child: const Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          final user = state.user;
+          final loadedState = state is ProfileInfoLoaded ? state : null;
+          final user = loadedState?.user ?? widget.user;
           final screenWidth = MediaQuery.of(context).size.width;
           final website = user['website'] as String? ?? '';
           final websiteUrl = website.isNotEmpty &&
@@ -179,7 +177,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildAvatarAndActionsRow(context, state),
+                      _buildAvatarAndActionsRow(context, loadedState),
                       const SizedBox(height: 2),
                       _buildNameRow(context, user),
                       if ((user['about'] as String? ?? '').isNotEmpty) ...[
@@ -208,7 +206,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         ),
                       ],
                       const SizedBox(height: 4),
-                      _buildFollowerInfo(context, state),
+                      _buildFollowerInfo(context, loadedState),
                     ],
                   ),
                 ),
@@ -220,75 +218,52 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  static final Map<String, Widget> _avatarCache = <String, Widget>{};
+  Widget _buildAvatarImage(
+      BuildContext context, String imageUrl, double radius) {
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: context.colors.surfaceTransparent,
+        child: Icon(
+          Icons.person,
+          size: radius,
+          color: context.colors.textSecondary,
+        ),
+      );
+    }
 
-  Widget _getCachedAvatar(
-      BuildContext context, String imageUrl, double radius, String cacheKey) {
-    return _avatarCache.putIfAbsent(cacheKey, () {
-      try {
-        Widget avatarWidget;
-
-        if (imageUrl.isEmpty) {
-          avatarWidget = CircleAvatar(
-            radius: radius,
-            backgroundColor: context.colors.surfaceTransparent,
-            child: Icon(
-              Icons.person,
-              size: radius,
-              color: context.colors.textSecondary,
-            ),
-          );
-        } else {
-          avatarWidget = CircleAvatar(
-            radius: radius,
-            backgroundColor: context.colors.surfaceTransparent,
-            child: ClipOval(
-              child: CachedNetworkImage(
-                imageUrl: imageUrl,
-                width: radius * 2,
-                height: radius * 2,
-                fit: BoxFit.cover,
-                fadeInDuration: Duration.zero,
-                fadeOutDuration: Duration.zero,
-                memCacheWidth: (radius * 5).toInt(),
-                maxHeightDiskCache: (radius * 5).toInt(),
-                maxWidthDiskCache: (radius * 5).toInt(),
-                placeholder: (context, url) => Icon(
-                  Icons.person,
-                  size: radius,
-                  color: context.colors.textSecondary,
-                ),
-                errorWidget: (context, url, error) => Icon(
-                  Icons.person,
-                  size: radius,
-                  color: context.colors.textSecondary,
-                ),
-              ),
-            ),
-          );
-        }
-
-        return avatarWidget;
-      } catch (e) {
-        debugPrint('[ProfileInfoWidget] Avatar cache error: $e');
-        return CircleAvatar(
-          radius: radius,
-          backgroundColor: context.colors.surfaceTransparent,
-          child: Icon(
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: context.colors.surfaceTransparent,
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          memCacheWidth: (radius * 5).toInt(),
+          maxHeightDiskCache: (radius * 5).toInt(),
+          maxWidthDiskCache: (radius * 5).toInt(),
+          placeholder: (context, url) => Icon(
             Icons.person,
             size: radius,
             color: context.colors.textSecondary,
           ),
-        );
-      }
-    });
+          errorWidget: (context, url, error) => Icon(
+            Icons.person,
+            size: radius,
+            color: context.colors.textSecondary,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildAvatar(BuildContext context, Map<String, dynamic> user) {
     final avatarRadius = 40.0;
-    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
     final profileImage = user['profileImage'] as String? ?? '';
-    final cacheKey = 'profile_large_${pubkeyHex}_${profileImage.hashCode}';
 
     Widget avatar = RepaintBoundary(
       child: Container(
@@ -299,12 +274,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             width: 3,
           ),
         ),
-        child: _getCachedAvatar(
-          context,
-          profileImage,
-          avatarRadius,
-          cacheKey,
-        ),
+        child: _buildAvatarImage(context, profileImage, avatarRadius),
       ),
     );
 
@@ -419,21 +389,19 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildAvatarAndActionsRow(
-      BuildContext context, ProfileInfoLoaded state) {
-    final currentUserNpub = state.currentUserNpub;
-    final authRepository = AppDI.get<AuthRepository>();
-    final currentUserHex = currentUserNpub != null
-        ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
-        : null;
-    final userPubkeyHex = state.user['pubkeyHex'] as String? ?? '';
+      BuildContext context, ProfileInfoLoaded? state) {
+    final currentUserHex = state?.currentUserHex;
+    final userPubkeyHex = state?.user['pubkeyHex'] as String? ??
+        widget.user['pubkeyHex'] as String? ??
+        '';
     final isOwnProfile = currentUserHex != null &&
         currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
 
     return Row(
       children: [
-        _buildAvatar(context, state.user),
+        _buildAvatar(context, state?.user ?? widget.user),
         const Spacer(),
-        if (currentUserNpub != null && !isOwnProfile)
+        if (state != null && currentUserHex != null && !isOwnProfile)
           Padding(
             padding: const EdgeInsets.only(top: 16),
             child: Row(
@@ -448,7 +416,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ],
             ),
           )
-        else if (currentUserNpub != null && isOwnProfile)
+        else if (state != null && currentUserHex != null && isOwnProfile)
           Padding(
             padding: const EdgeInsets.only(top: 16),
             child: _buildEditProfileButton(context),
@@ -620,8 +588,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return count.toString();
   }
 
-  Widget _buildFollowerInfo(BuildContext context, ProfileInfoLoaded state) {
-    if (state.isLoadingCounts) {
+  Widget _buildFollowerInfo(BuildContext context, ProfileInfoLoaded? state) {
+    if (state == null || state.isLoadingCounts) {
       return const SizedBox(
         height: 16,
         width: 16,
@@ -629,11 +597,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       );
     }
 
-    final currentUserNpub = state.currentUserNpub;
-    final authRepository = AppDI.get<AuthRepository>();
-    final currentUserHex = currentUserNpub != null
-        ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
-        : null;
+    final currentUserHex = state.currentUserHex;
     final userPubkeyHex = state.user['pubkeyHex'] as String? ?? '';
     final isOwnProfile = currentUserHex != null &&
         currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
@@ -647,8 +611,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               context.push('/home/feed/following', extra: state.user);
             } else if (currentLocation.startsWith('/home/notifications')) {
               context.push('/home/notifications/following', extra: state.user);
-            } else if (currentLocation.startsWith('/home/explore')) {
-              context.push('/home/feed/following', extra: state.user);
             } else {
               context.push('/following', extra: state.user);
             }

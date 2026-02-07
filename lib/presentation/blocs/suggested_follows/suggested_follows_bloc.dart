@@ -1,24 +1,33 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
-import '../../../data/services/user_batch_fetcher.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../constants/suggestions.dart';
 import 'suggested_follows_event.dart';
 import 'suggested_follows_state.dart';
 
-class SuggestedFollowsBloc extends Bloc<SuggestedFollowsEvent, SuggestedFollowsState> {
-  final UserRepository _userRepository;
-  final DataService _nostrDataService;
+class SuggestedFollowsBloc
+    extends Bloc<SuggestedFollowsEvent, SuggestedFollowsState> {
+  final FollowingRepository _followingRepository;
+  final ProfileRepository _profileRepository;
+  final SyncService _syncService;
+  final AuthService _authService;
 
   SuggestedFollowsBloc({
-    required UserRepository userRepository,
-    required DataService nostrDataService,
-  })  : _userRepository = userRepository,
-        _nostrDataService = nostrDataService,
+    required FollowingRepository followingRepository,
+    required ProfileRepository profileRepository,
+    required SyncService syncService,
+    required AuthService authService,
+  })  : _followingRepository = followingRepository,
+        _profileRepository = profileRepository,
+        _syncService = syncService,
+        _authService = authService,
         super(const SuggestedFollowsInitial()) {
     on<SuggestedFollowsLoadRequested>(_onSuggestedFollowsLoadRequested);
     on<SuggestedFollowsUserToggled>(_onSuggestedFollowsUserToggled);
-    on<SuggestedFollowsFollowSelectedRequested>(_onSuggestedFollowsFollowSelectedRequested);
+    on<SuggestedFollowsFollowSelectedRequested>(
+        _onSuggestedFollowsFollowSelectedRequested);
     on<SuggestedFollowsSkipRequested>(_onSuggestedFollowsSkipRequested);
   }
 
@@ -29,41 +38,49 @@ class SuggestedFollowsBloc extends Bloc<SuggestedFollowsEvent, SuggestedFollowsS
     emit(const SuggestedFollowsLoading());
 
     try {
-      final npubs = <String>[];
-      for (final pubkeyHex in suggestedUsers) {
-        final npub = _nostrDataService.authService.hexToNpub(pubkeyHex);
-        if (npub != null) {
-          npubs.add(npub);
-        }
-      }
-
-      final results = await _userRepository.getUserProfiles(
-        npubs,
-        priority: FetchPriority.high,
-      );
+      await _syncService.syncProfiles(suggestedUsers);
+      final profiles = await _profileRepository.getProfiles(suggestedUsers);
 
       final List<Map<String, dynamic>> users = [];
-      for (final entry in results.entries) {
-        entry.value.fold(
-          (user) => users.add(user),
-          (error) {
-            final fallbackUser = {
-              'pubkeyHex': entry.key,
-              'npub': entry.key,
-              'name': 'Nostr User',
-              'about': 'A Nostr user',
-              'profileImage': '',
-              'nip05': '',
-              'banner': '',
-              'lud16': '',
-              'website': '',
-              'updatedAt': DateTime.now(),
-              'nip05Verified': false,
-              'followerCount': 0,
-            };
-            users.add(fallbackUser);
-          },
-        );
+      for (final pubkeyHex in suggestedUsers) {
+        final profile = profiles[pubkeyHex];
+        final npub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
+
+        if (profile != null) {
+          final userWithNpub = <String, dynamic>{
+            'npub': npub,
+            'pubkeyHex': pubkeyHex,
+            'name': profile.name ?? profile.displayName ?? '',
+            'about': profile.about ?? '',
+            'profileImage': profile.picture ?? '',
+            'picture': profile.picture ?? '',
+            'nip05': profile.nip05 ?? '',
+            'banner': profile.banner ?? '',
+            'lud16': profile.lud16 ?? '',
+            'website': profile.website ?? '',
+            'updatedAt': DateTime.now(),
+            'nip05Verified': false,
+            'followerCount': 0,
+          };
+          users.add(userWithNpub);
+        } else {
+          final fallbackUser = {
+            'pubkeyHex': pubkeyHex,
+            'npub': npub,
+            'name': 'Nostr User',
+            'about': 'A Nostr user',
+            'profileImage': '',
+            'picture': '',
+            'nip05': '',
+            'banner': '',
+            'lud16': '',
+            'website': '',
+            'updatedAt': DateTime.now(),
+            'nip05Verified': false,
+            'followerCount': 0,
+          };
+          users.add(fallbackUser);
+        }
       }
 
       final selectedUsers = users
@@ -102,23 +119,31 @@ class SuggestedFollowsBloc extends Bloc<SuggestedFollowsEvent, SuggestedFollowsS
     Emitter<SuggestedFollowsState> emit,
   ) async {
     final currentState = state;
-    if (currentState is! SuggestedFollowsLoaded || currentState.isProcessing) return;
+    if (currentState is! SuggestedFollowsLoaded || currentState.isProcessing) {
+      return;
+    }
 
     emit(currentState.copyWith(isProcessing: true));
 
-    int successCount = 0;
-    for (final npub in currentState.selectedUsers) {
-      try {
-        final result = await _userRepository.followUser(npub);
-        result.fold(
-          (_) => successCount++,
-          (_) {},
-        );
-        await Future.delayed(const Duration(milliseconds: 100));
-      } catch (e) {
-        // Silently handle error - individual follow failure is acceptable
+    try {
+      final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+      if (pubkeyResult.isError || pubkeyResult.data == null) {
+        emit(currentState.copyWith(isProcessing: false));
+        return;
       }
-    }
+      final currentUserHex = pubkeyResult.data!;
+
+      final currentFollows =
+          await _followingRepository.getFollowingList(currentUserHex) ?? [];
+
+      final selectedHexes = currentState.selectedUsers
+          .map((npub) => _authService.npubToHex(npub) ?? npub)
+          .toList();
+
+      final newFollows = <String>{...currentFollows, ...selectedHexes}.toList();
+
+      await _syncService.publishFollow(followingPubkeys: newFollows);
+    } catch (e) {}
 
     emit(currentState.copyWith(isProcessing: false));
   }
@@ -128,7 +153,9 @@ class SuggestedFollowsBloc extends Bloc<SuggestedFollowsEvent, SuggestedFollowsS
     Emitter<SuggestedFollowsState> emit,
   ) {
     final currentState = state;
-    if (currentState is! SuggestedFollowsLoaded || currentState.isProcessing) return;
+    if (currentState is! SuggestedFollowsLoaded || currentState.isProcessing) {
+      return;
+    }
 
     emit(currentState.copyWith(selectedUsers: {}));
   }

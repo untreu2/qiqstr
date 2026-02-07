@@ -5,12 +5,12 @@ abstract class ArticleEvent extends BaseEvent {
 }
 
 class ArticleInitialized extends ArticleEvent {
-  final String npub;
+  final String userHex;
 
-  const ArticleInitialized({required this.npub});
+  const ArticleInitialized({required this.userHex});
 
   @override
-  List<Object?> get props => [npub];
+  List<Object?> get props => [userHex];
 }
 
 class ArticleRefreshed extends ArticleEvent {

@@ -62,7 +62,8 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_controller == null || !_controller!.value.isInitialized) return;
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       if (_controller!.value.isPlaying) {
         _controller!.pause();
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -76,7 +77,9 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
 
   @override
   void deactivate() {
-    if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
+    if (_controller != null &&
+        _controller!.value.isInitialized &&
+        _controller!.value.isPlaying) {
       _controller!.pause();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -88,7 +91,8 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   }
 
   void _updatePosition() {
-    if (!mounted || _controller == null || !_controller!.value.isInitialized) return;
+    if (!mounted || _controller == null || !_controller!.value.isInitialized)
+      return;
     final newPosition = _controller!.value.position;
     final newDuration = _controller!.value.duration;
     if (mounted) {
@@ -118,7 +122,9 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   }
 
   void _openFullScreen() {
-    if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
+    if (_controller != null &&
+        _controller!.value.isInitialized &&
+        _controller!.value.isPlaying) {
       _controller!.pause();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -126,7 +132,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
         }
       });
     }
-    
+
     Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 300),
@@ -192,136 +198,158 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
         builder: (context, constraints) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: _isInitialized && _controller != null && _controller!.value.aspectRatio > 0
+            child: _isInitialized &&
+                    _controller != null &&
+                    _controller!.value.aspectRatio > 0
                 ? AspectRatio(
                     aspectRatio: _controller!.value.aspectRatio,
                     child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GestureDetector(
-                          onTap: _togglePlayPause,
-                          child: VideoPlayer(_controller!),
+                      children: [
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: _togglePlayPause,
+                            child: VideoPlayer(_controller!),
+                          ),
                         ),
-                      ),
-                      Positioned(
-                        top: 8,
-                        left: 8,
-                        child: GestureDetector(
-                          onTap: _isDownloading ? null : _downloadVideo,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              _isDownloading ? CarbonIcons.download : CarbonIcons.download,
-                              color: Colors.white,
-                              size: 20,
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: GestureDetector(
+                            onTap: _isDownloading ? null : _downloadVideo,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                _isDownloading
+                                    ? CarbonIcons.download
+                                    : CarbonIcons.download,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: GestureDetector(
-                          onTap: _openFullScreen,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              CarbonIcons.maximize,
-                              color: Colors.white,
-                              size: 20,
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: GestureDetector(
+                            onTap: _openFullScreen,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                CarbonIcons.maximize,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          onTap: () {},
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                                colors: [
-                                  Colors.black.withValues(alpha: 0.7),
-                                  Colors.transparent,
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: GestureDetector(
+                            onTap: () {},
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.7),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 8),
+                              child: Row(
+                                children: [
+                                  GestureDetector(
+                                    onTap: () {
+                                      _togglePlayPause();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Icon(
+                                        _isPlaying
+                                            ? CarbonIcons.pause
+                                            : CarbonIcons.play,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Builder(
+                                      builder: (context) {
+                                        final colors = context.colors;
+                                        return SliderTheme(
+                                          data:
+                                              SliderTheme.of(context).copyWith(
+                                            activeTrackColor: colors.accent,
+                                            inactiveTrackColor: Colors.white
+                                                .withValues(alpha: 0.3),
+                                            thumbColor: Colors.white,
+                                            thumbShape:
+                                                const RoundSliderThumbShape(
+                                                    enabledThumbRadius: 4),
+                                            overlayShape:
+                                                const RoundSliderOverlayShape(
+                                                    overlayRadius: 8),
+                                            trackHeight: 2,
+                                          ),
+                                          child: Slider(
+                                            value: _position.inMilliseconds
+                                                .toDouble()
+                                                .clamp(
+                                                    0.0,
+                                                    _duration.inMilliseconds
+                                                        .toDouble()),
+                                            max: _duration.inMilliseconds
+                                                .toDouble(),
+                                            onChanged: (value) {
+                                              final position = Duration(
+                                                  milliseconds: value.toInt());
+                                              _controller?.seekTo(position);
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        left: 8, right: 4),
+                                    child: Text(
+                                      _formatDuration(_duration),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            child: Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  _togglePlayPause();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(
-                                    _isPlaying ? CarbonIcons.pause : CarbonIcons.play,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Builder(
-                                  builder: (context) {
-                                    final colors = context.colors;
-                                    return SliderTheme(
-                                      data: SliderTheme.of(context).copyWith(
-                                        activeTrackColor: colors.accent,
-                                        inactiveTrackColor: Colors.white.withValues(alpha: 0.3),
-                                        thumbColor: Colors.white,
-                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
-                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 8),
-                                        trackHeight: 2,
-                                      ),
-                                      child: Slider(
-                                        value: _position.inMilliseconds.toDouble().clamp(0.0, _duration.inMilliseconds.toDouble()),
-                                        max: _duration.inMilliseconds.toDouble(),
-                                        onChanged: (value) {
-                                          final position = Duration(milliseconds: value.toInt());
-                                          _controller?.seekTo(position);
-                                        },
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8, right: 4),
-                                child: Text(
-                                  _formatDuration(_duration),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                )
+                      ],
+                    ),
+                  )
                 : AspectRatio(
                     aspectRatio: 1,
                     child: Stack(
                       children: [
-                        if (widget.authorProfileImageUrl != null && widget.authorProfileImageUrl!.isNotEmpty)
+                        if (widget.authorProfileImageUrl != null &&
+                            widget.authorProfileImageUrl!.isNotEmpty)
                           Positioned.fill(
                             child: CachedNetworkImage(
                               imageUrl: widget.authorProfileImageUrl!,
@@ -393,19 +421,19 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   }
 
   DateTime? _lastPositionUpdate;
-  
+
   void _updatePosition() {
     if (!_controller.value.isInitialized) return;
-    
+
     final now = DateTime.now();
-    if (_lastPositionUpdate != null && 
+    if (_lastPositionUpdate != null &&
         now.difference(_lastPositionUpdate!).inMilliseconds < 500) {
       return;
     }
-    
+
     _lastPositionUpdate = now;
     final newPosition = _controller.value.position;
-    
+
     if ((_position - newPosition).inSeconds.abs() >= 1) {
       if (mounted) {
         setState(() {
@@ -418,7 +446,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   void _startHideTimer() {
     final showTime = DateTime.now();
     _lastShowTime = showTime;
-    
+
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted && _lastShowTime == showTime && _showControls) {
         setState(() {
@@ -495,7 +523,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: 1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
+      backgroundColor: Colors.black
+          .withValues(alpha: 1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
       body: GestureDetector(
         onTap: _showControlsAndResetTimer,
         onVerticalDragUpdate: _handleVerticalDragUpdate,
@@ -518,7 +547,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                 ),
               )
             else
-              const Center(child: CircularProgressIndicator(color: Colors.white)),
+              const Center(
+                  child: CircularProgressIndicator(color: Colors.white)),
             if (_isInitialized)
               Positioned(
                 bottom: 80,
@@ -537,7 +567,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                           child: BackdropFilter(
                             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
                                 color: colors.surface.withValues(alpha: 0.8),
                                 border: Border.all(
@@ -550,13 +581,17 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                 children: [
                                   IconActionButton(
                                     icon: CarbonIcons.close,
-                                    onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                                    onPressed: () => Navigator.of(context,
+                                            rootNavigator: true)
+                                        .pop(),
                                     size: ButtonSize.small,
                                     isCircular: true,
                                   ),
                                   IconButton(
                                     icon: Icon(
-                                      _controller.value.isPlaying ? CarbonIcons.pause : CarbonIcons.play,
+                                      _controller.value.isPlaying
+                                          ? CarbonIcons.pause
+                                          : CarbonIcons.play,
                                       color: colors.textPrimary,
                                       size: 22,
                                     ),
@@ -577,21 +612,33 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                   ),
                                   Expanded(
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12),
                                       child: SliderTheme(
                                         data: SliderTheme.of(context).copyWith(
                                           activeTrackColor: colors.accent,
-                                          inactiveTrackColor: colors.textSecondary.withValues(alpha: 0.3),
+                                          inactiveTrackColor: colors
+                                              .textSecondary
+                                              .withValues(alpha: 0.3),
                                           thumbColor: colors.textPrimary,
-                                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                          thumbShape:
+                                              const RoundSliderThumbShape(
+                                                  enabledThumbRadius: 6),
+                                          overlayShape:
+                                              const RoundSliderOverlayShape(
+                                                  overlayRadius: 12),
                                           trackHeight: 3,
                                         ),
                                         child: Slider(
-                                          value: _controller.value.position.inMilliseconds.toDouble(),
-                                          max: _controller.value.duration.inMilliseconds.toDouble(),
+                                          value: _controller
+                                              .value.position.inMilliseconds
+                                              .toDouble(),
+                                          max: _controller
+                                              .value.duration.inMilliseconds
+                                              .toDouble(),
                                           onChanged: (value) {
-                                            final position = Duration(milliseconds: value.toInt());
+                                            final position = Duration(
+                                                milliseconds: value.toInt());
                                             _controller.seekTo(position);
                                             _showControlsAndResetTimer();
                                           },
@@ -605,8 +652,11 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                   ),
                                   const SizedBox(width: 8),
                                   IconActionButton(
-                                    icon: _isDownloading ? CarbonIcons.download : CarbonIcons.download,
-                                    onPressed: _isDownloading ? null : _downloadVideo,
+                                    icon: _isDownloading
+                                        ? CarbonIcons.download
+                                        : CarbonIcons.download,
+                                    onPressed:
+                                        _isDownloading ? null : _downloadVideo,
                                     size: ButtonSize.small,
                                   ),
                                 ],

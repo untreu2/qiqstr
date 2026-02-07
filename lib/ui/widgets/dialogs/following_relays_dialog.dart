@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/services/relay_service.dart';
 import '../../../core/di/app_di.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/relay_service.dart';
 import '../../../constants/relays.dart';
 import 'dart:convert';
 
@@ -80,26 +81,29 @@ class _FollowingRelaysDialogContentState
     setState(() => _isLoading = true);
 
     try {
-      final authRepository = AppDI.get<AuthRepository>();
-      final userRepository = AppDI.get<UserRepository>();
+      final authService = AppDI.get<AuthService>();
+      final followingRepo = AppDI.get<FollowingRepository>();
+      final profileRepo = AppDI.get<ProfileRepository>();
 
-      final currentUserResult = await authRepository.getCurrentUserNpub();
-      if (currentUserResult.isError || currentUserResult.data == null) {
+      final currentUserHex = authService.currentUserPubkeyHex;
+      if (currentUserHex == null) {
         if (mounted) {
           setState(() => _isLoading = false);
         }
         return;
       }
 
-      final followingResult = await userRepository.getFollowingList();
-      if (followingResult.isError || followingResult.data == null) {
+      final followingPubkeys =
+          await followingRepo.getFollowingList(currentUserHex);
+      if (followingPubkeys == null || followingPubkeys.isEmpty) {
         if (mounted) {
           setState(() => _isLoading = false);
         }
         return;
       }
 
-      final followingUsers = followingResult.data!;
+      final profiles = await profileRepo.getProfiles(followingPubkeys);
+      final followingUsers = profiles.values.toList();
       if (followingUsers.isEmpty) {
         if (mounted) {
           setState(() => _isLoading = false);
@@ -113,11 +117,11 @@ class _FollowingRelaysDialogContentState
       final pubkeyHexList = followingUsers
           .map((user) {
             try {
-              final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-              final hex = authRepository.npubToHex(userPubkeyHex);
+              final userPubkeyHex = user.pubkey;
+              final hex = authService.npubToHex(userPubkeyHex);
               return hex ?? userPubkeyHex;
             } catch (_) {
-              return user['pubkeyHex'] as String? ?? '';
+              return user.pubkey;
             }
           })
           .where((hex) => hex.isNotEmpty)

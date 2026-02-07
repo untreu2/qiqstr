@@ -9,16 +9,17 @@ import '../../screens/webview/webview_page.dart';
 Future<Map<String, dynamic>?> _fetchAndParseLink(String url) async {
   try {
     final response = await http.get(Uri.parse(url)).timeout(
-      const Duration(seconds: 3),
-      onTimeout: () => http.Response('', 408),
-    );
+          const Duration(seconds: 3),
+          onTimeout: () => http.Response('', 408),
+        );
     if (response.statusCode == 200) {
       final document = html_parser.parse(response.body);
       final metaOgTitle = document.querySelector('meta[property="og:title"]');
       final metaTitle = document.querySelector('title');
       final metaOgImage = document.querySelector('meta[property="og:image"]');
 
-      final String parsedTitle = metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
+      final String parsedTitle =
+          metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
       final String? parsedImage = metaOgImage?.attributes['content'];
 
       return {
@@ -128,7 +129,8 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: CachedNetworkImage(
@@ -167,7 +169,8 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
               ),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 color: context.colors.textPrimary,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

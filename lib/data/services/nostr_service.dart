@@ -1,15 +1,12 @@
 import 'dart:convert';
 import 'dart:collection';
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:ndk/ndk.dart';
-import 'package:ndk/entities.dart';
-import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
+import '../../src/rust/api/events.dart' as rust_events;
 
 class NostrService {
-  static final Map<String, Filter> _filterCache = {};
+  static final Map<String, Map<String, dynamic>> _filterCache = {};
   static final Map<String, String> _requestCache = {};
   static const int _maxCacheSize = 1000;
 
@@ -21,161 +18,128 @@ class NostrService {
   static final Queue<Map<String, dynamic>> _batchQueue = Queue();
   static bool _isBatchProcessing = false;
 
-  static Nip01Event createNoteEvent({
+  static Map<String, dynamic> createNoteEvent({
     required String content,
     required String privateKey,
     List<List<String>>? tags,
   }) {
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 1,
-      tags: tags ?? [],
+    final json = rust_events.createNoteEvent(
       content: content,
+      tags: tags ?? [],
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createReactionEvent({
+  static Map<String, dynamic> createReactionEvent({
     required String targetEventId,
+    required String targetAuthor,
     required String content,
     required String privateKey,
+    String? relayUrl,
+    int targetKind = 1,
   }) {
-    final tags = [
-      ['e', targetEventId]
-    ];
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 7,
-      tags: tags,
+    final json = rust_events.createReactionEvent(
+      targetEventId: targetEventId,
+      targetAuthor: targetAuthor,
       content: content,
+      privateKeyHex: privateKey,
+      relayUrl: relayUrl ?? '',
+      targetKind: targetKind,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createReplyEvent({
+  static Map<String, dynamic> createReplyEvent({
     required String content,
     required String privateKey,
     required List<List<String>> tags,
   }) {
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 1,
-      tags: tags,
+    final json = rust_events.createReplyEvent(
       content: content,
+      tags: tags,
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createRepostEvent({
+  static Map<String, dynamic> createRepostEvent({
     required String noteId,
     required String noteAuthor,
     required String content,
     required String privateKey,
+    String? relayUrl,
   }) {
-    final tags = [
-      ['e', noteId],
-      ['p', noteAuthor],
-    ];
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 6,
-      tags: tags,
+    final json = rust_events.createRepostEvent(
+      noteId: noteId,
+      noteAuthor: noteAuthor,
       content: content,
+      privateKeyHex: privateKey,
+      relayUrl: relayUrl ?? '',
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createDeletionEvent({
+  static Map<String, dynamic> createDeletionEvent({
     required List<String> eventIds,
     required String privateKey,
     String? reason,
   }) {
-    final tags = eventIds.map((id) => ['e', id]).toList();
-    final content = reason ?? '';
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 5,
-      tags: tags,
-      content: content,
+    final json = rust_events.createDeletionEvent(
+      eventIds: eventIds,
+      reason: reason ?? '',
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createProfileEvent({
+  static Map<String, dynamic> createProfileEvent({
     required Map<String, dynamic> profileContent,
     required String privateKey,
   }) {
-    final content = jsonEncode(profileContent);
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 0,
-      tags: [],
-      content: content,
+    final json = rust_events.createProfileEvent(
+      profileJson: jsonEncode(profileContent),
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createFollowEvent({
+  static Map<String, dynamic> createFollowEvent({
     required List<String> followingPubkeys,
     required String privateKey,
   }) {
-    final tags = followingPubkeys.map((pubkey) => ['p', pubkey, '']).toList();
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 3,
-      tags: tags,
-      content: "",
+    final json = rust_events.createFollowEvent(
+      followingPubkeys: followingPubkeys,
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createMuteEvent({
+  static Map<String, dynamic> createMuteEvent({
     required List<String> mutedPubkeys,
     required String privateKey,
   }) {
-    final tags = mutedPubkeys.map((pubkey) => ['p', pubkey]).toList();
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 10000,
-      tags: tags,
-      content: "",
+    final json = rust_events.createMuteEvent(
+      mutedPubkeys: mutedPubkeys,
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createZapRequestEvent({
+  static Map<String, dynamic> createZapRequestEvent({
     required List<List<String>> tags,
     required String content,
     required String privateKey,
   }) {
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 9734,
+    final json = rust_events.createZapRequestEvent(
       tags: tags,
       content: content,
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createQuoteEvent({
+  static Map<String, dynamic> createQuoteEvent({
     required String content,
     required String quotedEventId,
     String? quotedEventPubkey,
@@ -183,56 +147,33 @@ class NostrService {
     required String privateKey,
     List<List<String>>? additionalTags,
   }) {
-    final List<List<String>> tags = [];
-
-    if (quotedEventPubkey != null) {
-      tags.add(['q', quotedEventId, relayUrl ?? '', quotedEventPubkey]);
-    } else {
-      tags.add(['q', quotedEventId, relayUrl ?? '']);
-    }
-
-    if (quotedEventPubkey != null) {
-      tags.add(['p', quotedEventPubkey]);
-    }
-
-    if (additionalTags != null) {
-      tags.addAll(additionalTags);
-    }
-
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 1,
-      tags: tags,
+    final json = rust_events.createQuoteEvent(
       content: content,
+      quotedEventId: quotedEventId,
+      quotedEventPubkey: quotedEventPubkey,
+      relayUrl: relayUrl ?? '',
+      privateKeyHex: privateKey,
+      additionalTags: additionalTags ?? [],
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Nip01Event createBlossomAuthEvent({
+  static Map<String, dynamic> createBlossomAuthEvent({
     required String content,
     required String sha256Hash,
     required int expiration,
     required String privateKey,
   }) {
-    final tags = [
-      ['t', 'upload'],
-      ['x', sha256Hash],
-      ['expiration', expiration.toString()],
-    ];
-    final publicKey = Bip340.getPublicKey(privateKey);
-    final event = Nip01Event(
-      pubKey: publicKey,
-      kind: 24242,
-      tags: tags,
+    final json = rust_events.createBlossomAuthEvent(
       content: content,
+      sha256Hash: sha256Hash,
+      expiration: expiration,
+      privateKeyHex: privateKey,
     );
-    event.sig = Bip340.sign(event.id, privateKey);
-    return event;
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Filter createNotesFilter({
+  static Map<String, dynamic> createNotesFilter({
     List<String>? authors,
     List<int>? kinds,
     int? limit,
@@ -255,123 +196,161 @@ class NostrService {
     _cacheMisses++;
     _filtersCreated++;
 
-    final filter = Filter(
-      authors: authors,
-      kinds: kinds ?? [1, 6],
-      limit: limit,
-      since: since,
-      until: until,
-    );
+    final filter = <String, dynamic>{};
+    if (authors != null && authors.isNotEmpty) filter['authors'] = authors;
+    filter['kinds'] = kinds ?? [1, 6];
+    if (limit != null) filter['limit'] = limit;
+    if (since != null) filter['since'] = since;
+    if (until != null) filter['until'] = until;
 
     _addToFilterCache(cacheKey, filter);
     return filter;
   }
 
-  static Filter createProfileFilter({
+  static Map<String, dynamic> createProfileFilter({
     required List<String> authors,
     int? limit,
   }) {
-    return Filter(
-      authors: authors,
-      kinds: [0],
-      limit: limit,
-    );
+    final filter = <String, dynamic>{
+      'kinds': [0],
+    };
+    if (authors.isNotEmpty) filter['authors'] = authors;
+    if (limit != null) filter['limit'] = limit;
+    return filter;
   }
 
-  static Filter createFollowingFilter({
+  static Map<String, dynamic> createFollowingFilter({
     required List<String> authors,
     int? limit,
   }) {
-    return Filter(
-      authors: authors,
-      kinds: [3],
-      limit: limit,
-    );
+    final filter = <String, dynamic>{
+      'kinds': [3],
+    };
+    if (authors.isNotEmpty) filter['authors'] = authors;
+    if (limit != null) filter['limit'] = limit;
+    return filter;
   }
 
-  static Filter createMuteFilter({
+  static Map<String, dynamic> createMuteFilter({
     required List<String> authors,
     int? limit,
   }) {
-    return Filter(
-      authors: authors,
-      kinds: [10000],
-      limit: limit,
-    );
+    final filter = <String, dynamic>{
+      'kinds': [10000],
+    };
+    if (authors.isNotEmpty) filter['authors'] = authors;
+    if (limit != null) filter['limit'] = limit;
+    return filter;
   }
 
-  static Filter createNotificationFilter({
+  static Map<String, dynamic> createNotificationFilter({
     required List<String> pubkeys,
     List<int>? kinds,
     int? since,
     int? limit,
   }) {
-    return Filter(
-      pTags: pubkeys,
-      kinds: kinds ?? [1, 6, 7, 9735],
-      since: since,
-      limit: limit,
-    );
+    final filter = <String, dynamic>{
+      '#p': pubkeys,
+      'kinds': kinds ?? [1, 6, 7, 9735],
+    };
+    if (since != null) filter['since'] = since;
+    if (limit != null) filter['limit'] = limit;
+    return filter;
   }
 
-  static Filter createEventByIdFilter({
+  static Map<String, dynamic> createEventByIdFilter({
     required List<String> eventIds,
   }) {
-    return Filter(
-      ids: eventIds,
-    );
+    return <String, dynamic>{
+      'ids': eventIds,
+    };
   }
 
-  static Filter createCombinedInteractionFilter({
+  static Map<String, dynamic> createCombinedInteractionFilter({
     required List<String> eventIds,
     int? limit,
   }) {
-    return Filter(
-      kinds: [7, 1, 6, 9735],
-      eTags: eventIds,
-      limit: limit,
-    );
+    final filter = <String, dynamic>{
+      'kinds': [7, 1, 6, 9735],
+      '#e': eventIds,
+    };
+    if (limit != null) filter['limit'] = limit;
+    return filter;
   }
 
-  static Filter createThreadRepliesFilter({
+  static Map<String, dynamic> createThreadRepliesFilter({
     required String rootNoteId,
     int? limit,
   }) {
-    return Filter(
-      kinds: [1],
-      eTags: [rootNoteId],
-      limit: limit ?? 100,
-    );
+    return <String, dynamic>{
+      'kinds': [1],
+      '#e': [rootNoteId],
+      'limit': limit ?? 100,
+    };
   }
 
-  static Filter createInteractionFilter({
+  static Map<String, dynamic> createInteractionFilter({
     required List<int> kinds,
     required List<String> eventIds,
     int? limit,
     int? since,
   }) {
-    return Filter(
-      kinds: kinds,
-      eTags: eventIds,
-      limit: limit,
-      since: since,
-    );
+    final filter = <String, dynamic>{
+      'kinds': kinds,
+      '#e': eventIds,
+    };
+    if (limit != null) filter['limit'] = limit;
+    if (since != null) filter['since'] = since;
+    return filter;
   }
 
-  static Filter createQuoteFilter({
+  static Map<String, dynamic> createQuoteFilter({
     required List<int> kinds,
     required List<String> quotedEventIds,
     int? limit,
   }) {
-    final filter = Filter(
-      kinds: kinds,
-      limit: limit,
-    );
-    filter.setTag('q', quotedEventIds);
+    final filter = <String, dynamic>{
+      'kinds': kinds,
+      '#q': quotedEventIds,
+    };
+    if (limit != null) filter['limit'] = limit;
     return filter;
   }
 
-  static String createRequest(Filter filter) {
+  static Map<String, dynamic> createArticlesFilter({
+    List<String>? authors,
+    int? limit,
+    int? since,
+    int? until,
+  }) {
+    final filter = <String, dynamic>{
+      'kinds': [30023],
+    };
+    if (authors != null && authors.isNotEmpty) filter['authors'] = authors;
+    if (limit != null) filter['limit'] = limit;
+    if (since != null) filter['since'] = since;
+    if (until != null) filter['until'] = until;
+    return filter;
+  }
+
+  static Map<String, dynamic> createHashtagFilter({
+    required String hashtag,
+    List<int>? kinds,
+    int? limit,
+    int? since,
+    int? until,
+  }) {
+    final filter = <String, dynamic>{
+      'kinds': kinds ?? [1],
+      '#t': [hashtag.toLowerCase()],
+      'limit': limit ?? 100,
+    };
+    if (since != null) filter['since'] = since;
+    if (until != null) filter['until'] = until;
+    return filter;
+  }
+
+  static String createRequest(Map<String, dynamic> filter) {
     final uuid = generateUUID();
     final cacheKey = 'single_${filter.hashCode}';
 
@@ -383,12 +362,12 @@ class NostrService {
     _cacheMisses++;
     _requestsCreated++;
 
-    final request = jsonEncode(['REQ', uuid, filter.toJson()]);
+    final request = jsonEncode(['REQ', uuid, filter]);
     _addToRequestCache(cacheKey, request);
     return request;
   }
 
-  static String createMultiFilterRequest(List<Filter> filters) {
+  static String createMultiFilterRequest(List<Map<String, dynamic>> filters) {
     final uuid = generateUUID();
     final cacheKey = 'multi_${filters.map((f) => f.hashCode).join('_')}';
 
@@ -400,8 +379,7 @@ class NostrService {
     _cacheMisses++;
     _requestsCreated++;
 
-    final filterList = filters.map((f) => f.toJson()).toList();
-    final request = jsonEncode(['REQ', uuid, ...filterList]);
+    final request = jsonEncode(['REQ', uuid, ...filters]);
     _addToRequestCache(cacheKey, request);
     return request;
   }
@@ -410,17 +388,17 @@ class NostrService {
     return const Uuid().v4().replaceAll('-', '');
   }
 
-  static String serializeEvent(Nip01Event event) =>
-      jsonEncode(['EVENT', event.toJson()]);
+  static String serializeEvent(Map<String, dynamic> event) =>
+      jsonEncode(['EVENT', event]);
 
   static String serializeRequest(String request) => request;
 
-  static String serializeCountRequest(String subscriptionId, Filter filter) {
-    final filterMap = filter.toJson();
-    return jsonEncode(['COUNT', subscriptionId, filterMap]);
+  static String serializeCountRequest(
+      String subscriptionId, Map<String, dynamic> filter) {
+    return jsonEncode(['COUNT', subscriptionId, filter]);
   }
 
-  static Map<String, dynamic> eventToJson(Nip01Event event) => event.toJson();
+  static Map<String, dynamic> eventToJson(Map<String, dynamic> event) => event;
 
   static List<List<String>> createZapRequestTags({
     required List<String> relays,
@@ -449,19 +427,24 @@ class NostrService {
   static List<List<String>> createReplyTags({
     required String rootId,
     String? replyId,
-    required String parentAuthor,
-    required List<String> relayUrls,
+    required String rootAuthor,
+    String? replyAuthor,
+    String? relayUrl,
   }) {
     List<List<String>> tags = [];
+    final relay = relayUrl ?? '';
 
     if (replyId != null && replyId != rootId) {
-      tags.add(['e', rootId, '', 'root', parentAuthor]);
-      tags.add(['e', replyId, '', 'reply', parentAuthor]);
+      tags.add(['e', rootId, relay, 'root']);
+      tags.add(['e', replyId, relay, 'reply']);
+      tags.add(['p', rootAuthor]);
+      if (replyAuthor != null && replyAuthor != rootAuthor) {
+        tags.add(['p', replyAuthor]);
+      }
     } else {
-      tags.add(['e', rootId, '', 'root', parentAuthor]);
+      tags.add(['e', rootId, relay, 'root']);
+      tags.add(['p', rootAuthor]);
     }
-
-    tags.add(['p', parentAuthor]);
 
     return tags;
   }
@@ -519,6 +502,7 @@ class NostrService {
           case 'createReactionEvent':
             results.add(createReactionEvent(
               targetEventId: params['targetEventId'],
+              targetAuthor: params['targetAuthor'],
               content: params['content'],
               privateKey: params['privateKey'],
             ));
@@ -546,7 +530,7 @@ class NostrService {
     return 'filter_${type}_${params.hashCode}';
   }
 
-  static void _addToFilterCache(String key, Filter filter) {
+  static void _addToFilterCache(String key, Map<String, dynamic> filter) {
     if (_filterCache.length >= _maxCacheSize) {
       _evictOldestCacheEntry(_filterCache);
     }
@@ -599,7 +583,7 @@ class NostrService {
     _batchQueue.clear();
   }
 
-  static List<Nip01Event> createMultipleNoteEvents(
+  static List<Map<String, dynamic>> createMultipleNoteEvents(
       List<Map<String, dynamic>> eventData) {
     return eventData
         .map((data) => createNoteEvent(
@@ -610,7 +594,7 @@ class NostrService {
         .toList();
   }
 
-  static List<Filter> createMultipleFilters(
+  static List<Map<String, dynamic>> createMultipleFilters(
       List<Map<String, dynamic>> filterData) {
     return filterData
         .map((data) => createNotesFilter(
@@ -641,46 +625,41 @@ class NostrService {
     }
 
     final fileBytes = await file.readAsBytes();
+    final hash = calculateSha256Hash(fileBytes);
     final mimeType = detectMimeType(filePath);
-    final publicKey = Bip340.getPublicKey(privateKey);
+    final expiration = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600;
 
-    final ndk = Ndk(
-      NdkConfig(
-        eventVerifier: Bip340EventVerifier(),
-        cache: MemCacheManager(),
-        bootstrapRelays: [],
-      ),
+    final authEventJson = rust_events.createBlossomAuthEvent(
+      content: 'Upload $filePath',
+      sha256Hash: hash,
+      expiration: expiration,
+      privateKeyHex: privateKey,
     );
 
-    ndk.accounts.loginPrivateKey(
-      pubkey: publicKey,
-      privkey: privateKey,
-    );
-
-    final ndkFile = NdkFile(
-      data: Uint8List.fromList(fileBytes),
-      mimeType: mimeType,
-    );
-
+    final authBase64 = base64Encode(utf8.encode(authEventJson));
     final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
 
-    final uploadResults = await ndk.files.upload(
-      file: ndkFile,
-      serverUrls: [cleanedUrl],
-    );
+    final httpClient = HttpClient();
+    try {
+      final request = await httpClient.putUrl(Uri.parse('$cleanedUrl/upload'));
+      request.headers.set('Authorization', 'Nostr $authBase64');
+      request.headers.set('Content-Type', mimeType);
+      request.add(fileBytes);
 
-    if (uploadResults.isEmpty || !uploadResults.first.success) {
-      throw Exception(
-          'Upload failed: ${uploadResults.first.error ?? 'Unknown error'}');
+      final response = await request.close();
+      final responseBody = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(responseBody) as Map<String, dynamic>;
+        final url = responseData['url'] as String? ?? '';
+        final sha256 = responseData['sha256'] as String? ?? '';
+        return url.isNotEmpty ? url : sha256;
+      } else {
+        throw Exception(
+            'Upload failed with status ${response.statusCode}: $responseBody');
+      }
+    } finally {
+      httpClient.close();
     }
-
-    final blobDescriptor = uploadResults.first.descriptor;
-    if (blobDescriptor == null) {
-      throw Exception('Upload succeeded but no descriptor returned.');
-    }
-
-    return blobDescriptor.url.isNotEmpty
-        ? blobDescriptor.url
-        : blobDescriptor.sha256;
   }
 }

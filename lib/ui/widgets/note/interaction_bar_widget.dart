@@ -4,16 +4,17 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/share_note.dart';
-import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../../presentation/blocs/interaction/interaction_bloc.dart';
 import '../../../presentation/blocs/interaction/interaction_event.dart';
 import '../../../presentation/blocs/interaction/interaction_state.dart';
-import '../../../data/repositories/note_repository.dart';
 import '../../../data/services/event_verifier.dart';
+import '../../../data/repositories/feed_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../dialogs/zap_dialog.dart';
 import '../dialogs/delete_note_dialog.dart';
@@ -21,14 +22,14 @@ import '../common/snackbar_widget.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
-  final String currentUserNpub;
+  final String currentUserHex;
   final Map<String, dynamic>? note;
   final bool isBigSize;
 
   const InteractionBar({
     super.key,
     required this.noteId,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     this.note,
     this.isBigSize = false,
   });
@@ -46,14 +47,15 @@ class _InteractionBarState extends State<InteractionBar> {
   void initState() {
     super.initState();
     _interactionBloc = InteractionBloc(
-      noteRepository: AppDI.get<NoteRepository>(),
+      syncService: AppDI.get<SyncService>(),
+      feedRepository: AppDI.get<FeedRepository>(),
       noteId: widget.noteId,
-      currentUserNpub: widget.currentUserNpub,
+      currentUserHex: widget.currentUserHex,
       note: widget.note,
     );
     _interactionBloc.add(InteractionInitialized(
       noteId: widget.noteId,
-      currentUserNpub: widget.currentUserNpub,
+      currentUserHex: widget.currentUserHex,
       note: widget.note,
     ));
   }
@@ -314,8 +316,6 @@ class _InteractionBarState extends State<InteractionBar> {
       context.push('/home/feed/note-statistics', extra: noteForStats);
     } else if (currentLocation.startsWith('/home/notifications')) {
       context.push('/home/notifications/note-statistics', extra: noteForStats);
-    } else if (currentLocation.startsWith('/home/explore')) {
-      context.push('/home/feed/note-statistics', extra: noteForStats);
     } else {
       context.push('/note-statistics', extra: noteForStats);
     }
@@ -327,28 +327,34 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final note = _interactionBloc.getNoteForActions();
     if (note == null) return;
-    final rawWs = note['rawWs'] as String?;
-    if (rawWs == null || rawWs.isEmpty) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Event data not available for verification');
-      }
-      return;
-    }
 
     try {
       final verifier = EventVerifier.instance;
-      final isValid = await verifier.verifyNote(note);
+
+      final noteValid = await verifier.verifyNote(note);
+      if (!mounted) return;
+
+      final authorHex =
+          note['pubkey'] as String? ?? note['author'] as String? ?? '';
+      bool profileValid = false;
+      if (authorHex.isNotEmpty) {
+        profileValid = await verifier.verifyProfile(authorHex);
+      }
 
       if (!mounted) return;
 
-      if (isValid) {
-        AppSnackbar.success(context, 'Event signature verified successfully');
+      if (noteValid && profileValid) {
+        AppSnackbar.success(
+            context, 'Event and author profile signatures verified');
+      } else if (noteValid && !profileValid) {
+        AppSnackbar.success(context,
+            'Event signature verified, profile not available for verification');
       } else {
         AppSnackbar.error(context, 'Event signature verification failed');
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.error(context, 'Failed to verify event: $e');
+        AppSnackbar.error(context, 'Verification failed: $e');
       }
     }
   }
@@ -496,7 +502,7 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final noteForActions = _interactionBloc.getNoteForActions();
     final noteAuthor = noteForActions?['author'] as String?;
-    if (noteAuthor == widget.currentUserNpub) {
+    if (noteAuthor == widget.currentUserHex) {
       items.add(
         PopupMenuItem(
           value: 'delete',

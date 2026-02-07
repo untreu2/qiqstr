@@ -71,5 +71,7 @@ class LoggingService {
 
 final loggingService = LoggingService.instance;
 
-void logWarning(String message, [String? tag]) => loggingService.warning(message, tag);
-void logError(String message, [String? tag, Object? error]) => loggingService.error(message, tag, error);
+void logWarning(String message, [String? tag]) =>
+    loggingService.warning(message, tag);
+void logError(String message, [String? tag, Object? error]) =>
+    loggingService.error(message, tag, error);

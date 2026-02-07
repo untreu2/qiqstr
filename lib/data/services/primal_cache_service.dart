@@ -18,8 +18,10 @@ class PrimalCacheService {
 
   final WebSocketManager _webSocketManager = WebSocketManager.instance;
   final Map<String, Completer<Map<String, int>>> _pendingCountRequests = {};
-  final Map<String, Completer<Map<String, Map<String, dynamic>>>> _pendingProfileRequests = {};
-  final Map<String, Completer<List<Map<String, dynamic>>>> _pendingNotificationRequests = {};
+  final Map<String, Completer<Map<String, Map<String, dynamic>>>>
+      _pendingProfileRequests = {};
+  final Map<String, Completer<List<Map<String, dynamic>>>>
+      _pendingNotificationRequests = {};
   final Map<String, List<Map<String, dynamic>>> _notificationBuffers = {};
   int _subscriptionCounter = 0;
 
@@ -33,7 +35,8 @@ class PrimalCacheService {
         final event = decoded[2] as Map<String, dynamic>;
         final kind = event['kind'] as int?;
 
-        if (kind == NOTIFICATION && _pendingNotificationRequests.containsKey(subscriptionId)) {
+        if (kind == NOTIFICATION &&
+            _pendingNotificationRequests.containsKey(subscriptionId)) {
           try {
             final content = event['content'];
             Map<String, dynamic> notifData;
@@ -44,7 +47,7 @@ class PrimalCacheService {
             } else {
               return;
             }
-            
+
             if (!_notificationBuffers.containsKey(subscriptionId)) {
               _notificationBuffers[subscriptionId] = [];
             }
@@ -54,11 +57,13 @@ class PrimalCacheService {
               print('[PrimalCacheService] Notification parse error: $e');
             }
           }
-        } else if (kind == USER_FOLLOWER_COUNTS && _pendingCountRequests.containsKey(subscriptionId)) {
+        } else if (kind == USER_FOLLOWER_COUNTS &&
+            _pendingCountRequests.containsKey(subscriptionId)) {
           final completer = _pendingCountRequests.remove(subscriptionId);
           if (completer != null && !completer.isCompleted) {
             try {
-              final content = jsonDecode(event['content'] as String) as Map<String, dynamic>;
+              final content = jsonDecode(event['content'] as String)
+                  as Map<String, dynamic>;
               final followerCounts = <String, int>{};
               content.forEach((key, value) {
                 if (value is int) {
@@ -77,7 +82,8 @@ class PrimalCacheService {
           final completer = _pendingProfileRequests.remove(subscriptionId);
           if (completer != null && !completer.isCompleted) {
             try {
-              final content = jsonDecode(event['content'] as String) as Map<String, dynamic>;
+              final content = jsonDecode(event['content'] as String)
+                  as Map<String, dynamic>;
               final profiles = <String, Map<String, dynamic>>{};
               content.forEach((key, value) {
                 if (value is Map<String, dynamic>) {
@@ -102,9 +108,12 @@ class PrimalCacheService {
         final profileCompleter = _pendingProfileRequests.remove(subscriptionId);
         profileCompleter?.complete({});
 
-        final notificationCompleter = _pendingNotificationRequests.remove(subscriptionId);
-        if (notificationCompleter != null && !notificationCompleter.isCompleted) {
-          final notifications = _notificationBuffers.remove(subscriptionId) ?? [];
+        final notificationCompleter =
+            _pendingNotificationRequests.remove(subscriptionId);
+        if (notificationCompleter != null &&
+            !notificationCompleter.isCompleted) {
+          final notifications =
+              _notificationBuffers.remove(subscriptionId) ?? [];
           notificationCompleter.complete(notifications);
         }
       }
@@ -118,7 +127,8 @@ class PrimalCacheService {
   Future<Map<String, int>> fetchFollowerCounts(List<String> pubkeyHexes) async {
     if (pubkeyHexes.isEmpty) return {};
 
-    final subscriptionId = 'primal_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
+    final subscriptionId =
+        'primal_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
     final completer = Completer<Map<String, int>>();
     _pendingCountRequests[subscriptionId] = completer;
 
@@ -129,7 +139,8 @@ class PrimalCacheService {
         return {};
       }
 
-      _webSocketManager.registerSubscriptionHandler(primalCacheUrl, subscriptionId, _handleMessage);
+      _webSocketManager.registerSubscriptionHandler(
+          primalCacheUrl, subscriptionId, _handleMessage);
 
       final request = [
         'REQ',
@@ -142,10 +153,12 @@ class PrimalCacheService {
         }
       ];
 
-      final sent = await _webSocketManager.sendMessage(primalCacheUrl, jsonEncode(request));
+      final sent = await _webSocketManager.sendMessage(
+          primalCacheUrl, jsonEncode(request));
       if (!sent) {
         _pendingCountRequests.remove(subscriptionId);
-        _webSocketManager.unregisterSubscriptionHandler(primalCacheUrl, subscriptionId);
+        _webSocketManager.unregisterSubscriptionHandler(
+            primalCacheUrl, subscriptionId);
         return {};
       }
 
@@ -153,7 +166,8 @@ class PrimalCacheService {
         const Duration(seconds: 10),
         onTimeout: () {
           _pendingCountRequests.remove(subscriptionId);
-          _webSocketManager.unregisterSubscriptionHandler(primalCacheUrl, subscriptionId);
+          _webSocketManager.unregisterSubscriptionHandler(
+              primalCacheUrl, subscriptionId);
           return <String, int>{};
         },
       );
@@ -170,10 +184,12 @@ class PrimalCacheService {
     }
   }
 
-  Future<Map<String, Map<String, dynamic>>> fetchUserInfos(List<String> pubkeyHexes) async {
+  Future<Map<String, Map<String, dynamic>>> fetchUserInfos(
+      List<String> pubkeyHexes) async {
     if (pubkeyHexes.isEmpty) return {};
 
-    final subscriptionId = 'primal_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
+    final subscriptionId =
+        'primal_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
     final completer = Completer<Map<String, Map<String, dynamic>>>();
     _pendingProfileRequests[subscriptionId] = completer;
 
@@ -184,7 +200,8 @@ class PrimalCacheService {
         return {};
       }
 
-      _webSocketManager.registerSubscriptionHandler(primalCacheUrl, subscriptionId, _handleMessage);
+      _webSocketManager.registerSubscriptionHandler(
+          primalCacheUrl, subscriptionId, _handleMessage);
 
       final request = [
         'REQ',
@@ -197,10 +214,12 @@ class PrimalCacheService {
         }
       ];
 
-      final sent = await _webSocketManager.sendMessage(primalCacheUrl, jsonEncode(request));
+      final sent = await _webSocketManager.sendMessage(
+          primalCacheUrl, jsonEncode(request));
       if (!sent) {
         _pendingProfileRequests.remove(subscriptionId);
-        _webSocketManager.unregisterSubscriptionHandler(primalCacheUrl, subscriptionId);
+        _webSocketManager.unregisterSubscriptionHandler(
+            primalCacheUrl, subscriptionId);
         return {};
       }
 
@@ -208,7 +227,8 @@ class PrimalCacheService {
         const Duration(seconds: 10),
         onTimeout: () {
           _pendingProfileRequests.remove(subscriptionId);
-          _webSocketManager.unregisterSubscriptionHandler(primalCacheUrl, subscriptionId);
+          _webSocketManager.unregisterSubscriptionHandler(
+              primalCacheUrl, subscriptionId);
           return <String, Map<String, dynamic>>{};
         },
       );
@@ -229,7 +249,8 @@ class PrimalCacheService {
     try {
       final closeRequest = ['CLOSE', subscriptionId];
       _webSocketManager.sendMessage(primalCacheUrl, jsonEncode(closeRequest));
-      _webSocketManager.unregisterSubscriptionHandler(primalCacheUrl, subscriptionId);
+      _webSocketManager.unregisterSubscriptionHandler(
+          primalCacheUrl, subscriptionId);
     } catch (e) {
       if (kDebugMode) {
         print('[PrimalCacheService] Close subscription error: $e');
@@ -248,7 +269,8 @@ class PrimalCacheService {
     int? until,
     int limit = 100,
   }) async {
-    final subscriptionId = 'primal_notif_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
+    final subscriptionId =
+        'primal_notif_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
     final completer = Completer<List<Map<String, dynamic>>>();
     _pendingNotificationRequests[subscriptionId] = completer;
 
@@ -260,7 +282,8 @@ class PrimalCacheService {
         return [];
       }
 
-      _webSocketManager.registerSubscriptionHandler(primalCacheUrl, subscriptionId, _handleMessage);
+      _webSocketManager.registerSubscriptionHandler(
+          primalCacheUrl, subscriptionId, _handleMessage);
 
       final requestParams = <String, dynamic>{
         'pubkey': pubkeyHex,
@@ -277,21 +300,20 @@ class PrimalCacheService {
         'REQ',
         subscriptionId,
         {
-          'cache': [
-            'get_notifications',
-            requestParams
-          ]
+          'cache': ['get_notifications', requestParams]
         }
       ];
 
-      final sent = await _webSocketManager.sendMessage(primalCacheUrl, jsonEncode(request));
+      final sent = await _webSocketManager.sendMessage(
+          primalCacheUrl, jsonEncode(request));
       if (!sent) {
         _pendingNotificationRequests.remove(subscriptionId);
         _notificationBuffers.remove(subscriptionId);
-        _webSocketManager.unregisterSubscriptionHandler(primalCacheUrl, subscriptionId);
+        _webSocketManager.unregisterSubscriptionHandler(
+            primalCacheUrl, subscriptionId);
         return [];
       }
-      
+
       _notificationBuffers[subscriptionId] = [];
 
       final result = await completer.future.timeout(
@@ -299,7 +321,8 @@ class PrimalCacheService {
         onTimeout: () {
           _pendingNotificationRequests.remove(subscriptionId);
           _notificationBuffers.remove(subscriptionId);
-          _webSocketManager.unregisterSubscriptionHandler(primalCacheUrl, subscriptionId);
+          _webSocketManager.unregisterSubscriptionHandler(
+              primalCacheUrl, subscriptionId);
           return <Map<String, dynamic>>[];
         },
       );
@@ -318,4 +341,3 @@ class PrimalCacheService {
     }
   }
 }
-

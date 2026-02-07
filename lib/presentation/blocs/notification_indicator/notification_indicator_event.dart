@@ -7,3 +7,11 @@ abstract class NotificationIndicatorEvent extends BaseEvent {
 class NotificationIndicatorInitialized extends NotificationIndicatorEvent {
   const NotificationIndicatorInitialized();
 }
+
+class NotificationIndicatorNewReceived extends NotificationIndicatorEvent {
+  const NotificationIndicatorNewReceived();
+}
+
+class NotificationIndicatorChecked extends NotificationIndicatorEvent {
+  const NotificationIndicatorChecked();
+}

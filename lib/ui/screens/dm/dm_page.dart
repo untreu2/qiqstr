@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import '../../theme/theme_manager.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../core/di/app_di.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../../presentation/blocs/dm/dm_bloc.dart';
 import '../../../presentation/blocs/dm/dm_event.dart';
 import '../../../presentation/blocs/dm/dm_state.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../widgets/common/title_widget.dart';
+import '../../theme/theme_manager.dart';
 import '../../widgets/common/custom_input_field.dart';
+import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../core/di/app_di.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import '../search/users_search_page.dart';
 
 class DmPage extends StatefulWidget {
@@ -81,7 +81,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
   Widget _buildConversationsContent(BuildContext context, DmState state) {
     if (state is DmConversationsLoaded) {
       final conversations = state.conversations;
-      
+
       if (conversations.isEmpty) {
         return CustomScrollView(
           slivers: [
@@ -105,7 +105,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
           ],
         );
       }
-      
+
       return RefreshIndicator(
         onRefresh: () async {
           context.read<DmBloc>().add(const DmConversationsLoadRequested());
@@ -143,7 +143,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         ),
       );
     }
-    
+
     if (state is DmLoading) {
       return CustomScrollView(
         slivers: [
@@ -169,7 +169,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         ],
       );
     }
-    
+
     if (state is DmError) {
       return CustomScrollView(
         slivers: [
@@ -199,7 +199,9 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
-                      context.read<DmBloc>().add(const DmConversationsLoadRequested());
+                      context
+                          .read<DmBloc>()
+                          .add(const DmConversationsLoadRequested());
                     },
                     child: const Text('Retry'),
                   ),
@@ -210,7 +212,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         ],
       );
     }
-    
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -278,8 +280,10 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
     BuildContext context,
     Map<String, dynamic> conversation,
   ) {
-    final otherUserPubkeyHex = conversation['otherUserPubkeyHex'] as String? ?? '';
-    final otherUserProfileImage = conversation['otherUserProfileImage'] as String?;
+    final otherUserPubkeyHex =
+        conversation['otherUserPubkeyHex'] as String? ?? '';
+    final otherUserProfileImage =
+        conversation['otherUserProfileImage'] as String?;
     final displayName = conversation['displayName'] as String? ?? '';
     final lastMessageTime = conversation['lastMessageTime'] as DateTime?;
     final lastMessage = conversation['lastMessage'] as Map<String, dynamic>?;
@@ -292,7 +296,9 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
             setState(() {
               _selectedChatPubkeyHex = otherUserPubkeyHex;
             });
-            context.read<DmBloc>().add(DmConversationOpened(otherUserPubkeyHex));
+            context
+                .read<DmBloc>()
+                .add(DmConversationOpened(otherUserPubkeyHex));
           }
         },
         child: Container(
@@ -305,10 +311,12 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
               CircleAvatar(
                 radius: 26,
                 backgroundColor: context.colors.border,
-                backgroundImage: otherUserProfileImage != null && otherUserProfileImage.isNotEmpty
+                backgroundImage: otherUserProfileImage != null &&
+                        otherUserProfileImage.isNotEmpty
                     ? CachedNetworkImageProvider(otherUserProfileImage)
                     : null,
-                child: otherUserProfileImage == null || otherUserProfileImage.isEmpty
+                child: otherUserProfileImage == null ||
+                        otherUserProfileImage.isEmpty
                     ? Icon(
                         CarbonIcons.user,
                         color: context.colors.textSecondary,
@@ -377,16 +385,20 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
     DmState state,
     String otherUserPubkeyHex,
   ) {
-    final userRepository = AppDI.get<UserRepository>();
-    final otherUserNpub = _hexToNpub(otherUserPubkeyHex);
     final otherUser = _userCache[otherUserPubkeyHex];
 
     if (otherUser == null && !_userCache.containsKey(otherUserPubkeyHex)) {
       _userCache[otherUserPubkeyHex] = null;
-      userRepository.getUserProfile(otherUserNpub).then((result) {
-        if (mounted) {
+      AppDI.get<ProfileRepository>()
+          .getProfile(otherUserPubkeyHex)
+          .then((profile) {
+        if (mounted && profile != null) {
           setState(() {
-            _userCache[otherUserPubkeyHex] = result.fold((u) => u, (_) => null);
+            _userCache[otherUserPubkeyHex] = {
+              'pubkeyHex': profile.pubkey,
+              'name': profile.name ?? '',
+              'profileImage': profile.picture ?? '',
+            };
           });
         }
       });
@@ -419,7 +431,8 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                     color: context.colors.avatarPlaceholder,
                     image: otherUserProfileImage.isNotEmpty
                         ? DecorationImage(
-                            image: CachedNetworkImageProvider(otherUserProfileImage),
+                            image: CachedNetworkImageProvider(
+                                otherUserProfileImage),
                             fit: BoxFit.cover,
                           )
                         : null,
@@ -434,7 +447,9 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  otherUserName.isNotEmpty ? otherUserName : otherUserNpub.substring(0, 8),
+                  otherUserName.isNotEmpty
+                      ? otherUserName
+                      : _hexToNpub(otherUserPubkeyHex).substring(0, 12),
                   style: TextStyle(
                     color: context.colors.background,
                     fontSize: 16,
@@ -456,10 +471,11 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  Widget _buildMessagesContent(BuildContext context, DmState state, double topPadding) {
+  Widget _buildMessagesContent(
+      BuildContext context, DmState state, double topPadding) {
     if (state is DmChatLoaded) {
       final messages = state.messages;
-      
+
       if (messages.isEmpty) {
         return Center(
           child: Text(
@@ -468,7 +484,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
           ),
         );
       }
-      
+
       final bottomPadding = MediaQuery.of(context).padding.bottom;
       return ListView.builder(
         padding: EdgeInsets.only(
@@ -485,13 +501,13 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         },
       );
     }
-    
+
     if (state is DmLoading) {
       return const Center(
         child: CircularProgressIndicator(),
       );
     }
-    
+
     if (state is DmError) {
       return Center(
         child: Text(
@@ -500,13 +516,14 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         ),
       );
     }
-    
+
     return const Center(
       child: CircularProgressIndicator(),
     );
   }
 
-  Widget _buildMessageBubble(BuildContext context, Map<String, dynamic> message) {
+  Widget _buildMessageBubble(
+      BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
     final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
     final content = message['content'] as String? ?? '';
@@ -516,7 +533,8 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
       child: Align(
         alignment: isFromMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Column(
-          crossAxisAlignment: isFromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isFromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             Container(
               margin: const EdgeInsets.only(bottom: 4),
@@ -598,7 +616,9 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
             onTap: () {
               final content = textController.text.trim();
               if (content.isNotEmpty) {
-                context.read<DmBloc>().add(DmMessageSent(recipientPubkeyHex, content));
+                context
+                    .read<DmBloc>()
+                    .add(DmMessageSent(recipientPubkeyHex, content));
                 textController.clear();
               }
             },
@@ -715,4 +735,3 @@ class _ConversationSeparator extends StatelessWidget {
     );
   }
 }
-

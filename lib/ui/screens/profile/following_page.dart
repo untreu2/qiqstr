@@ -200,9 +200,6 @@ class _FollowingPageState extends State<FollowingPage> {
             } else if (currentLocation.startsWith('/home/notifications')) {
               context.push(
                   '/home/notifications/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
-            } else if (currentLocation.startsWith('/home/explore')) {
-              context.push(
-                  '/home/feed/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
             } else {
               context.push(
                   '/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');

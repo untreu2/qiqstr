@@ -1,137 +1,180 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/isar_database_service.dart';
+import '../../../models/event_model.dart';
 import 'sidebar_event.dart';
 import 'sidebar_state.dart';
 
 class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
-  final AuthRepository _authRepository;
-  final UserRepository _userRepository;
-  final DataService _dataService;
+  final FollowingRepository _followingRepository;
+  final ProfileRepository _profileRepository;
+  final SyncService _syncService;
+  final AuthService _authService;
+  final IsarDatabaseService _db;
 
-  StreamSubscription<Map<String, dynamic>>? _userSubscription;
+  String? _currentUserHex;
+  String? _currentNpub;
+  StreamSubscription<EventModel?>? _profileSubscription;
 
   SidebarBloc({
-    required AuthRepository authRepository,
-    required UserRepository userRepository,
-    required DataService dataService,
-  })  : _authRepository = authRepository,
-        _userRepository = userRepository,
-        _dataService = dataService,
+    required FollowingRepository followingRepository,
+    required ProfileRepository profileRepository,
+    required SyncService syncService,
+    required AuthService authService,
+    IsarDatabaseService? db,
+  })  : _followingRepository = followingRepository,
+        _profileRepository = profileRepository,
+        _syncService = syncService,
+        _authService = authService,
+        _db = db ?? IsarDatabaseService.instance,
         super(const SidebarInitial()) {
     on<SidebarInitialized>(_onSidebarInitialized);
     on<SidebarRefreshed>(_onSidebarRefreshed);
+    on<_SidebarProfileUpdated>(_onSidebarProfileUpdated);
+    on<_SidebarCountsUpdated>(_onSidebarCountsUpdated);
   }
 
   Future<void> _onSidebarInitialized(
     SidebarInitialized event,
     Emitter<SidebarState> emit,
   ) async {
-    emit(const SidebarLoading());
+    try {
+      final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+      if (pubkeyResult.isError || pubkeyResult.data == null) {
+        return;
+      }
 
-    final npubResult = await _authRepository.getCurrentUserNpub();
-    if (npubResult.isError || npubResult.data == null) {
-      return;
+      _currentUserHex = pubkeyResult.data!;
+      _currentNpub =
+          _authService.hexToNpub(_currentUserHex!) ?? _currentUserHex!;
+
+      emit(const SidebarLoaded(currentUser: {}));
+
+      _watchProfile(_currentUserHex!);
+      _loadFollowerCounts(_currentUserHex!);
+      _syncInBackground(_currentUserHex!);
+    } catch (e) {
+      emit(const SidebarLoaded(currentUser: {}));
     }
+  }
 
-    final userResult = await _userRepository.getUserProfile(npubResult.data!);
-    await userResult.fold(
-      (user) async {
-        emit(SidebarLoaded(currentUser: user));
-        await _loadFollowerCounts(emit, user);
-        _setupUserStreamListener(emit);
-      },
-      (error) async {},
-    );
+  void _watchProfile(String userHex) {
+    _profileSubscription?.cancel();
+    _profileSubscription = _db.watchProfile(userHex).listen((event) {
+      if (isClosed || event == null) return;
+      add(_SidebarProfileUpdated(event));
+    });
+  }
+
+  void _onSidebarProfileUpdated(
+    _SidebarProfileUpdated event,
+    Emitter<SidebarState> emit,
+  ) {
+    if (state is! SidebarLoaded) return;
+    final currentState = state as SidebarLoaded;
+
+    final userMap = _buildUserMapFromEvent(event.profile);
+    emit(currentState.copyWith(currentUser: userMap));
+  }
+
+  Map<String, dynamic> _buildUserMapFromEvent(EventModel event) {
+    final content = event.content;
+    Map<String, dynamic> parsed = {};
+
+    try {
+      if (content.isNotEmpty) {
+        parsed = jsonDecode(content) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+
+    return {
+      'npub': _currentNpub ?? '',
+      'pubkeyHex': _currentUserHex ?? '',
+      'name': parsed['name'] ?? parsed['display_name'] ?? '',
+      'display_name': parsed['display_name'] ?? '',
+      'about': parsed['about'] ?? '',
+      'picture': parsed['picture'] ?? '',
+      'profileImage': parsed['picture'] ?? '',
+      'banner': parsed['banner'] ?? '',
+      'nip05': parsed['nip05'] ?? '',
+      'lud16': parsed['lud16'] ?? '',
+      'website': parsed['website'] ?? '',
+    };
+  }
+
+  void _syncInBackground(String userHex) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        await _syncService.syncProfile(userHex);
+      } catch (_) {}
+    });
   }
 
   Future<void> _onSidebarRefreshed(
     SidebarRefreshed event,
     Emitter<SidebarState> emit,
   ) async {
-    await _onSidebarInitialized(const SidebarInitialized(), emit);
-  }
-
-  void _setupUserStreamListener(Emitter<SidebarState> emit) {
-    _userSubscription?.cancel();
-    _userSubscription = _userRepository.currentUserStream.listen(
-      (updatedUser) {
-        final currentState = state;
-        if (currentState is SidebarLoaded) {
-          final currentNpub = currentState.currentUser['npub'] as String? ?? '';
-          final updatedNpub = updatedUser['npub'] as String? ?? '';
-          final currentImage = currentState.currentUser['profileImage'] as String? ?? '';
-          final updatedImage = updatedUser['profileImage'] as String? ?? '';
-          final currentName = currentState.currentUser['name'] as String? ?? '';
-          final updatedName = updatedUser['name'] as String? ?? '';
-          
-          final hasChanges = currentNpub != updatedNpub ||
-              currentImage != updatedImage ||
-              currentName != updatedName;
-
-          if (hasChanges) {
-            emit(currentState.copyWith(currentUser: updatedUser));
-            _loadFollowerCounts(emit, updatedUser);
-          }
-        }
-      },
-      onError: (error) {
-        // Silently handle error - stream error is acceptable
-      },
-    );
-  }
-
-  Future<void> _loadFollowerCounts(Emitter<SidebarState> emit, Map<String, dynamic> user) async {
-    final currentState = state;
-    if (currentState is! SidebarLoaded) return;
-
+    if (_currentUserHex == null) return;
     try {
-      final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-      if (userPubkeyHex.isEmpty) return;
-      
-      final followingResult = await _userRepository.getFollowingListForUser(userPubkeyHex);
+      await _syncService.syncProfile(_currentUserHex!);
+    } catch (_) {}
+  }
 
-      await followingResult.fold(
-        (followingUsers) async {
-          final followerCount = await _dataService.fetchFollowerCount(userPubkeyHex);
-          if (state is SidebarLoaded) {
-            emit((state as SidebarLoaded).copyWith(
-              followingCount: followingUsers.length,
-              followerCount: followerCount,
-              isLoadingCounts: false,
-            ));
-
-            if (followerCount > 0) {
-              await _userRepository.updateUserFollowerCount(userPubkeyHex, followerCount);
-            }
-          }
-        },
-        (error) async {
-          if (state is SidebarLoaded) {
-            emit((state as SidebarLoaded).copyWith(
-              followingCount: 0,
-              followerCount: 0,
-              isLoadingCounts: false,
-            ));
-          }
-        },
-      );
-    } catch (e) {
-      if (state is SidebarLoaded) {
-        emit((state as SidebarLoaded).copyWith(
-          followingCount: 0,
-          followerCount: 0,
-          isLoadingCounts: false,
-        ));
+  void _loadFollowerCounts(String userPubkeyHex) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final follows =
+            await _followingRepository.getFollowingList(userPubkeyHex);
+        final followerCount =
+            await _profileRepository.getFollowerCount(userPubkeyHex);
+        if (isClosed) return;
+        add(_SidebarCountsUpdated(follows?.length ?? 0, followerCount));
+      } catch (_) {
+        if (isClosed) return;
+        add(_SidebarCountsUpdated(0, 0));
       }
-    }
+    });
+  }
+
+  void _onSidebarCountsUpdated(
+    _SidebarCountsUpdated event,
+    Emitter<SidebarState> emit,
+  ) {
+    if (state is! SidebarLoaded) return;
+    emit((state as SidebarLoaded).copyWith(
+      followingCount: event.followingCount,
+      followerCount: event.followerCount,
+      isLoadingCounts: false,
+    ));
   }
 
   @override
   Future<void> close() {
-    _userSubscription?.cancel();
+    _profileSubscription?.cancel();
     return super.close();
   }
+}
+
+class _SidebarProfileUpdated extends SidebarEvent {
+  final EventModel profile;
+  const _SidebarProfileUpdated(this.profile);
+
+  @override
+  List<Object?> get props => [profile];
+}
+
+class _SidebarCountsUpdated extends SidebarEvent {
+  final int followingCount;
+  final int followerCount;
+  const _SidebarCountsUpdated(this.followingCount, this.followerCount);
+
+  @override
+  List<Object?> get props => [followingCount, followerCount];
 }

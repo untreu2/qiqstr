@@ -1,6 +1,8 @@
 import 'dart:convert';
-import 'package:ndk/ndk.dart';
-import 'package:ndk/entities.dart';
+import 'package:isar/isar.dart';
+import '../../models/event_model.dart';
+import 'isar_database_service.dart';
+import 'rust_nostr_bridge.dart';
 
 class EventVerifier {
   static final EventVerifier _instance = EventVerifier._internal();
@@ -10,17 +12,46 @@ class EventVerifier {
   static EventVerifier get instance => _instance;
 
   Future<bool> verifyNote(Map<String, dynamic> note) async {
-    final rawWs = note['rawWs'] as String?;
-    if (rawWs == null || rawWs.isEmpty) {
-      return false;
-    }
+    final noteId = note['id'] as String? ?? '';
+    if (noteId.isEmpty) return false;
 
     try {
-      final eventJson = jsonDecode(rawWs) as Map<String, dynamic>;
-      final event = Nip01Event.fromJson(eventJson);
-      
-      final verifier = Bip340EventVerifier();
-      return await verifier.verify(event);
+      final eventModel =
+          await IsarDatabaseService.instance.getEventModel(noteId);
+      if (eventModel == null) return false;
+
+      final rawEvent = eventModel.rawEvent;
+      if (rawEvent.isEmpty) return false;
+
+      return EventVerifierBridge.verify(rawEvent);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> verifyProfile(String pubkeyHex) async {
+    if (pubkeyHex.isEmpty) return false;
+
+    try {
+      final db = await IsarDatabaseService.instance.isar;
+      final profileEvent = await db.eventModels
+          .where()
+          .kindEqualToAnyCreatedAt(0)
+          .filter()
+          .pubkeyEqualTo(pubkeyHex)
+          .sortByCreatedAtDesc()
+          .findFirst();
+
+      if (profileEvent == null) return false;
+
+      final rawEvent = profileEvent.rawEvent;
+      if (rawEvent.isEmpty) return false;
+
+      final parsed = jsonDecode(rawEvent) as Map<String, dynamic>;
+      final sig = parsed['sig'] as String? ?? '';
+      if (sig.isEmpty) return false;
+
+      return EventVerifierBridge.verify(rawEvent);
     } catch (_) {
       return false;
     }
@@ -28,9 +59,7 @@ class EventVerifier {
 
   Future<bool> verifyEventJson(Map<String, dynamic> eventJson) async {
     try {
-      final event = Nip01Event.fromJson(eventJson);
-      final verifier = Bip340EventVerifier();
-      return await verifier.verify(event);
+      return EventVerifierBridge.verify(jsonEncode(eventJson));
     } catch (_) {
       return false;
     }
@@ -38,11 +67,9 @@ class EventVerifier {
 
   Future<bool> verifyEventString(String eventJsonString) async {
     try {
-      final eventJson = jsonDecode(eventJsonString) as Map<String, dynamic>;
-      return await verifyEventJson(eventJson);
+      return EventVerifierBridge.verify(eventJsonString);
     } catch (_) {
       return false;
     }
   }
 }
-

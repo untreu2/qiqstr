@@ -20,8 +20,9 @@ class ProfileLoaded extends ProfileState {
   final List<Map<String, dynamic>> notes;
   final bool canLoadMore;
   final bool isLoadingMore;
-  final String currentProfileNpub;
-  final String currentUserNpub;
+  final bool isSyncing;
+  final String currentProfileHex;
+  final String currentUserHex;
 
   const ProfileLoaded({
     required this.user,
@@ -29,10 +30,11 @@ class ProfileLoaded extends ProfileState {
     required this.isCurrentUser,
     required this.profiles,
     required this.notes,
-    required this.currentProfileNpub,
-    required this.currentUserNpub,
+    required this.currentProfileHex,
+    required this.currentUserHex,
     this.canLoadMore = true,
     this.isLoadingMore = false,
+    this.isSyncing = false,
   });
 
   @override
@@ -44,8 +46,9 @@ class ProfileLoaded extends ProfileState {
         notes,
         canLoadMore,
         isLoadingMore,
-        currentProfileNpub,
-        currentUserNpub,
+        isSyncing,
+        currentProfileHex,
+        currentUserHex,
       ];
 
   ProfileLoaded copyWith({
@@ -56,8 +59,9 @@ class ProfileLoaded extends ProfileState {
     List<Map<String, dynamic>>? notes,
     bool? canLoadMore,
     bool? isLoadingMore,
-    String? currentProfileNpub,
-    String? currentUserNpub,
+    bool? isSyncing,
+    String? currentProfileHex,
+    String? currentUserHex,
   }) {
     return ProfileLoaded(
       user: user ?? this.user,
@@ -67,8 +71,9 @@ class ProfileLoaded extends ProfileState {
       notes: notes ?? this.notes,
       canLoadMore: canLoadMore ?? this.canLoadMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      currentProfileNpub: currentProfileNpub ?? this.currentProfileNpub,
-      currentUserNpub: currentUserNpub ?? this.currentUserNpub,
+      isSyncing: isSyncing ?? this.isSyncing,
+      currentProfileHex: currentProfileHex ?? this.currentProfileHex,
+      currentUserHex: currentUserHex ?? this.currentUserHex,
     );
   }
 }

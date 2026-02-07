@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
-import '../../../data/services/event_cache_service.dart';
+import '../../../data/repositories/article_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/auth_service.dart';
 
 class ArticleQuoteWidget extends StatefulWidget {
   final String naddr;
@@ -33,7 +33,9 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
   }
 
   String _stringToHex(String input) {
-    return input.codeUnits.map((c) => c.toRadixString(16).padLeft(2, '0')).join();
+    return input.codeUnits
+        .map((c) => c.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 
   Future<void> _loadArticle() async {
@@ -67,55 +69,34 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
         return;
       }
 
-      final eventCacheService = EventCacheService.instance;
-      
-      if (pubkey != null) {
-        final cachedEvents = await eventCacheService.getEventsByAuthorsAndKinds(
-          [pubkey],
-          [30023],
-          limit: 50,
-        );
+      final articleRepo = AppDI.get<ArticleRepository>();
+      final articles = await articleRepo.getArticles(limit: 50);
 
-        for (final cachedEvent in cachedEvents) {
-          final eventDTag = cachedEvent.getTagValue('d');
-          final eventDTagHex = eventDTag != null ? _stringToHex(eventDTag) : null;
-          if (dTag == null || eventDTagHex == dTag) {
-            final eventData = cachedEvent.toEventData();
-            final article = _processArticleEvent(eventData);
-            if (article != null) {
-              setState(() {
-                _article = article;
-                _isLoading = false;
-              });
-              _loadAuthorProfile(pubkey);
-              return;
-            }
-          }
-        }
-      }
+      for (final article in articles) {
+        final articleDTag = article.dTag ?? '';
+        final articlePubkey = article.pubkey;
+        final articleDTagHex = _stringToHex(articleDTag);
+        final dTagMatch = dTag == null || articleDTagHex == dTag;
+        final pubkeyMatch = pubkey == null || articlePubkey == pubkey;
 
-      final dataService = AppDI.get<DataService>();
-      final result = await dataService.fetchLongFormContent(
-        authorHexKeys: pubkey != null ? [pubkey] : null,
-        limit: 20,
-      );
-
-      if (result.isSuccess && result.data != null) {
-        for (final article in result.data!) {
-          final articleDTag = article['dTag'] as String? ?? '';
-          final articlePubkey = article['pubkey'] as String? ?? '';
-          final articleDTagHex = _stringToHex(articleDTag);
-          final dTagMatch = dTag == null || articleDTagHex == dTag;
-          final pubkeyMatch = pubkey == null || articlePubkey == pubkey;
-          
-          if (dTagMatch && pubkeyMatch) {
-            setState(() {
-              _article = article;
-              _isLoading = false;
-            });
-            _loadAuthorProfile(articlePubkey);
-            return;
-          }
+        if (dTagMatch && pubkeyMatch) {
+          setState(() {
+            _article = {
+              'id': article.id,
+              'dTag': article.dTag,
+              'title': article.title,
+              'summary': article.summary,
+              'image': article.image,
+              'content': article.content,
+              'pubkey': article.pubkey,
+              'author': article.authorName,
+              'authorImage': article.authorImage,
+              'timestamp': article.createdAt,
+            };
+            _isLoading = false;
+          });
+          _loadAuthorProfile(articlePubkey);
+          return;
         }
       }
       setState(() {
@@ -132,13 +113,12 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
 
   Map<String, dynamic>? _decodeNaddr(String naddr) {
     try {
-      final cleanNaddr = naddr.startsWith('nostr:') 
-          ? naddr.substring(6) 
-          : naddr;
-      
-      final result = decodeTlvBech32Full(cleanNaddr, 'naddr');
-      final dTagHex = result['type_0_main'] as String?;
-      final pubkey = result['author'] as String?;
+      final cleanNaddr =
+          naddr.startsWith('nostr:') ? naddr.substring(6) : naddr;
+
+      final result = decodeTlvBech32Full(cleanNaddr);
+      final dTagHex = result['identifier'] as String?;
+      final pubkey = result['pubkey'] as String?;
       final kindValue = result['kind'];
       int? kind;
       if (kindValue is int) {
@@ -159,14 +139,14 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
 
   Map<String, dynamic>? _processArticleEvent(Map<String, dynamic> eventData) {
     try {
-      final dataService = AppDI.get<DataService>();
       final id = eventData['id'] as String? ?? '';
       final pubkey = eventData['pubkey'] as String? ?? '';
       final content = eventData['content'] as String? ?? '';
       final createdAt = eventData['created_at'] as int? ?? 0;
       final tags = eventData['tags'] as List<dynamic>? ?? [];
 
-      final authorNpub = dataService.authService.hexToNpub(pubkey) ?? pubkey;
+      final authService = AppDI.get<AuthService>();
+      final authorNpub = authService.hexToNpub(pubkey) ?? pubkey;
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
       String? title;
@@ -207,22 +187,22 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
 
   Future<void> _loadAuthorProfile(String pubkeyHex) async {
     try {
-      final dataService = AppDI.get<DataService>();
-      final npub = dataService.authService.hexToNpub(pubkeyHex);
-      if (npub == null) return;
-
-      final userRepository = AppDI.get<UserRepository>();
-      final result = await userRepository.getUserProfile(npub);
-      result.fold(
-        (user) {
-          if (mounted) {
-            setState(() {
-              _author = user;
-            });
-          }
-        },
-        (error) {},
-      );
+      final profileRepo = AppDI.get<ProfileRepository>();
+      final profile = await profileRepo.getProfile(pubkeyHex);
+      if (profile != null && mounted) {
+        setState(() {
+          _author = {
+            'pubkeyHex': profile.pubkey,
+            'name': profile.name ?? '',
+            'about': profile.about ?? '',
+            'profileImage': profile.picture ?? '',
+            'banner': profile.banner ?? '',
+            'website': profile.website ?? '',
+            'nip05': profile.nip05 ?? '',
+            'lud16': profile.lud16 ?? '',
+          };
+        });
+      }
     } catch (e) {}
   }
 
@@ -232,10 +212,9 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
     final articleId = _article!['id'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
 
-    if (currentLocation.startsWith('/home/explore')) {
-      context.push('/home/explore/article?articleId=${Uri.encodeComponent(articleId)}');
-    } else if (currentLocation.startsWith('/home/feed')) {
-      context.push('/home/feed/article?articleId=${Uri.encodeComponent(articleId)}');
+    if (currentLocation.startsWith('/home/feed')) {
+      context.push(
+          '/home/feed/article?articleId=${Uri.encodeComponent(articleId)}');
     } else {
       context.push('/article?articleId=${Uri.encodeComponent(articleId)}');
     }
@@ -293,7 +272,8 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
           children: [
             if (imageUrl.isNotEmpty)
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(11)),
                 child: CachedNetworkImage(
                   imageUrl: imageUrl,
                   width: double.infinity,

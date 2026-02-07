@@ -4,6 +4,12 @@ import 'package:isar/isar.dart';
 
 part 'event_model.g.dart';
 
+enum SyncStatus {
+  pending,
+  synced,
+  failed,
+}
+
 @collection
 class EventModel {
   Id id = Isar.autoIncrement;
@@ -30,6 +36,14 @@ class EventModel {
 
   String? relayUrl;
 
+  @Index()
+  String? dTag;
+
+  @enumerated
+  SyncStatus syncStatus = SyncStatus.synced;
+
+  DateTime? lastSyncedAt;
+
   EventModel();
 
   static EventModel fromEventData(Map<String, dynamic> eventData,
@@ -42,6 +56,14 @@ class EventModel {
       return tag.toString();
     }).toList();
 
+    String? dTagValue;
+    for (final tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == 'd' && tag.length > 1) {
+        dTagValue = tag[1]?.toString();
+        break;
+      }
+    }
+
     return EventModel()
       ..eventId = eventData['id'] as String? ?? ''
       ..pubkey = eventData['pubkey'] as String? ?? ''
@@ -52,7 +74,10 @@ class EventModel {
       ..sig = eventData['sig'] as String? ?? ''
       ..rawEvent = jsonEncode(eventData)
       ..cachedAt = DateTime.now()
-      ..relayUrl = relayUrl;
+      ..relayUrl = relayUrl
+      ..dTag = dTagValue
+      ..syncStatus = SyncStatus.synced
+      ..lastSyncedAt = DateTime.now();
   }
 
   Map<String, dynamic> toEventData() {
@@ -123,6 +148,9 @@ class EventModel {
     String? rawEvent,
     DateTime? cachedAt,
     String? relayUrl,
+    String? dTag,
+    SyncStatus? syncStatus,
+    DateTime? lastSyncedAt,
   }) {
     return EventModel()
       ..eventId = eventId ?? this.eventId
@@ -134,6 +162,9 @@ class EventModel {
       ..sig = sig ?? this.sig
       ..rawEvent = rawEvent ?? this.rawEvent
       ..cachedAt = cachedAt ?? this.cachedAt
-      ..relayUrl = relayUrl ?? this.relayUrl;
+      ..relayUrl = relayUrl ?? this.relayUrl
+      ..dTag = dTag ?? this.dTag
+      ..syncStatus = syncStatus ?? this.syncStatus
+      ..lastSyncedAt = lastSyncedAt ?? this.lastSyncedAt;
   }
 }

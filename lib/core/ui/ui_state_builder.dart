@@ -31,8 +31,10 @@ class UIStateBuilder<T> extends StatelessWidget {
       initial: () => initial?.call() ?? _buildDefaultInitial(context),
       loading: (type) => loading?.call() ?? _buildDefaultLoading(context, type),
       loaded: (data) => builder(context, data),
-      error: (message) => error?.call(message) ?? _buildDefaultError(context, message),
-      empty: (message) => empty?.call(message) ?? _buildDefaultEmpty(context, message),
+      error: (message) =>
+          error?.call(message) ?? _buildDefaultError(context, message),
+      empty: (message) =>
+          empty?.call(message) ?? _buildDefaultEmpty(context, message),
     );
   }
 

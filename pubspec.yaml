@@ -54,13 +54,13 @@ dependencies:
     file_picker: ^10.2.0
     bolt11_decoder: ^1.0.2
     dotted_border: ^3.1.0
-    nostr_nip19: ^0.1.0
+
     auto_size_text: ^3.0.0
     collection: ^1.19.1
     http: ^1.4.0
     crypto: ^3.0.6
     kmbal_ionicons: ^1.0.0
-    bech32: ^0.2.2
+
     flutter_svg: ^2.0.10+1
     html: ^0.15.4
     carbon_icons: ^0.0.1+2
@@ -69,13 +69,12 @@ dependencies:
     share_plus: ^12.0.0
     get_it: ^9.0.5
     intl: ^0.20.2
-    bip39: ^1.0.6
-    bip32: ^2.0.0
+
     flutter_native_splash: ^2.4.7
     google_fonts: ^6.2.1
-    ndk: ^0.6.0
+
     webview_flutter: ^4.13.0
-    web_socket_channel: ^3.0.1
+
     go_router: ^14.6.2
     qr_flutter: ^4.1.0
     qr_code_scanner: ^1.0.1
@@ -86,6 +85,9 @@ dependencies:
     flutter_advanced_drawer: ^1.5.0
     flutter_markdown_plus: ^1.0.7
     markdown: ^7.2.2
+    flutter_rust_bridge: 2.11.1
+    rust_lib_qiqstr:
+        path: rust_builder
 
 dev_dependencies:
     flutter_test:
@@ -99,6 +101,8 @@ dev_dependencies:
     flutter_lints: ^6.0.0
     isar_generator: ^3.1.0+1
     bloc_lint: ^0.3.0
+    integration_test:
+        sdk: flutter
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

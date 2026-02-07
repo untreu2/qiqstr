@@ -16,7 +16,7 @@ class ArticleLoaded extends ArticleState {
   final List<Map<String, dynamic>> articles;
   final List<Map<String, dynamic>> filteredArticles;
   final Map<String, Map<String, dynamic>> profiles;
-  final String currentUserNpub;
+  final String currentUserHex;
   final bool canLoadMore;
   final bool isLoadingMore;
   final String searchQuery;
@@ -25,7 +25,7 @@ class ArticleLoaded extends ArticleState {
     required this.articles,
     required this.filteredArticles,
     required this.profiles,
-    required this.currentUserNpub,
+    required this.currentUserHex,
     this.canLoadMore = true,
     this.isLoadingMore = false,
     this.searchQuery = '',
@@ -36,7 +36,7 @@ class ArticleLoaded extends ArticleState {
         articles,
         filteredArticles,
         profiles,
-        currentUserNpub,
+        currentUserHex,
         canLoadMore,
         isLoadingMore,
         searchQuery,
@@ -46,7 +46,7 @@ class ArticleLoaded extends ArticleState {
     List<Map<String, dynamic>>? articles,
     List<Map<String, dynamic>>? filteredArticles,
     Map<String, Map<String, dynamic>>? profiles,
-    String? currentUserNpub,
+    String? currentUserHex,
     bool? canLoadMore,
     bool? isLoadingMore,
     String? searchQuery,
@@ -55,7 +55,7 @@ class ArticleLoaded extends ArticleState {
       articles: articles ?? this.articles,
       filteredArticles: filteredArticles ?? this.filteredArticles,
       profiles: profiles ?? this.profiles,
-      currentUserNpub: currentUserNpub ?? this.currentUserNpub,
+      currentUserHex: currentUserHex ?? this.currentUserHex,
       canLoadMore: canLoadMore ?? this.canLoadMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       searchQuery: searchQuery ?? this.searchQuery,

@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
+import '../../../data/repositories/interaction_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/note_statistics/note_statistics_bloc.dart';
 import '../../../presentation/blocs/note_statistics/note_statistics_event.dart';
 import '../../../presentation/blocs/note_statistics/note_statistics_state.dart';
@@ -71,9 +74,6 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       } else if (currentLocation.startsWith('/home/notifications')) {
         context.push(
             '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-      } else if (currentLocation.startsWith('/home/explore')) {
-        context.push(
-            '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
       } else {
         context.push(
             '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
@@ -278,8 +278,9 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     return BlocProvider<NoteStatisticsBloc>(
       create: (context) {
         final bloc = NoteStatisticsBloc(
-          userRepository: AppDI.get(),
-          dataService: AppDI.get(),
+          interactionRepository: AppDI.get<InteractionRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          authService: AppDI.get<AuthService>(),
           noteId: widget.noteId,
         );
         bloc.add(NoteStatisticsInitialized(noteId: widget.noteId));
@@ -313,7 +314,12 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
             final npub =
                 npubValue is String ? npubValue : (npubValue?.toString() ?? '');
 
-            if (npub.isEmpty) {
+            final pubkeyValue = interaction['pubkey'];
+            final pubkey = pubkeyValue is String
+                ? pubkeyValue
+                : (pubkeyValue?.toString() ?? '');
+
+            if (npub.isEmpty && pubkey.isEmpty) {
               continue;
             }
 
@@ -327,7 +333,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                 ? zapAmountValue
                 : (zapAmountValue is num ? zapAmountValue.toInt() : null);
 
-            final user = users[npub];
+            final user = users[pubkey] ?? users[npub];
 
             interactionWidgets.add(
               _buildEntry(
@@ -377,6 +383,9 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                         addAutomaticKeepAlives: true,
                         addRepaintBoundaries: false,
                       ),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 150),
                     ),
                   ],
                 ),

@@ -1,117 +1,147 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/notification_repository.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../domain/entities/notification_item.dart';
 import 'notification_event.dart' as notification_event;
 import 'notification_state.dart';
 
-class NotificationBloc extends Bloc<notification_event.NotificationEvent, NotificationState> {
+class NotificationBloc
+    extends Bloc<notification_event.NotificationEvent, NotificationState> {
   final NotificationRepository _notificationRepository;
-  final AuthRepository _authRepository;
-  final DataService _nostrDataService;
+  final SyncService _syncService;
+  final AuthService _authService;
 
-  final List<StreamSubscription> _subscriptions = [];
+  final Set<String> _readNotificationIds = {};
+  String? _currentUserHex;
+  StreamSubscription<List<NotificationItem>>? _notificationSubscription;
 
   NotificationBloc({
     required NotificationRepository notificationRepository,
-    required UserRepository userRepository,
-    required AuthRepository authRepository,
-    required DataService nostrDataService,
+    required SyncService syncService,
+    required AuthService authService,
   })  : _notificationRepository = notificationRepository,
-        _authRepository = authRepository,
-        _nostrDataService = nostrDataService,
+        _syncService = syncService,
+        _authService = authService,
         super(const NotificationInitial()) {
-    on<notification_event.NotificationsLoadRequested>(_onNotificationsLoadRequested);
-    on<notification_event.NotificationsLoaded>(_onNotificationsLoaded);
-    on<notification_event.NotificationsRefreshRequested>(_onNotificationsRefreshRequested);
-    on<notification_event.NotificationsRefreshed>(_onNotificationsRefreshed);
+    on<notification_event.NotificationsLoadRequested>(
+        _onNotificationsLoadRequested);
+    on<notification_event.NotificationsRefreshRequested>(
+        _onNotificationsRefreshRequested);
     on<notification_event.NotificationRead>(_onNotificationRead);
     on<notification_event.AllNotificationsRead>(_onAllNotificationsRead);
-    on<notification_event.NotificationsMarkAllAsReadRequested>(_onNotificationsMarkAllAsReadRequested);
+    on<notification_event.NotificationsMarkAllAsReadRequested>(
+        _onNotificationsMarkAllAsReadRequested);
+    on<_NotificationsUpdated>(_onNotificationsUpdated);
 
     _loadCurrentUser();
-    _subscribeToNotificationUpdates();
   }
 
   Future<void> _loadCurrentUser() async {
-    final result = await _authRepository.getCurrentUserNpub();
-    final npub = result.fold((n) => n, (_) => null) ?? '';
-    if (npub.isNotEmpty) {
-      add(notification_event.NotificationsRefreshed());
+    final currentUserHex = _authService.currentUserPubkeyHex;
+    if (currentUserHex != null && currentUserHex.isNotEmpty) {
+      add(const notification_event.NotificationsLoadRequested());
     }
-  }
-
-  void _subscribeToNotificationUpdates() {
-    _subscriptions.add(
-      _nostrDataService.notificationsStream.listen((newNotifications) {
-        final currentState = state;
-        if (currentState is NotificationsLoaded) {
-          add(const notification_event.NotificationsRefreshed());
-        }
-      }),
-    );
   }
 
   Future<void> _onNotificationsLoadRequested(
     notification_event.NotificationsLoadRequested event,
     Emitter<NotificationState> emit,
   ) async {
-    await _onNotificationsLoaded(const notification_event.NotificationsLoaded(), emit);
+    final currentUserHex = _authService.currentUserPubkeyHex;
+    if (currentUserHex == null) {
+      emit(const NotificationError('Not authenticated'));
+      return;
+    }
+
+    _currentUserHex = currentUserHex;
+
+    emit(NotificationsLoaded(
+      notifications: const [],
+      unreadCount: 0,
+      currentUserHex: currentUserHex,
+    ));
+
+    _watchNotifications(currentUserHex);
+    _syncInBackground(currentUserHex);
   }
 
-  Future<void> _onNotificationsLoaded(
-    notification_event.NotificationsLoaded event,
+  void _watchNotifications(String userHex) {
+    _notificationSubscription?.cancel();
+    _notificationSubscription = _notificationRepository
+        .watchNotifications(userHex)
+        .listen((notifications) {
+      if (isClosed) return;
+      add(_NotificationsUpdated(notifications));
+    });
+  }
+
+  void _onNotificationsUpdated(
+    _NotificationsUpdated event,
     Emitter<NotificationState> emit,
-  ) async {
-    emit(const NotificationLoading());
+  ) {
+    if (state is! NotificationsLoaded) return;
+    final currentState = state as NotificationsLoaded;
 
-    final result = await _notificationRepository.getNotifications();
+    final processedNotifications = _processNotifications(event.notifications);
+    final unreadCount = processedNotifications.where((n) {
+      final isRead = n['isRead'] as bool? ?? false;
+      return !isRead;
+    }).length;
 
-    await result.fold(
-      (notifications) async {
-        final groupedNotifications = _notificationRepository.groupNotifications(notifications);
-        final unreadCount = notifications.where((n) {
-          final isRead = n['isRead'] as bool? ?? false;
-          return !isRead;
-        }).length;
+    emit(currentState.copyWith(
+      notifications: processedNotifications,
+      unreadCount: unreadCount,
+    ));
+  }
 
-        final currentUserResult = await _authRepository.getCurrentUserNpub();
-        final currentUserNpub = currentUserResult.fold((n) => n, (_) => null) ?? '';
-
-        emit(NotificationsLoaded(
-          notifications: groupedNotifications,
-          unreadCount: unreadCount,
-          userProfiles: {},
-          currentUserNpub: currentUserNpub,
-        ));
-      },
-      (error) async {
-        emit(NotificationError(error));
-      },
-    );
+  void _syncInBackground(String userHex) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        await _syncService.syncNotifications(userHex);
+      } catch (_) {}
+    });
   }
 
   Future<void> _onNotificationsRefreshRequested(
     notification_event.NotificationsRefreshRequested event,
     Emitter<NotificationState> emit,
   ) async {
-    await _onNotificationsRefreshed(const notification_event.NotificationsRefreshed(), emit);
+    if (_currentUserHex == null) return;
+    try {
+      await _syncService.syncNotifications(_currentUserHex!);
+    } catch (_) {}
   }
 
-  Future<void> _onNotificationsRefreshed(
-    notification_event.NotificationsRefreshed event,
-    Emitter<NotificationState> emit,
-  ) async {
-    await _onNotificationsLoaded(const notification_event.NotificationsLoaded(), emit);
+  List<Map<String, dynamic>> _processNotifications(
+      List<NotificationItem> items) {
+    return items.map((n) {
+      final id = n.id;
+      return {
+        'id': id,
+        'type': n.type.name,
+        'content': n.content,
+        'author': n.fromPubkey,
+        'fromPubkey': n.fromPubkey,
+        'fromName': n.fromName,
+        'fromImage': n.fromImage,
+        'profileImage': n.fromImage ?? '',
+        'name': n.fromName ?? '',
+        'targetEventId': n.targetNoteId,
+        'createdAt': n.createdAt,
+        'isRead': _readNotificationIds.contains(id),
+      };
+    }).toList();
   }
 
   Future<void> _onNotificationsMarkAllAsReadRequested(
     notification_event.NotificationsMarkAllAsReadRequested event,
     Emitter<NotificationState> emit,
   ) async {
-    await _onAllNotificationsRead(const notification_event.AllNotificationsRead(), emit);
+    await _onAllNotificationsRead(
+        const notification_event.AllNotificationsRead(), emit);
   }
 
   Future<void> _onNotificationRead(
@@ -120,12 +150,13 @@ class NotificationBloc extends Bloc<notification_event.NotificationEvent, Notifi
   ) async {
     final currentState = state;
     if (currentState is NotificationsLoaded) {
+      _readNotificationIds.add(event.notificationId);
+
       final updatedNotifications = currentState.notifications.map((n) {
         final notificationId = n['id'] as String? ?? '';
-        if (notificationId.isNotEmpty && notificationId == event.notificationId) {
-          final updatedNotification = Map<String, dynamic>.from(n);
-          updatedNotification['isRead'] = true;
-          return updatedNotification;
+        if (notificationId.isNotEmpty &&
+            notificationId == event.notificationId) {
+          return {...n, 'isRead': true};
         }
         return n;
       }).toList();
@@ -146,34 +177,37 @@ class NotificationBloc extends Bloc<notification_event.NotificationEvent, Notifi
     notification_event.AllNotificationsRead event,
     Emitter<NotificationState> emit,
   ) async {
-    final result = await _notificationRepository.markAllAsRead();
-
-    result.fold(
-      (_) {
-        final currentState = state;
-        if (currentState is NotificationsLoaded) {
-          final updatedNotifications = currentState.notifications.map((n) {
-            final updatedNotification = Map<String, dynamic>.from(n);
-            updatedNotification['isRead'] = true;
-            return updatedNotification;
-          }).toList();
-
-          emit(currentState.copyWith(
-            notifications: updatedNotifications,
-            unreadCount: 0,
-          ));
+    final currentState = state;
+    if (currentState is NotificationsLoaded) {
+      for (final n in currentState.notifications) {
+        final id = n['id'] as String? ?? '';
+        if (id.isNotEmpty) {
+          _readNotificationIds.add(id);
         }
-      },
-      (error) => emit(NotificationError(error)),
-    );
+      }
+
+      final updatedNotifications = currentState.notifications.map((n) {
+        return {...n, 'isRead': true};
+      }).toList();
+
+      emit(currentState.copyWith(
+        notifications: updatedNotifications,
+        unreadCount: 0,
+      ));
+    }
   }
 
   @override
   Future<void> close() {
-    for (final subscription in _subscriptions) {
-      subscription.cancel();
-    }
-    _subscriptions.clear();
+    _notificationSubscription?.cancel();
     return super.close();
   }
+}
+
+class _NotificationsUpdated extends notification_event.NotificationEvent {
+  final List<NotificationItem> notifications;
+  const _NotificationsUpdated(this.notifications);
+
+  @override
+  List<Object?> get props => [notifications];
 }

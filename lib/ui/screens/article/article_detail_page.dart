@@ -5,9 +5,8 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/event_cache_service.dart';
-import '../../../data/services/data_service.dart';
+import '../../../data/repositories/article_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 
@@ -48,47 +47,42 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         _error = null;
       });
 
-      final eventCacheService = EventCacheService.instance;
-      final cachedEvent = await eventCacheService.getEventById(widget.articleId);
+      final articleRepo = AppDI.get<ArticleRepository>();
+      final article = await articleRepo.getArticle(widget.articleId);
 
-      if (cachedEvent != null && cachedEvent.kind == 30023) {
-        final eventData = cachedEvent.toEventData();
-        final article = _processArticleEvent(eventData);
-        if (article != null) {
+      if (article != null) {
+        setState(() {
+          _article = {
+            'id': article.id,
+            'dTag': article.dTag,
+            'title': article.title,
+            'summary': article.summary,
+            'image': article.image,
+            'content': article.content,
+            'pubkey': article.pubkey,
+            'author': article.authorName,
+            'authorName': article.authorName,
+            'authorImage': article.authorImage,
+            'created_at': article.createdAt,
+            'publishedAt': article.publishedAt,
+          };
+          _isLoading = false;
+        });
+
+        if (article.authorName != null && article.authorName!.isNotEmpty) {
           setState(() {
-            _article = article;
-            _isLoading = false;
+            _authorUser = {
+              'name': article.authorName,
+              'profileImage': article.authorImage,
+              'picture': article.authorImage,
+            };
           });
-          _loadAuthorProfile();
-          return;
-        }
-      }
-
-      final dataService = AppDI.get<DataService>();
-      final result = await dataService.fetchLongFormContent(limit: 50);
-
-      if (result.isSuccess && result.data != null) {
-        final articles = result.data!;
-        final article = articles.firstWhere(
-          (a) => a['id'] == widget.articleId,
-          orElse: () => <String, dynamic>{},
-        );
-
-        if (article.isNotEmpty) {
-          setState(() {
-            _article = article;
-            _isLoading = false;
-          });
-          _loadAuthorProfile();
         } else {
-          setState(() {
-            _error = 'Article not found';
-            _isLoading = false;
-          });
+          _loadAuthorProfile();
         }
       } else {
         setState(() {
-          _error = result.error ?? 'Failed to load article';
+          _error = 'Article not found';
           _isLoading = false;
         });
       }
@@ -100,94 +94,44 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     }
   }
 
-  Map<String, dynamic>? _processArticleEvent(Map<String, dynamic> eventData) {
-    try {
-      final dataService = AppDI.get<DataService>();
-      final id = eventData['id'] as String? ?? '';
-      final pubkey = eventData['pubkey'] as String? ?? '';
-      final content = eventData['content'] as String? ?? '';
-      final createdAt = eventData['created_at'] as int? ?? 0;
-      final tags = eventData['tags'] as List<dynamic>? ?? [];
-
-      final authorNpub = dataService.authService.hexToNpub(pubkey) ?? pubkey;
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-
-      String? title;
-      String? image;
-      String? summary;
-      String? dTag;
-      int? publishedAt;
-      final tTags = <String>[];
-
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          final tagName = tag[0] as String?;
-          if (tagName == 'title' && tag.length > 1) {
-            title = tag[1] as String?;
-          } else if (tagName == 'image' && tag.length > 1) {
-            image = tag[1] as String?;
-          } else if (tagName == 'summary' && tag.length > 1) {
-            summary = tag[1] as String?;
-          } else if (tagName == 'd' && tag.length > 1) {
-            dTag = tag[1] as String?;
-          } else if (tagName == 'published_at' && tag.length > 1) {
-            final pubAtStr = tag[1] as String?;
-            if (pubAtStr != null) {
-              publishedAt = int.tryParse(pubAtStr);
-            }
-          } else if (tagName == 't' && tag.length > 1) {
-            final hashtag = tag[1] as String?;
-            if (hashtag != null && hashtag.isNotEmpty) {
-              tTags.add(hashtag.toLowerCase());
-            }
-          }
-        }
-      }
-
-      return {
-        'id': id,
-        'dTag': dTag ?? id,
-        'content': content,
-        'author': authorNpub,
-        'pubkey': pubkey,
-        'timestamp': timestamp,
-        'title': title ?? '',
-        'image': image ?? '',
-        'summary': summary ?? '',
-        'publishedAt': publishedAt != null
-            ? DateTime.fromMillisecondsSinceEpoch(publishedAt * 1000)
-            : timestamp,
-        'tTags': tTags,
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
   Future<void> _loadAuthorProfile() async {
     if (_article == null) return;
 
-    final authorId = _article!['author'] as String? ?? '';
-    if (authorId.isEmpty) return;
+    final pubkey = _article!['pubkey'] as String? ?? '';
+    if (pubkey.isEmpty) return;
 
-    final userRepository = AppDI.get<UserRepository>();
-    final result = await userRepository.getUserProfile(authorId);
-    result.fold(
-      (user) {
-        if (mounted) {
-          setState(() {
-            _authorUser = user;
-          });
-        }
-      },
-      (error) {},
-    );
+    final profileRepo = AppDI.get<ProfileRepository>();
+    final profile = await profileRepo.getProfile(pubkey);
+    if (profile != null && mounted) {
+      setState(() {
+        _authorUser = {
+          'pubkeyHex': profile.pubkey,
+          'name': profile.name ?? '',
+          'about': profile.about ?? '',
+          'profileImage': profile.picture ?? '',
+          'banner': profile.banner ?? '',
+          'website': profile.website ?? '',
+          'nip05': profile.nip05 ?? '',
+          'lud16': profile.lud16 ?? '',
+        };
+      });
+    }
   }
 
   String _formatDate(DateTime timestamp) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     return '${months[timestamp.month - 1]} ${timestamp.day}, ${timestamp.year}';
   }
@@ -195,20 +139,16 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   void _navigateToProfile() {
     if (_article == null) return;
 
-    final authorId = _article!['author'] as String? ?? '';
-    final userNpub = _authorUser?['npub'] as String? ?? authorId;
-    final userPubkeyHex = _authorUser?['pubkeyHex'] as String? ?? _article!['pubkey'] as String? ?? '';
+    final pubkey = _article!['pubkey'] as String? ?? '';
+    final userNpub = _authorUser?['npub'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
 
-    if (currentLocation.startsWith('/home/explore')) {
+    if (currentLocation.startsWith('/home/feed')) {
       context.push(
-          '/home/explore/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
-    } else if (currentLocation.startsWith('/home/feed')) {
-      context.push(
-          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkey)}');
     } else {
       context.push(
-          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkey)}');
     }
   }
 
@@ -335,15 +275,39 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final content = _article!['content'] as String? ?? '';
     final imageUrl = _article!['image'] as String? ?? '';
     final summary = _article!['summary'] as String? ?? '';
-    final timestamp = _article!['timestamp'] as DateTime? ?? DateTime.now();
-    final publishedAt = _article!['publishedAt'] as DateTime? ?? timestamp;
 
-    final authorName = _authorUser?['name'] as String? ?? '';
-    final authorImage = _authorUser?['profileImage'] as String? ?? '';
-    final authorId = _article!['author'] as String? ?? '';
+    final createdAt = _article!['created_at'];
+    final DateTime timestamp;
+    if (createdAt is int) {
+      timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+    } else if (createdAt is DateTime) {
+      timestamp = createdAt;
+    } else {
+      timestamp = DateTime.now();
+    }
+
+    final pubAt = _article!['publishedAt'];
+    final DateTime publishedAt;
+    if (pubAt is int) {
+      publishedAt = DateTime.fromMillisecondsSinceEpoch(pubAt * 1000);
+    } else if (pubAt is DateTime) {
+      publishedAt = pubAt;
+    } else {
+      publishedAt = timestamp;
+    }
+
+    final authorNameFromArticle = _article!['author'] as String? ?? '';
+    final authorImageFromArticle = _article!['authorImage'] as String? ?? '';
+    final authorName = _authorUser?['name'] as String? ??
+        _authorUser?['display_name'] as String? ??
+        authorNameFromArticle;
+    final authorImage = _authorUser?['profileImage'] as String? ??
+        _authorUser?['picture'] as String? ??
+        authorImageFromArticle;
+    final pubkey = _article!['pubkey'] as String? ?? '';
     final displayName = authorName.isNotEmpty
         ? authorName
-        : (authorId.length > 8 ? '${authorId.substring(0, 8)}...' : authorId);
+        : (pubkey.length > 8 ? '${pubkey.substring(0, 8)}...' : pubkey);
 
     final topPadding = MediaQuery.of(context).padding.top;
 
@@ -352,7 +316,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       color: colors.textPrimary,
       child: CustomScrollView(
         controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics()),
         slivers: [
           SliverToBoxAdapter(
             child: SizedBox(height: topPadding + 80),
@@ -447,7 +412,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                                           color: colors.textSecondary,
                                         ),
                                       ),
-                                      errorWidget: (context, url, error) => Container(
+                                      errorWidget: (context, url, error) =>
+                                          Container(
                                         width: 40,
                                         height: 40,
                                         color: colors.overlayLight,
@@ -658,7 +624,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             ),
           ),
           SliverToBoxAdapter(
-            child: SizedBox(height: MediaQuery.of(context).padding.bottom + 100),
+            child:
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 100),
           ),
         ],
       ),

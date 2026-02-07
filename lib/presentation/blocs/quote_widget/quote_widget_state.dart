@@ -28,7 +28,8 @@ class QuoteWidgetLoaded extends QuoteWidgetState {
   });
 
   @override
-  List<Object?> get props => [note, user, formattedTime, parsedContent, shouldTruncate];
+  List<Object?> get props =>
+      [note, user, formattedTime, parsedContent, shouldTruncate];
 }
 
 class QuoteWidgetError extends QuoteWidgetState {

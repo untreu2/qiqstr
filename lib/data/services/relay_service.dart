@@ -1,11 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:qiqstr/constants/relays.dart';
-import 'event_parser_isolate.dart';
-import 'event_handler.dart';
 
 class RelayConnectionStats {
   int connectAttempts = 0;
@@ -18,7 +17,8 @@ class RelayConnectionStats {
   Duration totalUptime = Duration.zero;
   DateTime? connectionStartTime;
 
-  double get successRate => connectAttempts > 0 ? successfulConnections / connectAttempts : 0.0;
+  double get successRate =>
+      connectAttempts > 0 ? successfulConnections / connectAttempts : 0.0;
   bool get isHealthy => successRate > 0.7 && disconnections < 5;
 }
 
@@ -27,10 +27,12 @@ class RelayConnectionState {
   bool isConnecting = false;
   DateTime? lastConnectAttempt;
   StreamSubscription? subscription;
+  Completer<void>? connectCompleter;
   final List<Function(List<dynamic>, String)> eventHandlers = [];
   final List<Function(String)> disconnectHandlers = [];
-  
-  bool get isConnected => socket != null && socket!.readyState == WebSocket.open;
+
+  bool get isConnected =>
+      socket != null && socket!.readyState == WebSocket.open;
   bool get isConnectingOrConnected => isConnecting || isConnected;
 }
 
@@ -53,8 +55,9 @@ class WebSocketManager {
 
   final Queue<String> _messageQueue = Queue();
   bool _isProcessingMessages = false;
-  
-  final Map<String, Function(List<dynamic> decoded, String relayUrl)?> _globalEventHandlers = {};
+
+  final Map<String, Function(List<dynamic> decoded, String relayUrl)?>
+      _globalEventHandlers = {};
   final Map<String, Function(String relayUrl)?> _globalDisconnectHandlers = {};
 
   WebSocketManager._internal() {
@@ -63,32 +66,33 @@ class WebSocketManager {
 
   Future<void> _ensureInitialized() async {
     if (_isInitialized) return;
-    
+
     try {
       if (kDebugMode) {
         print('[WebSocketManager] Initializing relay list...');
       }
-      
+
       final customRelays = await getRelaySetMainSockets();
-      
+
       if (relayUrls.isEmpty) {
         relayUrls.addAll(customRelays);
         if (!relayUrls.contains(countRelayUrl)) {
           relayUrls.add(countRelayUrl);
         }
         _initializeStats();
-        
+
         if (kDebugMode) {
-          print('[WebSocketManager] Initialized with ${customRelays.length} relays: $customRelays');
+          print(
+              '[WebSocketManager] Initialized with ${customRelays.length} relays: $customRelays');
         }
       }
-      
+
       _isInitialized = true;
     } catch (e) {
       if (kDebugMode) {
         print('[WebSocketManager] Error initializing relays: $e');
       }
-      
+
       if (relayUrls.isEmpty) {
         relayUrls.addAll(relaySetMainSockets);
         _initializeStats();
@@ -116,10 +120,9 @@ class WebSocketManager {
       .map((state) => state.socket!)
       .toList();
 
-  Map<String, WebSocket> get webSockets => Map.fromEntries(
-      _connections.entries
-          .where((e) => e.value.isConnected)
-          .map((e) => MapEntry(e.key, e.value.socket!)));
+  Map<String, WebSocket> get webSockets => Map.fromEntries(_connections.entries
+      .where((e) => e.value.isConnected)
+      .map((e) => MapEntry(e.key, e.value.socket!)));
 
   bool get isConnected => activeSockets.isNotEmpty;
 
@@ -127,55 +130,65 @@ class WebSocketManager {
     return relayUrls.where((url) {
       final stats = _connectionStats[url];
       final state = _connections[url];
-      return stats != null && stats.isHealthy && state != null && state.isConnected;
+      return stats != null &&
+          stats.isHealthy &&
+          state != null &&
+          state.isConnected;
     }).toList();
   }
-  
+
   bool isRelayConnected(String url) {
     final state = _connections[url];
     return state != null && state.isConnected;
   }
-  
+
   bool isRelayConnecting(String url) {
     final state = _connections[url];
     return state != null && state.isConnecting;
   }
-  
-  Future<WebSocket?> getOrCreateConnection(String relayUrl, {
+
+  Future<WebSocket?> getOrCreateConnection(
+    String relayUrl, {
     Function(List<dynamic> decoded, String relayUrl)? onEvent,
     Function(String relayUrl)? onDisconnected,
   }) async {
     await _ensureInitialized();
-    
+
     if (_isClosed) return null;
-    
+
     final state = _connections[relayUrl];
-    
+
     if (state != null && state.isConnected) {
       if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
         state.eventHandlers.add(onEvent);
       }
-      if (onDisconnected != null && !state.disconnectHandlers.contains(onDisconnected)) {
+      if (onDisconnected != null &&
+          !state.disconnectHandlers.contains(onDisconnected)) {
         state.disconnectHandlers.add(onDisconnected);
       }
       return state.socket;
     }
-    
+
     if (state != null && state.isConnecting) {
       if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
         state.eventHandlers.add(onEvent);
       }
-      if (onDisconnected != null && !state.disconnectHandlers.contains(onDisconnected)) {
+      if (onDisconnected != null &&
+          !state.disconnectHandlers.contains(onDisconnected)) {
         state.disconnectHandlers.add(onDisconnected);
       }
-      while (state.isConnecting) {
-        await Future.delayed(const Duration(milliseconds: 100));
+      if (state.connectCompleter != null) {
+        await state.connectCompleter!.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {},
+        );
       }
       if (state.isConnected) {
         return state.socket;
       }
+      return null;
     }
-    
+
     return await _connectSingleRelay(relayUrl, onEvent, onDisconnected);
   }
 
@@ -186,23 +199,26 @@ class WebSocketManager {
     String? serviceId,
   }) async {
     await _ensureInitialized();
-    
+
     if (serviceId != null) {
       _globalEventHandlers[serviceId] = onEvent;
       _globalDisconnectHandlers[serviceId] = onDisconnected;
     }
 
-    if (_connections.values.any((state) => state.isConnected || state.isConnecting)) {
+    if (_connections.values
+        .any((state) => state.isConnected || state.isConnecting)) {
       return;
     }
 
     if (kDebugMode) {
-      print('[WebSocketManager] Connecting to ${relayUrls.length} relays: $relayUrls');
+      print(
+          '[WebSocketManager] Connecting to ${relayUrls.length} relays: $relayUrls');
     }
 
-    final connectionFutures = relayUrls.map((relayUrl) => 
-      getOrCreateConnection(relayUrl, onEvent: onEvent, onDisconnected: onDisconnected)
-    );
+    final connectionFutures = relayUrls.map((relayUrl) => getOrCreateConnection(
+        relayUrl,
+        onEvent: onEvent,
+        onDisconnected: onDisconnected));
 
     await Future.wait(connectionFutures, eagerError: false);
   }
@@ -213,7 +229,7 @@ class WebSocketManager {
     Function(String relayUrl)? onDisconnected,
   ) async {
     if (_isClosed) return null;
-    
+
     var state = _connections[relayUrl];
     if (state == null) {
       state = RelayConnectionState();
@@ -222,26 +238,31 @@ class WebSocketManager {
         _connectionStats[relayUrl] = RelayConnectionStats();
       }
     }
-    
+
     if (state.isConnected) {
       if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
         state.eventHandlers.add(onEvent);
       }
-      if (onDisconnected != null && !state.disconnectHandlers.contains(onDisconnected)) {
+      if (onDisconnected != null &&
+          !state.disconnectHandlers.contains(onDisconnected)) {
         state.disconnectHandlers.add(onDisconnected);
       }
       return state.socket;
     }
-    
+
     if (state.isConnecting) {
       if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
         state.eventHandlers.add(onEvent);
       }
-      if (onDisconnected != null && !state.disconnectHandlers.contains(onDisconnected)) {
+      if (onDisconnected != null &&
+          !state.disconnectHandlers.contains(onDisconnected)) {
         state.disconnectHandlers.add(onDisconnected);
       }
-      while (state.isConnecting) {
-        await Future.delayed(const Duration(milliseconds: 100));
+      if (state.connectCompleter != null) {
+        await state.connectCompleter!.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {},
+        );
       }
       if (state.isConnected) {
         return state.socket;
@@ -250,6 +271,7 @@ class WebSocketManager {
     }
 
     state.isConnecting = true;
+    state.connectCompleter = Completer<void>();
     state.lastConnectAttempt = DateTime.now();
     final stats = _connectionStats[relayUrl]!;
     stats.connectAttempts++;
@@ -267,6 +289,10 @@ class WebSocketManager {
 
       state.socket = ws;
       state.isConnecting = false;
+      if (state.connectCompleter != null &&
+          !state.connectCompleter!.isCompleted) {
+        state.connectCompleter!.complete();
+      }
       stats.successfulConnections++;
       stats.lastConnected = DateTime.now();
       stats.connectionStartTime = DateTime.now();
@@ -274,7 +300,8 @@ class WebSocketManager {
       if (onEvent != null && !state.eventHandlers.contains(onEvent)) {
         state.eventHandlers.add(onEvent);
       }
-      if (onDisconnected != null && !state.disconnectHandlers.contains(onDisconnected)) {
+      if (onDisconnected != null &&
+          !state.disconnectHandlers.contains(onDisconnected)) {
         state.disconnectHandlers.add(onDisconnected);
       }
 
@@ -282,22 +309,22 @@ class WebSocketManager {
         (event) async {
           try {
             final currentState = _connections[relayUrl];
-            if (_isClosed || currentState == null || !currentState.isConnected) return;
+            if (_isClosed ||
+                currentState == null ||
+                !currentState.isConnected) {
+              return;
+            }
 
             stats.messagesReceived++;
 
             List<dynamic>? decoded;
             try {
-              final parsed = await EventParserIsolate.instance.parseJson(event is String ? event : event.toString());
-              decoded = parsed['data'] as List<dynamic>?;
+              decoded = jsonDecode(event is String ? event : event.toString())
+                  as List<dynamic>?;
             } catch (_) {}
 
             if (decoded != null && decoded.isNotEmpty) {
-              EventHandler.route(
-                decoded,
-                relayUrl,
-                subscriptionHandlers: _subscriptionHandlers,
-              );
+              _routeEvent(decoded, relayUrl);
             }
 
             for (final handler in _globalEventHandlers.values) {
@@ -306,7 +333,8 @@ class WebSocketManager {
                   handler(decoded, relayUrl);
                 } catch (e) {
                   if (kDebugMode) {
-                    print('[WebSocketManager] Error in global event handler: $e');
+                    print(
+                        '[WebSocketManager] Error in global event handler: $e');
                   }
                 }
               }
@@ -329,26 +357,26 @@ class WebSocketManager {
         onDone: () {
           try {
             _handleDisconnection(relayUrl);
-          } catch (e) {
-            
-          }
+          } catch (e) {}
         },
         onError: (error) {
           try {
             _handleDisconnection(relayUrl);
-          } catch (e) {
-            
-          }
+          } catch (e) {}
         },
         cancelOnError: false,
       );
-      
+
       return ws;
     } catch (e) {
       try {
         await ws?.close();
       } catch (_) {}
       state.isConnecting = false;
+      if (state.connectCompleter != null &&
+          !state.connectCompleter!.isCompleted) {
+        state.connectCompleter!.complete();
+      }
       _handleDisconnection(relayUrl);
       return null;
     }
@@ -357,11 +385,11 @@ class WebSocketManager {
   void _handleDisconnection(String relayUrl) {
     final state = _connections[relayUrl];
     if (state == null) return;
-    
+
     try {
       state.subscription?.cancel();
     } catch (_) {}
-    
+
     state.socket = null;
     state.isConnecting = false;
 
@@ -398,7 +426,7 @@ class WebSocketManager {
         }
       }
     }
-    
+
     state.eventHandlers.clear();
     state.disconnectHandlers.clear();
   }
@@ -407,13 +435,13 @@ class WebSocketManager {
     _globalEventHandlers.remove(serviceId);
     _globalDisconnectHandlers.remove(serviceId);
   }
-  
+
   Future<bool> sendMessage(String relayUrl, String message) async {
     final state = _connections[relayUrl];
     if (state == null || !state.isConnected) {
       return false;
     }
-    
+
     try {
       if (state.socket!.readyState == WebSocket.open) {
         state.socket!.add(message);
@@ -430,38 +458,61 @@ class WebSocketManager {
     }
     return false;
   }
-  
-  final Map<String, Map<String, Function(List<dynamic>, String)>> _subscriptionHandlers = {};
-  
-  void registerSubscriptionHandler(String relayUrl, String subscriptionId, Function(List<dynamic>, String) handler) {
+
+  final Map<String, Map<String, Function(List<dynamic>, String)>>
+      _subscriptionHandlers = {};
+
+  void registerSubscriptionHandler(String relayUrl, String subscriptionId,
+      Function(List<dynamic>, String) handler) {
     if (!_subscriptionHandlers.containsKey(relayUrl)) {
       _subscriptionHandlers[relayUrl] = {};
     }
     _subscriptionHandlers[relayUrl]![subscriptionId] = handler;
   }
-  
+
   void unregisterSubscriptionHandler(String relayUrl, String subscriptionId) {
     _subscriptionHandlers[relayUrl]?.remove(subscriptionId);
     if (_subscriptionHandlers[relayUrl]?.isEmpty ?? false) {
       _subscriptionHandlers.remove(relayUrl);
     }
   }
-  
-  Future<Completer<void>> sendQuery(String relayUrl, String request, String subscriptionId, {
+
+  void _routeEvent(List<dynamic> decoded, String relayUrl) {
+    if (decoded.isEmpty) return;
+    final messageType = decoded[0];
+    if ((messageType == 'EVENT' ||
+            messageType == 'EOSE' ||
+            messageType == 'CLOSED') &&
+        decoded.length >= 2) {
+      final subscriptionId = decoded[1] as String;
+      final subs = _subscriptionHandlers[relayUrl];
+      final handler = subs != null ? subs[subscriptionId] : null;
+      if (handler != null) {
+        try {
+          handler(decoded, relayUrl);
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<Completer<void>> sendQuery(
+    String relayUrl,
+    String request,
+    String subscriptionId, {
     required Function(Map<String, dynamic>, String) onEvent,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final completer = Completer<void>();
     Timer? timeoutTimer;
     bool eoseReceived = false;
-    
+
     final ws = await getOrCreateConnection(relayUrl);
     if (ws == null || ws.readyState != WebSocket.open) {
       completer.complete();
       return completer;
     }
-    
-    final handler = (List<dynamic> decoded, String url) async {
+
+    Future<void> handler(List<dynamic> decoded, String url) async {
       try {
         if (decoded.length >= 2 && decoded[1] == subscriptionId) {
           if (decoded[0] == 'EVENT' && decoded.length >= 3) {
@@ -483,10 +534,10 @@ class WebSocketManager {
           unregisterSubscriptionHandler(relayUrl, subscriptionId);
         }
       }
-    };
-    
+    }
+
     registerSubscriptionHandler(relayUrl, subscriptionId, handler);
-    
+
     final sent = await sendMessage(relayUrl, request);
     if (!sent) {
       if (!completer.isCompleted) {
@@ -495,18 +546,19 @@ class WebSocketManager {
       }
       return completer;
     }
-    
+
     timeoutTimer = Timer(timeout, () {
       if (!eoseReceived && !completer.isCompleted) {
         completer.complete();
         unregisterSubscriptionHandler(relayUrl, subscriptionId);
       }
     });
-    
+
     return completer;
   }
 
-  Future<void> executeOnActiveSockets(FutureOr<void> Function(WebSocket ws) action) async {
+  Future<void> executeOnActiveSockets(
+      FutureOr<void> Function(WebSocket ws) action) async {
     final activeWs = activeSockets;
     if (activeWs.isEmpty) return;
 
@@ -620,7 +672,7 @@ class WebSocketManager {
     final delay = _calculateBackoffDelay(attempt);
     final reconnectTime = DateTime.now();
     _reconnectTimers[relayUrl] = reconnectTime;
-    
+
     Future.delayed(Duration(seconds: delay), () async {
       if (_isClosed || _reconnectTimers[relayUrl] != reconnectTime) return;
 
@@ -629,7 +681,8 @@ class WebSocketManager {
         _reconnectTimers.remove(relayUrl);
         onReconnected?.call(relayUrl);
       } else if (!_isClosed) {
-        reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1, onReconnected: onReconnected);
+        reconnectRelay(relayUrl, targetNpubs,
+            attempt: attempt + 1, onReconnected: onReconnected);
       }
     });
   }
@@ -637,14 +690,29 @@ class WebSocketManager {
   int _calculateBackoffDelay(int attempt) {
     const baseDelay = 1;
     final maxDelaySeconds = maxBackoffDelay.inSeconds;
-    final delay = (baseDelay * pow(2, attempt - 1)).toInt().clamp(1, maxDelaySeconds);
+    final delay =
+        (baseDelay * pow(2, attempt - 1)).toInt().clamp(1, maxDelaySeconds);
 
     final maxJitter = (delay ~/ 2).clamp(1, 5);
     final jitter = (DateTime.now().millisecondsSinceEpoch % maxJitter);
     return delay + jitter;
   }
 
-  Future<void> closeConnections() async {}
+  Future<void> closeConnections() async {
+    for (final entry in _connections.entries) {
+      final state = entry.value;
+      try {
+        state.subscription?.cancel();
+        if (state.socket != null &&
+            state.socket!.readyState == WebSocket.open) {
+          await state.socket!.close();
+        }
+      } catch (_) {}
+    }
+    _connections.clear();
+    _subscriptionHandlers.clear();
+    _messageQueue.clear();
+  }
 
   Future<void> forceCloseConnections() async {
     _isClosed = true;
@@ -654,14 +722,12 @@ class WebSocketManager {
     for (final state in _connections.values) {
       try {
         state.subscription?.cancel();
-        if (state.socket != null && 
-            (state.socket!.readyState == WebSocket.open || 
-             state.socket!.readyState == WebSocket.connecting)) {
+        if (state.socket != null &&
+            (state.socket!.readyState == WebSocket.open ||
+                state.socket!.readyState == WebSocket.connecting)) {
           await state.socket!.close();
         }
-      } catch (e) {
-        
-      }
+      } catch (e) {}
     }
 
     _connections.clear();
@@ -669,7 +735,8 @@ class WebSocketManager {
   }
 
   Map<String, dynamic> getConnectionStats() {
-    final connectedCount = _connections.values.where((s) => s.isConnected).length;
+    final connectedCount =
+        _connections.values.where((s) => s.isConnected).length;
     final totalStats = {
       'totalRelays': relayUrls.length,
       'connectedRelays': connectedCount,
@@ -713,60 +780,65 @@ class WebSocketManager {
     await Future.microtask(() async {
       try {
         final customRelays = await getRelaySetMainSockets();
-        
+
         if (kDebugMode) {
           print('[WebSocketManager] Reloading custom relays...');
-          print('[WebSocketManager] Current relays: ${relayUrls.length} - $relayUrls');
-          print('[WebSocketManager] New relays: ${customRelays.length} - $customRelays');
+          print(
+              '[WebSocketManager] Current relays: ${relayUrls.length} - $relayUrls');
+          print(
+              '[WebSocketManager] New relays: ${customRelays.length} - $customRelays');
         }
-        
+
         if (!_listEquals(relayUrls, customRelays)) {
           if (kDebugMode) {
             print('[WebSocketManager] Relay list changed, updating...');
           }
-          
-          final activeConnections = _connections.values.where((s) => s.isConnected).length;
+
+          final activeConnections =
+              _connections.values.where((s) => s.isConnected).length;
           final closeFutures = _connections.values.map((state) async {
             try {
               state.subscription?.cancel();
-              if (state.socket != null && 
-                  (state.socket!.readyState == WebSocket.open || 
-                   state.socket!.readyState == WebSocket.connecting)) {
+              if (state.socket != null &&
+                  (state.socket!.readyState == WebSocket.open ||
+                      state.socket!.readyState == WebSocket.connecting)) {
                 await state.socket!.close();
               }
-            } catch (e) {
-              
-            }
+            } catch (e) {}
           });
           await Future.wait(closeFutures, eagerError: false);
-          
+
           _connections.clear();
           relayUrls.clear();
           _connectionStats.clear();
-          
+
           relayUrls.addAll(customRelays);
           _initializeStats();
 
           if (kDebugMode) {
-            print('[WebSocketManager] Updated to ${customRelays.length} relays');
+            print(
+                '[WebSocketManager] Updated to ${customRelays.length} relays');
           }
-          
+
           if (activeConnections > 0) {
             if (kDebugMode) {
-              print('[WebSocketManager] Reconnecting to ${relayUrls.length} new relays...');
+              print(
+                  '[WebSocketManager] Reconnecting to ${relayUrls.length} new relays...');
             }
-            final connectionFutures = relayUrls.map((relayUrl) => 
-              getOrCreateConnection(relayUrl)
-            );
+            final connectionFutures =
+                relayUrls.map((relayUrl) => getOrCreateConnection(relayUrl));
             await Future.wait(connectionFutures, eagerError: false);
-            
-            final newConnected = _connections.values.where((s) => s.isConnected).length;
+
+            final newConnected =
+                _connections.values.where((s) => s.isConnected).length;
             if (kDebugMode) {
-              print('[WebSocketManager] Reconnection complete: $newConnected active connections');
+              print(
+                  '[WebSocketManager] Reconnection complete: $newConnected active connections');
             }
           } else {
             if (kDebugMode) {
-              print('[WebSocketManager] No active connections, will connect on next connectRelays() call');
+              print(
+                  '[WebSocketManager] No active connections, will connect on next connectRelays() call');
             }
           }
         } else {

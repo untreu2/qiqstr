@@ -1,48 +1,30 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
-import '../../../data/repositories/dm_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/services/dm_service.dart';
+import '../../../data/repositories/profile_repository.dart';
 import 'dm_event.dart';
 import 'dm_state.dart';
 
 class DmBloc extends Bloc<DmEvent, DmState> {
-  final DmRepository _dmRepository;
+  final DmService _dmService;
+  final ProfileRepository _profileRepository;
 
   final List<StreamSubscription> _subscriptions = [];
   String? _currentChatPubkeyHex;
 
   DmBloc({
-    required DmRepository dmRepository,
-    required AuthRepository authRepository,
-  })  : _dmRepository = dmRepository,
+    required DmService dmService,
+    required ProfileRepository profileRepository,
+  })  : _dmService = dmService,
+        _profileRepository = profileRepository,
         super(const DmInitial()) {
     on<DmConversationsLoadRequested>(_onDmConversationsLoadRequested);
     on<DmConversationOpened>(_onDmConversationOpened);
     on<DmMessageSent>(_onDmMessageSent);
     on<DmMessageDeleted>(_onDmMessageDeleted);
     on<DmConversationRefreshed>(_onDmConversationRefreshed);
-    on<DmConversationsUpdated>(_onDmConversationsUpdated);
     on<DmMessagesUpdated>(_onDmMessagesUpdated);
     on<DmMessagesError>(_onDmMessagesError);
-
-    _subscribeToConversations();
-  }
-
-  void _subscribeToConversations() {
-    _subscriptions.add(
-      _dmRepository.conversationsStream.listen((conversations) {
-        if (state is! DmChatLoaded) {
-          add(DmConversationsUpdated(conversations));
-        }
-      }),
-    );
-  }
-
-  void _onDmConversationsUpdated(
-    DmConversationsUpdated event,
-    Emitter<DmState> emit,
-  ) {
-    emit(DmConversationsLoaded(event.conversations));
   }
 
   void _onDmMessagesUpdated(
@@ -69,12 +51,52 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
     emit(const DmLoading());
 
-    final result = await _dmRepository.getConversations();
+    final result = await _dmService.getConversations();
 
-    result.fold(
-      (conversations) => emit(DmConversationsLoaded(conversations)),
-      (error) => emit(DmError(error)),
-    );
+    if (result.isError) {
+      emit(DmError(result.error!));
+      return;
+    }
+
+    final conversations = result.data!;
+    final enriched = await _enrichConversations(conversations);
+    emit(DmConversationsLoaded(enriched));
+  }
+
+  Future<List<Map<String, dynamic>>> _enrichConversations(
+      List<Map<String, dynamic>> conversations) async {
+    if (conversations.isEmpty) return conversations;
+
+    final pubkeys = conversations
+        .map((c) => c['otherUserPubkeyHex'] as String? ?? '')
+        .where((p) => p.isNotEmpty)
+        .toList();
+
+    if (pubkeys.isEmpty) return conversations;
+
+    final profiles = await _profileRepository.getProfiles(pubkeys);
+
+    return conversations.map((conversation) {
+      final otherUserPubkeyHex =
+          conversation['otherUserPubkeyHex'] as String? ?? '';
+      final profile = profiles[otherUserPubkeyHex];
+
+      if (profile != null) {
+        final userName = profile.name ?? '';
+        final userProfileImage = profile.picture ?? '';
+        final displayName = userName.isNotEmpty
+            ? userName
+            : (otherUserPubkeyHex.length > 12
+                ? otherUserPubkeyHex.substring(0, 12)
+                : otherUserPubkeyHex);
+
+        return Map<String, dynamic>.from(conversation)
+          ..['otherUserName'] = displayName
+          ..['otherUserProfileImage'] = userProfileImage;
+      }
+
+      return conversation;
+    }).toList();
   }
 
   Future<void> _onDmConversationOpened(
@@ -89,9 +111,10 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     emit(const DmLoading());
 
     _subscriptions.add(
-      _dmRepository.subscribeToMessages(event.pubkeyHex).listen(
+      _dmService.subscribeToMessages(event.pubkeyHex).listen(
         (messages) {
-          add(DmMessagesUpdated(pubkeyHex: event.pubkeyHex, messages: messages));
+          add(DmMessagesUpdated(
+              pubkeyHex: event.pubkeyHex, messages: messages));
         },
         onError: (error) {
           add(DmMessagesError(error.toString()));
@@ -99,10 +122,11 @@ class DmBloc extends Bloc<DmEvent, DmState> {
       ),
     );
 
-    final result = await _dmRepository.getMessages(event.pubkeyHex);
+    final result = await _dmService.getMessages(event.pubkeyHex);
     result.fold(
       (messages) {
-        if (state is! DmChatLoaded || (state as DmChatLoaded).messages.isEmpty) {
+        if (state is! DmChatLoaded ||
+            (state as DmChatLoaded).messages.isEmpty) {
           emit(DmChatLoaded(pubkeyHex: event.pubkeyHex, messages: messages));
         }
       },
@@ -114,7 +138,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmMessageSent event,
     Emitter<DmState> emit,
   ) async {
-    final result = await _dmRepository.sendMessage(event.pubkeyHex, event.content);
+    final result = await _dmService.sendMessage(event.pubkeyHex, event.content);
 
     result.fold(
       (_) {},
@@ -132,7 +156,8 @@ class DmBloc extends Bloc<DmEvent, DmState> {
         final messageId = m['id'] as String? ?? '';
         return messageId.isNotEmpty && messageId != event.messageId;
       }).toList();
-      emit(DmChatLoaded(pubkeyHex: currentState.pubkeyHex, messages: updatedMessages));
+      emit(DmChatLoaded(
+          pubkeyHex: currentState.pubkeyHex, messages: updatedMessages));
     }
   }
 

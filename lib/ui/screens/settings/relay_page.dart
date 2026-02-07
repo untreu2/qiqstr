@@ -2,16 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ndk/ndk.dart';
-import 'package:ndk/shared/nips/nip01/bip340.dart';
+import '../../../src/rust/api/events.dart' as rust_events;
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import '../../theme/theme_manager.dart';
 import '../../../constants/relays.dart';
-import '../../../core/di/app_di.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
 import '../../widgets/common/common_buttons.dart';
@@ -95,7 +93,7 @@ class _RelayPageState extends State<RelayPage> {
   late ScrollController _scrollController;
   final ValueNotifier<bool> _showTitleBubble = ValueNotifier(false);
 
-  late AuthRepository _authRepository;
+  final AuthService _authService = AuthService.instance;
 
   @override
   void initState() {
@@ -125,9 +123,7 @@ class _RelayPageState extends State<RelayPage> {
     super.dispose();
   }
 
-  void _initializeServices() {
-    _authRepository = AppDI.get<AuthRepository>();
-  }
+  void _initializeServices() {}
 
   void _startStatsRefresh() {
     Timer.periodic(const Duration(seconds: 2), (timer) {
@@ -223,14 +219,14 @@ class _RelayPageState extends State<RelayPage> {
     });
 
     try {
-      final privateKeyResult = await _authRepository.getCurrentUserPrivateKey();
+      final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError || privateKeyResult.data == null) {
         AppSnackbar.error(
             context, 'Private key not found. Please set up your profile first');
         return;
       }
 
-      final npubResult = await _authRepository.getCurrentUserNpub();
+      final npubResult = await _authService.getCurrentUserNpub();
       if (npubResult.isError || npubResult.data == null) {
         AppSnackbar.error(context, 'Please set up your profile first');
         return;
@@ -243,28 +239,24 @@ class _RelayPageState extends State<RelayPage> {
         relayTags.add(['r', relay]);
       }
 
-      final publicKey = Bip340.getPublicKey(privateKey);
-      final event = Nip01Event(
-        pubKey: publicKey,
-        kind: 10002,
-        tags: relayTags,
-        content: '',
+      final eventJsonStr = rust_events.createRelayListEvent(
+        relayUrls: _relays,
+        privateKeyHex: privateKey,
       );
-      event.sig = Bip340.sign(event.id, privateKey);
+      final event = jsonDecode(eventJsonStr) as Map<String, dynamic>;
 
       final serializedEvent = NostrService.serializeEvent(event);
 
       await _broadcastRelayListEvent(serializedEvent);
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          'published_relay_list', jsonEncode(NostrService.eventToJson(event)));
+      await prefs.setString('published_relay_list', jsonEncode(event));
 
       AppSnackbar.success(context,
           'Relay list published successfully (${relayTags.length} relays in list)');
 
       if (kDebugMode) {
-        print('Relay list event published: ${event.id}');
+        print('Relay list event published: ${event['id']}');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -322,7 +314,7 @@ class _RelayPageState extends State<RelayPage> {
     });
 
     try {
-      final npubResult = await _authRepository.getCurrentUserNpub();
+      final npubResult = await _authService.getCurrentUserNpub();
       if (npubResult.isError || npubResult.data == null) {
         throw Exception('User not logged in');
       }
@@ -366,7 +358,7 @@ class _RelayPageState extends State<RelayPage> {
     final List<Map<String, dynamic>> relayList = [];
 
     try {
-      final pubkeyHex = _authRepository.npubToHex(npub) ?? npub;
+      final pubkeyHex = _authService.npubToHex(npub) ?? npub;
 
       final manager = WebSocketManager.instance;
 
