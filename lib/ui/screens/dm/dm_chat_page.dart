@@ -1,9 +1,12 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/services/encrypted_media_service.dart';
 import '../../../data/sync/sync_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/di/app_di.dart';
@@ -34,7 +37,8 @@ class _DmChatPageState extends State<DmChatPage> {
   bool _isInitialized = false;
   bool _isUploadingMedia = false;
   DmBloc? _dmBloc;
-  final List<String> _attachedMediaUrls = [];
+  
+  final List<Map<String, dynamic>> _attachedEncryptedMedia = [];
 
   static const _imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   static const _videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
@@ -49,7 +53,7 @@ class _DmChatPageState extends State<DmChatPage> {
     'image.nostr.build',
   ];
   static final _hexHashPattern = RegExp(r'/[0-9a-f]{64}$');
-  static const int _maxFileSizeBytes = 50 * 1024 * 1024;
+  static const int _maxFileSizeBytes = 50 * 1024 * 1024; // 50MB
 
   @override
   void dispose() {
@@ -60,6 +64,8 @@ class _DmChatPageState extends State<DmChatPage> {
     super.dispose();
   }
 
+  
+  
   Future<void> _selectMedia(String recipientPubkeyHex) async {
     if (_isUploadingMedia || !mounted || _dmBloc == null) return;
 
@@ -87,19 +93,48 @@ class _DmChatPageState extends State<DmChatPage> {
         _isUploadingMedia = true;
       });
 
-      final syncService = AppDI.get<SyncService>();
-      final url = await syncService.uploadMedia(file.path!);
+      final encryptedMediaService = EncryptedMediaService.instance;
+      final encryptResult = await encryptedMediaService.encryptMediaFile(file.path!);
 
       if (!mounted) return;
 
+      if (encryptResult.isError) {
+        setState(() {
+          _isUploadingMedia = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Encryption failed: ${encryptResult.error}')),
+        );
+        return;
+      }
+
+      final encryptedMetadata = encryptResult.data!;
+
+      final syncService = AppDI.get<SyncService>();
+      final url = await syncService.uploadMedia(encryptedMetadata.encryptedFilePath);
+
+      if (!mounted) return;
+
+      await encryptedMediaService.cleanupEncryptedFile(encryptedMetadata.encryptedFilePath);
+
       if (url != null && url.isNotEmpty) {
         setState(() {
-          _attachedMediaUrls.add(url);
+          _attachedEncryptedMedia.add({
+            'url': url,
+            'mimeType': encryptedMetadata.mimeType,
+            'encryptionKey': encryptedMetadata.encryptionKey,
+            'encryptionNonce': encryptedMetadata.encryptionNonce,
+            'encryptedHash': encryptedMetadata.encryptedHash,
+            'originalHash': encryptedMetadata.originalHash,
+            'fileSize': encryptedMetadata.encryptedSize,
+          });
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to upload media')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to upload encrypted media')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -116,30 +151,42 @@ class _DmChatPageState extends State<DmChatPage> {
     }
   }
 
-  void _removeAttachedMedia(String url) {
+  
+  void _removeAttachedMedia(int index) {
     setState(() {
-      _attachedMediaUrls.remove(url);
+      _attachedEncryptedMedia.removeAt(index);
     });
   }
 
+  
+  
   void _sendMessage(String recipientPubkeyHex) {
     if (_dmBloc == null) return;
     final textController = _textControllers[recipientPubkeyHex];
     final text = textController?.text.trim() ?? '';
 
-    if (text.isEmpty && _attachedMediaUrls.isEmpty) return;
+    if (text.isEmpty && _attachedEncryptedMedia.isEmpty) return;
 
-    final parts = <String>[];
-    if (text.isNotEmpty) parts.add(text);
-    for (final url in _attachedMediaUrls) {
-      parts.add(url);
+    if (text.isNotEmpty) {
+      _dmBloc!.add(DmMessageSent(recipientPubkeyHex, text));
     }
 
-    final content = parts.join('\n');
-    _dmBloc!.add(DmMessageSent(recipientPubkeyHex, content));
+    for (final media in _attachedEncryptedMedia) {
+      _dmBloc!.add(DmEncryptedMediaSent(
+        recipientPubkeyHex: recipientPubkeyHex,
+        encryptedFileUrl: media['url'] as String,
+        mimeType: media['mimeType'] as String,
+        encryptionKey: media['encryptionKey'] as String,
+        encryptionNonce: media['encryptionNonce'] as String,
+        encryptedHash: media['encryptedHash'] as String,
+        originalHash: media['originalHash'] as String,
+        fileSize: media['fileSize'] as int,
+      ));
+    }
+
     textController?.clear();
     setState(() {
-      _attachedMediaUrls.clear();
+      _attachedEncryptedMedia.clear();
     });
   }
 
@@ -354,12 +401,18 @@ class _DmChatPageState extends State<DmChatPage> {
     return (text: textLines.join('\n').trim(), mediaUrls: mediaUrls);
   }
 
+  
   Widget _buildMessageBubble(
       BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
     final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
     final content = message['content'] as String? ?? '';
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
+    final messageKind = message['kind'] as int? ?? 14;
+
+    if (messageKind == 15) {
+      return _buildEncryptedMediaBubble(context, message);
+    }
 
     final parsed = _parseMessageContent(content);
 
@@ -477,18 +530,408 @@ class _DmChatPageState extends State<DmChatPage> {
                 left: !isFromMe ? 8 : 0,
                 bottom: 12,
               ),
-              child: Text(
-                _formatTime(createdAt),
-                style: TextStyle(
-                  color: colors.textSecondary,
-                  fontSize: 11,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CarbonIcons.locked,
+                    size: 10,
+                    color: colors.textSecondary.withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatTime(createdAt),
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  
+  
+  Widget _buildEncryptedMediaBubble(
+      BuildContext context, Map<String, dynamic> message) {
+    final colors = context.colors;
+    final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
+    final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
+    final encryptedUrl = message['content'] as String? ?? '';
+    final mimeType = message['mimeType'] as String? ?? 'application/octet-stream';
+    final encryptionKey = message['encryptionKey'] as String?;
+    final encryptionNonce = message['encryptionNonce'] as String?;
+    final originalHash = message['originalHash'] as String?;
+
+    if (encryptionKey == null || encryptionNonce == null || originalHash == null) {
+      return _buildLegacyMediaBubble(context, message);
+    }
+
+    final isImage = mimeType.startsWith('image/');
+    final isVideo = mimeType.startsWith('video/');
+
+    return RepaintBoundary(
+      child: Align(
+        alignment: isFromMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment:
+              isFromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              decoration: BoxDecoration(
+                color: isFromMe ? colors.textPrimary : colors.overlayLight,
+                borderRadius: BorderRadius.circular(20).copyWith(
+                  bottomRight: isFromMe ? const Radius.circular(4) : null,
+                  bottomLeft: !isFromMe ? const Radius.circular(4) : null,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20).copyWith(
+                  bottomRight: isFromMe ? const Radius.circular(4) : null,
+                  bottomLeft: !isFromMe ? const Radius.circular(4) : null,
+                ),
+                child: FutureBuilder<Widget>(
+                  future: _decryptAndDisplayMedia(
+                    encryptedUrl: encryptedUrl,
+                    decryptionKey: encryptionKey,
+                    decryptionNonce: encryptionNonce,
+                    originalHash: originalHash,
+                    mimeType: mimeType,
+                    isImage: isImage,
+                    isVideo: isVideo,
+                    colors: colors,
+                  ),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Container(
+                        height: 200,
+                        color: colors.overlayLight,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+
+                    if (snapshot.hasError || !snapshot.hasData) {
+                      return Container(
+                        height: 100,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(CarbonIcons.locked,
+                                color: colors.textSecondary, size: 24),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Failed to decrypt media',
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return snapshot.data!;
+                  },
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(
+                right: isFromMe ? 8 : 0,
+                left: !isFromMe ? 8 : 0,
+                bottom: 12,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CarbonIcons.locked,
+                      size: 10, color: colors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatTime(createdAt),
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegacyMediaBubble(
+      BuildContext context, Map<String, dynamic> message) {
+    final colors = context.colors;
+    final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
+    final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
+    final mediaUrl = message['content'] as String? ?? '';
+    final mimeType = message['mimeType'] as String? ?? '';
+    
+    final isImage = mimeType.startsWith('image/') || _isImageUrl(mediaUrl);
+    
+    return RepaintBoundary(
+      child: Align(
+        alignment: isFromMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment:
+              isFromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              decoration: BoxDecoration(
+                color: isFromMe ? colors.textPrimary : colors.overlayLight,
+                borderRadius: BorderRadius.circular(20).copyWith(
+                  bottomRight: isFromMe ? const Radius.circular(4) : null,
+                  bottomLeft: !isFromMe ? const Radius.circular(4) : null,
+                ),
+              ),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20).copyWith(
+                      bottomRight: isFromMe ? const Radius.circular(4) : null,
+                      bottomLeft: !isFromMe ? const Radius.circular(4) : null,
+                    ),
+                    child: isImage
+                        ? CachedNetworkImage(
+                            imageUrl: mediaUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            placeholder: (_, __) => Container(
+                              height: 200,
+                              color: colors.overlayLight,
+                              child: const Center(
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              height: 100,
+                              color: colors.overlayLight,
+                              child: Icon(CarbonIcons.image,
+                                  color: colors.textSecondary),
+                            ),
+                          )
+                        : Container(
+                            height: 100,
+                            padding: const EdgeInsets.all(16),
+                            color: colors.overlayLight,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(CarbonIcons.warning,
+                                    color: colors.textSecondary, size: 24),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Legacy unencrypted media',
+                                  style: TextStyle(
+                                    color: colors.textSecondary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(
+                right: isFromMe ? 8 : 0,
+                left: !isFromMe ? 8 : 0,
+                bottom: 12,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CarbonIcons.warning,
+                      size: 10, color: colors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Not encrypted · ${_formatTime(createdAt)}',
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  
+  
+  Future<Widget> _decryptAndDisplayMedia({
+    required String encryptedUrl,
+    required String decryptionKey,
+    required String decryptionNonce,
+    required String originalHash,
+    required String mimeType,
+    required bool isImage,
+    required bool isVideo,
+    required dynamic colors,
+  }) async {
+    try {
+      final httpClient = HttpClient();
+      final request = await httpClient.getUrl(Uri.parse(encryptedUrl));
+      final response = await request.close();
+      
+      final encryptedBytes = await response.fold<List<int>>(
+        <int>[],
+        (previous, element) => previous..addAll(element),
+      );
+      httpClient.close();
+
+      final encryptedMediaService = EncryptedMediaService.instance;
+      final fileExtension = encryptedMediaService.getFileExtensionFromMimeType(mimeType);
+      
+      final decryptResult = await encryptedMediaService.decryptMediaFile(
+        encryptedBytes: Uint8List.fromList(encryptedBytes),
+        decryptionKey: decryptionKey,
+        decryptionNonce: decryptionNonce,
+        originalHash: originalHash,
+        fileExtension: fileExtension,
+      );
+
+      if (decryptResult.isError) {
+        return Container(
+          height: 150,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(CarbonIcons.locked, color: colors.textSecondary, size: 24),
+              const SizedBox(height: 8),
+              Text(
+                'Decryption Error',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                decryptResult.error ?? 'Unknown error',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        );
+      }
+
+      final decryptedFilePath = decryptResult.data!;
+
+      if (isImage) {
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => PhotoViewerWidget(imageUrls: [decryptedFilePath]),
+              ),
+            );
+          },
+          child: Image.file(
+            File(decryptedFilePath),
+            fit: BoxFit.cover,
+            width: double.infinity,
+            errorBuilder: (_, __, ___) => Container(
+              height: 100,
+              color: colors.overlayLight,
+              child: Icon(CarbonIcons.image, color: colors.textSecondary),
+            ),
+          ),
+        );
+      } else if (isVideo) {
+        return Container(
+          height: 200,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(CarbonIcons.play_filled_alt,
+                  color: colors.textSecondary, size: 48),
+              const SizedBox(height: 8),
+              Text(
+                'Video (tap to play)',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        return Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(CarbonIcons.document, size: 20, color: colors.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'File: $fileExtension',
+                  style: TextStyle(
+                    color: colors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      return Container(
+        height: 100,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(CarbonIcons.locked, color: colors.textSecondary, size: 24),
+            const SizedBox(height: 8),
+            Text(
+              'Decryption failed',
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildMessageInput(
@@ -515,7 +958,7 @@ class _DmChatPageState extends State<DmChatPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_attachedMediaUrls.isNotEmpty || _isUploadingMedia)
+          if (_attachedEncryptedMedia.isNotEmpty || _isUploadingMedia)
             _buildAttachedMediaPreview(colors),
           const SizedBox(height: 8),
           Row(
@@ -588,9 +1031,9 @@ class _DmChatPageState extends State<DmChatPage> {
       height: 80,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: _attachedMediaUrls.length + (_isUploadingMedia ? 1 : 0),
+        itemCount: _attachedEncryptedMedia.length + (_isUploadingMedia ? 1 : 0),
         itemBuilder: (context, index) {
-          if (_isUploadingMedia && index == _attachedMediaUrls.length) {
+          if (_isUploadingMedia && index == _attachedEncryptedMedia.length) {
             return Container(
               width: 80,
               height: 80,
@@ -612,7 +1055,10 @@ class _DmChatPageState extends State<DmChatPage> {
             );
           }
 
-          final url = _attachedMediaUrls[index];
+          final media = _attachedEncryptedMedia[index];
+          final mimeType = media['mimeType'] as String;
+          final isImage = mimeType.startsWith('image/');
+          
           return Stack(
             children: [
               Container(
@@ -624,45 +1070,23 @@ class _DmChatPageState extends State<DmChatPage> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: _isImageUrl(url)
-                      ? CachedNetworkImage(
-                          imageUrl: url,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(
-                            color: colors.overlayLight,
-                            child: Center(
-                              child: Icon(
-                                CarbonIcons.image,
-                                color: colors.textSecondary,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                          errorWidget: (_, __, ___) => Container(
-                            color: colors.overlayLight,
-                            child: Icon(
-                              CarbonIcons.image,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        )
-                      : Container(
-                          color: colors.overlayLight,
-                          child: Center(
-                            child: Icon(
-                              CarbonIcons.play_filled,
-                              color: colors.textSecondary,
-                              size: 28,
-                            ),
-                          ),
-                        ),
+                  child: Container(
+                    color: colors.overlayLight,
+                    child: Center(
+                      child: Icon(
+                        isImage ? CarbonIcons.image : CarbonIcons.play_filled,
+                        color: colors.textSecondary,
+                        size: 28,
+                      ),
+                    ),
+                  ),
                 ),
               ),
               Positioned(
                 top: 4,
                 right: 12,
                 child: GestureDetector(
-                  onTap: () => _removeAttachedMedia(url),
+                  onTap: () => _removeAttachedMedia(index),
                   child: Container(
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(

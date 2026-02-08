@@ -22,6 +22,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     on<DmConversationsLoadRequested>(_onDmConversationsLoadRequested);
     on<DmConversationOpened>(_onDmConversationOpened);
     on<DmMessageSent>(_onDmMessageSent);
+    on<DmEncryptedMediaSent>(_onDmEncryptedMediaSent);
     on<DmMessageDeleted>(_onDmMessageDeleted);
     on<DmConversationRefreshed>(_onDmConversationRefreshed);
     on<DmMessagesUpdated>(_onDmMessagesUpdated);
@@ -168,6 +169,27 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     Emitter<DmState> emit,
   ) async {
     final result = await _dmService.sendMessage(event.pubkeyHex, event.content);
+
+    result.fold(
+      (_) {},
+      (error) => emit(DmError(error)),
+    );
+  }
+
+  Future<void> _onDmEncryptedMediaSent(
+    DmEncryptedMediaSent event,
+    Emitter<DmState> emit,
+  ) async {
+    final result = await _dmService.sendEncryptedMediaMessage(
+      recipientPubkeyHex: event.recipientPubkeyHex,
+      encryptedFileUrl: event.encryptedFileUrl,
+      mimeType: event.mimeType,
+      encryptionKey: event.encryptionKey,
+      encryptionNonce: event.encryptionNonce,
+      encryptedHash: event.encryptedHash,
+      originalHash: event.originalHash,
+      fileSize: event.fileSize,
+    );
 
     result.fold(
       (_) {},

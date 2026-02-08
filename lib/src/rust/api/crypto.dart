@@ -28,3 +28,47 @@ bool validateMnemonic({required String mnemonic}) =>
 
 String mnemonicToPrivateKey({required String mnemonic}) =>
     RustLib.instance.api.crateApiCryptoMnemonicToPrivateKey(mnemonic: mnemonic);
+
+
+
+String generateAesKey() => RustLib.instance.api.crateApiCryptoGenerateAesKey();
+
+
+
+String generateAesNonce() =>
+    RustLib.instance.api.crateApiCryptoGenerateAesNonce();
+
+
+
+
+
+
+
+
+String aesGcmEncrypt(
+        {required List<int> data,
+        required String keyHex,
+        required String nonceHex}) =>
+    RustLib.instance.api.crateApiCryptoAesGcmEncrypt(
+        data: data, keyHex: keyHex, nonceHex: nonceHex);
+
+
+
+
+
+
+
+
+
+
+Uint8List aesGcmDecrypt(
+        {required String encryptedBase64,
+        required String keyHex,
+        required String nonceHex}) =>
+    RustLib.instance.api.crateApiCryptoAesGcmDecrypt(
+        encryptedBase64: encryptedBase64, keyHex: keyHex, nonceHex: nonceHex);
+
+
+
+String sha256Hash({required List<int> data}) =>
+    RustLib.instance.api.crateApiCryptoSha256Hash(data: data);

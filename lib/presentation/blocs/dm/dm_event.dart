@@ -36,6 +36,40 @@ class DmMessageDeleted extends DmEvent {
   List<Object?> get props => [messageId];
 }
 
+class DmEncryptedMediaSent extends DmEvent {
+  final String recipientPubkeyHex;
+  final String encryptedFileUrl;
+  final String mimeType;
+  final String encryptionKey;
+  final String encryptionNonce;
+  final String encryptedHash;
+  final String originalHash;
+  final int fileSize;
+
+  const DmEncryptedMediaSent({
+    required this.recipientPubkeyHex,
+    required this.encryptedFileUrl,
+    required this.mimeType,
+    required this.encryptionKey,
+    required this.encryptionNonce,
+    required this.encryptedHash,
+    required this.originalHash,
+    required this.fileSize,
+  });
+
+  @override
+  List<Object?> get props => [
+        recipientPubkeyHex,
+        encryptedFileUrl,
+        mimeType,
+        encryptionKey,
+        encryptionNonce,
+        encryptedHash,
+        originalHash,
+        fileSize,
+      ];
+}
+
 class DmConversationRefreshed extends DmEvent {
   final String pubkeyHex;
 

@@ -58,6 +58,96 @@ pub fn create_gift_wrap_dm_for_sender(
 }
 
 #[frb(sync)]
+pub fn create_gift_wrap_file_message(
+    sender_private_key_hex: String,
+    receiver_pubkey_hex: String,
+    file_url: String,
+    mime_type: String,
+    encryption_key_hex: String,
+    encryption_nonce_hex: String,
+    encrypted_hash: String,
+    original_hash: String,
+    file_size: Option<u64>,
+) -> Result<String> {
+    let sender_sk = SecretKey::parse(&sender_private_key_hex)?;
+    let sender_keys = Keys::new(sender_sk);
+    let receiver_pk = PublicKey::parse(&receiver_pubkey_hex)?;
+
+    let mut event_builder = EventBuilder::new(Kind::from(15), file_url);
+    event_builder = event_builder.tag(Tag::public_key(receiver_pk));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("file-type".into()), vec![mime_type]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("encryption-algorithm".into()), vec!["aes-gcm".to_string()]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("decryption-key".into()), vec![encryption_key_hex]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("decryption-nonce".into()), vec![encryption_nonce_hex]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("x".into()), vec![encrypted_hash]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("ox".into()), vec![original_hash]));
+    
+    if let Some(size) = file_size {
+        event_builder = event_builder.tag(Tag::custom(TagKind::Custom("size".into()), vec![size.to_string()]));
+    }
+
+    let rumor = event_builder.build(sender_keys.public_key());
+
+    let gift_wrap: Event =
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                EventBuilder::gift_wrap(&sender_keys, &receiver_pk, rumor, []).await
+            })?;
+
+    Ok(gift_wrap.as_json())
+}
+
+#[frb(sync)]
+pub fn create_gift_wrap_file_message_for_sender(
+    sender_private_key_hex: String,
+    receiver_pubkey_hex: String,
+    file_url: String,
+    mime_type: String,
+    encryption_key_hex: String,
+    encryption_nonce_hex: String,
+    encrypted_hash: String,
+    original_hash: String,
+    file_size: Option<u64>,
+) -> Result<String> {
+    let sender_sk = SecretKey::parse(&sender_private_key_hex)?;
+    let sender_keys = Keys::new(sender_sk);
+    let receiver_pk = PublicKey::parse(&receiver_pubkey_hex)?;
+
+    let mut event_builder = EventBuilder::new(Kind::from(15), file_url);
+    event_builder = event_builder.tag(Tag::public_key(receiver_pk));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("file-type".into()), vec![mime_type]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("encryption-algorithm".into()), vec!["aes-gcm".to_string()]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("decryption-key".into()), vec![encryption_key_hex]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("decryption-nonce".into()), vec![encryption_nonce_hex]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("x".into()), vec![encrypted_hash]));
+    event_builder = event_builder.tag(Tag::custom(TagKind::Custom("ox".into()), vec![original_hash]));
+    
+    if let Some(size) = file_size {
+        event_builder = event_builder.tag(Tag::custom(TagKind::Custom("size".into()), vec![size.to_string()]));
+    }
+
+    let rumor = event_builder.build(sender_keys.public_key());
+
+    let self_wrap: Event =
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                EventBuilder::gift_wrap(
+                    &sender_keys,
+                    &sender_keys.public_key(),
+                    rumor,
+                    [],
+                )
+                .await
+            })?;
+
+    Ok(self_wrap.as_json())
+}
+
+#[frb(sync)]
 pub fn unwrap_gift_wrap(
     receiver_private_key_hex: String,
     gift_wrap_json: String,

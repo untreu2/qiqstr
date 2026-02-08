@@ -48,6 +48,7 @@ dependencies:
     photo_view: ^0.15.0
     url_launcher: ^6.3.1
     flutter_linkify: ^6.0.0
+    convert: ^3.1.1
 
     file_picker: ^10.2.0
     bolt11_decoder: ^1.0.2

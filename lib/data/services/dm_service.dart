@@ -104,7 +104,7 @@ class DmService {
       final rumor = unwrapped['rumor'] as Map<String, dynamic>? ?? {};
       final rumorKind = rumor['kind'] as int? ?? 0;
 
-      if (rumorKind != 14) return null;
+      if (rumorKind != 14 && rumorKind != 15) return null;
 
       final content = rumor['content'] as String? ?? '';
       final rumorCreatedAt = rumor['created_at'] as int? ?? 0;
@@ -112,10 +112,31 @@ class DmService {
       final tags = rumor['tags'] as List<dynamic>? ?? [];
 
       String? recipientPubkey;
+      String? mimeType;
+      String? encryptionKey;
+      String? encryptionNonce;
+      String? encryptedHash;
+      String? originalHash;
+      int? fileSize;
+
       for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
-          recipientPubkey = tag[1] as String?;
-          break;
+        if (tag is List && tag.isNotEmpty) {
+          final tagName = tag[0] as String?;
+          if (tagName == 'p' && tag.length > 1) {
+            recipientPubkey = tag[1] as String?;
+          } else if (tagName == 'file-type' && tag.length > 1) {
+            mimeType = tag[1] as String?;
+          } else if (tagName == 'decryption-key' && tag.length > 1) {
+            encryptionKey = tag[1] as String?;
+          } else if (tagName == 'decryption-nonce' && tag.length > 1) {
+            encryptionNonce = tag[1] as String?;
+          } else if (tagName == 'x' && tag.length > 1) {
+            encryptedHash = tag[1] as String?;
+          } else if (tagName == 'ox' && tag.length > 1) {
+            originalHash = tag[1] as String?;
+          } else if (tagName == 'size' && tag.length > 1) {
+            fileSize = int.tryParse(tag[1] as String? ?? '');
+          }
         }
       }
 
@@ -125,7 +146,7 @@ class DmService {
 
       if (otherUserPubkeyHex.isEmpty) return null;
 
-      return <String, dynamic>{
+      final message = <String, dynamic>{
         'id': rumorId,
         'senderPubkeyHex': sender,
         'recipientPubkeyHex': otherUserPubkeyHex,
@@ -133,7 +154,19 @@ class DmService {
         'createdAt':
             DateTime.fromMillisecondsSinceEpoch(rumorCreatedAt * 1000),
         'isFromCurrentUser': isFromCurrentUser,
+        'kind': rumorKind,
       };
+
+      if (rumorKind == 15) {
+        if (mimeType != null) message['mimeType'] = mimeType;
+        if (encryptionKey != null) message['encryptionKey'] = encryptionKey;
+        if (encryptionNonce != null) message['encryptionNonce'] = encryptionNonce;
+        if (encryptedHash != null) message['encryptedHash'] = encryptedHash;
+        if (originalHash != null) message['originalHash'] = originalHash;
+        if (fileSize != null) message['fileSize'] = fileSize;
+      }
+
+      return message;
     } catch (_) {
       if (eventId.isNotEmpty) _failedUnwrapIds.add(eventId);
       return null;
@@ -502,6 +535,7 @@ class DmService {
         'content': content,
         'createdAt': DateTime.now(),
         'isFromCurrentUser': true,
+        'kind': 14, // Text message
       };
 
       if (!_messagesCache.containsKey(recipientPubkeyHex)) {
@@ -516,6 +550,97 @@ class DmService {
       return const Result.success(null);
     } catch (e) {
       return Result.error('Failed to send message: $e');
+    }
+  }
+
+  
+  
+  
+  
+  
+  
+  
+  
+  Future<Result<void>> sendEncryptedMediaMessage({
+    required String recipientPubkeyHex,
+    required String encryptedFileUrl,
+    required String mimeType,
+    required String encryptionKey,
+    required String encryptionNonce,
+    required String encryptedHash,
+    required String originalHash,
+    required int fileSize,
+  }) async {
+    final initResult = await _ensureInitialized();
+    if (initResult.isError) {
+      return Result.error(initResult.error!);
+    }
+
+    final privateKey = await _getPrivateKey();
+    if (privateKey == null) {
+      return Result.error('Not authenticated');
+    }
+
+    try {
+      final recipientWrapJson = rust_nip17.createGiftWrapFileMessage(
+        senderPrivateKeyHex: privateKey,
+        receiverPubkeyHex: recipientPubkeyHex,
+        fileUrl: encryptedFileUrl,
+        mimeType: mimeType,
+        encryptionKeyHex: encryptionKey,
+        encryptionNonceHex: encryptionNonce,
+        encryptedHash: encryptedHash,
+        originalHash: originalHash,
+        fileSize: BigInt.from(fileSize),
+      );
+
+      final senderWrapJson = rust_nip17.createGiftWrapFileMessageForSender(
+        senderPrivateKeyHex: privateKey,
+        receiverPubkeyHex: recipientPubkeyHex,
+        fileUrl: encryptedFileUrl,
+        mimeType: mimeType,
+        encryptionKeyHex: encryptionKey,
+        encryptionNonceHex: encryptionNonce,
+        encryptedHash: encryptedHash,
+        originalHash: originalHash,
+        fileSize: BigInt.from(fileSize),
+      );
+
+      final recipientWrap =
+          jsonDecode(recipientWrapJson) as Map<String, dynamic>;
+      final senderWrap = jsonDecode(senderWrapJson) as Map<String, dynamic>;
+
+      await RustRelayService.instance.broadcastEvent(recipientWrap);
+      await RustRelayService.instance.broadcastEvent(senderWrap);
+
+      final optimisticMessage = <String, dynamic>{
+        'id': recipientWrap['id'] as String? ?? '',
+        'senderPubkeyHex': _currentUserPubkeyHex!,
+        'recipientPubkeyHex': recipientPubkeyHex,
+        'content': encryptedFileUrl,
+        'createdAt': DateTime.now(),
+        'isFromCurrentUser': true,
+        'kind': 15, // File message
+        'mimeType': mimeType,
+        'encryptionKey': encryptionKey,
+        'encryptionNonce': encryptionNonce,
+        'encryptedHash': encryptedHash,
+        'originalHash': originalHash,
+        'fileSize': fileSize,
+      };
+
+      if (!_messagesCache.containsKey(recipientPubkeyHex)) {
+        _messagesCache[recipientPubkeyHex] = [];
+      }
+      _messagesCache[recipientPubkeyHex]!.add(optimisticMessage);
+      _sortAndCapMessages(recipientPubkeyHex);
+      _notifyMessageStream(recipientPubkeyHex);
+
+      _updateConversationCache(recipientPubkeyHex, optimisticMessage);
+
+      return const Result.success(null);
+    } catch (e) {
+      return Result.error('Failed to send encrypted media: $e');
     }
   }
 
