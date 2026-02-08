@@ -6,6 +6,7 @@ import '../../../data/services/coinos_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
+import '../../../l10n/app_localizations.dart';
 
 class ReceiveDialog extends StatefulWidget {
   final String? lud16;
@@ -122,6 +123,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
     final qrData = _getQrData();
     final showLightningAddress = _showLightningAddress();
@@ -209,7 +211,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
               controller: _amountController,
               keyboardType: TextInputType.number,
               enabled: !_isUpdating,
-              hintText: 'Amount (Optional)',
+              hintText: '${l10n.amount} (${l10n.optional})',
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -224,12 +226,12 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
               SizedBox(
                 width: double.infinity,
                 child: SecondaryButton(
-                  label: 'Copy',
+                  label: l10n.copy,
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: qrData));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: const Text('Copied to clipboard'),
+                        content: Text(l10n.copiedToClipboard),
                         backgroundColor: colors.success,
                       ),
                     );

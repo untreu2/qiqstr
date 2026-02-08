@@ -11,6 +11,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
+import '../../../l10n/app_localizations.dart';
 
 class FollowingPage extends StatefulWidget {
   final String pubkeyHex;
@@ -168,10 +169,11 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return const SliverToBoxAdapter(
+    final l10n = AppLocalizations.of(context)!;
+    return SliverToBoxAdapter(
       child: TitleWidget(
-        title: 'Following',
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+        title: l10n.following,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       ),
     );
   }

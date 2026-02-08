@@ -63,10 +63,12 @@ class EventMapper {
       if (eTags.length == 1) {
         rootId = eTags[0];
         parentId = eTags[0];
-      } else {
+      } else if (eTags.length >= 2) {
         rootId = eTags.first;
         parentId = eTags.last;
       }
+    } else if (rootId != null && parentId == null && !isQuote) {
+      parentId = rootId;
     }
 
     isReply = (rootId != null || parentId != null) && !isQuote;
@@ -122,10 +124,12 @@ class EventMapper {
               if (repostETags.length == 1) {
                 rootId = repostETags[0];
                 parentId = repostETags[0];
-              } else {
+              } else if (repostETags.length >= 2) {
                 rootId = repostETags.first;
                 parentId = repostETags.last;
               }
+            } else if (rootId != null && parentId == null) {
+              parentId = rootId;
             }
             isReply = rootId != null || parentId != null;
           }

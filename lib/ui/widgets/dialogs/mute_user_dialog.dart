@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<void> showMuteUserDialog({
   required BuildContext context,
@@ -8,6 +9,7 @@ Future<void> showMuteUserDialog({
   required VoidCallback onConfirm,
 }) async {
   final colors = context.colors;
+  final l10n = AppLocalizations.of(context)!;
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -27,7 +29,7 @@ Future<void> showMuteUserDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Mute $userName?',
+            l10n.muteUser(userName),
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 20,
@@ -36,7 +38,7 @@ Future<void> showMuteUserDialog({
           ),
           const SizedBox(height: 16),
           Text(
-            'You will not see notes from this user in your feed.',
+            l10n.muteUserDescription,
             style: TextStyle(
               color: colors.textSecondary,
               fontSize: 14,
@@ -48,7 +50,7 @@ Future<void> showMuteUserDialog({
             children: [
               Expanded(
                 child: SecondaryButton(
-                  label: 'Cancel',
+                  label: l10n.cancel,
                   onPressed: () => Navigator.pop(modalContext),
                   size: ButtonSize.large,
                 ),
@@ -56,7 +58,7 @@ Future<void> showMuteUserDialog({
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Mute',
+                  label: l10n.mute,
                   onPressed: () {
                     Navigator.pop(modalContext);
                     onConfirm();

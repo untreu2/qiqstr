@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<void> showLogoutDialog({
   required BuildContext context,
   required VoidCallback onConfirm,
 }) async {
   final colors = context.colors;
+  final l10n = AppLocalizations.of(context)!;
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -26,7 +28,7 @@ Future<void> showLogoutDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Are you sure you want to logout?',
+            l10n.areYouSureLogout,
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 20,
@@ -35,7 +37,7 @@ Future<void> showLogoutDialog({
           ),
           const SizedBox(height: 16),
           Text(
-            'IF YOU HAVEN\'T SAVED YOUR SEED PHRASE, YOU WILL LOSE YOUR ACCOUNT FOREVER.',
+            l10n.seedPhraseWarning,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: colors.textSecondary,
@@ -48,7 +50,7 @@ Future<void> showLogoutDialog({
             children: [
               Expanded(
                 child: SecondaryButton(
-                  label: 'Cancel',
+                  label: l10n.cancel,
                   onPressed: () => Navigator.pop(modalContext),
                   size: ButtonSize.large,
                 ),
@@ -56,7 +58,7 @@ Future<void> showLogoutDialog({
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Logout',
+                  label: l10n.logout,
                   onPressed: () {
                     Navigator.pop(modalContext);
                     onConfirm();

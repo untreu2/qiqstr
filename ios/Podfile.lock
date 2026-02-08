@@ -42,15 +42,11 @@ PODS:
     - Flutter
   - integration_test (0.0.1):
     - Flutter
-  - MTBBarcodeScanner (5.0.11)
-  - qr_code_scanner (0.2.0):
-    - Flutter
-    - MTBBarcodeScanner
   - rust_lib_qiqstr (0.0.1):
     - Flutter
-  - SDWebImage (5.20.0):
-    - SDWebImage/Core (= 5.20.0)
-  - SDWebImage/Core (5.20.0)
+  - SDWebImage (5.21.5):
+    - SDWebImage/Core (= 5.21.5)
+  - SDWebImage/Core (5.21.5)
   - share_plus (0.0.1):
     - Flutter
   - shared_preferences_foundation (0.0.1):
@@ -76,7 +72,6 @@ DEPENDENCIES:
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
   - gallery_saver_plus (from `.symlinks/plugins/gallery_saver_plus/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
-  - qr_code_scanner (from `.symlinks/plugins/qr_code_scanner/ios`)
   - rust_lib_qiqstr (from `.symlinks/plugins/rust_lib_qiqstr/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -89,7 +84,6 @@ SPEC REPOS:
   trunk:
     - DKImagePickerController
     - DKPhotoGallery
-    - MTBBarcodeScanner
     - SDWebImage
     - SwiftyGif
 
@@ -106,8 +100,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/gallery_saver_plus/ios"
   integration_test:
     :path: ".symlinks/plugins/integration_test/ios"
-  qr_code_scanner:
-    :path: ".symlinks/plugins/qr_code_scanner/ios"
   rust_lib_qiqstr:
     :path: ".symlinks/plugins/rust_lib_qiqstr/ios"
   share_plus:
@@ -132,10 +124,8 @@ SPEC CHECKSUMS:
   flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
   gallery_saver_plus: c4b59c605df1049a02d036ef81d82972b6dfd606
   integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
-  MTBBarcodeScanner: f453b33c4b7dfe545d8c6484ed744d55671788cb
-  qr_code_scanner: bb67d64904c3b9658ada8c402e8b4d406d5d796e
   rust_lib_qiqstr: b8e39f441e535e4536e68954978f1aace990120e
-  SDWebImage: 73c6079366fea25fa4bb9640d5fb58f0893facd8
+  SDWebImage: e9c98383c7572d713c1a0d7dd2783b10599b9838
   share_plus: 8b6f8b3447e494cca5317c8c3073de39b3600d1f
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
   sqflite_darwin: 5a7236e3b501866c1c9befc6771dfd73ffb8702d
@@ -144,6 +134,6 @@ SPEC CHECKSUMS:
   video_player_avfoundation: 7993f492ae0bd77edaea24d9dc051d8bb2cd7c86
   webview_flutter_wkwebview: 29eb20d43355b48fe7d07113835b9128f84e3af4
 
-PODFILE CHECKSUM: 4f1c12611da7338d21589c0b2ecd6bd20b109694
+PODFILE CHECKSUM: 45d3856f3db80f7d72f27a712912db8766860d37
 
 COCOAPODS: 1.16.2

@@ -9,6 +9,7 @@ import '../../widgets/common/snackbar_widget.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../../presentation/blocs/theme/theme_event.dart';
 import '../../../presentation/blocs/theme/theme_state.dart';
+import '../../../l10n/app_localizations.dart';
 
 class PaymentsPage extends StatefulWidget {
   const PaymentsPage({super.key});
@@ -38,6 +39,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return BlocBuilder<ThemeBloc, ThemeState>(
       builder: (context, themeState) {
         return Scaffold(
@@ -48,9 +50,9 @@ class _PaymentsPageState extends State<PaymentsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(context),
+                    _buildHeader(context, l10n),
                     const SizedBox(height: 16),
-                    _buildPaymentsSection(context, themeState),
+                    _buildPaymentsSection(context, themeState, l10n),
                     const SizedBox(height: 150),
                   ],
                 ),
@@ -63,27 +65,27 @@ class _PaymentsPageState extends State<PaymentsPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
-      child: const TitleWidget(
-        title: 'Payments',
+      child: TitleWidget(
+        title: l10n.paymentsTitle,
         fontSize: 32,
-        subtitle: "Manage your payment preferences.",
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+        subtitle: l10n.paymentsSubtitle,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       ),
     );
   }
 
-  Widget _buildPaymentsSection(BuildContext context, ThemeState themeState) {
+  Widget _buildPaymentsSection(BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _buildOneTapZapToggleItem(context, themeState),
+          _buildOneTapZapToggleItem(context, themeState, l10n),
           const SizedBox(height: 8),
           if (themeState.oneTapZap) ...[
-            _buildAmountInputItem(context, themeState),
+            _buildAmountInputItem(context, themeState, l10n),
             const SizedBox(height: 8),
           ],
           const SizedBox(height: 32),
@@ -93,7 +95,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
   }
 
   Widget _buildOneTapZapToggleItem(
-      BuildContext context, ThemeState themeState) {
+      BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     return GestureDetector(
       onTap: () =>
           context.read<ThemeBloc>().add(OneTapZapSet(!themeState.oneTapZap)),
@@ -114,7 +116,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'One Tap Zap',
+                l10n.oneTapZap,
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: 17,
@@ -137,7 +139,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
     );
   }
 
-  Widget _buildAmountInputItem(BuildContext context, ThemeState themeState) {
+  Widget _buildAmountInputItem(BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     final currentAmount = int.tryParse(_amountController.text.trim()) ?? 0;
     final hasChanges = currentAmount != _savedAmount && currentAmount > 0;
 
@@ -161,7 +163,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Default Zap Amount',
+                  l10n.defaultZapAmount,
                   style: TextStyle(
                     color: context.colors.textPrimary,
                     fontSize: 17,
@@ -178,7 +180,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                 child: CustomInputField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
-                  labelText: 'Amount (sats)',
+                  labelText: l10n.amountSats,
                   fillColor: context.colors.inputFill,
                   enabled: true,
                   readOnly: !_isEditing,
@@ -217,10 +219,10 @@ class _PaymentsPageState extends State<PaymentsPage> {
                               _isEditing = false;
                             });
                             AppSnackbar.success(
-                                context, 'Amount saved successfully');
+                                context, l10n.amountSavedSuccessfully);
                           } else {
                             AppSnackbar.error(
-                                context, 'Please enter a valid amount');
+                                context, l10n.pleaseEnterValidAmount);
                           }
                         }
                       : null,

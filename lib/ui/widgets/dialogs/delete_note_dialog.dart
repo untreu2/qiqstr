@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<void> showDeleteNoteDialog({
   required BuildContext context,
   required VoidCallback onConfirm,
 }) async {
   final colors = context.colors;
+  final l10n = AppLocalizations.of(context)!;
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -26,7 +28,7 @@ Future<void> showDeleteNoteDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Delete this post?',
+            l10n.deleteThisPost,
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 20,
@@ -38,7 +40,7 @@ Future<void> showDeleteNoteDialog({
             children: [
               Expanded(
                 child: SecondaryButton(
-                  label: 'Cancel',
+                  label: l10n.cancel,
                   onPressed: () => Navigator.pop(modalContext),
                   size: ButtonSize.large,
                 ),
@@ -46,7 +48,7 @@ Future<void> showDeleteNoteDialog({
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Yes',
+                  label: l10n.yes,
                   onPressed: () {
                     Navigator.pop(modalContext);
                     onConfirm();

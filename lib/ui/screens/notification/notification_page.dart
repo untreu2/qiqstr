@@ -13,7 +13,9 @@ import '../../../presentation/blocs/notification/notification_event.dart'
 import '../../../presentation/blocs/notification/notification_state.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
+import '../../../data/repositories/feed_repository.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../l10n/app_localizations.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -97,10 +99,11 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
       child: Text(
-        'Notifications',
+        l10n.notifications,
         style: GoogleFonts.poppins(
           fontSize: 28,
           fontWeight: FontWeight.w700,
@@ -121,6 +124,7 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   Widget _buildErrorContent(BuildContext context, String message) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -134,7 +138,7 @@ class _NotificationPageState extends State<NotificationPage> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Failed to load notifications',
+              l10n.failedToLoadNotifications,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -157,7 +161,7 @@ class _NotificationPageState extends State<NotificationPage> {
                     const notification_events.NotificationsLoadRequested());
               },
               child: Text(
-                'Retry',
+                l10n.retryText,
                 style: TextStyle(color: context.colors.textPrimary),
               ),
             ),
@@ -168,6 +172,7 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   Widget _buildEmptyContent(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -181,7 +186,7 @@ class _NotificationPageState extends State<NotificationPage> {
             ),
             const SizedBox(height: 24),
             Text(
-              'No notifications yet',
+              l10n.noNotificationsYet,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -190,7 +195,7 @@ class _NotificationPageState extends State<NotificationPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              'When someone interacts with your posts,\nyou\'ll see it here',
+              l10n.whenSomeoneInteractsWithYourPosts,
               style: TextStyle(
                 color: context.colors.textSecondary,
                 fontSize: 14,
@@ -254,24 +259,26 @@ class _NotificationTileState extends State<_NotificationTile> {
     }
   }
 
-  String _getTypeText(String type) {
+  String _getTypeText(BuildContext context, String type) {
+    final l10n = AppLocalizations.of(context)!;
     switch (type) {
       case 'reaction':
-        return 'reacted to your post';
+        return l10n.reactedToYourPost;
       case 'repost':
-        return 'reposted your post';
+        return l10n.repostedYourPost;
       case 'reply':
-        return 'replied to your post';
+        return l10n.repliedToYourPost;
       case 'mention':
-        return 'mentioned you';
+        return l10n.mentionedYou;
       case 'zap':
-        return 'zapped you';
+        return l10n.zappedYou;
       default:
-        return 'interacted with you';
+        return l10n.interactedWithYou;
     }
   }
 
-  String _formatTimestamp(int? createdAt) {
+  String _formatTimestamp(BuildContext context, int? createdAt) {
+    final l10n = AppLocalizations.of(context)!;
     if (createdAt == null || createdAt == 0) return '';
 
     final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
@@ -279,7 +286,7 @@ class _NotificationTileState extends State<_NotificationTile> {
     final difference = now.difference(timestamp);
 
     if (difference.inSeconds < 60) {
-      return 'now';
+      return l10n.now;
     } else if (difference.inMinutes < 60) {
       return '${difference.inMinutes}m';
     } else if (difference.inHours < 24) {
@@ -291,9 +298,10 @@ class _NotificationTileState extends State<_NotificationTile> {
     }
   }
 
-  void _onTap() {
+  void _onTap() async {
     final targetEventId = widget.notification['targetEventId'] as String? ?? '';
     final type = widget.notification['type'] as String? ?? '';
+    final notificationEventId = widget.notification['id'] as String? ?? '';
 
     if (type == 'follow' || type == 'unfollow') {
       final author = widget.notification['author'] as String? ?? '';
@@ -301,8 +309,39 @@ class _NotificationTileState extends State<_NotificationTile> {
         _navigateToProfile(author);
       }
     } else if (targetEventId.isNotEmpty) {
-      context.push(
-          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetEventId)}&focusedNoteId=${Uri.encodeComponent(targetEventId)}');
+      String rootNoteId = targetEventId;
+      String? focusedNoteId;
+
+      if (type == 'reply' && notificationEventId.isNotEmpty) {
+        try {
+          final feedRepo = AppDI.get<FeedRepository>();
+          final replyNote = await feedRepo.getNoteRaw(notificationEventId);
+          
+          if (replyNote != null) {
+            final replyRootId = replyNote['rootId'] as String?;
+            
+            if (replyRootId != null && replyRootId.isNotEmpty) {
+              rootNoteId = replyRootId;
+              focusedNoteId = notificationEventId;
+            } else if (targetEventId.isNotEmpty) {
+              rootNoteId = targetEventId;
+              focusedNoteId = notificationEventId;
+            }
+          }
+        } catch (e) {
+          debugPrint('[NotificationTile] Error resolving thread: $e');
+        }
+      }
+
+      if (!mounted) return;
+      
+      if (focusedNoteId != null && focusedNoteId.isNotEmpty) {
+        context.push(
+            '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(rootNoteId)}&focusedNoteId=${Uri.encodeComponent(focusedNoteId)}');
+      } else {
+        context.push(
+            '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(rootNoteId)}');
+      }
     }
   }
 
@@ -386,7 +425,7 @@ class _NotificationTileState extends State<_NotificationTile> {
                                 ),
                               ),
                               TextSpan(
-                                text: ' ${_getTypeText(type)}',
+                                text: ' ${_getTypeText(context, type)}',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w400,
                                   fontSize: 15,
@@ -399,7 +438,7 @@ class _NotificationTileState extends State<_NotificationTile> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _formatTimestamp(createdAt),
+                        _formatTimestamp(context, createdAt),
                         style: TextStyle(
                           fontSize: 13,
                           color: context.colors.textSecondary,

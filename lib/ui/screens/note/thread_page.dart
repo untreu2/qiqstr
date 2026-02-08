@@ -16,6 +16,7 @@ import '../../../presentation/blocs/thread/thread_event.dart';
 import '../../../presentation/blocs/thread/thread_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'share_note.dart';
+import '../../../l10n/app_localizations.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
@@ -41,7 +42,7 @@ class _ThreadPageState extends State<ThreadPage> {
   int _visibleRepliesCount = 20;
   static const int _repliesPerPage = 20;
   static const int _maxInitialReplies = 100;
-  static const int _maxNestedReplies = 100;
+  static const int _maxNestedReplies = 2;
   static const int _maxReplyDepth = 1;
 
   final List<String> _stableReplyOrder = [];
@@ -105,20 +106,26 @@ class _ThreadPageState extends State<ThreadPage> {
           return previous.runtimeType != current.runtimeType;
         },
         builder: (context, state) {
+          final l10n = AppLocalizations.of(context)!;
           return Scaffold(
             backgroundColor: context.colors.background,
             body: Stack(
               children: [
-                _buildContent(context, state),
+                _buildContent(context, state, l10n),
                 TopActionBarWidget(
                   onBackPressed: () => context.pop(),
-                  centerBubble: Text(
-                    'Thread',
-                    style: TextStyle(
-                      color: context.colors.background,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  centerBubble: Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context)!;
+                      return Text(
+                        l10n.thread,
+                        style: TextStyle(
+                          color: context.colors.background,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
                   ),
                   onCenterBubbleTap: () {
                     _scrollController.animateTo(
@@ -137,13 +144,13 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Widget _buildContent(BuildContext context, ThreadState state) {
+  Widget _buildContent(BuildContext context, ThreadState state, AppLocalizations l10n) {
     if (state is ThreadLoaded) {
       return _buildThreadContent(context, state);
     }
 
     if (state is ThreadError) {
-      return _buildErrorState(context, state.message);
+      return _buildErrorState(context, state.message, l10n);
     }
 
     if (state is ThreadLoading) {
@@ -481,17 +488,22 @@ class _ThreadPageState extends State<ThreadPage> {
         );
       }
       return SliverToBoxAdapter(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Text(
-              'No replies found',
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 16,
+        child: Builder(
+          builder: (context) {
+            final l10n = AppLocalizations.of(context)!;
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Text(
+                  l10n.noRepliesFound,
+                  style: TextStyle(
+                    color: context.colors.textSecondary,
+                    fontSize: 16,
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       );
     }
@@ -536,6 +548,7 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildLoadMoreButton(BuildContext context, int totalReplies) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: GestureDetector(
         onTap: () {
@@ -549,7 +562,7 @@ class _ThreadPageState extends State<ThreadPage> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Text(
-            'Load more',
+            l10n.loadMore,
             style: TextStyle(
               color: context.colors.accent,
               fontSize: 16,
@@ -644,32 +657,11 @@ class _ThreadPageState extends State<ThreadPage> {
                         ),
                       ),
                     ),
-                ] else if (hasNestedReplies) ...[
-                  _buildViewRepliesButton(
-                      context, replyId, nestedReplies.length, threadStructure),
                 ],
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildViewRepliesButton(BuildContext context, String noteId,
-      int replyCount, ThreadStructure threadStructure) {
-    return GestureDetector(
-      onTap: () => _handleNoteTap(noteId, null, threadStructure),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 12, top: 8, bottom: 4),
-        child: Text(
-          'View $replyCount ${replyCount == 1 ? 'reply' : 'replies'}',
-          style: TextStyle(
-            color: context.colors.accent,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
       ),
     );
   }
@@ -722,7 +714,7 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Widget _buildErrorState(BuildContext context, String message) {
+  Widget _buildErrorState(BuildContext context, String message, AppLocalizations l10n) {
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -738,7 +730,7 @@ class _ThreadPageState extends State<ThreadPage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Failed to load thread',
+                  l10n.failedToLoadThread,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: context.colors.textPrimary,
                       ),
@@ -754,7 +746,7 @@ class _ThreadPageState extends State<ThreadPage> {
                 ),
                 const SizedBox(height: 24),
                 PrimaryButton(
-                  label: 'Retry',
+                  label: l10n.retryText,
                   onPressed: () {
                     context.read<ThreadBloc>().add(const ThreadRefreshed());
                   },

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app_di.dart';
 import '../../../data/services/auth_service.dart';
@@ -34,37 +35,53 @@ class ServicesModule extends DIModule {
         ));
     await AuthService.instance.refreshCache();
 
-    _initRelayService();
+    await _initRelayService();
   }
 
-  void _initRelayService() {
-    Future.microtask(() async {
+  Future<void> _initRelayService() async {
+    try {
+      final authService = AuthService.instance;
+      String? privateKeyHex;
+      String? userPubkeyHex;
       try {
-        final authService = AuthService.instance;
-        String? privateKeyHex;
-        String? userPubkeyHex;
-        try {
-          final pkResult = await authService.getCurrentUserPrivateKey();
-          if (!pkResult.isError && pkResult.data != null) {
-            privateKeyHex = pkResult.data;
-          }
-          final pubResult = await authService.getCurrentUserPublicKeyHex();
-          if (!pubResult.isError && pubResult.data != null) {
-            userPubkeyHex = pubResult.data;
-          }
-        } catch (_) {}
-
-        await RustRelayService.instance.init(privateKeyHex: privateKeyHex);
-
-        if (userPubkeyHex != null) {
-          final prefs = await SharedPreferences.getInstance();
-          final gossipEnabled = prefs.getBool('gossip_model_enabled') ?? false;
-          if (gossipEnabled) {
-            _discoverOutboxRelays(userPubkeyHex);
-          }
+        final pkResult = await authService.getCurrentUserPrivateKey();
+        if (!pkResult.isError && pkResult.data != null) {
+          privateKeyHex = pkResult.data;
         }
-      } catch (_) {}
-    });
+        final pubResult = await authService.getCurrentUserPublicKeyHex();
+        if (!pubResult.isError && pubResult.data != null) {
+          userPubkeyHex = pubResult.data;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('[ServicesModule] Error getting auth keys: $e');
+        }
+      }
+
+      if (kDebugMode) {
+        print('[ServicesModule] Initializing RustRelayService...');
+      }
+
+      await RustRelayService.instance.init(privateKeyHex: privateKeyHex);
+
+      if (kDebugMode) {
+        print('[ServicesModule] RustRelayService initialized successfully');
+      }
+
+      if (userPubkeyHex != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final gossipEnabled = prefs.getBool('gossip_model_enabled') ?? false;
+        if (gossipEnabled) {
+          _discoverOutboxRelays(userPubkeyHex);
+        }
+      }
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('[ServicesModule] ERROR initializing RustRelayService: $e');
+        print('[ServicesModule] Stack trace: $stackTrace');
+      }
+      rethrow;
+    }
   }
 
   void _discoverOutboxRelays(String userPubkeyHex) {
@@ -80,7 +97,11 @@ class ServicesModule extends DIModule {
           await RustRelayService.instance
               .discoverAndConnectOutboxRelays([userPubkeyHex]);
         }
-      } catch (_) {}
+      } catch (e) {
+        if (kDebugMode) {
+          print('[ServicesModule] Error discovering outbox relays: $e');
+        }
+      }
     });
   }
 }

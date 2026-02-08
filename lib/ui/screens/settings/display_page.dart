@@ -8,6 +8,7 @@ import '../../widgets/common/title_widget.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../../presentation/blocs/theme/theme_event.dart';
 import '../../../presentation/blocs/theme/theme_state.dart';
+import '../../../l10n/app_localizations.dart';
 
 class DisplayPage extends StatefulWidget {
   const DisplayPage({super.key});
@@ -19,6 +20,7 @@ class DisplayPage extends StatefulWidget {
 class _DisplayPageState extends State<DisplayPage> {
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return BlocBuilder<ThemeBloc, ThemeState>(
       builder: (context, themeState) {
         return Scaffold(
@@ -29,9 +31,9 @@ class _DisplayPageState extends State<DisplayPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(context),
+                    _buildHeader(context, l10n),
                     const SizedBox(height: 16),
-                    _buildDisplaySection(context, themeState),
+                    _buildDisplaySection(context, themeState, l10n),
                     const SizedBox(height: 150),
                   ],
                 ),
@@ -44,28 +46,28 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
-      child: const TitleWidget(
-        title: 'Display',
+      child: TitleWidget(
+        title: l10n.displayTitle,
         fontSize: 32,
-        subtitle: "Customize your viewing experience.",
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+        subtitle: l10n.displaySubtitle,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       ),
     );
   }
 
-  Widget _buildDisplaySection(BuildContext context, ThemeState themeState) {
+  Widget _buildDisplaySection(BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _buildExpandedNoteModeToggleItem(context, themeState),
+          _buildExpandedNoteModeToggleItem(context, themeState, l10n),
           const SizedBox(height: 8),
-          _buildThemeToggleItem(context, themeState),
+          _buildThemeToggleItem(context, themeState, l10n),
           const SizedBox(height: 8),
-          _buildBottomNavOrderSection(context, themeState),
+          _buildBottomNavOrderSection(context, themeState, l10n),
           const SizedBox(height: 32),
         ],
       ),
@@ -73,7 +75,7 @@ class _DisplayPageState extends State<DisplayPage> {
   }
 
   Widget _buildExpandedNoteModeToggleItem(
-      BuildContext context, ThemeState themeState) {
+      BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     return GestureDetector(
       onTap: () =>
           context.read<ThemeBloc>().add(const ExpandedNoteModeToggled()),
@@ -97,8 +99,8 @@ class _DisplayPageState extends State<DisplayPage> {
             Expanded(
               child: Text(
                 themeState.isExpandedNoteMode
-                    ? 'Expanded Notes'
-                    : 'Normal Notes',
+                    ? l10n.expandedNotes
+                    : l10n.normalNotes,
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: 17,
@@ -122,7 +124,7 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 
-  Widget _buildThemeToggleItem(BuildContext context, ThemeState themeState) {
+  Widget _buildThemeToggleItem(BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     return GestureDetector(
       onTap: () => context.read<ThemeBloc>().add(const ThemeToggled()),
       child: Container(
@@ -142,7 +144,7 @@ class _DisplayPageState extends State<DisplayPage> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                themeState.isDarkMode ? 'Dark Mode' : 'Light Mode',
+                themeState.isDarkMode ? l10n.darkMode : l10n.lightMode,
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: 17,
@@ -166,12 +168,12 @@ class _DisplayPageState extends State<DisplayPage> {
   }
 
   Widget _buildBottomNavOrderSection(
-      BuildContext context, ThemeState themeState) {
+      BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     final navItems = [
-      {'index': 0, 'name': 'Home', 'icon': 'assets/house.svg'},
-      {'index': 1, 'name': 'DM', 'icon': 'assets/chat.svg'},
-      {'index': 2, 'name': 'Wallet', 'icon': 'assets/wallet.svg'},
-      {'index': 3, 'name': 'Notifications', 'icon': 'assets/bell.svg'},
+      {'index': 0, 'name': l10n.home, 'icon': 'assets/house.svg'},
+      {'index': 1, 'name': l10n.dm, 'icon': 'assets/chat.svg'},
+      {'index': 2, 'name': l10n.wallet, 'icon': 'assets/wallet.svg'},
+      {'index': 3, 'name': l10n.notifications, 'icon': 'assets/bell.svg'},
     ];
 
     final currentOrder = themeState.bottomNavOrder;
@@ -196,7 +198,7 @@ class _DisplayPageState extends State<DisplayPage> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Navigation Bar Order',
+                l10n.navigationBarOrder,
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: 17,
@@ -207,7 +209,7 @@ class _DisplayPageState extends State<DisplayPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Press and hold to drag and reorder items',
+            l10n.pressAndHoldToDrag,
             style: TextStyle(
               color: context.colors.textSecondary,
               fontSize: 14,

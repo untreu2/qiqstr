@@ -20,6 +20,7 @@ import '../../../presentation/blocs/user_tile/user_tile_event.dart';
 import '../../../presentation/blocs/user_tile/user_tile_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
+import '../../../l10n/app_localizations.dart';
 
 class UserSearchPage extends StatefulWidget {
   final Function(Map<String, dynamic>)? onUserSelected;
@@ -69,6 +70,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildSearchResults(BuildContext context, UserSearchState state) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return switch (state) {
       UserSearchLoading() => Center(
           child: Column(
@@ -77,7 +80,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
               CircularProgressIndicator(color: context.colors.primary),
               const SizedBox(height: 16),
               Text(
-                'Searching for users...',
+                l10n.searchingForUsers,
                 style: TextStyle(color: context.colors.textSecondary),
               ),
             ],
@@ -94,7 +97,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Search Error',
+                l10n.searchError,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -109,7 +112,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
               ),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'Retry',
+                label: l10n.retry,
                 onPressed: () {
                   context.read<UserSearchBloc>().add(
                       UserSearchQueryChanged(_searchController.text.trim()));
@@ -132,7 +135,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                     CircularProgressIndicator(color: context.colors.primary),
                     const SizedBox(height: 16),
                     Text(
-                      'Searching for users...',
+                      l10n.searchingForUsers,
                       style: TextStyle(color: context.colors.textSecondary),
                     ),
                   ],
@@ -150,7 +153,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No users found',
+                          l10n.noUsersFound,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -159,7 +162,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Try searching with a different term.',
+                          l10n.trySearchingDifferentTerm,
                           style: TextStyle(color: context.colors.textSecondary),
                           textAlign: TextAlign.center,
                         ),
@@ -196,8 +199,9 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildCancelButton() {
+    final l10n = AppLocalizations.of(context)!;
     return Semantics(
-      label: 'Close dialog',
+      label: l10n.closeDialog,
       button: true,
       child: GestureDetector(
         onTap: () => Navigator.of(context).pop(),
@@ -219,6 +223,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return BlocProvider<UserSearchBloc>(
       create: (context) {
         final bloc = AppDI.get<UserSearchBloc>();
@@ -256,7 +262,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                         child: CustomInputField(
                           controller: _searchController,
                           autofocus: true,
-                          hintText: 'Search by name or npub...',
+                          hintText: l10n.searchByNameOrNpub,
                           suffixIcon: Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: GestureDetector(
@@ -417,6 +423,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
 
   Widget _buildFollowButton(
       BuildContext context, UserTileLoaded state, UserTileBloc bloc) {
+    final l10n = AppLocalizations.of(context)!;
     final isFollowing = state.isFollowing ?? false;
     return GestureDetector(
       onTap: state.isLoading ? null : () => _toggleFollow(bloc, state),
@@ -456,7 +463,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    isFollowing ? 'Following' : 'Follow',
+                    isFollowing ? l10n.following : l10n.follow,
                     style: TextStyle(
                       color: isFollowing
                           ? context.colors.textPrimary

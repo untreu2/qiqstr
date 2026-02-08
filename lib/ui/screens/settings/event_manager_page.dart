@@ -11,6 +11,7 @@ import '../../widgets/common/snackbar_widget.dart';
 import '../../../src/rust/api/relay.dart' as rust_relay;
 import '../../../core/di/app_di.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../l10n/app_localizations.dart';
 
 class EventManagerPage extends StatefulWidget {
   const EventManagerPage({super.key});
@@ -317,6 +318,8 @@ class _EventManagerPageState extends State<EventManagerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
@@ -329,11 +332,10 @@ class _EventManagerPageState extends State<EventManagerPage> {
                     SizedBox(height: MediaQuery.of(context).padding.top + 60),
               ),
               SliverToBoxAdapter(
-                child: const TitleWidget(
-                  title: 'Your Data on Relays',
-                  subtitle:
-                      'Everything you share on Nostr is an event. View your event counts by kind and rebroadcast them to relays.',
-                  padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: TitleWidget(
+                  title: l10n.yourDataOnRelays,
+                  subtitle: l10n.yourDataOnRelaysDescription,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 ),
               ),
               SliverToBoxAdapter(
@@ -342,7 +344,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: PrimaryButton(
                     label:
-                        _isRebroadcasting ? 'Rebroadcasting...' : 'Rebroadcast',
+                        _isRebroadcasting ? l10n.rebroadcasting : l10n.rebroadcast,
                     icon: Icons.send,
                     onPressed: (_isLoading || _isRebroadcasting)
                         ? null
@@ -441,7 +443,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
           TopActionBarWidget(
             onBackPressed: () => context.pop(),
             centerBubble: Text(
-              'Your Data on Relays',
+              l10n.yourDataOnRelays,
               style: TextStyle(
                 color: context.colors.background,
                 fontSize: 16,

@@ -18,7 +18,7 @@ import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/dialogs/reset_relays_dialog.dart';
 import '../../widgets/dialogs/add_relay_dialog.dart';
-import '../../widgets/dialogs/following_relays_dialog.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../widgets/dialogs/broadcast_events_dialog.dart';
 import '../../../data/services/event_counts_service.dart';
 
@@ -211,7 +211,8 @@ class _RelayPageState extends State<RelayPage> {
         _isLoading = false;
       });
       if (mounted) {
-        AppSnackbar.error(context, 'Error loading relays: ${e.toString()}');
+        final l10n = AppLocalizations.of(context)!;
+        AppSnackbar.error(context, '${l10n.errorLoadingRelays}: ${e.toString()}');
       }
     }
   }
@@ -257,8 +258,9 @@ class _RelayPageState extends State<RelayPage> {
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError || privateKeyResult.data == null) {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           AppSnackbar.error(
-              context, 'Private key not found. Please set up your profile first');
+              context, l10n.privateKeyNotFound);
         }
         return;
       }
@@ -266,7 +268,8 @@ class _RelayPageState extends State<RelayPage> {
       final npubResult = await _authService.getCurrentUserNpub();
       if (npubResult.isError || npubResult.data == null) {
         if (mounted) {
-          AppSnackbar.error(context, 'Please set up your profile first');
+          final l10n = AppLocalizations.of(context)!;
+          AppSnackbar.error(context, l10n.pleaseSetUpYourProfileFirst);
         }
         return;
       }
@@ -302,8 +305,9 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setString('published_relay_list', jsonEncode(event));
 
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         AppSnackbar.success(context,
-            'Relay list published successfully (${relayConfigs.length} relays in list)');
+            '${l10n.relayListPublishedSuccessfully} (${relayConfigs.length} relays in list)');
       }
 
       if (kDebugMode) {
@@ -314,8 +318,9 @@ class _RelayPageState extends State<RelayPage> {
         print('Error publishing relays: $e');
       }
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, 'Error publishing relay list: ${e.toString()}');
+            context, '${l10n.errorPublishingRelayList}: ${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -366,18 +371,21 @@ class _RelayPageState extends State<RelayPage> {
         await _useUserRelays();
 
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           AppSnackbar.success(context,
-              'Found and applied ${_userRelays.length} relays from your profile');
+              '${l10n.relayListFetchedSuccessfully} (${_userRelays.length} relays)');
         }
       } else {
         if (mounted) {
-          AppSnackbar.info(context, 'No relay list found in your profile');
+          final l10n = AppLocalizations.of(context)!;
+          AppSnackbar.info(context, l10n.noRelayListFoundInYourProfile);
         }
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, 'Error fetching user relays: ${e.toString()}');
+            context, '${l10n.errorFetchingRelayList}: ${e.toString()}');
       }
     } finally {
       setState(() {
@@ -439,8 +447,9 @@ class _RelayPageState extends State<RelayPage> {
 
   Future<void> _useUserRelays() async {
     if (_userRelays.isEmpty) {
+      final l10n = AppLocalizations.of(context)!;
       AppSnackbar.info(
-          context, 'No user relays available. Please fetch them first.');
+          context, l10n.noRelayListFoundInYourProfile);
       return;
     }
 
@@ -498,8 +507,9 @@ class _RelayPageState extends State<RelayPage> {
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, 'Error applying user relays: ${e.toString()}');
+            context, '${l10n.errorSavingRelays}: ${e.toString()}');
       }
     }
   }
@@ -513,14 +523,16 @@ class _RelayPageState extends State<RelayPage> {
       await RustRelayService.instance.reloadCustomRelays();
 
       if (mounted) {
-        AppSnackbar.success(context, 'Relays saved successfully');
+        final l10n = AppLocalizations.of(context)!;
+        AppSnackbar.success(context, l10n.relaysSavedSuccessfully);
       }
     } catch (e) {
       if (kDebugMode) {
         print('[RelayPage] Error saving relays: $e');
       }
       if (mounted) {
-        AppSnackbar.error(context, 'Error saving relays: ${e.toString()}');
+        final l10n = AppLocalizations.of(context)!;
+        AppSnackbar.error(context, '${l10n.errorSavingRelays}: ${e.toString()}');
       }
     }
   }
@@ -546,13 +558,15 @@ class _RelayPageState extends State<RelayPage> {
     final url = _addRelayController.text.trim();
 
     if (url.isEmpty) {
-      AppSnackbar.error(context, 'Please enter a relay URL');
+      final l10n = AppLocalizations.of(context)!;
+      AppSnackbar.error(context, l10n.pleaseEnterRelayUrl);
       return;
     }
 
     if (!_isValidRelayUrl(url)) {
+      final l10n = AppLocalizations.of(context)!;
       AppSnackbar.error(
-          context, 'Please enter a valid WebSocket URL (wss:// or ws://)');
+          context, l10n.invalidRelayUrl);
       return;
     }
 
@@ -561,7 +575,8 @@ class _RelayPageState extends State<RelayPage> {
 
     if (targetList
         .any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
-      AppSnackbar.error(context, 'Relay already exists in this category');
+      final l10n = AppLocalizations.of(context)!;
+      AppSnackbar.error(context, l10n.relayAlreadyExistsInCategory);
       return;
     }
 
@@ -579,7 +594,8 @@ class _RelayPageState extends State<RelayPage> {
 
       if (mounted) {
         context.pop();
-        AppSnackbar.success(context, 'Relay added to Main list');
+        final l10n = AppLocalizations.of(context)!;
+        AppSnackbar.success(context, l10n.relayAddedToMainList);
 
         final shouldBroadcast = await showBroadcastEventsDialog(
           context: context,
@@ -592,7 +608,8 @@ class _RelayPageState extends State<RelayPage> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.error(context, 'Error adding relay: ${e.toString()}');
+        final l10n = AppLocalizations.of(context)!;
+        AppSnackbar.error(context, '${l10n.errorAddingRelay}: ${e.toString()}');
       }
     } finally {
       setState(() => _isAddingRelay = false);
@@ -606,7 +623,8 @@ class _RelayPageState extends State<RelayPage> {
   Future<void> _broadcastEventsToRelays(List<String> relayUrls) async {
     if (!mounted || relayUrls.isEmpty) return;
 
-    AppSnackbar.info(context, 'Fetching your events...');
+    final l10n = AppLocalizations.of(context)!;
+    AppSnackbar.info(context, l10n.fetchingYourEvents);
 
     try {
       final result =
@@ -615,12 +633,12 @@ class _RelayPageState extends State<RelayPage> {
       if (!mounted) return;
 
       if (result == null || result.allEvents.isEmpty) {
-        AppSnackbar.info(context, 'No events found to broadcast');
+        AppSnackbar.info(context, l10n.noEventsFoundToBroadcast);
         return;
       }
 
       AppSnackbar.info(
-          context, 'Broadcasting ${result.allEvents.length} events...');
+          context, l10n.broadcastingEvents(result.allEvents.length, relayUrls.length));
 
       final success = await EventCountsService.instance.rebroadcastEvents(
         result.allEvents,
@@ -630,20 +648,18 @@ class _RelayPageState extends State<RelayPage> {
       if (!mounted) return;
 
       if (success) {
-        final relayText = relayUrls.length == 1
-            ? 'the new relay'
-            : '${relayUrls.length} new relays';
         AppSnackbar.success(
           context,
-          'Broadcasted ${result.allEvents.length} events to $relayText',
+          l10n.eventsSuccessfullyBroadcast(result.allEvents.length, relayUrls.length),
         );
       } else {
-        AppSnackbar.error(context, 'Error broadcasting events');
+        AppSnackbar.error(context, l10n.errorBroadcastingEvents);
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, 'Error broadcasting events: ${e.toString()}');
+            context, '${l10n.errorBroadcastingEvents}: ${e.toString()}');
       }
     }
   }
@@ -659,7 +675,8 @@ class _RelayPageState extends State<RelayPage> {
     await _saveRelays();
 
     if (mounted) {
-      AppSnackbar.success(context, 'Relay removed successfully');
+      final l10n = AppLocalizations.of(context)!;
+      AppSnackbar.success(context, l10n.relayRemovedSuccessfully);
     }
   }
 
@@ -682,7 +699,8 @@ class _RelayPageState extends State<RelayPage> {
         await _saveRelays();
 
         if (mounted && context.mounted) {
-          AppSnackbar.success(context, 'Relays reset to defaults');
+          final l10n = AppLocalizations.of(context)!;
+          AppSnackbar.success(context, l10n.relaysResetToDefaults);
 
           final newRelayUrls = _relays
               .where((relay) =>
@@ -714,51 +732,18 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  void _showFollowingRelaysDialog() {
-    showFollowingRelaysDialog(
-      context: context,
-      currentRelays: _relays,
-      onAddRelay: (relayUrl) async {
-        final normalizedUrl = _normalizeRelayUrl(relayUrl);
-        if (!_relays.any(
-            (existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
-          setState(() {
-            _relays.add(normalizedUrl);
-            _relayFlags[normalizedUrl] = {'read': true, 'write': true};
-          });
-          await _saveRelays();
-          _fetchRelayInfo(normalizedUrl);
-          if (mounted) {
-            AppSnackbar.success(context, 'Relay added from following list');
-          }
-
-          if (mounted) {
-            final shouldBroadcast = await showBroadcastEventsDialog(
-              context: context,
-              relayUrl: normalizedUrl,
-            );
-
-            if (shouldBroadcast && mounted) {
-              await _broadcastEventsToRelay(normalizedUrl);
-            }
-          }
-        } else {
-          AppSnackbar.info(context, 'Relay already exists in your list');
-        }
-      },
-    );
-  }
-
   Widget _buildHeader(BuildContext context) {
-    return const TitleWidget(
-      title: 'Relays',
+    final l10n = AppLocalizations.of(context)!;
+    return TitleWidget(
+      title: l10n.relays,
       fontSize: 32,
-      subtitle: "Manage your relay connections and publish your relay list.",
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+      subtitle: l10n.manageYourRelayConnections,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
     );
   }
 
   Widget _buildGossipModelToggle(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
@@ -777,7 +762,7 @@ class _RelayPageState extends State<RelayPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Gossip Mode',
+                        l10n.gossipMode,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -786,8 +771,7 @@ class _RelayPageState extends State<RelayPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Automatically discover and connect to relays used by people you follow. '
-                        'When off, only your own relays above are used to read and write.',
+                        l10n.gossipModeDescription,
                         style: TextStyle(
                           fontSize: 13,
                           color: context.colors.textSecondary,
@@ -807,11 +791,12 @@ class _RelayPageState extends State<RelayPage> {
                     final prefs = await SharedPreferences.getInstance();
                     await prefs.setBool('gossip_model_enabled', value);
                     if (context.mounted) {
+                      final l10n = AppLocalizations.of(context)!;
                       AppSnackbar.success(
                         context,
                         value
-                            ? 'Gossip model enabled. Restart the app to apply.'
-                            : 'Gossip model disabled. Restart the app to apply.',
+                            ? l10n.gossipModelEnabledRestartApp
+                            : l10n.gossipModelDisabledRestartApp,
                       );
                     }
                   },
@@ -825,7 +810,7 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  Widget _buildActionButtons(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -834,7 +819,7 @@ class _RelayPageState extends State<RelayPage> {
             children: [
               Expanded(
                 child: SecondaryButton(
-                  label: _isFetchingUserRelays ? 'Fetching...' : 'Fetch',
+                  label: _isFetchingUserRelays ? l10n.fetching : l10n.fetch,
                   icon: Icons.download,
                   onPressed: _isFetchingUserRelays ? null : _fetchUserRelays,
                   isLoading: _isFetchingUserRelays,
@@ -846,7 +831,7 @@ class _RelayPageState extends State<RelayPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: _isPublishingRelays ? 'Publishing...' : 'Publish',
+                  label: _isPublishingRelays ? l10n.publishing : l10n.publish,
                   icon: Icons.upload,
                   onPressed: _isPublishingRelays ? null : _publishRelays,
                   isLoading: _isPublishingRelays,
@@ -862,7 +847,7 @@ class _RelayPageState extends State<RelayPage> {
             children: [
               Expanded(
                 child: SecondaryButton(
-                  label: 'Add Relay',
+                  label: l10n.addRelay,
                   icon: Icons.add,
                   onPressed: _showAddRelayDialog,
                   backgroundColor: context.colors.overlayLight,
@@ -873,24 +858,11 @@ class _RelayPageState extends State<RelayPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Reset',
+                  label: l10n.reset,
                   icon: Icons.refresh,
                   onPressed: _resetToDefaults,
                   backgroundColor: context.colors.overlayLight,
                   foregroundColor: context.colors.textPrimary,
-                  size: ButtonSize.large,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: PrimaryButton(
-                  label: 'Explore Relays',
-                  icon: Icons.people,
-                  onPressed: _showFollowingRelaysDialog,
                   size: ButtonSize.large,
                 ),
               ),
@@ -901,7 +873,7 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  Widget _buildRelayTile(String relay, bool isMainRelay) {
+  Widget _buildRelayTile(String relay, bool isMainRelay, AppLocalizations l10n) {
     final stats = _relayStats[relay];
     final relayStatus = stats?['status'] as String? ?? 'disconnected';
     final isConnected = relayStatus == 'connected';
@@ -911,12 +883,17 @@ class _RelayPageState extends State<RelayPage> {
 
     return RepaintBoundary(
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: 12),
         child: Container(
-          width: double.infinity,
           decoration: BoxDecoration(
             color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isConnected
+                  ? Colors.green.withValues(alpha: 0.3)
+                  : context.colors.divider.withValues(alpha: 0.1),
+              width: 1,
+            ),
           ),
           child: Column(
             children: [
@@ -926,200 +903,173 @@ class _RelayPageState extends State<RelayPage> {
                     _expandedRelays[relay] = !isExpanded;
                   });
                 },
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   child: Row(
                     children: [
                       Container(
-                        width: 12,
-                        height: 12,
+                        width: 10,
+                        height: 10,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: isConnected
                               ? Colors.green
                               : isConnecting
                                   ? Colors.orange
-                                  : Colors.red,
+                                  : Colors.red.withValues(alpha: 0.5),
+                          boxShadow: isConnected
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.green.withValues(alpha: 0.4),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                  ),
+                                ]
+                              : null,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              info?.name ?? relay,
+                              info?.name ?? relay.replaceAll('wss://', '').replaceAll('ws://', '').split('/').first,
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 color: context.colors.textPrimary,
                               ),
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
-                            const SizedBox(height: 6),
-                            _buildRelayFlagChips(relay),
+                            const SizedBox(height: 4),
+                            _buildRelayFlagChips(relay, l10n),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Icon(
-                        isExpanded ? Icons.expand_less : Icons.expand_more,
-                        color: context.colors.textSecondary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () => _removeRelay(relay, isMainRelay),
                         child: Container(
-                          width: 36,
-                          height: 36,
+                          width: 32,
+                          height: 32,
                           decoration: BoxDecoration(
-                            color: context.colors.background,
-                            shape: BoxShape.circle,
+                            color: context.colors.error.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
-                            CarbonIcons.delete,
-                            size: 18,
-                            color: context.colors.textPrimary,
+                            CarbonIcons.trash_can,
+                            size: 16,
+                            color: context.colors.error,
                           ),
                         ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                        color: context.colors.textSecondary.withValues(alpha: 0.6),
+                        size: 20,
                       ),
                     ],
                   ),
                 ),
               ),
               if (isExpanded)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: context.colors.divider.withValues(alpha: 0.1),
+                        width: 1,
+                      ),
+                    ),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'URL',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        relay,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: context.colors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
+                      _buildInfoRow('URL', relay, context),
                       if (info != null) ...[
                         if (info.description != null) ...[
-                          Text(
-                            'Description',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            info.description!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: context.colors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 10),
+                          _buildInfoRow(l10n.description, info.description!, context),
                         ],
-                        if (info.supportedNips != null &&
-                            info.supportedNips!.isNotEmpty) ...[
+                        if (info.software != null) ...[
+                          const SizedBox(height: 10),
+                          _buildInfoRow(l10n.software, info.software!, context),
+                        ],
+                        if (info.version != null) ...[
+                          const SizedBox(height: 10),
+                          _buildInfoRow(l10n.version, info.version!, context),
+                        ],
+                        if (info.supportedNips != null && info.supportedNips!.isNotEmpty) ...[
+                          const SizedBox(height: 12),
                           Text(
-                            'Supported NIPs',
+                            l10n.supportedNIPs,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: context.colors.textSecondary,
+                              letterSpacing: 0.5,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: info.supportedNips!.take(20).map((nip) {
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: info.supportedNips!.take(15).map((nip) {
                               return Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: context.colors.background,
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: context.colors.divider.withValues(alpha: 0.2),
+                                  ),
                                 ),
                                 child: Text(
                                   'NIP-$nip',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: context.colors.textSecondary,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               );
                             }).toList(),
                           ),
-                          const SizedBox(height: 16),
-                        ],
-                        if (info.software != null) ...[
-                          Text(
-                            'Software',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            info.software!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: context.colors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        if (info.version != null) ...[
-                          Text(
-                            'Version',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            info.version!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: context.colors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
                         ],
                       ],
                       if (stats != null) ...[
-                        Text(
-                          'Connection Statistics',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: context.colors.textSecondary,
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: context.colors.background,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l10n.connectionStatistics,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.colors.textSecondary,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildStatRow(l10n.status, stats['status'] ?? l10n.unknown),
+                              _buildStatRow(l10n.attempts, '${stats['attempts'] ?? 0}'),
+                              _buildStatRow(l10n.successful, '${stats['success'] ?? 0}'),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        _buildStatRow('Status', stats['status'] ?? 'unknown'),
-                        _buildStatRow('Attempts', '${stats['attempts'] ?? 0}'),
-                        _buildStatRow('Successful', '${stats['success'] ?? 0}'),
-                        _buildStatRow('Bytes Sent', '${stats['bytesSent'] ?? 0}'),
-                        _buildStatRow('Bytes Received', '${stats['bytesReceived'] ?? 0}'),
                       ],
                     ],
                   ),
@@ -1131,15 +1081,44 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  Widget _buildRelayFlagChips(String relay) {
+  Widget _buildInfoRow(String label, String value, BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: context.colors.textSecondary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.colors.textPrimary,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRelayFlagChips(String relay, AppLocalizations l10n) {
     final flags = _relayFlags[relay] ?? {'read': true, 'write': true};
     final isRead = flags['read'] ?? true;
     final isWrite = flags['write'] ?? true;
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         _buildFlagChip(
-          label: 'Read',
+          label: l10n.read,
           active: isRead,
           activeColor: const Color(0xFF4CAF50),
           onTap: () {
@@ -1156,7 +1135,7 @@ class _RelayPageState extends State<RelayPage> {
         ),
         const SizedBox(width: 6),
         _buildFlagChip(
-          label: 'Write',
+          label: l10n.write,
           active: isWrite,
           activeColor: const Color(0xFF2196F3),
           onTap: () {
@@ -1173,11 +1152,11 @@ class _RelayPageState extends State<RelayPage> {
         ),
         if (_relayInfos[relay]?.paymentRequired == true) ...[
           const SizedBox(width: 6),
-          _buildInfoChip('Paid', Colors.amber),
+          _buildInfoChip(l10n.paid, const Color(0xFFFFA726)),
         ],
         if (_relayInfos[relay]?.authRequired == true) ...[
           const SizedBox(width: 6),
-          _buildInfoChip('Auth', Colors.purple),
+          _buildInfoChip(l10n.auth, const Color(0xFFAB47BC)),
         ],
       ],
     );
@@ -1192,13 +1171,13 @@ class _RelayPageState extends State<RelayPage> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: active ? activeColor.withValues(alpha: 0.15) : context.colors.background,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: active ? activeColor.withValues(alpha: 0.4) : context.colors.textSecondary.withValues(alpha: 0.3),
-            width: 1,
+            color: active ? activeColor.withValues(alpha: 0.5) : context.colors.divider.withValues(alpha: 0.3),
+            width: 1.5,
           ),
         ),
         child: Text(
@@ -1207,6 +1186,7 @@ class _RelayPageState extends State<RelayPage> {
             fontSize: 11,
             color: active ? activeColor : context.colors.textSecondary,
             fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
           ),
         ),
       ),
@@ -1215,17 +1195,22 @@ class _RelayPageState extends State<RelayPage> {
 
   Widget _buildInfoChip(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1,
+        ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 10,
           color: color,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -1233,21 +1218,21 @@ class _RelayPageState extends State<RelayPage> {
 
   Widget _buildStatRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               color: context.colors.textSecondary,
             ),
           ),
           Text(
             value,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               color: context.colors.textPrimary,
             ),
@@ -1259,6 +1244,7 @@ class _RelayPageState extends State<RelayPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (_isLoading) {
       return Scaffold(
         backgroundColor: context.colors.background,
@@ -1270,7 +1256,7 @@ class _RelayPageState extends State<RelayPage> {
 
     final relayWidgets = <Widget>[];
     for (int i = 0; i < _relays.length; i++) {
-      relayWidgets.add(_buildRelayTile(_relays[i], true));
+      relayWidgets.add(_buildRelayTile(_relays[i], true, l10n));
       if (i < _relays.length - 1) {
         relayWidgets.add(const SizedBox(height: 8));
       }
@@ -1291,7 +1277,7 @@ class _RelayPageState extends State<RelayPage> {
                 child: _buildHeader(context),
               ),
               SliverToBoxAdapter(
-                child: _buildActionButtons(context),
+                child: _buildActionButtons(context, l10n),
               ),
               SliverToBoxAdapter(
                 child: _buildGossipModelToggle(context),

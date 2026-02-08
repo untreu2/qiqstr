@@ -13,6 +13,7 @@ import '../../widgets/common/custom_input_field.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../search/users_search_page.dart';
+import '../../../l10n/app_localizations.dart';
 
 class DmPage extends StatefulWidget {
   const DmPage({super.key});
@@ -79,6 +80,8 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _buildConversationsContent(BuildContext context, DmState state) {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (state is DmConversationsLoaded) {
       final conversations = state.conversations;
 
@@ -87,7 +90,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
           slivers: [
             SliverToBoxAdapter(
               child: TitleWidget(
-                title: 'Messages',
+                title: l10n.messages,
                 fontSize: 32,
                 useTopPadding: true,
                 padding: EdgeInsets.fromLTRB(
@@ -115,7 +118,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
           slivers: [
             SliverToBoxAdapter(
               child: TitleWidget(
-                title: 'Messages',
+                title: l10n.messages,
                 fontSize: 32,
                 useTopPadding: true,
                 padding: EdgeInsets.fromLTRB(
@@ -149,7 +152,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         slivers: [
           SliverToBoxAdapter(
             child: TitleWidget(
-              title: 'Messages',
+              title: l10n.messages,
               fontSize: 32,
               useTopPadding: true,
               padding: EdgeInsets.fromLTRB(
@@ -175,7 +178,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         slivers: [
           SliverToBoxAdapter(
             child: TitleWidget(
-              title: 'Messages',
+              title: l10n.messages,
               fontSize: 32,
               useTopPadding: true,
               padding: EdgeInsets.fromLTRB(
@@ -193,7 +196,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Error loading conversations',
+                    l10n.errorLoadingConversations,
                     style: TextStyle(color: context.colors.textSecondary),
                   ),
                   const SizedBox(height: 16),
@@ -203,7 +206,12 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                           .read<DmBloc>()
                           .add(const DmConversationsLoadRequested());
                     },
-                    child: const Text('Retry'),
+                    child: Builder(
+                      builder: (context) {
+                        final l10n = AppLocalizations.of(context)!;
+                        return Text(l10n.retryText);
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -217,7 +225,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
       slivers: [
         SliverToBoxAdapter(
           child: TitleWidget(
-            title: 'Messages',
+            title: l10n.messages,
             fontSize: 32,
             useTopPadding: true,
             padding: EdgeInsets.fromLTRB(
@@ -239,6 +247,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _buildTopBar(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final double topPadding = MediaQuery.of(context).padding.top;
 
     return Positioned(
@@ -262,7 +271,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
               ),
               const SizedBox(width: 8),
               Text(
-                'New message',
+                l10n.newMessage,
                 style: TextStyle(
                   color: context.colors.background,
                   fontSize: 15,
@@ -473,13 +482,15 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
 
   Widget _buildMessagesContent(
       BuildContext context, DmState state, double topPadding) {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (state is DmChatLoaded) {
       final messages = state.messages;
 
       if (messages.isEmpty) {
         return Center(
           child: Text(
-            'No messages yet',
+            l10n.noMessagesYet,
             style: TextStyle(color: context.colors.textSecondary),
           ),
         );
@@ -581,6 +592,8 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
     BuildContext context,
     String recipientPubkeyHex,
   ) {
+    final l10n = AppLocalizations.of(context)!;
+    
     if (!_textControllers.containsKey(recipientPubkeyHex)) {
       _textControllers[recipientPubkeyHex] = TextEditingController();
     }
@@ -602,7 +615,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
           Expanded(
             child: CustomInputField(
               controller: textController,
-              hintText: 'Type a message...',
+              hintText: l10n.typeAMessage,
               maxLines: null,
               height: null,
               contentPadding: const EdgeInsets.symmetric(
@@ -641,6 +654,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -652,7 +666,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
           ),
           const SizedBox(height: 16),
           Text(
-            'No conversations yet',
+            l10n.noConversationsYet,
             style: TextStyle(
               color: context.colors.textSecondary,
               fontSize: 18,
@@ -660,7 +674,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
           ),
           const SizedBox(height: 8),
           Text(
-            'Start a conversation by messaging someone',
+            l10n.startConversationBy,
             style: TextStyle(
               color: context.colors.textSecondary,
               fontSize: 14,

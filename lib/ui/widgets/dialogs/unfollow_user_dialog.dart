@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<void> showUnfollowUserDialog({
   required BuildContext context,
@@ -8,6 +9,7 @@ Future<void> showUnfollowUserDialog({
   required VoidCallback onConfirm,
 }) async {
   final colors = context.colors;
+  final l10n = AppLocalizations.of(context)!;
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -27,7 +29,7 @@ Future<void> showUnfollowUserDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Unfollow $userName?',
+            l10n.unfollowUser(userName),
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 20,
@@ -39,7 +41,7 @@ Future<void> showUnfollowUserDialog({
             children: [
               Expanded(
                 child: SecondaryButton(
-                  label: 'Cancel',
+                  label: l10n.cancel,
                   onPressed: () => Navigator.pop(modalContext),
                   size: ButtonSize.large,
                 ),
@@ -47,7 +49,7 @@ Future<void> showUnfollowUserDialog({
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Unfollow',
+                  label: l10n.unfollow,
                   onPressed: () {
                     Navigator.pop(modalContext);
                     onConfirm();

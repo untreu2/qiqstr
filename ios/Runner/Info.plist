@@ -53,7 +53,16 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
-		<key>UIViewControllerBasedStatusBarAppearance</key>
-		<false/>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app needs access to the local network to connect to Nostr relays and sync your content.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
 	</dict>
+</dict>
 </plist>

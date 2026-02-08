@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
+import '../../../l10n/app_localizations.dart';
 
 class TopActionBarWidget extends StatelessWidget {
   final VoidCallback? onBackPressed;
@@ -32,6 +33,7 @@ class TopActionBarWidget extends StatelessWidget {
     final double topPadding = MediaQuery.of(context).padding.top;
     final double effectiveTopOffset = topOffset ?? 14;
     final colors = context.colors;
+    final l10n = AppLocalizations.of(context)!;
 
     return Positioned(
       top: topPadding + effectiveTopOffset,
@@ -55,7 +57,7 @@ class TopActionBarWidget extends StatelessWidget {
                   onTap: onBackPressed ?? () => context.pop(),
                   behavior: HitTestBehavior.opaque,
                   child: Semantics(
-                    label: 'Go back to previous screen',
+                    label: l10n.goBackToPreviousScreen,
                     button: true,
                     child: Icon(
                       Icons.arrow_back,
@@ -88,7 +90,7 @@ class TopActionBarWidget extends StatelessWidget {
                   onTap: onSharePressed,
                   behavior: HitTestBehavior.opaque,
                   child: Semantics(
-                    label: 'Share',
+                    label: l10n.share,
                     button: true,
                     child: Icon(
                       CarbonIcons.share,

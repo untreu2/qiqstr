@@ -19,6 +19,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../dialogs/zap_dialog.dart';
 import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
+import '../../../l10n/app_localizations.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -88,6 +89,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _showRepostMenu(InteractionLoaded state) {
+    final l10n = AppLocalizations.of(context)!;
     final RenderBox? renderBox =
         _repostButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
@@ -110,7 +112,7 @@ class _InteractionBarState extends State<InteractionBar> {
                 Icon(Icons.undo, size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
-                  'Undo repost',
+                  l10n.undoRepost,
                   style: TextStyle(
                     color: context.colors.background,
                     fontSize: 16,
@@ -133,7 +135,7 @@ class _InteractionBarState extends State<InteractionBar> {
                 Icon(Icons.repeat, size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
-                  'Repost again',
+                  l10n.repostAgain,
                   style: TextStyle(
                     color: context.colors.background,
                     fontSize: 16,
@@ -157,7 +159,7 @@ class _InteractionBarState extends State<InteractionBar> {
                 Icon(Icons.repeat, size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
-                  'Repost',
+                  l10n.repost,
                   style: TextStyle(
                     color: context.colors.background,
                     fontSize: 16,
@@ -183,7 +185,7 @@ class _InteractionBarState extends State<InteractionBar> {
                   size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
-                'Quote',
+                l10n.quote,
                 style: TextStyle(
                   color: context.colors.background,
                   fontSize: 16,
@@ -322,6 +324,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   Future<void> _handleVerifyTap() async {
+    final l10n = AppLocalizations.of(context)!;
     HapticFeedback.lightImpact();
     if (widget.note == null || !mounted) return;
 
@@ -345,16 +348,16 @@ class _InteractionBarState extends State<InteractionBar> {
 
       if (noteValid && profileValid) {
         AppSnackbar.success(
-            context, 'Event and author profile signatures verified');
+            context, l10n.eventAndAuthorProfileSignaturesVerified);
       } else if (noteValid && !profileValid) {
         AppSnackbar.success(context,
-            'Event signature verified, profile not available for verification');
+            l10n.eventSignatureVerified);
       } else {
-        AppSnackbar.error(context, 'Event signature verification failed');
+        AppSnackbar.error(context, l10n.eventSignatureVerificationFailed);
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.error(context, 'Verification failed: $e');
+        AppSnackbar.error(context, l10n.errorWithMessage(e.toString()));
       }
     }
   }
@@ -462,6 +465,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _showMoreMenu(InteractionLoaded state) {
+    final l10n = AppLocalizations.of(context)!;
     final RenderBox? renderBox =
         _moreButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
@@ -480,7 +484,7 @@ class _InteractionBarState extends State<InteractionBar> {
                   size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
-                'Verify signature',
+                l10n.verifySignature,
                 style: TextStyle(
                   color: context.colors.background,
                   fontSize: 16,
@@ -501,7 +505,7 @@ class _InteractionBarState extends State<InteractionBar> {
                   size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
-                'Interactions',
+                l10n.interactions,
                 style: TextStyle(
                   color: context.colors.background,
                   fontSize: 16,
@@ -528,7 +532,7 @@ class _InteractionBarState extends State<InteractionBar> {
                     size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
-                  'Delete',
+                  l10n.delete,
                   style: TextStyle(
                     color: context.colors.background,
                     fontSize: 16,

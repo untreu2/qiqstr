@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<void> showResetRelaysDialog({
   required BuildContext context,
   required VoidCallback onConfirm,
 }) async {
   final colors = context.colors;
+  final l10n = AppLocalizations.of(context)!;
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -21,7 +23,7 @@ Future<void> showResetRelaysDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'This will reset all relays to their default values. Are you sure?',
+            l10n.resetRelaysConfirm,
             style: TextStyle(
               color: colors.textSecondary,
               fontSize: 15,
@@ -32,7 +34,7 @@ Future<void> showResetRelaysDialog({
           SizedBox(
             width: double.infinity,
             child: SecondaryButton(
-              label: 'Reset to Defaults',
+              label: l10n.resetToDefaults,
               icon: Icons.refresh,
               onPressed: () {
                 Navigator.pop(modalContext);
@@ -45,7 +47,7 @@ Future<void> showResetRelaysDialog({
           SizedBox(
             width: double.infinity,
             child: SecondaryButton(
-              label: 'Cancel',
+              label: l10n.cancel,
               onPressed: () => Navigator.pop(modalContext),
               size: ButtonSize.large,
             ),

@@ -12,6 +12,7 @@ import '../../../presentation/blocs/note_statistics/note_statistics_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
+import '../../../l10n/app_localizations.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final String noteId;
@@ -267,9 +268,10 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return const TitleWidget(
-      title: 'Interactions',
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+    final l10n = AppLocalizations.of(context)!;
+    return TitleWidget(
+      title: l10n.interactions,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
     );
   }
 
@@ -288,6 +290,8 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       },
       child: BlocBuilder<NoteStatisticsBloc, NoteStatisticsState>(
         builder: (context, state) {
+          final l10n = AppLocalizations.of(context)!;
+          
           if (state is NoteStatisticsLoading ||
               state is NoteStatisticsInitial) {
             return Scaffold(
@@ -368,7 +372,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                               child: Padding(
                                 padding: const EdgeInsets.only(top: 32),
                                 child: Text(
-                                  'No interactions yet.',
+                                  l10n.noInteractionsYet,
                                   style: TextStyle(
                                       color: context.colors.textTertiary),
                                 ),
@@ -392,7 +396,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                 TopActionBarWidget(
                   onBackPressed: () => context.pop(),
                   centerBubble: Text(
-                    'Interactions',
+                    l10n.interactions,
                     style: TextStyle(
                       color: context.colors.background,
                       fontSize: 16,

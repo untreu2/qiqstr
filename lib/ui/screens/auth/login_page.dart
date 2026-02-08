@@ -7,6 +7,7 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 
 import '../../widgets/common/custom_input_field.dart';
+import '../../../l10n/app_localizations.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -28,6 +29,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _loginWithInput() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_inputController.text.trim().isEmpty) return;
     setState(() => _isLoading = true);
 
@@ -41,7 +43,7 @@ class _LoginPageState extends State<LoginPage> {
         } else {
           if (mounted) {
             setState(() {
-              _message = 'Error: ${result.error}';
+              _message = l10n.errorPrefix(result.error ?? l10n.unknownError);
               _isLoading = false;
             });
           }
@@ -53,7 +55,7 @@ class _LoginPageState extends State<LoginPage> {
         } else {
           if (mounted) {
             setState(() {
-              _message = 'Error: ${result.error}';
+              _message = l10n.errorPrefix(result.error ?? l10n.unknownError);
               _isLoading = false;
             });
           }
@@ -62,8 +64,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _message =
-              'Error: Invalid input. Please check your NSEC or mnemonic phrase.';
+          _message = l10n.errorInvalidInput;
           _isLoading = false;
         });
       }
@@ -71,6 +72,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _createNewAccount() async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _isLoading = true);
     try {
       final result = await _authService.createAccountWithMnemonic();
@@ -84,7 +86,7 @@ class _LoginPageState extends State<LoginPage> {
       } else {
         if (mounted) {
           setState(() {
-            _message = 'Error: ${result.error}';
+            _message = l10n.errorPrefix(result.error ?? l10n.unknownError);
             _isLoading = false;
           });
         }
@@ -92,7 +94,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _message = 'Error: Could not create a new account.';
+          _message = l10n.errorCouldNotCreateAccount;
           _isLoading = false;
         });
       }
@@ -128,6 +130,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildLoginForm() {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -135,7 +138,7 @@ class _LoginPageState extends State<LoginPage> {
         children: [
           CustomInputField(
             controller: _inputController,
-            labelText: 'Enter your seed phrase or nsec...',
+            labelText: l10n.enterSeedPhraseOrNsec,
             fillColor: context.colors.inputFill,
             suffixIcon: Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -161,7 +164,7 @@ class _LoginPageState extends State<LoginPage> {
           SizedBox(
             width: double.infinity,
             child: PrimaryButton(
-              label: 'Login',
+              label: l10n.login,
               onPressed: _isLoading ? null : _loginWithInput,
               size: ButtonSize.large,
               isLoading: _isLoading,
@@ -173,7 +176,7 @@ class _LoginPageState extends State<LoginPage> {
           SizedBox(
             width: double.infinity,
             child: PrimaryButton(
-              label: 'Create a New Account',
+              label: l10n.createNewAccount,
               onPressed: _isLoading ? null : _createNewAccount,
               size: ButtonSize.large,
             ),
@@ -191,13 +194,14 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildLoadingScreen() {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         CircularProgressIndicator(color: context.colors.loading),
         const SizedBox(height: 20),
         Text(
-          'Logging in...',
+          l10n.loggingIn,
           style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
         ),
       ],

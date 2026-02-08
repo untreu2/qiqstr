@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<bool> showCopyKeyWarningDialog({
   required BuildContext context,
   required String keyType,
 }) async {
   final colors = context.colors;
+  final l10n = AppLocalizations.of(context)!;
   final result = await showModalBottomSheet<bool>(
     context: context,
     useRootNavigator: true,
@@ -26,7 +28,7 @@ Future<bool> showCopyKeyWarningDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Warning!',
+            l10n.warning,
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 20,
@@ -35,7 +37,7 @@ Future<bool> showCopyKeyWarningDialog({
           ),
           const SizedBox(height: 16),
           Text(
-            'You can use this to import your account into qiqstr or other apps that use the Nostr protocol. Never share it with anyone.',
+            l10n.copyKeyWarning,
             style: TextStyle(
               color: colors.textSecondary,
               fontSize: 14,
@@ -47,7 +49,7 @@ Future<bool> showCopyKeyWarningDialog({
             children: [
               Expanded(
                 child: SecondaryButton(
-                  label: 'Cancel',
+                  label: l10n.cancel,
                   onPressed: () => Navigator.pop(modalContext, false),
                   size: ButtonSize.large,
                 ),
@@ -55,7 +57,7 @@ Future<bool> showCopyKeyWarningDialog({
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Copy',
+                  label: l10n.copy,
                   onPressed: () => Navigator.pop(modalContext, true),
                   size: ButtonSize.large,
                 ),

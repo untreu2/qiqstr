@@ -1,0 +1,595 @@
+{
+  "@@locale": "en",
+  "settings": "Settings",
+  "settingsSubtitle": "Manage your app preferences.",
+  "relays": "Relays",
+  "yourDataOnRelays": "Your Data on Relays",
+  "keys": "Keys",
+  "display": "Display",
+  "payments": "Payments",
+  "muted": "Muted",
+  "logout": "Logout",
+  "language": "Language",
+  "languageSubtitle": "Select your preferred language",
+  "english": "English",
+  "turkish": "Turkish",
+  "german": "German",
+  
+  "failedToUploadEncryptedMedia": "Failed to upload encrypted media",
+  "noMessagesYet": "No messages yet",
+  "failedToDecryptMedia": "Failed to decrypt media",
+  "legacyUnencryptedMedia": "Legacy unencrypted media",
+  "decryptionError": "Decryption Error",
+  "unknownError": "Unknown error",
+  "decryptionFailed": "Decryption failed",
+  "yesterday": "Yesterday",
+  
+  "errorSelectingMedia": "Error selecting media",
+  "errorSelectingUser": "Error selecting user",
+  "errorSharingNote": "Error sharing note",
+  "emptyNoteMessage": "Please enter a note or add media",
+  "addMediaText": "Add media",
+  "retryText": "Retry",
+  "hintText": "What's on your mind?",
+  "cancel": "Cancel",
+  "uploadingMediaFiles": "Uploading media files",
+  "addMediaFilesToPost": "Add media files to your post",
+  "addGifFromGiphy": "Add GIF from Giphy",
+  "postYourNote": "Post your note",
+  "composeYourNote": "Compose your note",
+  "removeThisMediaFile": "Remove this media file",
+  
+  "yourFeedIsEmpty": "Your feed is empty",
+  "notes": "Notes",
+  "reads": "Reads",
+  "noArticlesAvailable": "No articles available",
+  "searchError": "Search Error",
+  "noResultsFound": "No results found",
+  "users": "Users",
+  "following": "Following",
+  "follow": "Follow",
+  
+  "login": "Login",
+  "createNewAccount": "Create a New Account",
+  
+  "noFollowingUsers": "No following users",
+  "unknownUser": "Unknown User",
+  
+  "failedToLoadSuggestedUsers": "Failed to load suggested users",
+  "suggestedFollows": "Suggested Follows",
+  "continueButton": "Continue",
+  
+  "noEventsToRebroadcast": "No events to rebroadcast",
+  "errorRebroadcastingEvents": "Error rebroadcasting events",
+  "delete": "Delete",
+  "noEventsFoundToDelete": "No events found to delete",
+  "noValidEventIdsFound": "No valid event IDs found",
+  "userRequestedAccountDeletion": "User requested account deletion",
+  "profileMetadata": "Profile Metadata",
+  "textNote": "Text Note",
+  "follows": "Follows",
+  "encryptedDirectMessage": "Encrypted Direct Message",
+  "eventDeletion": "Event Deletion",
+  "repost": "Repost",
+  "reaction": "Reaction",
+  "muteList": "Mute List",
+  "relayList": "Relay List",
+  "rebroadcasting": "Rebroadcasting...",
+  "rebroadcast": "Rebroadcast",
+  "deleteAccount": "Delete Account",
+  
+  "editProfile": "Edit Profile",
+  "banner": "Banner",
+  "profileImage": "Profile image",
+  "username": "Username",
+  "pleaseEnterValidWebsiteUrl": "Please enter a valid website URL",
+  
+  "setUpProfile": "Set Up Profile",
+  
+  "thread": "Thread",
+  "noRepliesFound": "No replies found",
+  "loadMore": "Load more",
+  "failedToLoadThread": "Failed to load thread",
+  
+  "closeDialog": "Close dialog",
+  
+  "pleaseSetUpProfileFirst": "Please set up your profile first",
+  "noRelayListFoundInProfile": "No relay list found in your profile",
+  "relaysSavedSuccessfully": "Relays saved successfully",
+  "pleaseEnterRelayUrl": "Please enter a relay URL",
+  "relayAlreadyExists": "Relay already exists in this category",
+  "relayAddedToMainList": "Relay added to Main list",
+  "noEventsFoundToBroadcast": "No events found to broadcast",
+  "errorBroadcastingEvents": "Error broadcasting events",
+  "relayRemovedSuccessfully": "Relay removed successfully",
+  "relaysResetToDefaults": "Relays reset to defaults",
+  "relayAddedFromFollowingList": "Relay added from following list",
+  "relayAlreadyExistsInList": "Relay already exists in your list",
+  
+  "untitledArticle": "Untitled Article",
+  "article": "Article",
+  
+  "eventNotFound": "Event not found",
+  
+  "copy": "Copy",
+  "copiedToClipboard": "Copied to clipboard",
+  
+  "couldNotLoadHashtagFeed": "Could not load hashtag feed",
+  "errorOpeningHashtag": "Error opening hashtag",
+  
+  "videoSavedToGallery": "Video saved to gallery",
+  "failedToSaveVideoToGallery": "Failed to save video to gallery",
+  
+  "undoRepost": "Undo repost",
+  "repostAgain": "Repost again",
+  "quote": "Quote",
+  "eventAndAuthorProfileSignaturesVerified": "Event and author profile signatures verified",
+  "eventSignatureVerified": "Event signature verified, profile not available for verification",
+  "eventSignatureVerificationFailed": "Event signature verification failed",
+  "verificationFailed": "Verification failed",
+  "verifySignature": "Verify signature",
+  "interactions": "Interactions",
+  
+  "errorLoadingNotes": "Error loading notes",
+  
+  "repostedBy": "Reposted by ",
+  "anonymous": "Anonymous",
+  
+  "profile": "Profile",
+  
+  "pleaseConnectWalletFirst": "Please connect your wallet first",
+  "user": "User",
+  "errorLoadingUserProfile": "Error loading user profile",
+  "send": "Send",
+  "enterValidAmount": "Enter a valid amount",
+  
+  "relaysFromYourFollows": "Relays from your follows",
+  "noRelaysFoundFromFollowingUsers": "No relays found from following users",
+  
+  "editProfileButton": "Edit profile",
+  "mutedButton": "Muted",
+  "followButton": "Follow",
+  "followingYou": "Following you",
+  
+  "imageSavedToGallery": "Image saved to gallery",
+  "failedToSaveImageToGallery": "Failed to save image to gallery",
+  
+  "unfollow": "Unfollow",
+  
+  "pleaseEnterInvoice": "Please enter an invoice",
+  "payInvoice": "Pay Invoice",
+  
+  "resetToDefaults": "Reset to Defaults",
+  
+  "mute": "Mute",
+  
+  "goBack": "Go back",
+  "goBackToPreviousScreen": "Go back to previous screen",
+  
+  "share": "Share",
+  
+  "untitled": "Untitled",
+  "noArticlesFound": "No articles found",
+  "refresh": "Refresh",
+  
+  "displayTitle": "Display",
+  "displaySubtitle": "Customize your viewing experience.",
+  "expandedNotes": "Expanded Notes",
+  "normalNotes": "Normal Notes",
+  "darkMode": "Dark Mode",
+  "lightMode": "Light Mode",
+  "home": "Home",
+  "dm": "DM",
+  "wallet": "Wallet",
+  "notifications": "Notifications",
+  "navigationBarOrder": "Navigation Bar Order",
+  "pressAndHoldToDrag": "Press and hold to drag and reorder items",
+  
+  "loading": "Loading...",
+  "notFound": "Not found",
+  "errorLoadingKeys": "Error loading keys",
+  "notAvailable": "Not available",
+  "errorEncodingNsec": "Error encoding nsec",
+  "publicKeyNpub": "Public Key (npub)",
+  "privateKeyNsec": "Private Key (nsec)",
+  "seedPhrase": "Seed Phrase",
+  "shareThisToReceiveMessages": "Share this with others to receive messages and zaps.",
+  "keepThisSecret": "Keep this secret! Never share it with anyone.",
+  "useThisToRecoverAccount": "Use this to recover your account. Store it safely.",
+  "advanced": "Advanced",
+  "keysTitle": "Keys",
+  "keysSubtitle": "Manage your Nostr identity keys.",
+  "copiedToClipboardWithType": "{type} copied to clipboard!",
+  "@copiedToClipboardWithType": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  
+  "paymentsTitle": "Payments",
+  "paymentsSubtitle": "Manage your payment preferences.",
+  "oneTapZap": "One Tap Zap",
+  "defaultZapAmount": "Default Zap Amount",
+  "amountSats": "Amount (sats)",
+  "amountSavedSuccessfully": "Amount saved successfully",
+  "pleaseEnterValidAmount": "Please enter a valid amount",
+  
+  "mutedTitle": "Muted",
+  "mutedSubtitle": "Manage your muted users.",
+  "errorLoadingMutedUsers": "Error loading muted users",
+  "noMutedUsers": "No muted users",
+  "youHaventMutedAnyUsersYet": "You haven't muted any users yet.",
+  "mutedUsersCount": "{count} muted {count, plural, =1{user} other{users}}",
+  "@mutedUsersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "unmute": "Unmute",
+  
+  "addRelay": "Add Relay",
+  "areYouSureLogout": "Are you sure you want to logout?",
+  "seedPhraseWarning": "IF YOU HAVEN'T SAVED YOUR SEED PHRASE, YOU WILL LOSE YOUR ACCOUNT FOREVER.",
+  "muteUser": "Mute {user}?",
+  "@muteUser": {
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "muteUserDescription": "You will not see notes from this user in your feed.",
+  "unfollowUser": "Unfollow {user}?",
+  "@unfollowUser": {
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteThisPost": "Delete this post?",
+  "yes": "Yes",
+  "resetRelaysConfirm": "This will reset all relays to their default values. Are you sure?",
+  "warning": "Warning!",
+  "copyKeyWarning": "You can use this to import your account into qiqstr or other apps that use the Nostr protocol. Never share it with anyone.",
+  "relayUrlHint": "wss://relay.example.com",
+  "enterSeedPhraseOrNsec": "Enter your seed phrase or nsec...",
+  "loggingIn": "Logging in...",
+  "errorInvalidInput": "Error: Invalid input. Please check your NSEC or mnemonic phrase.",
+  "errorCouldNotCreateAccount": "Error: Could not create a new account.",
+  "errorPrefix": "Error: {message}",
+  "@errorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "followers": "followers",
+  "followingCount": "following",
+  
+  "saveYourSeedPhrase": "Save Your Seed Phrase",
+  "thisIsYourOnlyChance": "This is your only chance to save your seed phrase. Write it down and store it safely.",
+  "iHaveSavedMySeedPhrase": "I have saved my seed phrase",
+  "tapToCopy": "Tap to copy",
+  "next": "Next",
+  "skip": "Skip",
+  "done": "Done",
+  "save": "Save",
+  "saving": "Saving...",
+  "name": "Name",
+  "bio": "Bio",
+  "website": "Website",
+  "nip05": "NIP-05",
+  "zapAddress": "Zap Address",
+  
+  "searchUsers": "Search users...",
+  "search": "Search",
+  "searching": "Searching...",
+  
+  "newMessage": "New Message",
+  "typeAMessage": "Type a message...",
+  "sendMessage": "Send message",
+  "messagePlaceholder": "Message...",
+  
+  "directMessages": "Direct Messages",
+  "noConversationsYet": "No conversations yet",
+  "startNewConversation": "Start a new conversation",
+  
+  "replies": "Replies",
+  "reply": "Reply",
+  "replyingTo": "Replying to",
+  
+  "zap": "Zap",
+  "zapUser": "Zap {user}",
+  "@zapUser": {
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "amount": "Amount",
+  "message": "Message",
+  "optional": "Optional",
+  "zapNote": "Zap Note",
+  
+  "invoice": "Invoice",
+  "pasteInvoice": "Paste invoice",
+  "paying": "Paying...",
+  "paymentSuccess": "Payment successful!",
+  "paymentFailed": "Payment failed",
+  
+  "receive": "Receive",
+  "yourLightningAddress": "Your Lightning Address",
+  "scanQRCode": "Scan QR Code",
+  
+  "relayStatus": "Relay Status",
+  "connected": "Connected",
+  "disconnected": "Disconnected",
+  "connecting": "Connecting...",
+  "addRelayUrl": "Add relay URL",
+  "removeRelay": "Remove relay",
+  
+  "eventType": "Event Type",
+  "createdAt": "Created at",
+  "relayCount": "Relay count",
+  "deleteSelected": "Delete selected",
+  "selectAll": "Select all",
+  "deselectAll": "Deselect all",
+  
+  "statistics": "Statistics",
+  "reposts": "Reposts",
+  "reactions": "Reactions",
+  "zaps": "Zaps",
+  "views": "Views",
+  
+  "filters": "Filters",
+  "filterBy": "Filter by",
+  "sortBy": "Sort by",
+  "newest": "Newest",
+  "oldest": "Oldest",
+  "mostPopular": "Most Popular",
+  
+  "copied": "Copied!",
+  "failed": "Failed",
+  "success": "Success!",
+  "error": "Error",
+  "tryAgain": "Try again",
+  "ok": "OK",
+  
+  "deleteMessage": "Delete message?",
+  "deleteConversation": "Delete conversation?",
+  "areYouSureDelete": "Are you sure you want to delete this?",
+  
+  "block": "Block",
+  "unblock": "Unblock",
+  "report": "Report",
+  "reportUser": "Report user",
+  
+  "today": "Today",
+  "justNow": "Just now",
+  "minutesAgo": "{count}m ago",
+  "@minutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgo": "{count}h ago",
+  "@hoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daysAgo": "{count}d ago",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  
+  "backupYourAccount": "Backup Your Account",
+  "secureYourAccount": "Secure your account with your seed phrase.",
+  "important": "Important",
+  "writeSeedPhraseInOrder": "Write down your seed phrase in the correct order",
+  "storeItSafely": "Store it in a safe place",
+  "neverShareIt": "Never share it with anyone",
+  "ifYouLoseIt": "If you lose it, you will lose access to your account forever",
+  "accessFromSettings": "You can access this later from Settings > Keys",
+  "iHaveWrittenDownSeedPhrase": "I have written down my seed phrase",
+  
+  "noNotesFromThisUser": "No notes from this user yet",
+  "fileTooLarge": "File is too large (max 50MB)",
+  "encryptionFailed": "Encryption failed",
+  "errorWithMessage": "Error: {message}",
+  "@errorWithMessage": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  
+  "read": "Read",
+  "write": "Write",
+  "exploreRelays": "Explore Relays",
+  "reset": "Reset",
+  "mention": "Mention",
+  "removeThisMediaFile": "Remove this media file",
+  
+  "searchByNameOrNpub": "Search by name or npub...",
+  "searchDotDotDot": "Search...",
+  "searchingForUsers": "Searching for users...",
+  "searchingDotDotDot": "Searching...",
+  
+  "uploadingDotDotDot": "Uploading...",
+  "postExclamation": "Post!",
+  "whatsOnYourMind": "What's on your mind?",
+  "uploadingMediaFiles": "Uploading media files",
+  "postingYourNotePleaseWait": "Posting your note, please wait",
+  
+  "undoRepost": "Undo repost",
+  "repostAgain": "Repost again",
+  
+  "notifications": "Notifications",
+  "failedToLoadNotifications": "Failed to load notifications",
+  "noNotificationsYet": "No notifications yet",
+  "whenSomeoneInteractsWithYourPosts": "When someone interacts with your posts,\nyou'll see it here",
+  "reactedToYourPost": "reacted to your post",
+  "repostedYourPost": "reposted your post",
+  "repliedToYourPost": "replied to your post",
+  "mentionedYou": "mentioned you",
+  "zappedYou": "zapped you",
+  "interactedWithYou": "interacted with you",
+  "now": "now",
+  
+  "errorLoadingRelays": "Error loading relays",
+  "privateKeyNotFound": "Private key not found. Please set up your profile first",
+  "pleaseSetUpYourProfileFirst": "Please set up your profile first",
+  "relayListPublishedSuccessfully": "Relay list published successfully",
+  "errorPublishingRelayList": "Error publishing relay list",
+  "relayListFetchedSuccessfully": "Relay list fetched successfully",
+  "noRelayListFoundInYourProfile": "No relay list found in your profile",
+  "errorFetchingRelayList": "Error fetching relay list",
+  "gossipModelEnabledRestartApp": "Gossip model enabled. Restart the app to apply.",
+  "gossipModelDisabledRestartApp": "Gossip model disabled. Restart the app to apply.",
+  "errorTogglingGossipModel": "Error toggling Gossip model",
+  "relaysSavedSuccessfully": "Relays saved successfully",
+  "errorSavingRelays": "Error saving relays",
+  "pleaseEnterRelayUrl": "Please enter a relay URL",
+  "invalidRelayUrl": "Invalid relay URL. Must start with ws:// or wss://",
+  "relayAlreadyExistsInCategory": "Relay already exists in this category",
+  "relayAddedToMainList": "Relay added to Main list",
+  "errorAddingRelay": "Error adding relay",
+  "fetchingYourEvents": "Fetching your events...",
+  "noEventsFoundToBroadcast": "No events found to broadcast",
+  "broadcastingEvents": "Broadcasting {count} events to {relayCount} relays...",
+  "@broadcastingEvents": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "relayCount": {"type": "int"}
+    }
+  },
+  "eventsSuccessfullyBroadcast": "Successfully broadcast {count} events to {relayCount} relays",
+  "@eventsSuccessfullyBroadcast": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "relayCount": {"type": "int"}
+    }
+  },
+  "errorBroadcastingEvents": "Error broadcasting events",
+  "relayRemovedSuccessfully": "Relay removed successfully",
+  "relaysResetToDefaults": "Relays reset to defaults",
+  "relayAddedFromFollowingList": "Relay added from following list",
+  "relayAlreadyExistsInYourList": "Relay already exists in your list",
+  "fetchingRelayInformation": "Fetching relay information...",
+  "paymentRequired": "Payment required",
+  "authenticationRequired": "Authentication required",
+  "supportedNIPs": "Supported NIPs",
+  "software": "Software",
+  "contact": "Contact",
+  "description": "Description",
+  "limitation": "Limitation",
+  "maxMessageLength": "Max message length",
+  "maxSubscriptions": "Max subscriptions",
+  "maxFilters": "Max filters",
+  "maxLimit": "Max limit",
+  "maxSubidLength": "Max subid length",
+  "minPowDifficulty": "Min PoW difficulty",
+  "viewOnWebsite": "View on website",
+  "eventCounts": "Event Counts",
+  "eventCount": "{count} events",
+  "@eventCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "broadcasted": "broadcasted",
+  
+  "gossipMode": "Gossip Mode",
+  "gossipModeDescription": "Automatically discover and connect to relays used by people you follow. When off, only your own relays above are used to read and write.",
+  "fetching": "Fetching...",
+  "fetch": "Fetch",
+  "publishing": "Publishing...",
+  "publish": "Publish",
+  "version": "Version",
+  "connectionStatistics": "Connection Statistics",
+  "status": "Status",
+  "attempts": "Attempts",
+  "successful": "Successful",
+  "bytesSent": "Bytes Sent",
+  "bytesReceived": "Bytes Received",
+  "unknown": "unknown",
+  "paid": "Paid",
+  "auth": "Auth",
+  
+  "relays": "Relays",
+  "manageYourRelayConnections": "Manage your relay connections and publish your relay list.",
+  
+  "goBackToPreviousScreen": "Go back to previous screen",
+  "noInteractionsYet": "No interactions yet.",
+  
+  "messages": "Messages",
+  "noMessagesYet": "No messages yet",
+  "typeAMessage": "Type a message...",
+  
+  "yourDataOnRelaysDescription": "Everything you share on Nostr is an event. View your event count by type and resend them to relays.",
+  
+  "noConversationsYet": "No conversations yet",
+  "startConversationBy": "Start a conversation by messaging someone",
+  "errorLoadingConversations": "Error loading conversations",
+  "newMessage": "New message",
+  "errorLoadingMessages": "Error loading messages: {message}",
+  "@errorLoadingMessages": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDecryptMedia": "Failed to decrypt media",
+  "legacyUnencryptedMedia": "Legacy unencrypted media",
+  "notEncrypted": "Not encrypted",
+  "decryptionError": "Decryption Error",
+  "unknownError": "Unknown error",
+  "videoTapToPlay": "Video (tap to play)",
+  "fileType": "File: {type}",
+  "@fileType": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "decryptionFailed": "Decryption failed",
+  
+  "searchingForUsers": "Searching for users...",
+  "searchError": "Search Error",
+  "retry": "Retry",
+  "noUsersFound": "No users found",
+  "trySearchingDifferentTerm": "Try searching with a different term.",
+  "closeDialog": "Close dialog",
+  "searchByNameOrNpub": "Search by name or npub...",
+  "following": "Following",
+  "follow": "Follow",
+  
+  "yesterday": "Yesterday",
+  "daysAgo": "{days}d ago",
+  "@daysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  }
+}

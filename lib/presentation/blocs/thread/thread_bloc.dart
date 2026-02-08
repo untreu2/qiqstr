@@ -101,7 +101,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           final id = r['id'] as String? ?? '';
           if (id.isNotEmpty) allIds.add(id);
         }
-        _preloadInteractionCounts(allIds);
+        await _preloadInteractionCounts(allIds);
 
         _watchReplies(event.rootNoteId);
         _syncInBackground(event.rootNoteId);
@@ -183,7 +183,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final id = r['id'] as String? ?? '';
       if (id.isNotEmpty) allIds.add(id);
     }
-    _preloadInteractionCounts(allIds);
+    await _preloadInteractionCounts(allIds);
 
     _watchReplies(event.rootNoteId);
     _syncInBackground(event.rootNoteId);
@@ -238,7 +238,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         .where((id) => id.isNotEmpty)
         .toList();
     if (newReplyIds.isNotEmpty) {
-      _preloadInteractionCounts(newReplyIds);
+      Future.microtask(() async {
+        if (isClosed) return;
+        await _preloadInteractionCounts(newReplyIds);
+      });
     }
   }
 
@@ -251,39 +254,36 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     }
   }
 
-  void _preloadInteractionCounts(List<String> noteIds) {
+  Future<void> _preloadInteractionCounts(List<String> noteIds) async {
     if (noteIds.isEmpty) return;
     final userHex = _authService.currentUserPubkeyHex ?? '';
     if (userHex.isEmpty) return;
 
-    Future.microtask(() async {
+    try {
+      final db = RustDatabaseService.instance;
+      final data = await db.getBatchInteractionData(noteIds, userHex);
       if (isClosed) return;
-      try {
-        final db = RustDatabaseService.instance;
-        final data = await db.getBatchInteractionData(noteIds, userHex);
-        if (isClosed) return;
 
-        final service = InteractionService.instance;
-        for (final noteId in noteIds) {
-          final d = data[noteId];
-          if (d == null) continue;
-          final counts = InteractionCounts(
-            reactions: (d['reactions'] as num?)?.toInt() ?? 0,
-            reposts: (d['reposts'] as num?)?.toInt() ?? 0,
-            replies: (d['replies'] as num?)?.toInt() ?? 0,
-            zapAmount: (d['zaps'] as num?)?.toInt() ?? 0,
-            hasReacted: d['hasReacted'] == true,
-            hasReposted: d['hasReposted'] == true,
-            hasZapped: d['hasZapped'] == true,
-          );
-          service.prePopulateCache(noteId, counts);
-        }
-        service.refreshAllActive();
-      } catch (_) {}
-    });
+      final service = InteractionService.instance;
+      for (final noteId in noteIds) {
+        final d = data[noteId];
+        if (d == null) continue;
+        final counts = InteractionCounts(
+          reactions: (d['reactions'] as num?)?.toInt() ?? 0,
+          reposts: (d['reposts'] as num?)?.toInt() ?? 0,
+          replies: (d['replies'] as num?)?.toInt() ?? 0,
+          zapAmount: (d['zaps'] as num?)?.toInt() ?? 0,
+          hasReacted: d['hasReacted'] == true,
+          hasReposted: d['hasReposted'] == true,
+          hasZapped: d['hasZapped'] == true,
+        );
+        service.prePopulateCache(noteId, counts);
+      }
+      service.refreshAllActive();
+    } catch (_) {}
   }
 
-  void _syncInBackground(String rootNoteId) {
+  Future<void> _syncInBackground(String rootNoteId) async {
     final allNoteIds = <String>[rootNoteId];
     if (state is ThreadLoaded) {
       for (final reply in (state as ThreadLoaded).replies) {
@@ -292,9 +292,13 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       }
     }
 
-    _syncService.syncInteractionsForNotes(allNoteIds).then((_) {
-      if (!isClosed) InteractionService.instance.refreshAllActive();
-    }).catchError((_) {});
+    try {
+      await _syncService.syncInteractionsForNotes(allNoteIds);
+      if (!isClosed) {
+        await _preloadInteractionCounts(allNoteIds);
+        InteractionService.instance.refreshAllActive();
+      }
+    } catch (_) {}
 
     Future.microtask(() async {
       if (isClosed) return;
@@ -303,8 +307,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         if (isClosed) return;
 
         add(const _ThreadRepliesSyncCompleted());
-        InteractionService.instance.refreshAllActive();
-
+        
         final newNoteIds = <String>[];
         if (state is ThreadLoaded) {
           for (final reply in (state as ThreadLoaded).replies) {
@@ -317,7 +320,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
         if (newNoteIds.isNotEmpty) {
           await _syncService.syncInteractionsForNotes(newNoteIds);
-          if (!isClosed) InteractionService.instance.refreshAllActive();
+          if (!isClosed) {
+            await _preloadInteractionCounts(newNoteIds);
+            InteractionService.instance.refreshAllActive();
+          }
         }
       } catch (_) {
         if (!isClosed) add(const _ThreadRepliesSyncCompleted());
@@ -398,6 +404,18 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (_currentRootNoteId == null) return;
     try {
       await _syncService.syncReplies(_currentRootNoteId!);
+      
+      if (state is ThreadLoaded) {
+        final allIds = <String>[_currentRootNoteId!];
+        for (final reply in (state as ThreadLoaded).replies) {
+          final id = reply['id'] as String? ?? '';
+          if (id.isNotEmpty) allIds.add(id);
+        }
+        
+        await _syncService.syncInteractionsForNotes(allIds);
+        await _preloadInteractionCounts(allIds);
+        InteractionService.instance.refreshAllActive();
+      }
     } catch (_) {}
   }
 
@@ -448,21 +466,35 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final replyId = reply['id'] as String? ?? '';
       if (replyId.isEmpty) continue;
 
-      String parentId = reply['parentId'] as String? ?? '';
-      final replyRootId = reply['rootId'] as String? ?? '';
+      String? parentId = reply['parentId'] as String?;
+      final replyRootId = reply['rootId'] as String?;
 
-      if (parentId.isEmpty && replyRootId.isNotEmpty) {
-        parentId = replyRootId;
+      if (parentId != null && parentId.isEmpty) {
+        parentId = null;
       }
 
-      if (parentId.isEmpty) {
+      if (parentId == null && replyRootId != null && replyRootId.isNotEmpty) {
+        if (replyRootId == rootNoteId) {
+          parentId = rootNoteId;
+        } else if (replyIds.contains(replyRootId) || notesMap.containsKey(replyRootId)) {
+          parentId = replyRootId;
+        } else {
+          parentId = rootNoteId;
+        }
+      }
+
+      if (parentId == null || parentId.isEmpty) {
         parentId = rootNoteId;
       }
 
       if (parentId != rootNoteId &&
           !replyIds.contains(parentId) &&
           !notesMap.containsKey(parentId)) {
-        parentId = rootNoteId;
+        if (replyRootId != null && replyRootId == rootNoteId) {
+          parentId = rootNoteId;
+        } else {
+          parentId = rootNoteId;
+        }
       }
 
       childrenMap.putIfAbsent(parentId, () => []);

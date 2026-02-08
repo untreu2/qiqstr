@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../../utils/logout.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/dialogs/logout_dialog.dart';
+import '../../widgets/dialogs/language_dialog.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../../presentation/blocs/theme/theme_state.dart';
+import '../../../presentation/blocs/locale/locale_bloc.dart';
+import '../../../presentation/blocs/locale/locale_state.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -21,51 +25,89 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return BlocBuilder<ThemeBloc, ThemeState>(
       builder: (context, themeState) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
-            children: [
-              SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(context),
-                    const SizedBox(height: 16),
-                    _buildSettingsSection(context),
-                    const SizedBox(height: 150),
-                  ],
-                ),
+        return BlocBuilder<LocaleBloc, LocaleState>(
+          builder: (context, localeState) {
+            return Scaffold(
+              backgroundColor: context.colors.background,
+              body: Stack(
+                children: [
+                  SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(context, l10n),
+                        const SizedBox(height: 16),
+                        _buildSettingsSection(context, l10n),
+                        const SizedBox(height: 150),
+                      ],
+                    ),
+                  ),
+                  TopActionBarWidget(
+                    topOffset: 6,
+                    onBackPressed: () => context.pop(),
+                    showShareButton: false,
+                    centerBubble: null,
+                  ),
+                  _buildLanguageButton(context, l10n, localeState),
+                ],
               ),
-              const BackButtonWidget.floating(),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
-      child: const TitleWidget(
-        title: 'Settings',
+      child: TitleWidget(
+        title: l10n.settings,
         fontSize: 32,
-        subtitle: "Manage your app preferences.",
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+        subtitle: l10n.settingsSubtitle,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       ),
     );
   }
 
-  Widget _buildSettingsSection(BuildContext context) {
+  Widget _buildLanguageButton(BuildContext context, AppLocalizations l10n, LocaleState localeState) {
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 6,
+      right: 16,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: context.colors.textPrimary,
+          borderRadius: BorderRadius.circular(22.0),
+        ),
+        child: GestureDetector(
+          onTap: () => showLanguageDialog(
+            context: context,
+            currentLocale: localeState.locale,
+          ),
+          behavior: HitTestBehavior.opaque,
+          child: Icon(
+            CarbonIcons.language,
+            color: context.colors.background,
+            size: 20,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsSection(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
           _buildSettingsItem(
             context: context,
-            title: 'Relays',
+            title: l10n.relays,
             subtitle: '',
             icon: CarbonIcons.network_3,
             onTap: () => context.push('/relays'),
@@ -73,7 +115,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildSettingsItem(
             context: context,
-            title: 'Your Data on Relays',
+            title: l10n.yourDataOnRelays,
             subtitle: '',
             icon: CarbonIcons.data_connected,
             onTap: () => context.push('/event-manager'),
@@ -81,7 +123,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildSettingsItem(
             context: context,
-            title: 'Keys',
+            title: l10n.keys,
             subtitle: '',
             icon: CarbonIcons.password,
             onTap: () => context.push('/keys'),
@@ -89,7 +131,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildSettingsItem(
             context: context,
-            title: 'Display',
+            title: l10n.display,
             subtitle: '',
             icon: CarbonIcons.view,
             onTap: () => context.push('/display'),
@@ -97,7 +139,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildSettingsItem(
             context: context,
-            title: 'Payments',
+            title: l10n.payments,
             subtitle: '',
             icon: CarbonIcons.flash,
             onTap: () => context.push('/payments'),
@@ -105,13 +147,13 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildSettingsItem(
             context: context,
-            title: 'Muted',
+            title: l10n.muted,
             subtitle: '',
             icon: CarbonIcons.notification_off,
             onTap: () => context.push('/muted'),
           ),
           const SizedBox(height: 8),
-          _buildLogoutItem(context),
+          _buildLogoutItem(context, l10n),
           const SizedBox(height: 32),
         ],
       ),
@@ -168,7 +210,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildLogoutItem(BuildContext context) {
+  Widget _buildLogoutItem(BuildContext context, AppLocalizations l10n) {
     return GestureDetector(
       onTap: () {
         showLogoutDialog(
@@ -196,7 +238,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(width: 8),
             Text(
-              'Logout',
+              l10n.logout,
               style: TextStyle(
                 color: context.colors.error,
                 fontSize: 17,

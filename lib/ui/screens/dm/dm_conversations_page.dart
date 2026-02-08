@@ -10,6 +10,7 @@ import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/title_widget.dart';
 import '../search/users_search_page.dart';
+import '../../../l10n/app_localizations.dart';
 
 class DmConversationsPage extends StatefulWidget {
   const DmConversationsPage({super.key});
@@ -50,6 +51,8 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   }
 
   Widget _buildConversationList(BuildContext context, DmState state) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
@@ -60,7 +63,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                     slivers: [
                       SliverToBoxAdapter(
                         child: TitleWidget(
-                          title: 'Messages',
+                          title: l10n.messages,
                           fontSize: 32,
                           useTopPadding: true,
                           padding: EdgeInsets.fromLTRB(
@@ -88,7 +91,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                       slivers: [
                         SliverToBoxAdapter(
                           child: TitleWidget(
-                            title: 'Messages',
+                            title: l10n.messages,
                             fontSize: 32,
                             useTopPadding: true,
                             padding: EdgeInsets.fromLTRB(
@@ -120,7 +123,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                 slivers: [
                   SliverToBoxAdapter(
                     child: TitleWidget(
-                      title: 'Messages',
+                      title: l10n.messages,
                       fontSize: 32,
                       useTopPadding: true,
                       padding: EdgeInsets.fromLTRB(
@@ -143,7 +146,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                 slivers: [
                   SliverToBoxAdapter(
                     child: TitleWidget(
-                      title: 'Messages',
+                      title: l10n.messages,
                       fontSize: 32,
                       useTopPadding: true,
                       padding: EdgeInsets.fromLTRB(
@@ -161,7 +164,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'Error loading conversations',
+                            l10n.errorLoadingConversations,
                             style:
                                 TextStyle(color: context.colors.textSecondary),
                           ),
@@ -171,7 +174,12 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                               context.read<DmBloc>().add(const dm_events
                                   .DmConversationsLoadRequested());
                             },
-                            child: const Text('Retry'),
+                            child: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context)!;
+                                return Text(l10n.retryText);
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -183,7 +191,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                 slivers: [
                   SliverToBoxAdapter(
                     child: TitleWidget(
-                      title: 'Messages',
+                      title: l10n.messages,
                       fontSize: 32,
                       useTopPadding: true,
                       padding: EdgeInsets.fromLTRB(
@@ -340,6 +348,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -351,7 +360,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
           ),
           const SizedBox(height: 16),
           Text(
-            'No conversations yet',
+            l10n.noConversationsYet,
             style: TextStyle(
               color: context.colors.textSecondary,
               fontSize: 18,
@@ -359,7 +368,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
           ),
           const SizedBox(height: 8),
           Text(
-            'Start a conversation by messaging someone',
+            l10n.startConversationBy,
             style: TextStyle(
               color: context.colors.textSecondary,
               fontSize: 14,
@@ -371,6 +380,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   }
 
   String _formatTime(DateTime dateTime) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final difference = now.difference(dateTime);
 
@@ -379,9 +389,9 @@ class _DmConversationsPageState extends State<DmConversationsPage>
       final minute = dateTime.minute.toString().padLeft(2, '0');
       return '$hour:$minute';
     } else if (difference.inDays == 1) {
-      return 'Yesterday';
+      return l10n.yesterday;
     } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
+      return l10n.daysAgo(difference.inDays);
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }

@@ -8,6 +8,7 @@ import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/sidebar/sidebar_bloc.dart';
 import '../../../presentation/blocs/sidebar/sidebar_event.dart';
 import '../../../presentation/blocs/sidebar/sidebar_state.dart';
+import '../../../l10n/app_localizations.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -139,8 +140,9 @@ class _UserProfileHeader extends StatelessWidget {
                     Flexible(
                       child: Text(
                         () {
+                          final l10n = AppLocalizations.of(context)!;
                           final name = user['name'] as String? ?? '';
-                          return name.isNotEmpty ? name : 'Anonymous';
+                          return name.isNotEmpty ? name : l10n.anonymous;
                         }(),
                         style: TextStyle(
                           color: colors.textPrimary,
@@ -177,6 +179,7 @@ class _UserProfileHeader extends StatelessWidget {
   }
 
   Widget _buildFollowerInfo(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (isLoadingCounts) {
       return const Padding(
         padding: EdgeInsets.only(top: 4.0),
@@ -201,7 +204,7 @@ class _UserProfileHeader extends StatelessWidget {
             ),
           ),
           Text(
-            ' followers',
+            ' ${l10n.followers}',
             style: TextStyle(
               fontSize: 14,
               color: colors.textSecondary,
@@ -223,7 +226,7 @@ class _UserProfileHeader extends StatelessWidget {
             ),
           ),
           Text(
-            ' following',
+            ' ${l10n.followingCount}',
             style: TextStyle(
               fontSize: 14,
               color: colors.textSecondary,
@@ -243,6 +246,7 @@ class _SidebarContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,7 +266,7 @@ class _SidebarContent extends StatelessWidget {
                               context: context,
                               colors: colors,
                               svgAsset: 'assets/profile_button.svg',
-                              label: 'Profile',
+                              label: l10n.profile,
                               onTap: () {
                                 final userNpub = user['npub'] as String? ?? '';
                                 final userPubkeyHex =
@@ -294,7 +298,7 @@ class _SidebarContent extends StatelessWidget {
                     context: context,
                     colors: colors,
                     icon: CarbonIcons.settings,
-                    label: 'Settings',
+                    label: l10n.settings,
                     onTap: () => context.push('/settings'),
                   ),
                 ),

@@ -120,16 +120,24 @@ class _QuoteContent extends StatelessWidget {
 
   void _navigateToThread(BuildContext context) {
     final noteId = note['id'] as String? ?? '';
+    final isReply = note['isReply'] as bool? ?? false;
+    final rootId = note['rootId'] as String?;
+    
+    final targetRootId = (isReply && rootId != null && rootId.isNotEmpty) 
+        ? rootId 
+        : noteId;
+    final targetFocusedId = noteId;
+    
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
       context.push(
-          '/home/feed/thread?rootNoteId=${Uri.encodeComponent(noteId)}&focusedNoteId=${Uri.encodeComponent(noteId)}');
+          '/home/feed/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
     } else if (currentLocation.startsWith('/home/notifications')) {
       context.push(
-          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(noteId)}&focusedNoteId=${Uri.encodeComponent(noteId)}');
+          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
     } else {
       context.push(
-          '/thread?rootNoteId=${Uri.encodeComponent(noteId)}&focusedNoteId=${Uri.encodeComponent(noteId)}');
+          '/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
     }
   }
 

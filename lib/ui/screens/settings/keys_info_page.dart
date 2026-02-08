@@ -5,6 +5,7 @@ import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../../presentation/blocs/theme/theme_state.dart';
+import '../../../l10n/app_localizations.dart';
 
 class KeysInfoPage extends StatefulWidget {
   final String mnemonic;
@@ -23,17 +24,18 @@ class KeysInfoPage extends StatefulWidget {
 class _KeysInfoPageState extends State<KeysInfoPage> {
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return BlocBuilder<ThemeBloc, ThemeState>(
       builder: (context, themeState) {
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: _buildBody(context),
+          body: _buildBody(context, l10n),
         );
       },
     );
   }
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildBody(BuildContext context, AppLocalizations l10n) {
     return Column(
       children: [
         Expanded(
@@ -41,42 +43,42 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(context),
+                _buildHeader(context, l10n),
                 const SizedBox(height: 16),
-                _buildMnemonicTitle(context),
+                _buildMnemonicTitle(context, l10n),
                 const SizedBox(height: 8),
                 _buildMnemonicCard(context),
                 const SizedBox(height: 24),
-                _buildWarningCard(context),
+                _buildWarningCard(context, l10n),
                 const SizedBox(height: 32),
               ],
             ),
           ),
         ),
-        _buildActionButtons(context),
+        _buildActionButtons(context, l10n),
       ],
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     final double topPadding = MediaQuery.of(context).padding.top;
 
     return TitleWidget(
-      title: 'Backup Your Account',
+      title: l10n.backupYourAccount,
       fontSize: 32,
-      subtitle: "Secure your account with your seed phrase.",
+      subtitle: l10n.secureYourAccount,
       useTopPadding: false,
       padding: EdgeInsets.fromLTRB(16, topPadding + 20, 16, 8),
     );
   }
 
-  Widget _buildWarningCard(BuildContext context) {
+  Widget _buildWarningCard(BuildContext context, AppLocalizations l10n) {
     final warnings = [
-      'Write down your seed phrase in the correct order',
-      'Store it in a safe place',
-      'Never share it with anyone',
-      'If you lose it, you will lose access to your account forever',
-      'You can access this later from Settings > Keys',
+      l10n.writeSeedPhraseInOrder,
+      l10n.storeItSafely,
+      l10n.neverShareIt,
+      l10n.ifYouLoseIt,
+      l10n.accessFromSettings,
     ];
 
     return Padding(
@@ -95,7 +97,7 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Important',
+                  l10n.important,
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
@@ -137,11 +139,11 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
     );
   }
 
-  Widget _buildMnemonicTitle(BuildContext context) {
+  Widget _buildMnemonicTitle(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.only(left: 33, right: 16),
       child: Text(
-        'Seed Phrase',
+        l10n.seedPhrase,
         style: TextStyle(
           color: context.colors.textSecondary,
           fontSize: 15,
@@ -177,7 +179,7 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  Widget _buildActionButtons(BuildContext context, AppLocalizations l10n) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
       decoration: BoxDecoration(
@@ -195,7 +197,7 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
               borderRadius: BorderRadius.circular(24),
             ),
             child: Text(
-              'I have written down my seed phrase',
+              l10n.iHaveWrittenDownSeedPhrase,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: context.colors.background,

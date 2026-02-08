@@ -21,6 +21,7 @@ import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../l10n/app_localizations.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -426,6 +427,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildEditProfileButton(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return GestureDetector(
       onTap: () {
         context.push('/edit-profile');
@@ -438,7 +440,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
-          'Edit profile',
+          l10n.editProfileButton,
           style: TextStyle(
             color: context.colors.textPrimary,
             fontSize: 13,
@@ -474,6 +476,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildMuteButton(BuildContext context, ProfileInfoLoaded state) {
+    final l10n = AppLocalizations.of(context)!;
     final isMuted = state.isMuted ?? false;
     final bloc = context.read<ProfileInfoBloc>();
     return Material(
@@ -506,7 +509,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Muted',
+                      l10n.mutedButton,
                       style: TextStyle(
                         color: context.colors.background,
                         fontSize: 13,
@@ -526,6 +529,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildFollowButton(BuildContext context, ProfileInfoLoaded state) {
+    final l10n = AppLocalizations.of(context)!;
     final isFollowing = state.isFollowing ?? false;
     final bloc = context.read<ProfileInfoBloc>();
     return Material(
@@ -557,7 +561,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ),
               const SizedBox(width: 8),
               Text(
-                isFollowing ? 'Following' : 'Follow',
+                isFollowing ? l10n.following : l10n.follow,
                 style: TextStyle(
                   color: isFollowing
                       ? context.colors.textPrimary
@@ -589,6 +593,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildFollowerInfo(BuildContext context, ProfileInfoLoaded? state) {
+    final l10n = AppLocalizations.of(context)!;
     if (state == null || state.isLoadingCounts) {
       return const SizedBox(
         height: 16,
@@ -628,7 +633,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
               ),
               Text(
-                ' following',
+                ' ${l10n.followingCount}',
                 style: TextStyle(
                   fontSize: 14,
                   color: context.colors.textSecondary,
@@ -656,7 +661,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ),
             ),
             Text(
-              ' followers',
+              ' ${l10n.followers}',
               style: TextStyle(
                 fontSize: 14,
                 color: context.colors.textSecondary,
@@ -673,7 +678,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ),
           ),
           Text(
-            'Following you',
+            l10n.followingYou,
             style: TextStyle(
               fontSize: 14,
               color: context.colors.textSecondary,

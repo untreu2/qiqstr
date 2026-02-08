@@ -18,6 +18,7 @@ import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/feed/feed_event.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../presentation/blocs/feed/feed_state.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../presentation/blocs/article/article_event.dart';
@@ -50,10 +51,11 @@ class FeedPage extends StatefulWidget {
 
 class FeedPageState extends State<FeedPage> {
   late ScrollController _scrollController;
+  late PageController _pageController;
   bool _showAppBar = true;
   bool isFirstOpen = false;
   bool _isSearchMode = false;
-  bool _isReadsMode = false;
+  int _currentPageIndex = 0;
 
   final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier =
       ValueNotifier([]);
@@ -73,6 +75,7 @@ class FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
+    _pageController = PageController();
     _searchController
         .addListener(() => _onSearchChanged(_searchController.text));
     _updateRelayCount();
@@ -142,6 +145,7 @@ class FeedPageState extends State<FeedPage> {
     _searchDebounceTimer?.cancel();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
+    _pageController.dispose();
     _notesNotifier.dispose();
     _connectedRelaysCount.dispose();
     _searchController.dispose();
@@ -211,6 +215,7 @@ class FeedPageState extends State<FeedPage> {
 
   Widget _buildHeader(
       BuildContext context, double topPadding, Map<String, dynamic>? user) {
+    final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
     final userProfileImage = user?['profileImage'] as String? ?? '';
@@ -250,7 +255,7 @@ class FeedPageState extends State<FeedPage> {
                         controller: _searchController,
                         focusNode: _searchFocusNode,
                         autofocus: true,
-                        hintText: 'Search by name or npub...',
+                        hintText: l10n.searchByNameOrNpub,
                         height: 48,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 0),
@@ -368,7 +373,7 @@ class FeedPageState extends State<FeedPage> {
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Search...',
+                                      l10n.searchDotDotDot,
                                       style: TextStyle(
                                         color: colors.textPrimary,
                                         fontSize: 15,
@@ -492,16 +497,28 @@ class FeedPageState extends State<FeedPage> {
               backgroundColor: colors.background,
               body: Stack(
                 children: [
-                  if (_isReadsMode)
-                    BlocBuilder<ArticleBloc, ArticleState>(
-                      builder: (context, articleState) {
-                        return _buildReadsContent(context, articleState,
-                            feedState, topPadding, headerHeight, colors);
-                      },
-                    )
-                  else
+                  if (isHashtagMode)
                     _buildFeedContent(context, feedState, topPadding,
-                        headerHeight, isHashtagMode, colors),
+                        headerHeight, isHashtagMode, colors)
+                  else
+                    PageView(
+                      controller: _pageController,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentPageIndex = index;
+                        });
+                      },
+                      children: [
+                        _buildFeedContent(context, feedState, topPadding,
+                            headerHeight, isHashtagMode, colors),
+                        BlocBuilder<ArticleBloc, ArticleState>(
+                          builder: (context, articleState) {
+                            return _buildReadsContent(context, articleState,
+                                feedState, topPadding, headerHeight, colors);
+                          },
+                        ),
+                      ],
+                    ),
                   if (isHashtagMode) ...[
                     BackButtonWidget.floating(),
                     Positioned(
@@ -670,10 +687,15 @@ class FeedPageState extends State<FeedPage> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              PrimaryButton(
-                label: 'Retry',
-                onPressed: () {
-                  context.read<FeedBloc>().add(const FeedRefreshed());
+              Builder(
+                builder: (context) {
+                  final l10n = AppLocalizations.of(context)!;
+                  return PrimaryButton(
+                    label: l10n.retryText,
+                    onPressed: () {
+                      context.read<FeedBloc>().add(const FeedRefreshed());
+                    },
+                  );
                 },
               ),
             ],
@@ -693,104 +715,121 @@ class FeedPageState extends State<FeedPage> {
   }
 
   Widget _buildFeedModeToggle(BuildContext context, AppThemeColors colors) {
+    final l10n = AppLocalizations.of(context)!;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     return Positioned(
       bottom: bottomPadding + 20,
       left: 0,
       right: 0,
       child: Center(
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: colors.textPrimary,
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  if (_isReadsMode) {
-                    setState(() => _isReadsMode = false);
-                  }
-                },
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  decoration: BoxDecoration(
-                    color:
-                        !_isReadsMode ? colors.background : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        CarbonIcons.blog,
-                        size: 16,
-                        color: !_isReadsMode
-                            ? colors.textPrimary
-                            : colors.background.withValues(alpha: 0.7),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Notes',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: !_isReadsMode
-                              ? colors.textPrimary
-                              : colors.background.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(25),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: colors.textPrimary.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(25),
               ),
-              GestureDetector(
-                onTap: () {
-                  if (!_isReadsMode) {
-                    setState(() => _isReadsMode = true);
-                  }
-                },
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  decoration: BoxDecoration(
-                    color:
-                        _isReadsMode ? colors.background : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SvgPicture.asset(
-                        'assets/newspaper.svg',
-                        width: 16,
-                        height: 16,
-                        colorFilter: ColorFilter.mode(
-                          _isReadsMode
-                              ? colors.textPrimary
-                              : colors.background.withValues(alpha: 0.7),
-                          BlendMode.srcIn,
-                        ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      if (_currentPageIndex != 0) {
+                        _pageController.animateToPage(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _currentPageIndex == 0
+                            ? colors.background
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Reads',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: _isReadsMode
-                              ? colors.textPrimary
-                              : colors.background.withValues(alpha: 0.7),
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            CarbonIcons.blog,
+                            size: 16,
+                            color: _currentPageIndex == 0
+                                ? colors.textPrimary
+                                : colors.background.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.notes,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _currentPageIndex == 0
+                                  ? colors.textPrimary
+                                  : colors.background.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  GestureDetector(
+                    onTap: () {
+                      if (_currentPageIndex != 1) {
+                        _pageController.animateToPage(
+                          1,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _currentPageIndex == 1
+                            ? colors.background
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SvgPicture.asset(
+                            'assets/newspaper.svg',
+                            width: 16,
+                            height: 16,
+                            colorFilter: ColorFilter.mode(
+                              _currentPageIndex == 1
+                                  ? colors.textPrimary
+                                  : colors.background.withValues(alpha: 0.7),
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.reads,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _currentPageIndex == 1
+                                  ? colors.textPrimary
+                                  : colors.background.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -919,6 +958,7 @@ class FeedPageState extends State<FeedPage> {
   }
 
   Widget _buildUserSearchResults(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return BlocBuilder<UserSearchBloc, UserSearchState>(
       builder: (context, searchState) {
         return switch (searchState) {
@@ -932,7 +972,7 @@ class FeedPageState extends State<FeedPage> {
                       CircularProgressIndicator(color: context.colors.primary),
                       const SizedBox(height: 16),
                       Text(
-                        'Searching for users...',
+                        l10n.searchingForUsers,
                         style: TextStyle(color: context.colors.textSecondary),
                       ),
                     ],
@@ -954,7 +994,7 @@ class FeedPageState extends State<FeedPage> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Search Error',
+                        l10n.searchError,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -968,15 +1008,20 @@ class FeedPageState extends State<FeedPage> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
-                      PrimaryButton(
-                        label: 'Retry',
-                        onPressed: () {
-                          context.read<UserSearchBloc>().add(
+                      Builder(
+                        builder: (context) {
+                          final l10n = AppLocalizations.of(context)!;
+                          return PrimaryButton(
+                            label: l10n.retryText,
+                            onPressed: () {
+                              context.read<UserSearchBloc>().add(
                               UserSearchQueryChanged(
                                   _searchController.text.trim()));
                         },
                         backgroundColor: context.colors.accent,
                         foregroundColor: context.colors.background,
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -1001,7 +1046,7 @@ class FeedPageState extends State<FeedPage> {
                                 color: context.colors.primary),
                             const SizedBox(height: 16),
                             Text(
-                              'Searching...',
+                              l10n.searchingDotDotDot,
                               style: TextStyle(
                                   color: context.colors.textSecondary),
                             ),
@@ -1061,13 +1106,14 @@ class FeedPageState extends State<FeedPage> {
     List<Map<String, dynamic>> notes,
     Map<String, Map<String, dynamic>> noteProfiles,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
     final items = <_SearchResultItem>[];
 
     
     if (users.isNotEmpty) {
       items.add(_SearchResultItem(
-          type: _SearchResultType.header, data: {'title': 'Users'}));
+          type: _SearchResultType.header, data: {'title': l10n.users}));
       for (final user in users) {
         items.add(_SearchResultItem(type: _SearchResultType.user, data: user));
       }
@@ -1076,7 +1122,7 @@ class FeedPageState extends State<FeedPage> {
     
     if (notes.isNotEmpty) {
       items.add(_SearchResultItem(
-          type: _SearchResultType.header, data: {'title': 'Notes'}));
+          type: _SearchResultType.header, data: {'title': l10n.notes}));
       for (final note in notes) {
         items.add(_SearchResultItem(
             type: _SearchResultType.note, data: note, profiles: noteProfiles));
@@ -1305,6 +1351,7 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
 
   Widget _buildFollowButton(
       BuildContext context, UserTileLoaded state, UserTileBloc bloc) {
+    final l10n = AppLocalizations.of(context)!;
     final isFollowing = state.isFollowing ?? false;
     return GestureDetector(
       onTap: state.isLoading ? null : () => _toggleFollow(bloc, state),
@@ -1344,7 +1391,7 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    isFollowing ? 'Following' : 'Follow',
+                    isFollowing ? l10n.following : l10n.follow,
                     style: TextStyle(
                       color: isFollowing
                           ? context.colors.textPrimary

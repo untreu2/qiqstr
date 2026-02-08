@@ -6,8 +6,6 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-
-
 String createGiftWrapDm(
         {required String senderPrivateKeyHex,
         required String receiverPubkeyHex,
@@ -17,8 +15,6 @@ String createGiftWrapDm(
         receiverPubkeyHex: receiverPubkeyHex,
         message: message);
 
-
-
 String createGiftWrapDmForSender(
         {required String senderPrivateKeyHex,
         required String receiverPubkeyHex,
@@ -27,18 +23,6 @@ String createGiftWrapDmForSender(
         senderPrivateKeyHex: senderPrivateKeyHex,
         receiverPubkeyHex: receiverPubkeyHex,
         message: message);
-
-
-
-
-
-
-
-
-
-
-
-
 
 String createGiftWrapFileMessage(
         {required String senderPrivateKeyHex,
@@ -61,8 +45,6 @@ String createGiftWrapFileMessage(
         originalHash: originalHash,
         fileSize: fileSize);
 
-
-
 String createGiftWrapFileMessageForSender(
         {required String senderPrivateKeyHex,
         required String receiverPubkeyHex,
@@ -84,10 +66,6 @@ String createGiftWrapFileMessageForSender(
         originalHash: originalHash,
         fileSize: fileSize);
 
-
-
-
-
 String unwrapGiftWrap(
         {required String receiverPrivateKeyHex,
         required String giftWrapJson}) =>
@@ -95,11 +73,8 @@ String unwrapGiftWrap(
         receiverPrivateKeyHex: receiverPrivateKeyHex,
         giftWrapJson: giftWrapJson);
 
-
 bool isGiftWrap({required String eventJson}) =>
     RustLib.instance.api.crateApiNip17IsGiftWrap(eventJson: eventJson);
-
-
 
 String nip44Encrypt(
         {required String content,
@@ -109,8 +84,6 @@ String nip44Encrypt(
         content: content,
         senderSkHex: senderSkHex,
         receiverPkHex: receiverPkHex);
-
-
 
 String nip44Decrypt(
         {required String payload,

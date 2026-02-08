@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'presentation/blocs/theme/theme_bloc.dart';
 import 'presentation/blocs/theme/theme_event.dart';
 import 'presentation/blocs/theme/theme_state.dart';
+import 'presentation/blocs/locale/locale_bloc.dart';
+import 'presentation/blocs/locale/locale_event.dart';
+import 'presentation/blocs/locale/locale_state.dart';
 
 import 'data/services/logging_service.dart';
 import 'core/di/app_di.dart';
@@ -15,6 +19,7 @@ import 'core/router/app_router.dart';
 import 'core/bloc/observers/app_bloc_observer.dart';
 
 import 'src/rust/frb_generated.dart';
+import 'l10n/app_localizations.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -63,8 +68,15 @@ void main() {
     FlutterNativeSplash.remove();
 
     runApp(
-      BlocProvider<ThemeBloc>(
-        create: (context) => ThemeBloc()..add(const ThemeInitialized()),
+      MultiBlocProvider(
+        providers: [
+          BlocProvider<ThemeBloc>(
+            create: (context) => ThemeBloc()..add(const ThemeInitialized()),
+          ),
+          BlocProvider<LocaleBloc>(
+            create: (context) => LocaleBloc()..add(const LocaleInitialized()),
+          ),
+        ],
         child: const QiqstrApp(),
       ),
     );
@@ -85,69 +97,85 @@ class QiqstrApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ThemeBloc, ThemeState>(
-      builder: (context, themeState) {
-        final colors = themeState.colors;
-        final isDark = themeState.isDarkMode;
+    return BlocBuilder<LocaleBloc, LocaleState>(
+      builder: (context, localeState) {
+        return BlocBuilder<ThemeBloc, ThemeState>(
+          builder: (context, themeState) {
+            final colors = themeState.colors;
+            final isDark = themeState.isDarkMode;
 
-        return MaterialApp.router(
-          title: 'Qiqstr',
-          routerConfig: AppRouter.router,
-          theme: ThemeData(
-            brightness: isDark ? Brightness.dark : Brightness.light,
-            scaffoldBackgroundColor: colors.background,
-            textTheme: (isDark ? ThemeData.dark() : ThemeData.light())
-                .textTheme
-                .apply(
-                  bodyColor: colors.textPrimary,
-                  displayColor: colors.textPrimary,
-                )
-                .copyWith(
-                  bodyLarge: TextStyle(height: 2.1, color: colors.textPrimary),
-                  bodyMedium: TextStyle(height: 2.1, color: colors.textPrimary),
-                  bodySmall: TextStyle(height: 2.1, color: colors.textPrimary),
-                  titleLarge: TextStyle(height: 2.1, color: colors.textPrimary),
-                  titleMedium:
-                      TextStyle(height: 2.1, color: colors.textPrimary),
-                  titleSmall: TextStyle(height: 2.1, color: colors.textPrimary),
-                ),
-            colorScheme: isDark
-                ? ColorScheme.dark(
-                    primary: colors.primary,
-                    secondary: colors.secondary,
-                    surface: colors.surface,
-                    error: colors.error,
-                    onPrimary: colors.background,
-                    onSecondary: colors.textPrimary,
-                    onSurface: colors.textPrimary,
-                    onError: colors.background,
-                  )
-                : ColorScheme.light(
-                    primary: colors.primary,
-                    secondary: colors.secondary,
-                    surface: colors.surface,
-                    error: colors.error,
-                    onPrimary: colors.background,
-                    onSecondary: colors.textPrimary,
-                    onSurface: colors.textPrimary,
-                    onError: colors.background,
+            return MaterialApp.router(
+              title: 'Qiqstr',
+              routerConfig: AppRouter.router,
+              locale: localeState.locale,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('en'),
+                Locale('tr'),
+                Locale('de'),
+              ],
+              theme: ThemeData(
+                brightness: isDark ? Brightness.dark : Brightness.light,
+                scaffoldBackgroundColor: colors.background,
+                textTheme: (isDark ? ThemeData.dark() : ThemeData.light())
+                    .textTheme
+                    .apply(
+                      bodyColor: colors.textPrimary,
+                      displayColor: colors.textPrimary,
+                    )
+                    .copyWith(
+                      bodyLarge: TextStyle(height: 2.1, color: colors.textPrimary),
+                      bodyMedium: TextStyle(height: 2.1, color: colors.textPrimary),
+                      bodySmall: TextStyle(height: 2.1, color: colors.textPrimary),
+                      titleLarge: TextStyle(height: 2.1, color: colors.textPrimary),
+                      titleMedium:
+                          TextStyle(height: 2.1, color: colors.textPrimary),
+                      titleSmall: TextStyle(height: 2.1, color: colors.textPrimary),
+                    ),
+                colorScheme: isDark
+                    ? ColorScheme.dark(
+                        primary: colors.primary,
+                        secondary: colors.secondary,
+                        surface: colors.surface,
+                        error: colors.error,
+                        onPrimary: colors.background,
+                        onSecondary: colors.textPrimary,
+                        onSurface: colors.textPrimary,
+                        onError: colors.background,
+                      )
+                    : ColorScheme.light(
+                        primary: colors.primary,
+                        secondary: colors.secondary,
+                        surface: colors.surface,
+                        error: colors.error,
+                        onPrimary: colors.background,
+                        onSecondary: colors.textPrimary,
+                        onSurface: colors.textPrimary,
+                        onError: colors.background,
+                      ),
+                appBarTheme: AppBarTheme(
+                  backgroundColor: colors.background,
+                  elevation: 0,
+                  centerTitle: true,
+                  titleTextStyle: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                    height: 2.1,
                   ),
-            appBarTheme: AppBarTheme(
-              backgroundColor: colors.background,
-              elevation: 0,
-              centerTitle: true,
-              titleTextStyle: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: colors.textPrimary,
-                height: 2.1,
+                ),
+                buttonTheme: const ButtonThemeData(
+                  buttonColor: Colors.deepPurpleAccent,
+                  textTheme: ButtonTextTheme.primary,
+                ),
               ),
-            ),
-            buttonTheme: const ButtonThemeData(
-              buttonColor: Colors.deepPurpleAccent,
-              textTheme: ButtonTextTheme.primary,
-            ),
-          ),
+            );
+          },
         );
       },
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<void> showAddRelayDialog({
   required BuildContext context,
@@ -10,6 +11,7 @@ Future<void> showAddRelayDialog({
 }) async {
   controller.clear();
   final colors = context.colors;
+  final l10n = AppLocalizations.of(context)!;
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -33,7 +35,7 @@ Future<void> showAddRelayDialog({
               fontSize: 15,
             ),
             decoration: InputDecoration(
-              hintText: 'wss://relay.example.com',
+              hintText: l10n.relayUrlHint,
               hintStyle: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 15,
@@ -52,7 +54,7 @@ Future<void> showAddRelayDialog({
           SizedBox(
             width: double.infinity,
             child: SecondaryButton(
-              label: 'Add Relay',
+              label: l10n.addRelay,
               onPressed: isLoading ? null : onAdd,
               isLoading: isLoading,
               size: ButtonSize.large,

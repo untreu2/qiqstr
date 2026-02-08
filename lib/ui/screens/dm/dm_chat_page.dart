@@ -18,6 +18,7 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/media/photo_viewer_widget.dart';
+import '../../../l10n/app_localizations.dart';
 
 class DmChatPage extends StatefulWidget {
   final String pubkeyHex;
@@ -39,6 +40,7 @@ class _DmChatPageState extends State<DmChatPage> {
   DmBloc? _dmBloc;
   
   final List<Map<String, dynamic>> _attachedEncryptedMedia = [];
+  final Map<String, Future<Widget>> _mediaCache = {};
 
   static const _imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   static const _videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
@@ -53,7 +55,7 @@ class _DmChatPageState extends State<DmChatPage> {
     'image.nostr.build',
   ];
   static final _hexHashPattern = RegExp(r'/[0-9a-f]{64}$');
-  static const int _maxFileSizeBytes = 50 * 1024 * 1024; // 50MB
+  static const int _maxFileSizeBytes = 50 * 1024 * 1024;
 
   @override
   void dispose() {
@@ -82,8 +84,9 @@ class _DmChatPageState extends State<DmChatPage> {
 
       if (file.size > _maxFileSizeBytes) {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('File is too large (max 50MB)')),
+            SnackBar(content: Text(l10n.fileTooLarge)),
           );
         }
         return;
@@ -102,8 +105,9 @@ class _DmChatPageState extends State<DmChatPage> {
         setState(() {
           _isUploadingMedia = false;
         });
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Encryption failed: ${encryptResult.error}')),
+          SnackBar(content: Text('${l10n.encryptionFailed}: ${encryptResult.error}')),
         );
         return;
       }
@@ -131,15 +135,17 @@ class _DmChatPageState extends State<DmChatPage> {
         });
       } else {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to upload encrypted media')),
+            SnackBar(content: Text(l10n.failedToUploadEncryptedMedia)),
           );
         }
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(l10n.errorWithMessage(e.toString()))),
         );
       }
     } finally {
@@ -207,6 +213,15 @@ class _DmChatPageState extends State<DmChatPage> {
         return bloc;
       },
       child: BlocBuilder<DmBloc, DmState>(
+        buildWhen: (previous, current) {
+          if (previous.runtimeType != current.runtimeType) return true;
+          if (current is DmChatLoaded && previous is DmChatLoaded) {
+            return current.pubkeyHex != previous.pubkeyHex ||
+                   current.messages.length != previous.messages.length ||
+                   current.messages != previous.messages;
+          }
+          return true;
+        },
         builder: (context, state) {
           return _buildChatView(context, state, widget.pubkeyHex);
         },
@@ -219,6 +234,7 @@ class _DmChatPageState extends State<DmChatPage> {
     DmState state,
     String otherUserPubkeyHex,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final otherUser = _userCache[otherUserPubkeyHex];
 
     if (otherUser == null && !_userCache.containsKey(otherUserPubkeyHex)) {
@@ -250,7 +266,7 @@ class _DmChatPageState extends State<DmChatPage> {
               messages.isEmpty
                   ? Center(
                       child: Text(
-                        'No messages yet',
+                        l10n.noMessagesYet,
                         style: TextStyle(color: context.colors.textSecondary),
                       ),
                     )
@@ -267,10 +283,17 @@ class _DmChatPageState extends State<DmChatPage> {
                           ),
                           reverse: true,
                           itemCount: messages.length,
+                          addAutomaticKeepAlives: true,
+                          addRepaintBoundaries: true,
                           itemBuilder: (context, index) {
                             final message =
                                 messages[messages.length - 1 - index];
-                            return _buildMessageBubble(context, message);
+                            final messageId = message['id'] as String? ?? 
+                                '${message['createdAt']?.toString() ?? ''}_$index';
+                            return KeyedSubtree(
+                              key: ValueKey(messageId),
+                              child: _buildMessageBubble(context, message),
+                            );
                           },
                         );
                       },
@@ -280,7 +303,7 @@ class _DmChatPageState extends State<DmChatPage> {
               ),
             DmError(:final message) => Center(
                 child: Text(
-                  'Error loading messages: $message',
+                  l10n.errorLoadingMessages(message),
                   style: TextStyle(color: context.colors.textSecondary),
                 ),
               ),
@@ -461,6 +484,7 @@ class _DmChatPageState extends State<DmChatPage> {
                                 );
                               },
                               child: CachedNetworkImage(
+                                key: ValueKey(url),
                                 imageUrl: url,
                                 fit: BoxFit.cover,
                                 width: double.infinity,
@@ -560,6 +584,7 @@ class _DmChatPageState extends State<DmChatPage> {
   Widget _buildEncryptedMediaBubble(
       BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
+    final l10n = AppLocalizations.of(context)!;
     final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
     final encryptedUrl = message['content'] as String? ?? '';
@@ -574,6 +599,22 @@ class _DmChatPageState extends State<DmChatPage> {
 
     final isImage = mimeType.startsWith('image/');
     final isVideo = mimeType.startsWith('video/');
+
+    final cacheKey = '$encryptedUrl-$encryptionKey-$originalHash';
+    
+    if (!_mediaCache.containsKey(cacheKey)) {
+      _mediaCache[cacheKey] = _decryptAndDisplayMedia(
+        encryptedUrl: encryptedUrl,
+        decryptionKey: encryptionKey,
+        decryptionNonce: encryptionNonce,
+        originalHash: originalHash,
+        mimeType: mimeType,
+        isImage: isImage,
+        isVideo: isVideo,
+        colors: colors,
+        l10n: l10n,
+      );
+    }
 
     return RepaintBoundary(
       child: Align(
@@ -600,16 +641,7 @@ class _DmChatPageState extends State<DmChatPage> {
                   bottomLeft: !isFromMe ? const Radius.circular(4) : null,
                 ),
                 child: FutureBuilder<Widget>(
-                  future: _decryptAndDisplayMedia(
-                    encryptedUrl: encryptedUrl,
-                    decryptionKey: encryptionKey,
-                    decryptionNonce: encryptionNonce,
-                    originalHash: originalHash,
-                    mimeType: mimeType,
-                    isImage: isImage,
-                    isVideo: isVideo,
-                    colors: colors,
-                  ),
+                  future: _mediaCache[cacheKey]!,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Container(
@@ -622,6 +654,7 @@ class _DmChatPageState extends State<DmChatPage> {
                     }
 
                     if (snapshot.hasError || !snapshot.hasData) {
+                      final l10n = AppLocalizations.of(context)!;
                       return Container(
                         height: 100,
                         padding: const EdgeInsets.all(16),
@@ -632,7 +665,7 @@ class _DmChatPageState extends State<DmChatPage> {
                                 color: colors.textSecondary, size: 24),
                             const SizedBox(height: 8),
                             Text(
-                              'Failed to decrypt media',
+                              l10n.failedToDecryptMedia,
                               style: TextStyle(
                                 color: colors.textSecondary,
                                 fontSize: 12,
@@ -678,6 +711,7 @@ class _DmChatPageState extends State<DmChatPage> {
 
   Widget _buildLegacyMediaBubble(
       BuildContext context, Map<String, dynamic> message) {
+    final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
     final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
@@ -714,6 +748,7 @@ class _DmChatPageState extends State<DmChatPage> {
                     ),
                     child: isImage
                         ? CachedNetworkImage(
+                            key: ValueKey(mediaUrl),
                             imageUrl: mediaUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
@@ -742,7 +777,7 @@ class _DmChatPageState extends State<DmChatPage> {
                                     color: colors.textSecondary, size: 24),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Legacy unencrypted media',
+                                  l10n.legacyUnencryptedMedia,
                                   style: TextStyle(
                                     color: colors.textSecondary,
                                     fontSize: 12,
@@ -768,7 +803,7 @@ class _DmChatPageState extends State<DmChatPage> {
                       size: 10, color: colors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
-                    'Not encrypted · ${_formatTime(createdAt)}',
+                    '${l10n.notEncrypted} · ${_formatTime(createdAt)}',
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 11,
@@ -794,6 +829,7 @@ class _DmChatPageState extends State<DmChatPage> {
     required bool isImage,
     required bool isVideo,
     required dynamic colors,
+    required AppLocalizations l10n,
   }) async {
     try {
       final httpClient = HttpClient();
@@ -827,7 +863,7 @@ class _DmChatPageState extends State<DmChatPage> {
               Icon(CarbonIcons.locked, color: colors.textSecondary, size: 24),
               const SizedBox(height: 8),
               Text(
-                'Decryption Error',
+                l10n.decryptionError,
                 style: TextStyle(
                   color: colors.textSecondary,
                   fontSize: 14,
@@ -836,7 +872,7 @@ class _DmChatPageState extends State<DmChatPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                decryptResult.error ?? 'Unknown error',
+                decryptResult.error ?? l10n.unknownError,
                 style: TextStyle(
                   color: colors.textSecondary,
                   fontSize: 11,
@@ -863,6 +899,7 @@ class _DmChatPageState extends State<DmChatPage> {
           },
           child: Image.file(
             File(decryptedFilePath),
+            key: ValueKey(decryptedFilePath),
             fit: BoxFit.cover,
             width: double.infinity,
             errorBuilder: (_, __, ___) => Container(
@@ -883,7 +920,7 @@ class _DmChatPageState extends State<DmChatPage> {
                   color: colors.textSecondary, size: 48),
               const SizedBox(height: 8),
               Text(
-                'Video (tap to play)',
+                l10n.videoTapToPlay,
                 style: TextStyle(
                   color: colors.textSecondary,
                   fontSize: 13,
@@ -901,7 +938,7 @@ class _DmChatPageState extends State<DmChatPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'File: $fileExtension',
+                  l10n.fileType(fileExtension),
                   style: TextStyle(
                     color: colors.textSecondary,
                     fontSize: 13,
@@ -922,7 +959,7 @@ class _DmChatPageState extends State<DmChatPage> {
             Icon(CarbonIcons.locked, color: colors.textSecondary, size: 24),
             const SizedBox(height: 8),
             Text(
-              'Decryption failed',
+              l10n.decryptionFailed,
               style: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 12,
@@ -938,6 +975,7 @@ class _DmChatPageState extends State<DmChatPage> {
     BuildContext context,
     String recipientPubkeyHex,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     if (!_textControllers.containsKey(recipientPubkeyHex)) {
       _textControllers[recipientPubkeyHex] = TextEditingController();
     }
@@ -993,7 +1031,7 @@ class _DmChatPageState extends State<DmChatPage> {
               Expanded(
                 child: CustomInputField(
                   controller: textController,
-                  hintText: 'Type a message...',
+                  hintText: l10n.typeAMessage,
                   maxLines: null,
                   height: null,
                   textCapitalization: TextCapitalization.sentences,

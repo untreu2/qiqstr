@@ -17,6 +17,7 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/note/quote_widget.dart';
 import '../../widgets/media/video_preview.dart';
+import '../../../l10n/app_localizations.dart';
 
 class ShareNotePage extends StatefulWidget {
   final String? initialText;
@@ -84,11 +85,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     'm4v',
   ];
 
-  static const String _uploadingText = 'Uploading...';
-  static const String _addMediaText = 'Add media';
-  static const String _postButtonText = 'Post!';
   static const String _retryText = 'Retry';
-  static const String _hintText = "What's on your mind?";
 
   late TextEditingController _noteController;
   final FocusNode _focusNode = FocusNode();
@@ -585,11 +582,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildCancelButton() {
+    final l10n = AppLocalizations.of(context)!;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.of(context).pop(),
       child: Semantics(
-        label: 'Cancel',
+        label: l10n.cancel,
         button: true,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -599,7 +597,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
-            'Cancel',
+            l10n.cancel,
             style: TextStyle(
               color: context.colors.error,
               fontSize: _smallFontSize,
@@ -668,6 +666,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildMediaButton() {
+    final l10n = AppLocalizations.of(context)!;
     return BlocSelector<NoteBloc, NoteState, bool>(
       selector: (state) =>
           state is NoteComposeState ? state.isUploadingMedia : false,
@@ -681,8 +680,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
               borderRadius: BorderRadius.circular(16),
               child: Semantics(
                 label: isUploading
-                    ? 'Uploading media files'
-                    : 'Add media files to your post',
+                    ? l10n.uploadingMediaFiles
+                    : l10n.addMediaFilesToPost,
                 button: true,
                 enabled: !isUploading,
                 child: Container(
@@ -711,7 +710,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                             size: 16, color: context.colors.textPrimary),
                       const SizedBox(width: 6),
                       Text(
-                        isUploading ? _uploadingText : _addMediaText,
+                        isUploading ? l10n.uploadingDotDotDot : l10n.addMediaText,
                         style: TextStyle(
                           color: context.colors.textPrimary,
                           fontSize: _smallFontSize,
@@ -730,6 +729,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildGifButton() {
+    final l10n = AppLocalizations.of(context)!;
     return BlocSelector<NoteBloc, NoteState, bool>(
       selector: (state) =>
           state is NoteComposeState ? state.isUploadingMedia : false,
@@ -742,7 +742,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
               onTap: _selectGif,
               borderRadius: BorderRadius.circular(16),
               child: Semantics(
-                label: 'Add GIF from Giphy',
+                label: l10n.addGifFromGiphy,
                 button: true,
                 enabled: !isUploading,
                 child: Container(
@@ -771,6 +771,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildPostButton() {
+    final l10n = AppLocalizations.of(context)!;
     return BlocSelector<NoteBloc, NoteState, bool>(
       selector: (state) => state is NoteLoading,
       builder: (context, isLoading) {
@@ -783,8 +784,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
               borderRadius: BorderRadius.circular(16),
               child: Semantics(
                 label: isLoading
-                    ? 'Posting your note, please wait'
-                    : 'Post your note',
+                    ? l10n.postingYourNotePleaseWait
+                    : l10n.postYourNote,
                 button: true,
                 enabled: !isLoading,
                 child: Container(
@@ -797,7 +798,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                   ),
                   child: isLoading
                       ? _buildPostingIndicator()
-                      : _buildPostButtonText(),
+                      : _buildPostButtonText(l10n),
                 ),
               ),
             ),
@@ -818,9 +819,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
     );
   }
 
-  Widget _buildPostButtonText() {
+  Widget _buildPostButtonText(AppLocalizations l10n) {
     return Text(
-      _postButtonText,
+      l10n.postExclamation,
       style: TextStyle(
         color: context.colors.background,
         fontSize: _smallFontSize,
@@ -901,13 +902,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildTextInputStack() {
+    final l10n = AppLocalizations.of(context)!;
     final textStyle = TextStyle(fontSize: _fontSize, height: _lineHeight);
     final strutStyle = StrutStyle(fontSize: _fontSize, height: _lineHeight);
 
     return Padding(
       padding: const EdgeInsets.only(top: 5),
       child: Semantics(
-        label: 'Compose your note',
+        label: l10n.composeYourNote,
         textField: true,
         multiline: true,
         child: TextField(
@@ -920,7 +922,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           textCapitalization: TextCapitalization.sentences,
           strutStyle: strutStyle,
           decoration: InputDecoration(
-            hintText: _noteController.text.isEmpty ? _hintText : "",
+            hintText: _noteController.text.isEmpty ? l10n.hintText : "",
             hintStyle: textStyle.copyWith(color: context.colors.textSecondary),
             border: InputBorder.none,
             contentPadding: EdgeInsets.zero,
@@ -997,8 +999,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildRemoveMediaButton(String url) {
+    final l10n = AppLocalizations.of(context)!;
     return Semantics(
-      label: 'Remove this media file',
+      label: l10n.removeThisMediaFile,
       button: true,
       child: GestureDetector(
         onTap: () => _removeMedia(url),
@@ -1090,12 +1093,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildUserSuggestionItem(Map<String, dynamic> user) {
+    final l10n = AppLocalizations.of(context)!;
     final userName = user['name'] as String? ?? '';
     final userAbout = user['about'] as String? ?? '';
     final userProfileImage = user['profileImage'] as String? ?? '';
 
     return Semantics(
-      label: 'Mention $userName, $userAbout',
+      label: '${l10n.mention} $userName, $userAbout',
       button: true,
       child: GestureDetector(
         onTap: () => _onUserSelected(user),

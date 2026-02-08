@@ -4,7 +4,7 @@ import '../../../data/services/coinos_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
-import '../qr_scanner_widget.dart';
+import '../../../l10n/app_localizations.dart';
 
 class SendDialog extends StatefulWidget {
   final VoidCallback onPaymentSuccess;
@@ -40,18 +40,7 @@ class _SendDialogState extends State<SendDialog> {
   }
 
   Future<void> _scanQrCode() async {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => QrScannerWidget(
-          onScanComplete: (scannedText) {
-            setState(() {
-              _invoiceController.text = scannedText;
-            });
-          },
-        ),
-      ),
-    );
+    await _pasteFromClipboard();
   }
 
   Future<void> _payInvoice() async {
@@ -190,11 +179,16 @@ class _SendDialogState extends State<SendDialog> {
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            child: SecondaryButton(
-              label: 'Pay Invoice',
-              onPressed: _isLoading ? null : _payInvoice,
-              isLoading: _isLoading,
-              size: ButtonSize.large,
+            child: Builder(
+              builder: (context) {
+                final l10n = AppLocalizations.of(context)!;
+                return SecondaryButton(
+                  label: l10n.payInvoice,
+                  onPressed: _isLoading ? null : _payInvoice,
+                  isLoading: _isLoading,
+                  size: ButtonSize.large,
+                );
+              },
             ),
           ),
         ],

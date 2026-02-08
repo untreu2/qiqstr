@@ -24,31 +24,69 @@ class RustRelayService {
 
   Future<String> _getDbPath() async {
     if (_dbPath != null) return _dbPath!;
-    final dir = await getApplicationDocumentsDirectory();
-    _dbPath = '${dir.path}/nostr-lmdb';
-    return _dbPath!;
+    
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      _dbPath = '${dir.path}/nostr-lmdb';
+      if (kDebugMode) {
+        print('[RustRelayService] DB path: $_dbPath');
+      }
+      return _dbPath!;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[RustRelayService] Error getting DB path: $e');
+      }
+      rethrow;
+    }
   }
 
   Future<void> init({
     List<String>? relayUrls,
     String? privateKeyHex,
   }) async {
-    final urls = relayUrls ?? await getRelaySetMainSockets();
-    _currentRelayUrls = List.from(urls);
-    final dbPath = await _getDbPath();
+    try {
+      if (kDebugMode) {
+        print('[RustRelayService] Starting initialization...');
+      }
+      
+      final urls = relayUrls ?? await getRelaySetMainSockets();
+      _currentRelayUrls = List.from(urls);
+      
+      if (kDebugMode) {
+        print('[RustRelayService] Relay URLs: $urls');
+      }
+      
+      final dbPath = await _getDbPath();
+      
+      if (kDebugMode) {
+        print('[RustRelayService] Calling Rust initClient with dbPath: $dbPath');
+      }
 
-    await rust_relay.initClient(
-      relayUrls: urls,
-      privateKeyHex: privateKeyHex,
-      dbPath: dbPath,
-    );
-    _initialized = true;
+      await rust_relay.initClient(
+        relayUrls: urls,
+        privateKeyHex: privateKeyHex,
+        dbPath: dbPath,
+      );
+      
+      _initialized = true;
 
-    if (kDebugMode) {
-      print('[RustRelayService] Initialized with ${urls.length} relays, db: $dbPath');
+      if (kDebugMode) {
+        print('[RustRelayService] Initialized successfully with ${urls.length} relays');
+      }
+
+      unawaited(rust_relay.connectRelays().catchError((e) {
+        if (kDebugMode) {
+          print('[RustRelayService] connectRelays error: $e');
+        }
+      }));
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('[RustRelayService] INIT ERROR: $e');
+        print('[RustRelayService] Stack trace: $stackTrace');
+      }
+      _initialized = false;
+      rethrow;
     }
-
-    unawaited(rust_relay.connectRelays().catchError((_) {}));
   }
 
   Future<void> reinit({

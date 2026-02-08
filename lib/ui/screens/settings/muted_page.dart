@@ -10,12 +10,14 @@ import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import 'package:carbon_icons/carbon_icons.dart';
+import '../../../l10n/app_localizations.dart';
 
 class MutedPage extends StatelessWidget {
   const MutedPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return BlocProvider<MutedBloc>(
       create: (context) {
         final bloc = AppDI.get<MutedBloc>();
@@ -32,9 +34,9 @@ class MutedPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildHeader(context),
+                      _buildHeader(context, l10n),
                       const SizedBox(height: 16),
-                      _buildMutedSection(context, state),
+                      _buildMutedSection(context, state, l10n),
                       const SizedBox(height: 150),
                     ],
                   ),
@@ -48,19 +50,19 @@ class MutedPage extends StatelessWidget {
     );
   }
 
-  static Widget _buildHeader(BuildContext context) {
+  static Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
-      child: const TitleWidget(
-        title: 'Muted',
+      child: TitleWidget(
+        title: l10n.mutedTitle,
         fontSize: 32,
-        subtitle: "Manage your muted users.",
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+        subtitle: l10n.mutedSubtitle,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       ),
     );
   }
 
-  static Widget _buildMutedSection(BuildContext context, MutedState state) {
+  static Widget _buildMutedSection(BuildContext context, MutedState state, AppLocalizations l10n) {
     return switch (state) {
       MutedLoading() => Padding(
           padding: const EdgeInsets.all(32),
@@ -82,7 +84,7 @@ class MutedPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Error loading muted users',
+                  l10n.errorLoadingMutedUsers,
                   style: TextStyle(
                     color: context.colors.textPrimary,
                     fontSize: 17,
@@ -100,7 +102,7 @@ class MutedPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 PrimaryButton(
-                  label: 'Retry',
+                  label: l10n.retryText,
                   onPressed: () {
                     context.read<MutedBloc>().add(const MutedLoadRequested());
                   },
@@ -124,7 +126,7 @@ class MutedPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'No muted users',
+                      l10n.noMutedUsers,
                       style: TextStyle(
                         color: context.colors.textPrimary,
                         fontSize: 17,
@@ -133,7 +135,7 @@ class MutedPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'You haven\'t muted any users yet.',
+                      l10n.youHaventMutedAnyUsersYet,
                       style: TextStyle(
                         color: context.colors.textSecondary,
                         fontSize: 15,
@@ -149,7 +151,7 @@ class MutedPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${mutedUsers.length} muted ${mutedUsers.length == 1 ? 'user' : 'users'}',
+                    l10n.mutedUsersCount(mutedUsers.length),
                     style: TextStyle(
                       color: context.colors.textSecondary,
                       fontSize: 14,
@@ -158,7 +160,7 @@ class MutedPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   ...mutedUsers
-                      .map((user) => _buildUserTile(context, state, user)),
+                      .map((user) => _buildUserTile(context, state, user, l10n)),
                 ],
               ),
             ),
@@ -167,7 +169,7 @@ class MutedPage extends StatelessWidget {
   }
 
   static Widget _buildUserTile(
-      BuildContext context, MutedLoaded state, Map<String, dynamic> user) {
+      BuildContext context, MutedLoaded state, Map<String, dynamic> user, AppLocalizations l10n) {
     final userNpub = user['npub'] as String? ?? '';
     final isUnmuting = state.unmutingStates[userNpub] ?? false;
     final profileImage = user['profileImage'] as String? ?? '';
@@ -280,7 +282,7 @@ class MutedPage extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Unmute',
+                          l10n.unmute,
                           style: TextStyle(
                             color: context.colors.textPrimary,
                             fontSize: 13,

@@ -14,6 +14,7 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/user/profile_info_widget.dart';
+import '../../../l10n/app_localizations.dart';
 
 class ProfilePage extends StatefulWidget {
   final String pubkeyHex;
@@ -85,9 +86,10 @@ class _ProfilePageState extends State<ProfilePage> {
               );
             }
             if (state is ProfileError) {
+              final l10n = AppLocalizations.of(context)!;
               return Scaffold(
                 backgroundColor: colors.background,
-                body: Center(child: Text('Error: ${state.message}')),
+                body: Center(child: Text(l10n.errorWithMessage(state.message))),
               );
             }
             return Scaffold(
@@ -293,12 +295,17 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
 
-    return const SliverToBoxAdapter(
-      child: Center(
-        child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: Text('No notes from this user yet'),
-        ),
+    return SliverToBoxAdapter(
+      child: Builder(
+        builder: (context) {
+          final l10n = AppLocalizations.of(context)!;
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Text(l10n.noNotesFromThisUser),
+            ),
+          );
+        },
       ),
     );
   }

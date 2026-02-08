@@ -55,7 +55,9 @@ pub async fn init_client(
     }
 
     if let Some(ref path) = db_path {
-        let database = NostrLMDB::open(path)?;
+        let database = NostrLMDB::builder(path)
+            .map_size(256 * 1024 * 1024)
+            .build()?;
         builder = builder.database(database);
     }
 
