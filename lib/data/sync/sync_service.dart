@@ -152,6 +152,19 @@ class SyncService {
       final filter =
           NostrService.createFollowingFilter(authors: [userPubkey], limit: 1);
       final events = await _queryRelays(filter);
+      
+      if (events.isNotEmpty) {
+        final event = events.first;
+        final tags = event['tags'] as List<dynamic>? ?? [];
+        final followList = tags
+            .where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'p')
+            .map((tag) => (tag as List)[1] as String)
+            .toList();
+        
+        final listWithUser = followList.toSet()..add(userPubkey);
+        await _db.saveFollowingList(userPubkey, listWithUser.toList());
+      }
+      
       await _saveEvents(events);
       _markSynced(key);
     });
@@ -328,7 +341,10 @@ class SyncService {
     final event = await _publish(
         () => _publisher.createFollow(followingPubkeys: followingPubkeys));
     final pubkey = event['pubkey'] as String? ?? '';
-    await _db.saveFollowingList(pubkey, followingPubkeys);
+    
+    final listWithUser = followingPubkeys.toSet()..add(pubkey);
+    await _db.saveFollowingList(pubkey, listWithUser.toList());
+    
     return event;
   }
 
@@ -459,8 +475,16 @@ class SyncService {
   Future<Map<String, dynamic>> _publish(
       Future<Map<String, dynamic>> Function() createEvent) async {
     final event = await createEvent();
+    
+    await _db.saveEvents([event]);
+    
     final eventJson = jsonEncode(event);
-    unawaited(_relayService.sendEvent(eventJson).catchError((_) => <String, dynamic>{}));
+    try {
+      await _relayService.sendEvent(eventJson);
+    } catch (_) {
+      // Relay hatası olsa bile event database'e kaydedildi
+    }
+    
     return event;
   }
 

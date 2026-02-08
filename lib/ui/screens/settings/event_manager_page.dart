@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/theme_manager.dart';
@@ -7,6 +8,9 @@ import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../../data/services/event_counts_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
+import '../../../src/rust/api/relay.dart' as rust_relay;
+import '../../../core/di/app_di.dart';
+import '../../../data/services/auth_service.dart';
 
 class EventManagerPage extends StatefulWidget {
   const EventManagerPage({super.key});
@@ -118,6 +122,169 @@ class _EventManagerPageState extends State<EventManagerPage> {
     }
   }
 
+  void _showDeleteAccountDialog() {
+    final colors = context.colors;
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (modalContext) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40,
+          top: 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Delete Account?',
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'This will send deletion requests for all your events and request all relays to delete your data. This action cannot be undone.',
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: SecondaryButton(
+                    label: 'Cancel',
+                    onPressed: () => Navigator.pop(modalContext),
+                    size: ButtonSize.large,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SecondaryButton(
+                    label: 'Delete',
+                    onPressed: () {
+                      Navigator.pop(modalContext);
+                      _deleteAccount();
+                    },
+                    backgroundColor: colors.error.withValues(alpha: 0.1),
+                    foregroundColor: colors.error,
+                    size: ButtonSize.large,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteAccount() async {
+    setState(() {
+      _isRebroadcasting = true;
+    });
+
+    try {
+      if (_allEvents.isEmpty) {
+        if (mounted) {
+          AppSnackbar.error(context, 'No events found to delete');
+          setState(() {
+            _isRebroadcasting = false;
+          });
+        }
+        return;
+      }
+
+      final eventIds = _allEvents
+          .map((e) => e['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
+
+      if (eventIds.isEmpty) {
+        if (mounted) {
+          AppSnackbar.error(context, 'No valid event IDs found');
+          setState(() {
+            _isRebroadcasting = false;
+          });
+        }
+        return;
+      }
+
+      final deleteResultJson = await rust_relay.deleteEvents(
+        eventIds: eventIds,
+        reason: 'User requested account deletion',
+      );
+
+      if (!mounted) return;
+
+      final deleteResult = jsonDecode(deleteResultJson) as Map<String, dynamic>;
+      final deleteSuccess = deleteResult['totalSuccess'] as int? ?? 0;
+
+      if (deleteSuccess > 0) {
+        AppSnackbar.success(
+          context,
+          'Deletion request sent for ${eventIds.length} events to $deleteSuccess relay${deleteSuccess != 1 ? 's' : ''}',
+        );
+      }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final vanishResultJson = await rust_relay.requestToVanish(
+        relayUrls: ['ALL_RELAYS'],
+        reason: 'User requested account deletion',
+      );
+
+      if (!mounted) return;
+
+      final vanishResult = jsonDecode(vanishResultJson) as Map<String, dynamic>;
+      final vanishSuccess = vanishResult['totalSuccess'] as int? ?? 0;
+
+      if (vanishSuccess > 0) {
+        AppSnackbar.success(
+          context,
+          'Account deletion request sent to $vanishSuccess relay${vanishSuccess != 1 ? 's' : ''}',
+        );
+
+        await Future.delayed(const Duration(seconds: 2));
+        
+        if (mounted) {
+          final authService = AppDI.get<AuthService>();
+          await authService.logout();
+          if (mounted) {
+            context.go('/login');
+          }
+        }
+      } else {
+        final vanishFailed = vanishResult['totalFailed'] as int? ?? 0;
+        AppSnackbar.error(
+          context,
+          'Failed to send vanish request. $vanishFailed relay${vanishFailed != 1 ? 's' : ''} failed',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.error(context, 'Error deleting account: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRebroadcasting = false;
+        });
+      }
+    }
+  }
+
   String _getKindName(int kind) {
     switch (kind) {
       case 0:
@@ -182,6 +349,22 @@ class _EventManagerPageState extends State<EventManagerPage> {
                         : _rebroadcastAllEvents,
                     isLoading: _isRebroadcasting,
                     size: ButtonSize.large,
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: SecondaryButton(
+                    label: 'Delete Account',
+                    icon: Icons.delete_forever,
+                    onPressed: (_isLoading || _isRebroadcasting)
+                        ? null
+                        : _showDeleteAccountDialog,
+                    size: ButtonSize.large,
+                    backgroundColor: context.colors.error.withValues(alpha: 0.1),
+                    foregroundColor: context.colors.error,
                   ),
                 ),
               ),

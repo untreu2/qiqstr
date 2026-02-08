@@ -178,15 +178,22 @@ class _FollowingPageState extends State<FollowingPage> {
 
   static Widget _buildUserTile(
       BuildContext context, FollowingLoaded state, dynamic user, int index) {
-    final loadedUser = state.loadedUsers[user.npub] ?? user;
+    final userNpub = user['npub'] as String? ?? '';
+    final loadedUser = state.loadedUsers[userNpub] ?? user;
 
-    final displayName = loadedUser.name.isNotEmpty
-        ? (loadedUser.name.length > 25
-            ? '${loadedUser.name.substring(0, 25)}...'
-            : loadedUser.name)
-        : (user.npub.startsWith('npub1')
-            ? '${user.npub.substring(0, 16)}...'
+    final userName = loadedUser['name'] as String? ?? '';
+    final displayName = userName.isNotEmpty
+        ? (userName.length > 25
+            ? '${userName.substring(0, 25)}...'
+            : userName)
+        : (userNpub.startsWith('npub1')
+            ? '${userNpub.substring(0, 16)}...'
             : 'Unknown User');
+
+    final profileImage = loadedUser['profileImage'] as String? ?? '';
+    final nip05 = loadedUser['nip05'] as String? ?? '';
+    final nip05Verified = loadedUser['nip05Verified'] as bool? ?? false;
+    final pubkeyHex = loadedUser['pubkeyHex'] as String? ?? '';
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -196,20 +203,20 @@ class _FollowingPageState extends State<FollowingPage> {
             final currentLocation = GoRouterState.of(context).matchedLocation;
             if (currentLocation.startsWith('/home/feed')) {
               context.push(
-                  '/home/feed/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+                  '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
             } else if (currentLocation.startsWith('/home/notifications')) {
               context.push(
-                  '/home/notifications/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+                  '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
             } else {
               context.push(
-                  '/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+                  '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
             }
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
-                _buildAvatar(context, loadedUser.profileImage),
+                _buildAvatar(context, profileImage),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Row(
@@ -229,8 +236,7 @@ class _FollowingPageState extends State<FollowingPage> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (loadedUser.nip05.isNotEmpty &&
-                                loadedUser.nip05Verified) ...[
+                            if (nip05.isNotEmpty && nip05Verified) ...[
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.verified,

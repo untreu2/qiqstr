@@ -76,5 +76,15 @@ Future<String> broadcastEvents(
     RustLib.instance.api.crateApiRelayBroadcastEvents(
         eventsJson: eventsJson, relayUrls: relayUrls);
 
+Future<String> requestToVanish(
+        {required List<String> relayUrls, required String reason}) =>
+    RustLib.instance.api
+        .crateApiRelayRequestToVanish(relayUrls: relayUrls, reason: reason);
+
+Future<String> deleteEvents(
+        {required List<String> eventIds, required String reason}) =>
+    RustLib.instance.api
+        .crateApiRelayDeleteEvents(eventIds: eventIds, reason: reason);
+
 Stream<String> subscribeToEvents({required String filterJson}) =>
     RustLib.instance.api.crateApiRelaySubscribeToEvents(filterJson: filterJson);

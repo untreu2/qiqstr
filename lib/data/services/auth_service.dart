@@ -476,6 +476,9 @@ class AuthService {
         _secureStorage.write(key: 'mnemonic', value: mnemonic.trim()),
       ]);
 
+      _cachedNpub = npub;
+      _cachedPubkeyHex = npubToHex(npub);
+
       return Result.success(npub);
     } catch (e) {
       return Result.error('Login with mnemonic failed: ${e.toString()}');

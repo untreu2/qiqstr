@@ -27,73 +27,80 @@ class SuggestedFollowsPage extends StatelessWidget {
         bloc.add(const SuggestedFollowsLoadRequested());
         return bloc;
       },
-      child: BlocBuilder<SuggestedFollowsBloc, SuggestedFollowsState>(
-        builder: (context, state) {
-          return Scaffold(
-            backgroundColor: context.colors.background,
-            body: switch (state) {
-              SuggestedFollowsLoading() => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(color: context.colors.primary),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Loading suggested users...',
-                        style: TextStyle(
-                          color: context.colors.textSecondary,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              SuggestedFollowsError(:final message) => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline,
-                          size: 64, color: context.colors.error),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Failed to load suggested users',
-                        style: TextStyle(
-                            color: context.colors.error, fontSize: 18),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        message,
-                        style: TextStyle(color: context.colors.textSecondary),
-                      ),
-                      const SizedBox(height: 16),
-                      PrimaryButton(
-                        label: 'Retry',
-                        onPressed: () {
-                          context
-                              .read<SuggestedFollowsBloc>()
-                              .add(const SuggestedFollowsLoadRequested());
-                        },
-                        size: ButtonSize.large,
-                      ),
-                    ],
-                  ),
-                ),
-              SuggestedFollowsLoaded(:final suggestedUsers) =>
-                suggestedUsers.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No suggested users available at the moment.',
+      child: BlocListener<SuggestedFollowsBloc, SuggestedFollowsState>(
+        listener: (context, state) {
+          if (state is SuggestedFollowsLoaded && state.shouldNavigate) {
+            _navigateToHome(context);
+          }
+        },
+        child: BlocBuilder<SuggestedFollowsBloc, SuggestedFollowsState>(
+          builder: (context, state) {
+            return Scaffold(
+              backgroundColor: context.colors.background,
+              body: switch (state) {
+                SuggestedFollowsLoading() => Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: context.colors.primary),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Loading suggested users...',
                           style: TextStyle(
                             color: context.colors.textSecondary,
                             fontSize: 16,
                           ),
                         ),
-                      )
-                    : _buildContent(context, state),
-              _ => const SizedBox(),
-            },
-          );
-        },
+                      ],
+                    ),
+                  ),
+                SuggestedFollowsError(:final message) => Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline,
+                            size: 64, color: context.colors.error),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Failed to load suggested users',
+                          style: TextStyle(
+                              color: context.colors.error, fontSize: 18),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          message,
+                          style: TextStyle(color: context.colors.textSecondary),
+                        ),
+                        const SizedBox(height: 16),
+                        PrimaryButton(
+                          label: 'Retry',
+                          onPressed: () {
+                            context
+                                .read<SuggestedFollowsBloc>()
+                                .add(const SuggestedFollowsLoadRequested());
+                          },
+                          size: ButtonSize.large,
+                        ),
+                      ],
+                    ),
+                  ),
+                SuggestedFollowsLoaded(:final suggestedUsers) =>
+                  suggestedUsers.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No suggested users available at the moment.',
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
+                              fontSize: 16,
+                            ),
+                          ),
+                        )
+                      : _buildContent(context, state),
+                _ => const SizedBox(),
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -287,11 +294,10 @@ class SuggestedFollowsPage extends StatelessWidget {
     return GestureDetector(
       onTap: isDisabled
           ? null
-          : () async {
+          : () {
               context
                   .read<SuggestedFollowsBloc>()
                   .add(const SuggestedFollowsFollowSelectedRequested());
-              _navigateToHome(context);
             },
       child: Container(
         width: double.infinity,

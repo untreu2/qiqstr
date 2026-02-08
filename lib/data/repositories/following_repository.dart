@@ -28,18 +28,30 @@ class FollowingRepositoryImpl extends BaseRepository
 
   @override
   Future<List<String>?> getFollowingList(String userPubkey) async {
-    return await db.getFollowingList(userPubkey);
+    final list = await db.getFollowingList(userPubkey);
+    if (list == null) return null;
+    
+    if (!list.contains(userPubkey)) {
+      return [...list, userPubkey];
+    }
+    return list;
   }
 
   @override
   Stream<List<String>> watchFollowingList(String userPubkey) {
-    return db.watchFollowingList(userPubkey);
+    return db.watchFollowingList(userPubkey).map((list) {
+      if (!list.contains(userPubkey)) {
+        return [...list, userPubkey];
+      }
+      return list;
+    });
   }
 
   @override
   Future<void> saveFollowingList(
       String userPubkey, List<String> followingList) async {
-    await db.saveFollowingList(userPubkey, followingList);
+    final listWithUser = followingList.toSet()..add(userPubkey);
+    await db.saveFollowingList(userPubkey, listWithUser.toList());
   }
 
   @override
@@ -74,7 +86,7 @@ class FollowingRepositoryImpl extends BaseRepository
 
   @override
   Future<bool> isFollowing(String userPubkey, String targetPubkey) async {
-    final followingList = await db.getFollowingList(userPubkey);
+    final followingList = await getFollowingList(userPubkey);
     if (followingList == null) return false;
     return followingList.contains(targetPubkey);
   }
@@ -91,16 +103,20 @@ class FollowingRepositoryImpl extends BaseRepository
     final currentList = await db.getFollowingList(userPubkey) ?? [];
     if (!currentList.contains(targetPubkey)) {
       final updatedList = [...currentList, targetPubkey];
-      await db.saveFollowingList(userPubkey, updatedList);
+      await saveFollowingList(userPubkey, updatedList);
     }
   }
 
   @override
   Future<void> unfollow(String userPubkey, String targetPubkey) async {
+    if (userPubkey == targetPubkey) {
+      return;
+    }
+    
     final currentList = await db.getFollowingList(userPubkey) ?? [];
     if (currentList.contains(targetPubkey)) {
       final updatedList = currentList.where((p) => p != targetPubkey).toList();
-      await db.saveFollowingList(userPubkey, updatedList);
+      await saveFollowingList(userPubkey, updatedList);
     }
   }
 

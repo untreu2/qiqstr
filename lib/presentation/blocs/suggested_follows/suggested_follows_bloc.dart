@@ -140,12 +140,18 @@ class SuggestedFollowsBloc
           .map((npub) => _authService.npubToHex(npub) ?? npub)
           .toList();
 
-      final newFollows = <String>{...currentFollows, ...selectedHexes}.toList();
+      final newFollows = <String>{
+        currentUserHex,
+        ...currentFollows,
+        ...selectedHexes
+      }.toList();
 
       await _syncService.publishFollow(followingPubkeys: newFollows);
-    } catch (_) {}
-
-    emit(currentState.copyWith(isProcessing: false));
+      
+      emit(currentState.copyWith(isProcessing: false, shouldNavigate: true));
+    } catch (_) {
+      emit(currentState.copyWith(isProcessing: false));
+    }
   }
 
   void _onSuggestedFollowsSkipRequested(

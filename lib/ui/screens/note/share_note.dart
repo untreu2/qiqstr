@@ -299,10 +299,19 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     try {
       final state = _noteBloc.state;
-      if (state is! NoteComposeState || state.isUploadingMedia) return;
+      
+      if (state is! NoteComposeState) {
+        return;
+      }
+      
+      if (state.isUploadingMedia) {
+        return;
+      }
 
       final noteContent = _prepareNoteContent(state);
-      if (noteContent == null) return;
+      if (noteContent == null) {
+        return;
+      }
 
       _sendNote(noteContent);
     } catch (error) {
@@ -423,7 +432,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return matches
         .map((match) =>
             match.group(1)!.toLowerCase()) // NIP-24 requires lowercase
-        .toSet() // Remove duplicates
+        .toSet()
         .toList();
   }
 
@@ -626,6 +635,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
                 Navigator.of(context).pop(true);
               }
             });
+          } else if (state is NoteError) {
+            AppSnackbar.error(context, state.message);
           }
         },
         child: BlocBuilder<NoteBloc, NoteState>(

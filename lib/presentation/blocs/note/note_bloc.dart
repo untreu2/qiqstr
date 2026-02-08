@@ -37,7 +37,12 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
 
-    if (!currentState.canPost) return;
+    if (!currentState.canPost) {
+      emit(const NoteError('Cannot post. Please add content or media.'));
+      await Future.delayed(const Duration(milliseconds: 100));
+      emit(currentState);
+      return;
+    }
 
     emit(const NoteLoading());
 
@@ -45,6 +50,8 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
       final currentUserHex = _authService.currentUserPubkeyHex;
       if (currentUserHex == null) {
         emit(const NoteError('Not authenticated. Please log in first.'));
+        await Future.delayed(const Duration(milliseconds: 100));
+        emit(currentState);
         return;
       }
 
@@ -92,6 +99,8 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
       add(const NoteContentCleared());
     } catch (e) {
       emit(NoteError(e.toString()));
+      await Future.delayed(const Duration(milliseconds: 100));
+      emit(currentState);
     }
   }
 
@@ -104,8 +113,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         : const NoteComposeState(content: '');
     final trimmedContent = event.content.trim();
     final hasMedia = currentState.mediaUrls.isNotEmpty;
-    final canPost =
-        (trimmedContent.isNotEmpty || hasMedia) && trimmedContent.length <= 280;
+    final canPost = trimmedContent.isNotEmpty || hasMedia;
 
     if (event.content.contains('@')) {
       add(NoteUserSearchRequested(event.content));
@@ -184,9 +192,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     final updatedMediaUrls =
         currentState.mediaUrls.where((url) => url != event.url).toList();
     final trimmedContent = currentState.content.trim();
-    final canPost =
-        (trimmedContent.isNotEmpty || updatedMediaUrls.isNotEmpty) &&
-            trimmedContent.length <= 280;
+    final canPost = trimmedContent.isNotEmpty || updatedMediaUrls.isNotEmpty;
     emit(currentState.copyWith(mediaUrls: updatedMediaUrls, canPost: canPost));
   }
 
@@ -215,8 +221,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         content: newContent,
         isSearchingUsers: false,
         userSuggestions: const [],
-        canPost:
-            newContent.trim().isNotEmpty && newContent.trim().length <= 280,
+        canPost: newContent.trim().isNotEmpty,
       ));
     } catch (e) {
       final newContent = '${currentState.content}@${event.params.name} ';
@@ -224,8 +229,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         content: newContent,
         isSearchingUsers: false,
         userSuggestions: const [],
-        canPost:
-            newContent.trim().isNotEmpty && newContent.trim().length <= 280,
+        canPost: newContent.trim().isNotEmpty,
       ));
     }
   }

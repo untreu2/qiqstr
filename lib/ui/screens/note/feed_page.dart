@@ -1064,7 +1064,7 @@ class FeedPageState extends State<FeedPage> {
     final colors = context.colors;
     final items = <_SearchResultItem>[];
 
-    // Add users section
+    
     if (users.isNotEmpty) {
       items.add(_SearchResultItem(
           type: _SearchResultType.header, data: {'title': 'Users'}));
@@ -1073,7 +1073,7 @@ class FeedPageState extends State<FeedPage> {
       }
     }
 
-    // Add notes section
+    
     if (notes.isNotEmpty) {
       items.add(_SearchResultItem(
           type: _SearchResultType.header, data: {'title': 'Notes'}));

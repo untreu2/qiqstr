@@ -124,9 +124,15 @@ class _HomeNavigatorState extends State<HomeNavigator>
                   if (item['type'] == 'add') {
                     return Expanded(
                       child: GestureDetector(
-                        onTap: () {
+                        onTap: () async {
                           HapticFeedback.lightImpact();
-                          ShareNotePage.show(context);
+                          final result = await ShareNotePage.show(context);
+                          if (result == true && mounted) {
+                            final currentIndex = widget.navigationShell.currentIndex;
+                            if (currentIndex != 0) {
+                              widget.navigationShell.goBranch(0);
+                            }
+                          }
                         },
                         behavior: HitTestBehavior.opaque,
                         child: Center(

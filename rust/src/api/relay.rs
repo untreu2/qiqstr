@@ -536,6 +536,86 @@ pub async fn broadcast_events(
     Ok(result.to_string())
 }
 
+pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Result<String> {
+    let client = get_client().await?;
+    
+    let tags: Vec<Tag> = if relay_urls.len() == 1 && relay_urls[0] == "ALL_RELAYS" {
+        vec![Tag::custom(TagKind::Custom("relay".into()), vec!["ALL_RELAYS"])]
+    } else {
+        relay_urls.iter()
+            .map(|url| Tag::custom(TagKind::Custom("relay".into()), vec![url.as_str()]))
+            .collect()
+    };
+
+    let builder = EventBuilder::new(Kind::from(62), reason).tags(tags);
+    let event = client.sign_event_builder(builder).await?;
+
+    let ur = user_relays_state().read().await;
+    let urls: Vec<RelayUrl> = if relay_urls.len() == 1 && relay_urls[0] == "ALL_RELAYS" {
+        ur.iter()
+            .filter_map(|u| RelayUrl::parse(u).ok())
+            .collect()
+    } else {
+        relay_urls.iter()
+            .filter_map(|u| RelayUrl::parse(u).ok())
+            .collect()
+    };
+    drop(ur);
+
+    let output = client.send_event_to(urls, &event).await?;
+
+    let success_count = output.success.len();
+    let failed_count = output.failed.len();
+
+    let result = serde_json::json!({
+        "id": output.id().to_hex(),
+        "totalSuccess": success_count,
+        "totalFailed": failed_count,
+    });
+
+    Ok(result.to_string())
+}
+
+pub async fn delete_events(event_ids: Vec<String>, reason: String) -> Result<String> {
+    let client = get_client().await?;
+    
+    let event_tags: Vec<Tag> = event_ids
+        .iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .map(|event_id| Tag::event(event_id))
+        .collect();
+
+    if event_tags.is_empty() {
+        return Ok(serde_json::json!({
+            "totalSuccess": 0,
+            "totalFailed": 0,
+        }).to_string());
+    }
+
+    let builder = EventBuilder::new(Kind::EventDeletion, reason).tags(event_tags);
+    let event = client.sign_event_builder(builder).await?;
+
+    let ur = user_relays_state().read().await;
+    let urls: Vec<RelayUrl> = ur
+        .iter()
+        .filter_map(|u| RelayUrl::parse(u).ok())
+        .collect();
+    drop(ur);
+
+    let output = client.send_event_to(urls, &event).await?;
+
+    let success_count = output.success.len();
+    let failed_count = output.failed.len();
+
+    let result = serde_json::json!({
+        "id": output.id().to_hex(),
+        "totalSuccess": success_count,
+        "totalFailed": failed_count,
+    });
+
+    Ok(result.to_string())
+}
+
 #[frb]
 pub async fn subscribe_to_events(
     filter_json: String,
