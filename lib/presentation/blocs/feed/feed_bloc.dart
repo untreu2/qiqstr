@@ -125,6 +125,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         if (isClosed) return;
         _watchFeed(userHex);
         await _syncService.syncFeed(userHex);
+        if (isClosed) return;
+        await _syncService.startRealtimeSubscriptions(userHex);
       } catch (_) {}
       if (!isClosed && state is FeedLoaded) {
         add(feed_event.FeedSyncCompleted());

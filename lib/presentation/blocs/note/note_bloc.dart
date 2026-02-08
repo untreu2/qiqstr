@@ -58,10 +58,10 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
           parentAuthor: currentState.parentAuthor!,
         );
         emit(NoteComposedSuccess({
-          'id': replyEvent.eventId,
+          'id': replyEvent['id'] ?? '',
           'content': event.content,
-          'pubkey': replyEvent.pubkey,
-          'created_at': replyEvent.createdAt,
+          'pubkey': replyEvent['pubkey'] ?? '',
+          'created_at': replyEvent['created_at'] ?? 0,
         }));
       } else if (currentState.isQuote && currentState.quoteEventId != null) {
         final quotedContent =
@@ -71,10 +71,10 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
           quotedNoteId: currentState.quoteEventId!,
         );
         emit(NoteComposedSuccess({
-          'id': quoteEvent.eventId,
+          'id': quoteEvent['id'] ?? '',
           'content': quotedContent,
-          'pubkey': quoteEvent.pubkey,
-          'created_at': quoteEvent.createdAt,
+          'pubkey': quoteEvent['pubkey'] ?? '',
+          'created_at': quoteEvent['created_at'] ?? 0,
         }));
       } else {
         final noteEvent = await _syncService.publishNote(
@@ -82,10 +82,10 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
           tags: event.tags,
         );
         emit(NoteComposedSuccess({
-          'id': noteEvent.eventId,
+          'id': noteEvent['id'] ?? '',
           'content': event.content,
-          'pubkey': noteEvent.pubkey,
-          'created_at': noteEvent.createdAt,
+          'pubkey': noteEvent['pubkey'] ?? '',
+          'created_at': noteEvent['created_at'] ?? 0,
         }));
       }
 

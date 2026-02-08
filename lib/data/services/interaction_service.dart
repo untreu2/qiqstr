@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'package:isar/isar.dart';
-import '../../models/event_model.dart';
-import 'isar_database_service.dart';
+import 'rust_database_service.dart';
 
 class InteractionCounts {
   final int reactions;
@@ -48,9 +46,13 @@ class InteractionService {
   static InteractionService get instance =>
       _instance ??= InteractionService._internal();
 
-  InteractionService._internal();
+  InteractionService._internal() {
+    _dbChangeSubscription = _db.onChange.listen((_) {
+      _refreshActiveStreams();
+    });
+  }
 
-  final IsarDatabaseService _db = IsarDatabaseService.instance;
+  final RustDatabaseService _db = RustDatabaseService.instance;
   final Map<String, StreamController<InteractionCounts>> _streams = {};
   final Map<String, InteractionCounts> _cache = {};
   static const int _maxCacheSize = 500;
@@ -59,61 +61,21 @@ class InteractionService {
   final Set<String> _localReposts = {};
 
   String? _currentUserHex;
-  StreamSubscription? _collectionWatcher;
-  Timer? _refreshDebounce;
-  bool _watcherInitialized = false;
+  StreamSubscription<void>? _dbChangeSubscription;
+  Timer? _refreshDebounceTimer;
+
+  final Set<String> _pendingBatch = {};
+  Timer? _batchTimer;
+  bool _batchLoading = false;
+  static const Duration _batchDelay = Duration(milliseconds: 10);
+  static const int _batchSize = 50;
 
   void setCurrentUser(String? userHex) {
     _currentUserHex = userHex;
   }
 
-  void _ensureWatcher() {
-    if (_watcherInitialized) return;
-    _watcherInitialized = true;
-
-    Future.microtask(() async {
-      try {
-        final db = await _db.isar;
-        _collectionWatcher = db.eventModels
-            .where()
-            .anyOf(
-                [7, 1, 6, 9735], (q, kind) => q.kindEqualToAnyCreatedAt(kind))
-            .watchLazy(fireImmediately: false)
-            .listen((_) {
-              _scheduleRefresh();
-            });
-      } catch (_) {}
-    });
-  }
-
-  void _scheduleRefresh() {
-    _refreshDebounce?.cancel();
-    _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
-      _refreshActiveStreams();
-    });
-  }
-
-  Future<void> _refreshActiveStreams() async {
-    final activeNoteIds = _streams.keys.toList();
-    if (activeNoteIds.isEmpty) return;
-
-    final batchSize = 20;
-    for (var i = 0; i < activeNoteIds.length; i += batchSize) {
-      final batch = activeNoteIds.skip(i).take(batchSize).toList();
-      await Future.wait(
-        batch.map((noteId) {
-          if (_streams.containsKey(noteId) && !_streams[noteId]!.isClosed) {
-            return _loadFromDb(noteId);
-          }
-          return Future.value();
-        }),
-      );
-    }
-  }
-
   Stream<InteractionCounts> streamInteractions(String noteId,
       {InteractionCounts? initialCounts}) {
-    _ensureWatcher();
 
     if (!_streams.containsKey(noteId)) {
       _streams[noteId] = StreamController<InteractionCounts>.broadcast();
@@ -121,15 +83,97 @@ class InteractionService {
         _cache[noteId] = initialCounts;
         Future.microtask(() => _emit(noteId, initialCounts));
       }
-      _loadFromDb(noteId);
+      if (initialCounts == null || _isEmptyCounts(initialCounts)) {
+        _scheduleBatchLoad(noteId);
+      }
     } else if (_cache.containsKey(noteId)) {
       Future.microtask(() => _emit(noteId, _cache[noteId]!));
     } else if (initialCounts != null) {
       _cache[noteId] = initialCounts;
       Future.microtask(() => _emit(noteId, initialCounts));
-      _loadFromDb(noteId);
+      if (_isEmptyCounts(initialCounts)) {
+        _scheduleBatchLoad(noteId);
+      }
     }
     return _streams[noteId]!.stream;
+  }
+
+  bool _isEmptyCounts(InteractionCounts counts) {
+    return counts.reactions == 0 &&
+        counts.reposts == 0 &&
+        counts.replies == 0 &&
+        counts.zapAmount == 0;
+  }
+
+  void _scheduleBatchLoad(String noteId) {
+    _pendingBatch.add(noteId);
+    _batchTimer?.cancel();
+    _batchTimer = Timer(_batchDelay, _flushBatch);
+  }
+
+  Future<void> _flushBatch() async {
+    if (_batchLoading || _pendingBatch.isEmpty) return;
+    _batchLoading = true;
+
+    final batch = _pendingBatch.toList();
+    _pendingBatch.clear();
+
+    for (var i = 0; i < batch.length; i += _batchSize) {
+      final chunk = batch.skip(i).take(_batchSize).toList();
+      await _loadBatchFromDb(chunk);
+    }
+
+    _batchLoading = false;
+
+    if (_pendingBatch.isNotEmpty) {
+      _flushBatch();
+    }
+  }
+
+  Future<void> _loadBatchFromDb(List<String> noteIds) async {
+    if (_currentUserHex == null || noteIds.isEmpty) return;
+
+    try {
+      final data =
+          await _db.getBatchInteractionData(noteIds, _currentUserHex!);
+
+      for (final noteId in noteIds) {
+        final d = data[noteId];
+        if (d == null) continue;
+
+        final hasReacted =
+            _localReactions.contains(noteId) || (d['hasReacted'] == true);
+        final hasReposted =
+            _localReposts.contains(noteId) || (d['hasReposted'] == true);
+        final hasZapped = d['hasZapped'] == true;
+
+        if (hasReacted) _localReactions.add(noteId);
+        if (hasReposted) _localReposts.add(noteId);
+
+        final counts = InteractionCounts(
+          reactions: (d['reactions'] as num?)?.toInt() ?? 0,
+          reposts: (d['reposts'] as num?)?.toInt() ?? 0,
+          replies: (d['replies'] as num?)?.toInt() ?? 0,
+          zapAmount: (d['zaps'] as num?)?.toInt() ?? 0,
+          hasReacted: hasReacted,
+          hasReposted: hasReposted,
+          hasZapped: hasZapped,
+        );
+
+        final oldCounts = _cache[noteId];
+        _cache[noteId] = counts;
+
+        if (oldCounts == null ||
+            oldCounts.reactions != counts.reactions ||
+            oldCounts.reposts != counts.reposts ||
+            oldCounts.replies != counts.replies ||
+            oldCounts.zapAmount != counts.zapAmount ||
+            oldCounts.hasReacted != counts.hasReacted ||
+            oldCounts.hasReposted != counts.hasReposted) {
+          _emit(noteId, counts);
+        }
+      }
+    } catch (_) {}
   }
 
   void prePopulateCache(String noteId, InteractionCounts counts) {
@@ -138,67 +182,15 @@ class InteractionService {
     }
   }
 
-  Future<void> _loadFromDb(String noteId) async {
-    bool hasReacted = _localReactions.contains(noteId);
-    bool hasReposted = _localReposts.contains(noteId);
-
-    final futures = <Future>[];
-
-    futures.add(_db.getCachedInteractionCounts([noteId]));
-
-    if (!hasReacted && _currentUserHex != null) {
-      futures.add(_db.hasUserReacted(noteId, _currentUserHex!));
-    }
-    if (!hasReposted && _currentUserHex != null) {
-      futures.add(_db.hasUserReposted(noteId, _currentUserHex!));
-    }
-
-    final results = await Future.wait(futures);
-
-    final countsMap = results[0] as Map<String, Map<String, int>>;
-    final dbCounts = countsMap[noteId] ?? {};
-
-    int resultIndex = 1;
-    if (!hasReacted && _currentUserHex != null) {
-      hasReacted = results[resultIndex] as bool;
-      if (hasReacted) _localReactions.add(noteId);
-      resultIndex++;
-    }
-    if (!hasReposted && _currentUserHex != null) {
-      hasReposted = results[resultIndex] as bool;
-      if (hasReposted) _localReposts.add(noteId);
-    }
-
-    final counts = InteractionCounts(
-      reactions: dbCounts['reactions'] ?? 0,
-      reposts: dbCounts['reposts'] ?? 0,
-      replies: dbCounts['replies'] ?? 0,
-      zapAmount: dbCounts['zaps'] ?? 0,
-      hasReacted: hasReacted,
-      hasReposted: hasReposted,
-      hasZapped: false,
-    );
-
-    final oldCounts = _cache[noteId];
-    _cache[noteId] = counts;
-
-    if (oldCounts == null ||
-        oldCounts.reactions != counts.reactions ||
-        oldCounts.reposts != counts.reposts ||
-        oldCounts.replies != counts.replies ||
-        oldCounts.zapAmount != counts.zapAmount ||
-        oldCounts.hasReacted != counts.hasReacted ||
-        oldCounts.hasReposted != counts.hasReposted) {
-      _emit(noteId, counts);
-    }
-  }
-
   Future<void> refreshInteractions(String noteId) async {
-    await _loadFromDb(noteId);
+    if (_currentUserHex == null) return;
+    await _loadBatchFromDb([noteId]);
   }
 
   Future<void> refreshAllActive() async {
-    await _refreshActiveStreams();
+    final activeNoteIds = _streams.keys.toList();
+    if (activeNoteIds.isEmpty || _currentUserHex == null) return;
+    await _loadBatchFromDb(activeNoteIds);
   }
 
   void markReacted(String noteId) {
@@ -281,10 +273,22 @@ class InteractionService {
     _cache.clear();
   }
 
+  void _refreshActiveStreams() {
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      final activeNoteIds = _streams.keys.toList();
+      if (activeNoteIds.isEmpty || _currentUserHex == null) return;
+      _loadBatchFromDb(activeNoteIds);
+    });
+  }
+
   void dispose() {
-    _refreshDebounce?.cancel();
-    _collectionWatcher?.cancel();
-    _watcherInitialized = false;
+    _dbChangeSubscription?.cancel();
+    _dbChangeSubscription = null;
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = null;
+    _batchTimer?.cancel();
+    _batchTimer = null;
     for (final controller in _streams.values) {
       controller.close();
     }

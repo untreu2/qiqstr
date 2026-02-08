@@ -5,7 +5,8 @@ import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/interaction_service.dart';
-import '../../../data/remote/relay_query_service.dart';
+import '../../../data/services/nostr_service.dart';
+import '../../../data/services/relay_service.dart';
 import 'note_statistics_event.dart';
 import 'note_statistics_state.dart';
 
@@ -15,7 +16,6 @@ class NoteStatisticsBloc
   final ProfileRepository _profileRepository;
   final AuthService _authService;
   final InteractionService _interactionService;
-  final RelayQueryService _relayQueryService;
   final String noteId;
 
   NoteStatisticsBloc({
@@ -27,7 +27,6 @@ class NoteStatisticsBloc
         _profileRepository = profileRepository,
         _authService = authService,
         _interactionService = InteractionService.instance,
-        _relayQueryService = RelayQueryService(),
         super(const NoteStatisticsInitial()) {
     on<NoteStatisticsInitialized>(_onNoteStatisticsInitialized);
     on<NoteStatisticsRefreshed>(_onNoteStatisticsRefreshed);
@@ -118,8 +117,12 @@ class NoteStatisticsBloc
 
         if (missingPubkeys.isNotEmpty) {
           try {
+            final filter = NostrService.createProfileFilter(
+              authors: missingPubkeys,
+              limit: missingPubkeys.length,
+            );
             final fetchedProfiles =
-                await _relayQueryService.fetchProfiles(missingPubkeys);
+                await RustRelayService.instance.fetchEvents(filter);
 
             if (fetchedProfiles.isNotEmpty) {
               final profilesToSave = <String, Map<String, String>>{};

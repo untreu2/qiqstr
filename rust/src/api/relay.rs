@@ -3,8 +3,12 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+use flutter_rust_bridge::frb;
+use nostr_lmdb::NostrLMDB;
 use nostr_sdk::prelude::*;
 use tokio::sync::RwLock;
+
+use crate::frb_generated::StreamSink;
 
 const DISCOVERY_RELAYS: &[&str] = &[
     "wss://relay.damus.io",
@@ -17,9 +21,14 @@ const MAX_OUTBOX_RELAYS: usize = 30;
 const MIN_RELAY_FREQUENCY: usize = 2;
 
 static CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
+static USER_RELAYS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
 
 fn state() -> &'static RwLock<Option<Client>> {
     CLIENT.get_or_init(|| RwLock::new(None))
+}
+
+fn user_relays_state() -> &'static RwLock<Vec<String>> {
+    USER_RELAYS.get_or_init(|| RwLock::new(Vec::new()))
 }
 
 async fn get_client() -> Result<Client> {
@@ -29,9 +38,14 @@ async fn get_client() -> Result<Client> {
         .ok_or_else(|| anyhow!("Client not initialized"))
 }
 
+pub(crate) async fn get_client_pub() -> Result<Client> {
+    get_client().await
+}
+
 pub async fn init_client(
     relay_urls: Vec<String>,
     private_key_hex: Option<String>,
+    db_path: Option<String>,
 ) -> Result<()> {
     let mut builder = Client::builder();
 
@@ -40,14 +54,28 @@ pub async fn init_client(
         builder = builder.signer(keys);
     }
 
-    let client = builder.build();
-
-    for url in &relay_urls {
-        let _ = client.add_relay(url.as_str()).await;
+    if let Some(ref path) = db_path {
+        let database = NostrLMDB::open(path)?;
+        builder = builder.database(database);
     }
 
-    for url in DISCOVERY_RELAYS {
-        let _ = client.add_discovery_relay(*url).await;
+    let client = builder.build();
+
+    let relay_futures: Vec<_> = relay_urls
+        .iter()
+        .map(|url| client.add_relay(url.as_str()))
+        .collect();
+    futures::future::join_all(relay_futures).await;
+
+    let discovery_futures: Vec<_> = DISCOVERY_RELAYS
+        .iter()
+        .map(|url| client.add_discovery_relay(*url))
+        .collect();
+    futures::future::join_all(discovery_futures).await;
+
+    {
+        let mut ur = user_relays_state().write().await;
+        *ur = relay_urls;
     }
 
     let mut lock = state().write().await;
@@ -87,6 +115,10 @@ pub async fn add_relay(url: String) -> Result<bool> {
     let client = get_client().await?;
     let added = client.add_relay(&url).await.is_ok();
     if added {
+        let mut ur = user_relays_state().write().await;
+        if !ur.contains(&url) {
+            ur.push(url);
+        }
         client.connect().await;
     }
     Ok(added)
@@ -108,7 +140,10 @@ pub async fn add_relay_with_flags(url: String, read: bool, write: bool) -> Resul
                 flags.remove(RelayServiceFlags::WRITE);
             }
         }
-        client.connect().await;
+        let mut ur = user_relays_state().write().await;
+        if !ur.contains(&url) {
+            ur.push(url);
+        }
     }
     Ok(added)
 }
@@ -117,6 +152,8 @@ pub async fn remove_relay(url: String) -> Result<()> {
     let client = get_client().await?;
     let relay_url = RelayUrl::parse(&url)?;
     client.remove_relay(&relay_url).await?;
+    let mut ur = user_relays_state().write().await;
+    ur.retain(|u| u != &url);
     Ok(())
 }
 
@@ -227,38 +264,43 @@ pub async fn discover_and_connect_outbox_relays(pubkeys_hex: Vec<String>) -> Res
     let mut outbox_freq: HashMap<String, usize> = HashMap::new();
     let mut inbox_freq: HashMap<String, usize> = HashMap::new();
 
-    for chunk in public_keys.chunks(50) {
-        let filter = Filter::new()
-            .authors(chunk.to_vec())
-            .kind(Kind::RelayList)
-            .limit(chunk.len());
+    let chunk_futures: Vec<_> = public_keys
+        .chunks(50)
+        .map(|chunk| {
+            let filter = Filter::new()
+                .authors(chunk.to_vec())
+                .kind(Kind::RelayList)
+                .limit(chunk.len());
+            client.fetch_events(filter, Duration::from_secs(10))
+        })
+        .collect();
 
-        match client.fetch_events(filter, Duration::from_secs(10)).await {
-            Ok(events) => {
-                for event in events.into_iter() {
-                    for tag in event.tags.iter() {
-                        let tag_vec: Vec<&str> = tag.as_slice().iter().map(|s| s.as_str()).collect();
-                        if tag_vec.len() >= 2 && tag_vec[0] == "r" {
-                            let relay_url = tag_vec[1].to_string();
-                            let mode = tag_vec.get(2).copied().unwrap_or("");
+    let chunk_results = futures::future::join_all(chunk_futures).await;
 
-                            match mode {
-                                "write" => {
-                                    *outbox_freq.entry(relay_url).or_insert(0) += 1;
-                                }
-                                "read" => {
-                                    *inbox_freq.entry(relay_url).or_insert(0) += 1;
-                                }
-                                _ => {
-                                    *outbox_freq.entry(relay_url.clone()).or_insert(0) += 1;
-                                    *inbox_freq.entry(relay_url).or_insert(0) += 1;
-                                }
+    for result in chunk_results {
+        if let Ok(events) = result {
+            for event in events.into_iter() {
+                for tag in event.tags.iter() {
+                    let tag_vec: Vec<&str> = tag.as_slice().iter().map(|s| s.as_str()).collect();
+                    if tag_vec.len() >= 2 && tag_vec[0] == "r" {
+                        let relay_url = tag_vec[1].to_string();
+                        let mode = tag_vec.get(2).copied().unwrap_or("");
+
+                        match mode {
+                            "write" => {
+                                *outbox_freq.entry(relay_url).or_insert(0) += 1;
+                            }
+                            "read" => {
+                                *inbox_freq.entry(relay_url).or_insert(0) += 1;
+                            }
+                            _ => {
+                                *outbox_freq.entry(relay_url.clone()).or_insert(0) += 1;
+                                *inbox_freq.entry(relay_url).or_insert(0) += 1;
                             }
                         }
                     }
                 }
             }
-            Err(_) => {}
         }
     }
 
@@ -299,27 +341,37 @@ pub async fn discover_and_connect_outbox_relays(pubkeys_hex: Vec<String>) -> Res
     let discovered_count = candidates.len() as u32;
     let mut added_count: u32 = 0;
 
-    for (url, _, is_outbox, is_inbox) in &candidates {
-        if let Ok(relay_url) = RelayUrl::parse(url.as_str()) {
-            if client.add_relay(relay_url.as_str()).await.is_ok() {
-                let relays = client.relays().await;
-                if let Some(relay) = relays.get(&relay_url) {
-                    let flags = relay.flags();
+    let parsed_candidates: Vec<_> = candidates
+        .iter()
+        .filter_map(|(url, _, is_outbox, is_inbox)| {
+            RelayUrl::parse(url.as_str()).ok().map(|relay_url| (relay_url, *is_outbox, *is_inbox))
+        })
+        .collect();
 
-                    if *is_outbox && !*is_inbox {
-                        flags.remove(RelayServiceFlags::WRITE);
-                    } else if *is_inbox && !*is_outbox {
-                        flags.remove(RelayServiceFlags::READ);
-                    }
+    let add_futures: Vec<_> = parsed_candidates
+        .iter()
+        .map(|(relay_url, _, _)| client.add_relay(relay_url.as_str()))
+        .collect();
+    let add_results = futures::future::join_all(add_futures).await;
+
+    for (i, result) in add_results.into_iter().enumerate() {
+        if result.is_ok() {
+            let (ref relay_url, is_outbox, is_inbox) = parsed_candidates[i];
+            let relays = client.relays().await;
+            if let Some(relay) = relays.get(relay_url) {
+                let flags = relay.flags();
+                if is_outbox && !is_inbox {
+                    flags.remove(RelayServiceFlags::WRITE);
+                } else if is_inbox && !is_outbox {
+                    flags.remove(RelayServiceFlags::READ);
                 }
-                added_count += 1;
             }
+            added_count += 1;
         }
     }
 
     if added_count > 0 {
         client.connect().await;
-        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
     let mut connected_count: u32 = 0;
@@ -354,11 +406,37 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
     Ok(serde_json::to_string(&events_json)?)
 }
 
+pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Option<String>> {
+    let client = get_client().await?;
+    let id = EventId::from_hex(&event_id)?;
+    let filter = Filter::new().id(id).limit(1);
+    let timeout = Duration::from_secs(timeout_secs as u64);
+
+    let events: Events = client.fetch_events(filter, timeout).await?;
+    
+    if let Some(event) = events.first_owned() {
+        Ok(Some(event.as_json()))
+    } else {
+        Ok(None)
+    }
+}
+
 pub async fn send_event(event_json: String) -> Result<String> {
     let client = get_client().await?;
     let event = Event::from_json(&event_json)?;
 
-    let output = client.send_event(&event).await?;
+    let ur = user_relays_state().read().await;
+    let urls: Vec<RelayUrl> = ur
+        .iter()
+        .filter_map(|u| RelayUrl::parse(u).ok())
+        .collect();
+    drop(ur);
+
+    let output = if urls.is_empty() {
+        client.send_event(&event).await?
+    } else {
+        client.send_event_to(urls, &event).await?
+    };
 
     let success: Vec<String> = output.success.iter().map(|u| u.to_string()).collect();
     let failed: HashMap<String, String> = output
@@ -385,11 +463,9 @@ pub async fn send_event_to(event_json: String, relay_urls: Vec<String>) -> Resul
         .filter_map(|u| RelayUrl::parse(u).ok())
         .collect();
 
-    for url in &urls {
-        let _ = client.add_relay(url.as_str()).await;
-    }
+    let add_futures: Vec<_> = urls.iter().map(|url| client.add_relay(url.as_str())).collect();
+    futures::future::join_all(add_futures).await;
     client.connect().await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let output = client.send_event_to(urls, &event).await?;
 
@@ -426,11 +502,9 @@ pub async fn broadcast_events(
     });
 
     if let Some(ref urls) = target_urls {
-        for url in urls {
-            let _ = client.add_relay(url.as_str()).await;
-        }
+        let add_futures: Vec<_> = urls.iter().map(|url| client.add_relay(url.as_str())).collect();
+        futures::future::join_all(add_futures).await;
         client.connect().await;
-        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
     for event_val in &events {
@@ -460,4 +534,46 @@ pub async fn broadcast_events(
     });
 
     Ok(result.to_string())
+}
+
+#[frb]
+pub async fn subscribe_to_events(
+    filter_json: String,
+    sink: StreamSink<String>,
+) -> Result<()> {
+    let client = get_client().await?;
+    let filter = Filter::from_json(&filter_json)?;
+
+    let Output { val: sub_id, .. } = client.subscribe(filter, None).await
+        .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
+
+    let mut notifications = client.notifications();
+
+    loop {
+        match notifications.recv().await {
+            Ok(notification) => {
+                if let RelayPoolNotification::Event {
+                    subscription_id,
+                    event,
+                    ..
+                } = notification
+                {
+                    if subscription_id == sub_id {
+                        if let Ok(json) = serde_json::to_string(
+                            &serde_json::from_str::<serde_json::Value>(&event.as_json())
+                                .unwrap_or_default(),
+                        ) {
+                            let _ = sink.add(json);
+                        }
+                    }
+                } else if let RelayPoolNotification::Shutdown = notification {
+                    break;
+                }
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+        }
+    }
+
+    Ok(())
 }

@@ -219,12 +219,12 @@ class _EditProfileContentState extends State<_EditProfileContent> {
           if (!_isUploadingBanner)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: context.colors.background.withOpacity(0.9),
+                      color: context.colors.background.withValues(alpha: 0.9),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -291,13 +291,13 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                       ),
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: context.colors.background.withOpacity(0.9),
+                            color: context.colors.background.withValues(alpha: 0.9),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:bloc/bloc.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/repositories/profile_repository.dart';
 import 'dm_event.dart';
@@ -11,6 +11,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
   final List<StreamSubscription> _subscriptions = [];
   String? _currentChatPubkeyHex;
+  Timer? _conversationsTimer;
 
   DmBloc({
     required DmService dmService,
@@ -25,6 +26,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     on<DmConversationRefreshed>(_onDmConversationRefreshed);
     on<DmMessagesUpdated>(_onDmMessagesUpdated);
     on<DmMessagesError>(_onDmMessagesError);
+    on<DmConversationsUpdated>(_onDmConversationsUpdated);
   }
 
   void _onDmMessagesUpdated(
@@ -61,6 +63,33 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     final conversations = result.data!;
     final enriched = await _enrichConversations(conversations);
     emit(DmConversationsLoaded(enriched));
+
+    _startConversationsPolling();
+  }
+
+  void _startConversationsPolling() {
+    _conversationsTimer?.cancel();
+    _conversationsTimer =
+        Timer.periodic(const Duration(seconds: 15), (_) async {
+      try {
+        final result = await _dmService.getConversations(forceRefresh: true);
+        if (result.isSuccess && result.data != null) {
+          final enriched = await _enrichConversations(result.data!);
+          add(DmConversationsUpdated(enriched));
+        }
+      } catch (_) {}
+    });
+  }
+
+  void _onDmConversationsUpdated(
+    DmConversationsUpdated event,
+    Emitter<DmState> emit,
+  ) {
+    if (state is DmConversationsLoaded || state is DmChatLoaded) {
+      if (state is! DmChatLoaded) {
+        emit(DmConversationsLoaded(event.conversations));
+      }
+    }
   }
 
   Future<List<Map<String, dynamic>>> _enrichConversations(
@@ -171,6 +200,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
   @override
   Future<void> close() {
+    _conversationsTimer?.cancel();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }

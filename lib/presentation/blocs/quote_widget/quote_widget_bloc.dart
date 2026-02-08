@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 import '../../../utils/string_optimizer.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../src/rust/api/relay.dart' as rust_relay;
 import 'quote_widget_event.dart';
 import 'quote_widget_state.dart';
 
@@ -20,20 +21,19 @@ class _InternalProfileUpdate extends QuoteWidgetEvent {
 class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
   final FeedRepository _feedRepository;
   final ProfileRepository _profileRepository;
-  final IsarDatabaseService _db;
+  final RustDatabaseService _db;
   final String bech32;
 
   StreamSubscription? _profileSubscription;
-  String? _authorPubkey;
 
   QuoteWidgetBloc({
     required FeedRepository feedRepository,
     required ProfileRepository profileRepository,
     required this.bech32,
-    IsarDatabaseService? db,
+    RustDatabaseService? db,
   })  : _feedRepository = feedRepository,
         _profileRepository = profileRepository,
-        _db = db ?? IsarDatabaseService.instance,
+        _db = db ?? RustDatabaseService.instance,
         super(const QuoteWidgetInitial()) {
     on<QuoteWidgetLoadRequested>(_onQuoteWidgetLoadRequested);
     on<_InternalProfileUpdate>(_onInternalProfileUpdate);
@@ -56,41 +56,23 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
   }
 
   void _watchProfile(String pubkey) {
-    _authorPubkey = pubkey;
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(pubkey).listen((event) {
-      if (isClosed || event == null) return;
-
-      final profile = _parseProfileContent(event.content);
-      if (profile == null) return;
+    _profileSubscription = _db.watchProfile(pubkey).listen((profileData) {
+      if (isClosed || profileData == null) return;
 
       final user = {
         'pubkeyHex': pubkey,
         'npub': pubkey,
-        'name': profile['name'] ?? '',
-        'profileImage': profile['profileImage'] ?? '',
-        'picture': profile['profileImage'] ?? '',
-        'nip05': profile['nip05'] ?? '',
+        'name': profileData['name'] ?? '',
+        'profileImage': profileData['picture'] ?? '',
+        'picture': profileData['picture'] ?? '',
+        'nip05': profileData['nip05'] ?? '',
       };
 
       add(_InternalProfileUpdate(user));
     });
   }
 
-  Map<String, String>? _parseProfileContent(String content) {
-    if (content.isEmpty) return null;
-    try {
-      final parsed = jsonDecode(content) as Map<String, dynamic>;
-      final result = <String, String>{};
-      parsed.forEach((key, value) {
-        result[key == 'picture' ? 'profileImage' : key] =
-            value?.toString() ?? '';
-      });
-      return result;
-    } catch (_) {
-      return null;
-    }
-  }
 
   @override
   Future<void> close() {
@@ -160,23 +142,61 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
     }
 
     try {
-      final feedNote = await _feedRepository.getNote(eventId);
+      var feedNote = await _feedRepository.getNote(eventId);
+      Map<String, dynamic>? eventData;
 
       if (feedNote == null) {
+        final eventJson = await rust_relay.fetchEventById(
+          eventId: eventId,
+          timeoutSecs: 5,
+        );
+        
+        if (eventJson != null) {
+          eventData = jsonDecode(eventJson) as Map<String, dynamic>;
+          
+          Future.microtask(() async {
+            try {
+              await _db.saveEvents([eventData!]);
+            } catch (_) {}
+          });
+        } else {
+          emit(const QuoteWidgetError());
+          return;
+        }
+      }
+
+      final String noteContent;
+      final int noteTimestamp;
+      final String noteAuthor;
+      final Map<String, dynamic> note;
+
+      if (feedNote != null) {
+        note = feedNote.toMap();
+        note['pubkey'] = feedNote.pubkey;
+        noteContent = feedNote.content;
+        noteTimestamp = feedNote.createdAt;
+        noteAuthor = feedNote.pubkey;
+      } else if (eventData != null) {
+        noteContent = eventData['content'] as String? ?? '';
+        noteTimestamp = eventData['created_at'] as int? ?? 0;
+        noteAuthor = eventData['pubkey'] as String? ?? '';
+        note = {
+          'id': eventData['id'] ?? eventId,
+          'content': noteContent,
+          'created_at': noteTimestamp,
+          'pubkey': noteAuthor,
+          'kind': eventData['kind'] ?? 1,
+          'tags': eventData['tags'] ?? [],
+        };
+      } else {
         emit(const QuoteWidgetError());
         return;
       }
 
-      final note = feedNote.toMap();
-      note['pubkey'] = feedNote.pubkey;
-
-      final noteTimestamp = feedNote.createdAt;
       final formattedTime = noteTimestamp > 0 ? _formatTime(noteTimestamp) : '';
-      final noteContent = feedNote.content;
       final parsedContent = stringOptimizer.parseContentOptimized(noteContent);
       final shouldTruncate = _checkTruncation(parsedContent);
 
-      final noteAuthor = feedNote.pubkey;
       Map<String, dynamic>? user;
       if (noteAuthor.isNotEmpty) {
         final profile = await _profileRepository.getProfile(noteAuthor);
@@ -191,7 +211,6 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
           };
         }
 
-        // Start watching profile for updates
         _watchProfile(noteAuthor);
       }
 

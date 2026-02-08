@@ -1,6 +1,5 @@
 import 'dart:async';
 import '../../domain/entities/notification_item.dart';
-import '../../models/event_model.dart';
 import 'base_repository.dart';
 
 abstract class NotificationRepository {
@@ -43,19 +42,24 @@ class NotificationRepositoryImpl extends BaseRepository
   }
 
   Future<List<NotificationItem>> _hydrateNotifications(
-      List<EventModel> events) async {
+      List<Map<String, dynamic>> events) async {
     if (events.isEmpty) return [];
 
-    final pubkeys = events.map((e) => e.pubkey).toSet().toList();
+    final pubkeys = events
+        .map((e) => e['pubkey'] as String? ?? '')
+        .where((p) => p.isNotEmpty)
+        .toSet()
+        .toList();
     final profiles = await db.getUserProfiles(pubkeys);
 
     return events.map((event) {
-      final profile = profiles[event.pubkey];
+      final pubkey = event['pubkey'] as String? ?? '';
+      final profile = profiles[pubkey];
 
       return mapper.toNotificationItem(
         event,
         fromName: profile?['name'] ?? profile?['display_name'],
-        fromImage: profile?['profileImage'],
+        fromImage: profile?['picture'],
       );
     }).toList();
   }

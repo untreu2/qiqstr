@@ -20,11 +20,13 @@ import 'share_note.dart';
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
   final String? focusedNoteId;
+  final Map<String, dynamic>? initialNoteData;
 
   const ThreadPage({
     super.key,
     required this.rootNoteId,
     this.focusedNoteId,
+    this.initialNoteData,
   });
 
   @override
@@ -41,6 +43,8 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int _maxInitialReplies = 100;
   static const int _maxNestedReplies = 100;
   static const int _maxReplyDepth = 1;
+
+  final List<String> _stableReplyOrder = [];
 
   bool _isRefreshing = false;
   Timer? _cacheCheckTimer;
@@ -70,6 +74,7 @@ class _ThreadPageState extends State<ThreadPage> {
         bloc.add(ThreadLoadRequested(
           rootNoteId: widget.rootNoteId,
           focusedNoteId: widget.focusedNoteId,
+          initialNoteData: widget.initialNoteData,
         ));
         return bloc;
       },
@@ -93,7 +98,9 @@ class _ThreadPageState extends State<ThreadPage> {
             final currRootNoteId = current.rootNote['id'] as String? ?? '';
             return previous.replies.length != current.replies.length ||
                 prevRootNoteId != currRootNoteId ||
-                previous.focusedNoteId != current.focusedNoteId;
+                previous.focusedNoteId != current.focusedNoteId ||
+                previous.userProfiles.length != current.userProfiles.length ||
+                previous.repliesSynced != current.repliesSynced;
           }
           return previous.runtimeType != current.runtimeType;
         },
@@ -135,31 +142,20 @@ class _ThreadPageState extends State<ThreadPage> {
       return _buildThreadContent(context, state);
     }
 
-    if (state is ThreadLoading) {
-      return _buildLoadingState(context);
-    }
-
     if (state is ThreadError) {
       return _buildErrorState(context, state.message);
     }
 
-    return _buildLoadingState(context);
-  }
+    if (state is ThreadLoading) {
+      return Center(
+        child: CircularProgressIndicator(
+          color: context.colors.primary,
+          strokeWidth: 2,
+        ),
+      );
+    }
 
-  Widget _buildLoadingState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: context.colors.primary),
-          const SizedBox(height: 16),
-          Text(
-            'Loading thread...',
-            style: TextStyle(color: context.colors.textSecondary),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildThreadContent(BuildContext context, ThreadLoaded state) {
@@ -420,36 +416,76 @@ class _ThreadPageState extends State<ThreadPage> {
     final displayNoteId = displayNote['id'] as String? ?? '';
 
     final allDirectReplies = threadStructure.getChildren(displayNoteId);
-    final directReplies = <Map<String, dynamic>>[];
+    final repliesById = <String, Map<String, dynamic>>{};
     for (final reply in allDirectReplies) {
       final isRepost = reply['isRepost'] as bool? ?? false;
-      if (!isRepost) {
-        directReplies.add(reply);
-      }
+      if (isRepost) continue;
+      final id = reply['id'] as String? ?? '';
+      if (id.isNotEmpty) repliesById[id] = reply;
     }
 
-    final currentUserHex = state.currentUserHex;
-    directReplies.sort((a, b) {
-      final aAuthor = a['author'] as String? ?? '';
-      final bAuthor = b['author'] as String? ?? '';
-      final aIsUserReply = aAuthor == currentUserHex;
-      final bIsUserReply = bAuthor == currentUserHex;
+    _stableReplyOrder.removeWhere((id) => !repliesById.containsKey(id));
 
-      if (aIsUserReply && !bIsUserReply) return -1;
-      if (!aIsUserReply && bIsUserReply) return 1;
+    final newIds = repliesById.keys
+        .where((id) => !_stableReplyOrder.contains(id))
+        .toList();
 
-      final aTimestamp = a['timestamp'] as DateTime? ?? DateTime(0);
-      final bTimestamp = b['timestamp'] as DateTime? ?? DateTime(0);
-      return aTimestamp.compareTo(bTimestamp);
-    });
+    if (_stableReplyOrder.isEmpty && newIds.isNotEmpty) {
+      final currentUserHex = state.currentUserHex;
+      newIds.sort((a, b) {
+        final aReply = repliesById[a]!;
+        final bReply = repliesById[b]!;
+        final aAuthor = aReply['author'] as String? ?? '';
+        final bAuthor = bReply['author'] as String? ?? '';
+        final aIsUser = aAuthor == currentUserHex;
+        final bIsUser = bAuthor == currentUserHex;
+        if (aIsUser && !bIsUser) return -1;
+        if (!aIsUser && bIsUser) return 1;
+        final aTime = aReply['timestamp'] as DateTime? ?? DateTime(0);
+        final bTime = bReply['timestamp'] as DateTime? ?? DateTime(0);
+        return aTime.compareTo(bTime);
+      });
+    } else if (newIds.isNotEmpty) {
+      newIds.sort((a, b) {
+        final aTime =
+            repliesById[a]!['timestamp'] as DateTime? ?? DateTime(0);
+        final bTime =
+            repliesById[b]!['timestamp'] as DateTime? ?? DateTime(0);
+        return aTime.compareTo(bTime);
+      });
+    }
+
+    _stableReplyOrder.addAll(newIds);
+
+    final directReplies = _stableReplyOrder
+        .where((id) => repliesById.containsKey(id))
+        .map((id) => repliesById[id]!)
+        .toList();
 
     if (directReplies.isEmpty) {
+      if (!state.repliesSynced) {
+        return SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       return SliverToBoxAdapter(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(32.0),
             child: Text(
-              'No replies yet',
+              'No replies found',
               style: TextStyle(
                 color: context.colors.textSecondary,
                 fontSize: 16,

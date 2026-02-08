@@ -312,7 +312,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                   ? pubkey
                   : encodeBasicBech32(pubkey, 'npub');
               widget.onNavigateToMentionProfile?.call(npubForNavigation);
-            } catch (e) {}
+            } catch (_) {}
           };
         _gestureRecognizers.add(recognizer);
 

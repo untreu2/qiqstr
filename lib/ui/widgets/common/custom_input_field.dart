@@ -25,6 +25,7 @@ class CustomInputField extends StatelessWidget {
   final Color? fillColor;
   final EdgeInsets? contentPadding;
   final double? height;
+  final TextCapitalization textCapitalization;
 
   const CustomInputField({
     super.key,
@@ -51,6 +52,7 @@ class CustomInputField extends StatelessWidget {
     this.fillColor,
     this.contentPadding,
     this.height = 56,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   @override
@@ -97,6 +99,7 @@ class CustomInputField extends StatelessWidget {
         maxLines: maxLines,
         maxLength: maxLength,
         keyboardType: keyboardType,
+        textCapitalization: textCapitalization,
         onChanged: onChanged,
         onEditingComplete: onEditingComplete,
         onFieldSubmitted: onSubmitted,
@@ -121,6 +124,7 @@ class CustomInputField extends StatelessWidget {
         maxLines: maxLines,
         maxLength: maxLength,
         keyboardType: keyboardType,
+        textCapitalization: textCapitalization,
         onChanged: onChanged,
         onEditingComplete: onEditingComplete,
         onSubmitted: onSubmitted,

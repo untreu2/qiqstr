@@ -1,6 +1,5 @@
 import 'dart:async';
 import '../../domain/entities/feed_note.dart';
-import '../../models/event_model.dart';
 import 'base_repository.dart';
 
 abstract class FeedRepository {
@@ -10,8 +9,11 @@ abstract class FeedRepository {
   Future<List<FeedNote>> getProfileNotes(String pubkey, {int limit = 50});
   Stream<List<FeedNote>> watchHashtagFeed(String hashtag, {int limit = 100});
   Future<FeedNote?> getNote(String noteId);
+  Future<Map<String, dynamic>?> getNoteRaw(String noteId);
   Stream<FeedNote?> watchNote(String noteId);
   Future<List<FeedNote>> getReplies(String noteId, {int limit = 100});
+  Future<List<Map<String, dynamic>>> getRepliesRaw(String noteId,
+      {int limit = 100});
   Stream<List<FeedNote>> watchReplies(String noteId, {int limit = 100});
   Future<void> saveNotes(List<Map<String, dynamic>> notes);
   Future<List<String>?> getFollowingList(String userPubkey);
@@ -32,6 +34,11 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
       return;
     }
 
+    final initial = await db.getCachedFeedNotes(follows, limit: limit);
+    if (initial.isNotEmpty) {
+      yield await _hydrateNotes(initial);
+    }
+
     yield* db.watchFeedNotes(follows, limit: limit).asyncMap((events) async {
       return await _hydrateNotes(events);
     });
@@ -49,8 +56,14 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
   }
 
   @override
-  Stream<List<FeedNote>> watchProfileNotes(String pubkey, {int limit = 50}) {
-    return db.watchProfileNotes(pubkey, limit: limit).asyncMap((events) async {
+  Stream<List<FeedNote>> watchProfileNotes(String pubkey,
+      {int limit = 50}) async* {
+    final initial = await db.getCachedProfileNotes(pubkey, limit: limit);
+    if (initial.isNotEmpty) {
+      yield await _hydrateNotes(initial);
+    }
+
+    yield* db.watchProfileNotes(pubkey, limit: limit).asyncMap((events) async {
       return await _hydrateNotes(events);
     });
   }
@@ -64,7 +77,9 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
 
   @override
   Stream<List<FeedNote>> watchHashtagFeed(String hashtag, {int limit = 100}) {
-    return db.watchHashtagNotes(hashtag, limit: limit).asyncMap((events) async {
+    return db
+        .watchHashtagNotes(hashtag, limit: limit)
+        .asyncMap((events) async {
       return await _hydrateNotes(events);
     });
   }
@@ -74,8 +89,9 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
     final event = await db.getEventModel(noteId);
     if (event == null) return null;
 
+    final pubkey = event['pubkey'] as String? ?? '';
     final results = await Future.wait([
-      db.getUserProfile(event.pubkey),
+      db.getUserProfile(pubkey),
       db.getInteractionCounts(noteId),
     ]);
     final profile = results[0] as Map<String, String>?;
@@ -84,7 +100,7 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
     return mapper.toFeedNote(
       event,
       authorName: profile?['name'] ?? profile?['display_name'],
-      authorImage: profile?['profileImage'],
+      authorImage: profile?['picture'],
       authorNip05: profile?['nip05'],
       reactionCount: counts['reactions'] ?? 0,
       repostCount: counts['reposts'] ?? 0,
@@ -95,25 +111,24 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
 
   @override
   Stream<FeedNote?> watchNote(String noteId) async* {
-    final db = this.db;
-
-    EventModel? currentEvent = await db.getEventModel(noteId);
-    if (currentEvent == null) {
+    final event = await db.getEventModel(noteId);
+    if (event == null) {
       yield null;
       return;
     }
 
+    final pubkey = event['pubkey'] as String? ?? '';
     final results = await Future.wait([
-      db.getUserProfile(currentEvent.pubkey),
+      db.getUserProfile(pubkey),
       db.getInteractionCounts(noteId),
     ]);
     final profile = results[0] as Map<String, String>?;
     final counts = results[1] as Map<String, int>;
 
     yield mapper.toFeedNote(
-      currentEvent,
+      event,
       authorName: profile?['name'] ?? profile?['display_name'],
-      authorImage: profile?['profileImage'],
+      authorImage: profile?['picture'],
       authorNip05: profile?['nip05'],
       reactionCount: counts['reactions'] ?? 0,
       repostCount: counts['reposts'] ?? 0,
@@ -123,15 +138,30 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
   }
 
   @override
+  Future<Map<String, dynamic>?> getNoteRaw(String noteId) async {
+    final event = await db.getEventModel(noteId);
+    if (event == null) return null;
+    return mapper.toFeedNote(event).toMap();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getRepliesRaw(String noteId,
+      {int limit = 100}) async {
+    final events = await db.getReplies(noteId, limit: limit);
+    if (events.isEmpty) return [];
+    return events.map((e) => mapper.toFeedNote(e).toMap()).toList();
+  }
+
+  @override
   Future<List<FeedNote>> getReplies(String noteId, {int limit = 100}) async {
     final events = await db.getReplies(noteId, limit: limit);
-    return await _hydrateNotes(events);
+    return await _hydrateNotes(events, filterReplies: false);
   }
 
   @override
   Stream<List<FeedNote>> watchReplies(String noteId, {int limit = 100}) {
     return db.watchReplies(noteId, limit: limit).asyncMap((events) async {
-      return await _hydrateNotes(events);
+      return await _hydrateNotes(events, filterReplies: false);
     });
   }
 
@@ -145,74 +175,72 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
     return await db.getFollowingList(userPubkey);
   }
 
-  Future<List<FeedNote>> _hydrateNotes(List<EventModel> events) async {
+  Future<List<FeedNote>> _hydrateNotes(
+      List<Map<String, dynamic>> events, {bool filterReplies = true}) async {
     if (events.isEmpty) return [];
 
     final pubkeys = <String>{};
-    final noteIdMap = <String, String>{};
+    final noteIds = <String>[];
 
     for (final event in events) {
-      pubkeys.add(event.pubkey);
-      if (event.kind == 6) {
-        final originalId = _extractOriginalNoteId(event);
-        if (originalId != null) {
-          noteIdMap[event.eventId] = originalId;
-          final originalAuthor = _extractOriginalAuthor(event);
-          if (originalAuthor != null) {
-            pubkeys.add(originalAuthor);
-          }
-        } else {
-          noteIdMap[event.eventId] = event.eventId;
+      final pubkey = event['pubkey'] as String? ?? '';
+      final kind = event['kind'] as int? ?? 1;
+      final eventId = event['id'] as String? ?? '';
+      pubkeys.add(pubkey);
+      if (eventId.isNotEmpty) noteIds.add(eventId);
+
+      if (kind == 6) {
+        final originalAuthor = _extractOriginalAuthor(event);
+        if (originalAuthor != null) {
+          pubkeys.add(originalAuthor);
         }
-      } else {
-        noteIdMap[event.eventId] = event.eventId;
       }
     }
 
-    final originalNoteIds = noteIdMap.values.toSet().toList();
-    final results = await Future.wait([
-      db.getUserProfiles(pubkeys.toList()),
-      db.getCachedInteractionCounts(originalNoteIds),
+    final profilesFuture = db.getUserProfiles(pubkeys.toList());
+    final countsFuture = noteIds.isNotEmpty
+        ? db.getCachedInteractionCounts(noteIds)
+        : Future.value(<String, Map<String, int>>{});
+
+    late final Map<String, Map<String, String>> profiles;
+    late final Map<String, Map<String, int>> interactionCounts;
+    await Future.wait([
+      profilesFuture.then((v) => profiles = v),
+      countsFuture.then((v) => interactionCounts = v),
     ]);
-    final profiles = results[0] as Map<String, Map<String, String>>;
-    final counts = results[1] as Map<String, Map<String, int>>;
 
-    return events.map((event) {
-      final originalNoteId = noteIdMap[event.eventId] ?? event.eventId;
-      final originalAuthor = event.kind == 6
-          ? _extractOriginalAuthor(event) ?? event.pubkey
-          : event.pubkey;
+    final notes = <FeedNote>[];
+    for (final event in events) {
+      final kind = event['kind'] as int? ?? 1;
+      final eventId = event['id'] as String? ?? '';
+      final originalAuthor = kind == 6
+          ? _extractOriginalAuthor(event) ?? (event['pubkey'] as String? ?? '')
+          : (event['pubkey'] as String? ?? '');
       final profile = profiles[originalAuthor];
-      final noteCounts = counts[originalNoteId] ?? {};
+      final counts = interactionCounts[eventId];
 
-      return mapper.toFeedNote(
+      final note = mapper.toFeedNote(
         event,
         authorName: profile?['name'] ?? profile?['display_name'],
-        authorImage: profile?['profileImage'],
+        authorImage: profile?['picture'],
         authorNip05: profile?['nip05'],
-        reactionCount: noteCounts['reactions'] ?? 0,
-        repostCount: noteCounts['reposts'] ?? 0,
-        replyCount: noteCounts['replies'] ?? 0,
-        zapCount: noteCounts['zaps'] ?? 0,
+        reactionCount: counts?['reactions'] ?? 0,
+        repostCount: counts?['reposts'] ?? 0,
+        replyCount: counts?['replies'] ?? 0,
+        zapCount: counts?['zaps'] ?? 0,
       );
-    }).toList();
-  }
 
-  String? _extractOriginalNoteId(EventModel event) {
-    final tags = event.getTags();
-    for (final tag in tags) {
-      if (tag.isNotEmpty && tag[0] == 'e' && tag.length > 1) {
-        return tag[1];
-      }
+      if (filterReplies && note.isReply && !note.isRepost) continue;
+      notes.add(note);
     }
-    return null;
+    return notes;
   }
 
-  String? _extractOriginalAuthor(EventModel event) {
-    final tags = event.getTags();
+  String? _extractOriginalAuthor(Map<String, dynamic> event) {
+    final tags = event['tags'] as List<dynamic>? ?? [];
     for (final tag in tags) {
-      if (tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
-        return tag[1];
+      if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
+        return tag[1] as String?;
       }
     }
     return null;

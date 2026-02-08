@@ -91,8 +91,9 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   }
 
   void _updatePosition() {
-    if (!mounted || _controller == null || !_controller!.value.isInitialized)
+    if (!mounted || _controller == null || !_controller!.value.isInitialized) {
       return;
+    }
     final newPosition = _controller!.value.position;
     final newDuration = _controller!.value.duration;
     if (mounted) {

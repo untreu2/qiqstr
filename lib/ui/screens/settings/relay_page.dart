@@ -88,6 +88,7 @@ class _RelayPageState extends State<RelayPage> {
   bool _isFetchingUserRelays = false;
   bool _isPublishingRelays = false;
   bool _disposed = false;
+  bool _gossipModelEnabled = false;
   final Map<String, RelayInfo?> _relayInfos = {};
   final Map<String, bool> _expandedRelays = {};
   final Map<String, Map<String, dynamic>> _relayStats = {};
@@ -166,6 +167,7 @@ class _RelayPageState extends State<RelayPage> {
       final customMainRelays = prefs.getStringList('custom_main_relays');
       final userRelaysJson = prefs.getString('user_relays');
       final flagsJson = prefs.getString('relay_flags');
+      _gossipModelEnabled = prefs.getBool('gossip_model_enabled') ?? false;
 
       if (userRelaysJson != null) {
         final List<dynamic> decoded = jsonDecode(userRelaysJson);
@@ -254,14 +256,18 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError || privateKeyResult.data == null) {
-        AppSnackbar.error(
-            context, 'Private key not found. Please set up your profile first');
+        if (mounted) {
+          AppSnackbar.error(
+              context, 'Private key not found. Please set up your profile first');
+        }
         return;
       }
 
       final npubResult = await _authService.getCurrentUserNpub();
       if (npubResult.isError || npubResult.data == null) {
-        AppSnackbar.error(context, 'Please set up your profile first');
+        if (mounted) {
+          AppSnackbar.error(context, 'Please set up your profile first');
+        }
         return;
       }
 
@@ -295,8 +301,10 @@ class _RelayPageState extends State<RelayPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('published_relay_list', jsonEncode(event));
 
-      AppSnackbar.success(context,
-          'Relay list published successfully (${relayConfigs.length} relays in list)');
+      if (mounted) {
+        AppSnackbar.success(context,
+            'Relay list published successfully (${relayConfigs.length} relays in list)');
+      }
 
       if (kDebugMode) {
         print('Relay list event published: ${event['id']}');
@@ -305,8 +313,10 @@ class _RelayPageState extends State<RelayPage> {
       if (kDebugMode) {
         print('Error publishing relays: $e');
       }
-      AppSnackbar.error(
-          context, 'Error publishing relay list: ${e.toString()}');
+      if (mounted) {
+        AppSnackbar.error(
+            context, 'Error publishing relay list: ${e.toString()}');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -718,7 +728,9 @@ class _RelayPageState extends State<RelayPage> {
           });
           await _saveRelays();
           _fetchRelayInfo(normalizedUrl);
-          AppSnackbar.success(context, 'Relay added from following list');
+          if (mounted) {
+            AppSnackbar.success(context, 'Relay added from following list');
+          }
 
           if (mounted) {
             final shouldBroadcast = await showBroadcastEventsDialog(
@@ -743,6 +755,73 @@ class _RelayPageState extends State<RelayPage> {
       fontSize: 32,
       subtitle: "Manage your relay connections and publish your relay list.",
       padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+    );
+  }
+
+  Widget _buildGossipModelToggle(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Gossip Mode',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Automatically discover and connect to relays used by people you follow. '
+                        'When off, only your own relays above are used to read and write.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.colors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Switch.adaptive(
+                  value: _gossipModelEnabled,
+                  onChanged: (value) async {
+                    setState(() {
+                      _gossipModelEnabled = value;
+                    });
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setBool('gossip_model_enabled', value);
+                    if (context.mounted) {
+                      AppSnackbar.success(
+                        context,
+                        value
+                            ? 'Gossip model enabled. Restart the app to apply.'
+                            : 'Gossip model disabled. Restart the app to apply.',
+                      );
+                    }
+                  },
+                  activeTrackColor: context.colors.accent,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1213,6 +1292,9 @@ class _RelayPageState extends State<RelayPage> {
               ),
               SliverToBoxAdapter(
                 child: _buildActionButtons(context),
+              ),
+              SliverToBoxAdapter(
+                child: _buildGossipModelToggle(context),
               ),
               if (_relays.isEmpty)
                 SliverToBoxAdapter(

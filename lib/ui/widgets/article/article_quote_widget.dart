@@ -6,7 +6,8 @@ import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
-import '../../../data/services/auth_service.dart';
+import '../../../data/sync/sync_service.dart';
+
 
 class ArticleQuoteWidget extends StatefulWidget {
   final String naddr;
@@ -70,18 +71,61 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
       }
 
       final articleRepo = AppDI.get<ArticleRepository>();
-      final articles = await articleRepo.getArticles(limit: 50);
+      var articles = await articleRepo.getArticles(limit: 50);
 
+      Map<String, dynamic>? foundArticle;
       for (final article in articles) {
-        final articleDTag = article.dTag ?? '';
+        final articleDTag = article.dTag;
         final articlePubkey = article.pubkey;
         final articleDTagHex = _stringToHex(articleDTag);
-        final dTagMatch = dTag == null || articleDTagHex == dTag;
-        final pubkeyMatch = pubkey == null || articlePubkey == pubkey;
+        
+        bool matches = false;
+        if (pubkey != null && dTag != null) {
+          matches = articlePubkey == pubkey && articleDTagHex == dTag;
+        } else if (pubkey != null) {
+          matches = articlePubkey == pubkey;
+        } else if (dTag != null) {
+          matches = articleDTagHex == dTag;
+        }
 
-        if (dTagMatch && pubkeyMatch) {
-          setState(() {
-            _article = {
+        if (matches) {
+          foundArticle = {
+            'id': article.id,
+            'dTag': article.dTag,
+            'title': article.title,
+            'summary': article.summary,
+            'image': article.image,
+            'content': article.content,
+            'pubkey': article.pubkey,
+            'author': article.authorName,
+            'authorImage': article.authorImage,
+            'timestamp': article.createdAt,
+          };
+          break;
+        }
+      }
+
+      if (foundArticle == null && pubkey != null) {
+        final syncService = AppDI.get<SyncService>();
+        await syncService.syncArticles(authors: [pubkey], limit: 10);
+        
+        await Future.delayed(const Duration(milliseconds: 500));
+        articles = await articleRepo.getArticles(limit: 50);
+        
+        for (final article in articles) {
+          final articleDTag = article.dTag;
+          final articlePubkey = article.pubkey;
+          final articleDTagHex = _stringToHex(articleDTag);
+          
+          bool matches = false;
+          if (dTag != null) {
+            matches = articlePubkey == pubkey && articleDTagHex == dTag;
+          } else {
+            matches = articlePubkey == pubkey;
+          }
+
+          if (matches) {
+            foundArticle = {
               'id': article.id,
               'dTag': article.dTag,
               'title': article.title,
@@ -93,16 +137,23 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
               'authorImage': article.authorImage,
               'timestamp': article.createdAt,
             };
-            _isLoading = false;
-          });
-          _loadAuthorProfile(articlePubkey);
-          return;
+            break;
+          }
         }
       }
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
+
+      if (foundArticle != null) {
+        setState(() {
+          _article = foundArticle;
+          _isLoading = false;
+        });
+        _loadAuthorProfile(foundArticle['pubkey'] as String);
+      } else {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _hasError = true;
@@ -137,54 +188,6 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
     }
   }
 
-  Map<String, dynamic>? _processArticleEvent(Map<String, dynamic> eventData) {
-    try {
-      final id = eventData['id'] as String? ?? '';
-      final pubkey = eventData['pubkey'] as String? ?? '';
-      final content = eventData['content'] as String? ?? '';
-      final createdAt = eventData['created_at'] as int? ?? 0;
-      final tags = eventData['tags'] as List<dynamic>? ?? [];
-
-      final authService = AppDI.get<AuthService>();
-      final authorNpub = authService.hexToNpub(pubkey) ?? pubkey;
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-
-      String? title;
-      String? image;
-      String? summary;
-      String? dTag;
-
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          final tagName = tag[0] as String?;
-          if (tagName == 'title' && tag.length > 1) {
-            title = tag[1] as String?;
-          } else if (tagName == 'image' && tag.length > 1) {
-            image = tag[1] as String?;
-          } else if (tagName == 'summary' && tag.length > 1) {
-            summary = tag[1] as String?;
-          } else if (tagName == 'd' && tag.length > 1) {
-            dTag = tag[1] as String?;
-          }
-        }
-      }
-
-      return {
-        'id': id,
-        'dTag': dTag ?? id,
-        'content': content,
-        'author': authorNpub,
-        'pubkey': pubkey,
-        'timestamp': timestamp,
-        'title': title ?? '',
-        'image': image ?? '',
-        'summary': summary ?? '',
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
   Future<void> _loadAuthorProfile(String pubkeyHex) async {
     try {
       final profileRepo = AppDI.get<ProfileRepository>();
@@ -203,7 +206,7 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
           };
         });
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   void _navigateToArticle() {

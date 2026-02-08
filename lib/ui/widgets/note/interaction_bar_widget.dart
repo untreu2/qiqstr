@@ -381,7 +381,21 @@ class _InteractionBarState extends State<InteractionBar> {
 
     return BlocProvider<InteractionBloc>.value(
       value: _interactionBloc,
-      child: BlocBuilder<InteractionBloc, InteractionState>(
+      child: BlocConsumer<InteractionBloc, InteractionState>(
+        listenWhen: (previous, current) {
+          if (current is InteractionLoaded && current.noteDeleted) {
+            final prev = previous is InteractionLoaded ? previous : null;
+            return prev == null || !prev.noteDeleted;
+          }
+          return false;
+        },
+        listener: (context, state) {
+          if (state is InteractionLoaded && state.noteDeleted) {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          }
+        },
         builder: (context, state) {
           final interactionState =
               state is InteractionLoaded ? state : const InteractionLoaded();
@@ -679,7 +693,12 @@ class _InteractionButton extends StatelessWidget {
   }
 
   String _formatCount(int count) {
-    if (count >= 1000) {
+    if (count >= 1000000) {
+      final formatted = (count / 1000000).toStringAsFixed(1);
+      return formatted.endsWith('.0')
+          ? '${formatted.substring(0, formatted.length - 2)}M'
+          : '${formatted}M';
+    } else if (count >= 1000) {
       final formatted = (count / 1000).toStringAsFixed(1);
       return formatted.endsWith('.0')
           ? '${formatted.substring(0, formatted.length - 2)}K'

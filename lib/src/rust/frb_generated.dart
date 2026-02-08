@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/crypto.dart';
+import 'api/database.dart';
 import 'api/events.dart';
 import 'api/nip17.dart';
 import 'api/nip19.dart';
@@ -72,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 1852440402;
+  int get rustContentHash => 2109504889;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -176,6 +177,101 @@ abstract class RustLibApi extends BaseApi {
       required String content,
       required String privateKeyHex});
 
+  Future<int> crateApiDatabaseDbCountEvents({required String filterJson});
+
+  Future<void> crateApiDatabaseDbDeleteFollowingList(
+      {required String pubkeyHex});
+
+  Future<void> crateApiDatabaseDbDeleteMuteList({required String pubkeyHex});
+
+  Future<bool> crateApiDatabaseDbEventExists({required String eventId});
+
+  Future<String?> crateApiDatabaseDbFindUserRepostEventId(
+      {required String userPubkeyHex, required String noteId});
+
+  Future<String> crateApiDatabaseDbGetArticles({required int limit});
+
+  Future<String> crateApiDatabaseDbGetArticlesByAuthors(
+      {required List<String> authorsHex, required int limit});
+
+  Future<String> crateApiDatabaseDbGetBatchInteractionCounts(
+      {required List<String> noteIds});
+
+  Future<String> crateApiDatabaseDbGetBatchInteractionData(
+      {required List<String> noteIds, required String userPubkeyHex});
+
+  Future<String> crateApiDatabaseDbGetDetailedInteractions(
+      {required String noteId});
+
+  Future<String?> crateApiDatabaseDbGetEvent({required String eventId});
+
+  Future<String> crateApiDatabaseDbGetFeedNotes(
+      {required List<String> authorsHex, required int limit});
+
+  Future<List<String>> crateApiDatabaseDbGetFollowingList(
+      {required String pubkeyHex});
+
+  Future<String> crateApiDatabaseDbGetHashtagNotes(
+      {required String hashtag, required int limit});
+
+  Future<String> crateApiDatabaseDbGetInteractionCounts(
+      {required String noteId});
+
+  Future<List<String>> crateApiDatabaseDbGetMuteList(
+      {required String pubkeyHex});
+
+  Future<String> crateApiDatabaseDbGetNotifications(
+      {required String userPubkeyHex, required int limit});
+
+  Future<String?> crateApiDatabaseDbGetProfile({required String pubkeyHex});
+
+  Future<String> crateApiDatabaseDbGetProfileNotes(
+      {required String pubkeyHex, required int limit});
+
+  Future<String> crateApiDatabaseDbGetProfiles(
+      {required List<String> pubkeysHex});
+
+  Future<String> crateApiDatabaseDbGetRandomProfiles({required int limit});
+
+  Future<String> crateApiDatabaseDbGetReplies(
+      {required String noteId, required int limit});
+
+  Future<bool> crateApiDatabaseDbHasFollowingList({required String pubkeyHex});
+
+  Future<bool> crateApiDatabaseDbHasMuteList({required String pubkeyHex});
+
+  Future<bool> crateApiDatabaseDbHasProfile({required String pubkeyHex});
+
+  Future<bool> crateApiDatabaseDbHasUserReacted(
+      {required String noteId, required String userPubkeyHex});
+
+  Future<bool> crateApiDatabaseDbHasUserReposted(
+      {required String noteId, required String userPubkeyHex});
+
+  Future<String> crateApiDatabaseDbQueryEvents(
+      {required String filterJson, required int limit});
+
+  Future<bool> crateApiDatabaseDbSaveEvent({required String eventJson});
+
+  Future<int> crateApiDatabaseDbSaveEvents({required String eventsJson});
+
+  Future<void> crateApiDatabaseDbSaveFollowingList(
+      {required String pubkeyHex, required List<String> followsHex});
+
+  Future<void> crateApiDatabaseDbSaveMuteList(
+      {required String pubkeyHex, required List<String> mutedHex});
+
+  Future<void> crateApiDatabaseDbSaveProfile(
+      {required String pubkeyHex, required String profileJson});
+
+  Future<String> crateApiDatabaseDbSearchNotes(
+      {required String query, required int limit});
+
+  Future<String> crateApiDatabaseDbSearchProfiles(
+      {required String query, required int limit});
+
+  Future<void> crateApiDatabaseDbWipe();
+
   Future<void> crateApiRelayDisconnectRelays();
 
   Future<String> crateApiRelayDiscoverAndConnectOutboxRelays(
@@ -183,6 +279,9 @@ abstract class RustLibApi extends BaseApi {
 
   String crateApiNip19EncodeBasicBech32(
       {required String hexStr, required String prefix});
+
+  Future<String?> crateApiRelayFetchEventById(
+      {required String eventId, required int timeoutSecs});
 
   Future<String> crateApiRelayFetchEvents(
       {required String filterJson, required int timeoutSecs});
@@ -200,7 +299,7 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiRelayGetRelayStatus();
 
   Future<void> crateApiRelayInitClient(
-      {required List<String> relayUrls, String? privateKeyHex});
+      {required List<String> relayUrls, String? privateKeyHex, String? dbPath});
 
   Future<bool> crateApiRelayIsClientInitialized();
 
@@ -237,6 +336,8 @@ abstract class RustLibApi extends BaseApi {
 
   String crateApiCryptoSignEventId(
       {required String eventIdHex, required String privateKeyHex});
+
+  Stream<String> crateApiRelaySubscribeToEvents({required String filterJson});
 
   String crateApiNip17UnwrapGiftWrap(
       {required String receiverPrivateKeyHex, required String giftWrapJson});
@@ -888,12 +989,948 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<int> crateApiDatabaseDbCountEvents({required String filterJson}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(filterJson, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 22, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_u_32,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbCountEventsConstMeta,
+      argValues: [filterJson],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbCountEventsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_count_events",
+        argNames: ["filterJson"],
+      );
+
+  @override
+  Future<void> crateApiDatabaseDbDeleteFollowingList(
+      {required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 23, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbDeleteFollowingListConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbDeleteFollowingListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_delete_following_list",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<void> crateApiDatabaseDbDeleteMuteList({required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 24, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbDeleteMuteListConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbDeleteMuteListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_delete_mute_list",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<bool> crateApiDatabaseDbEventExists({required String eventId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(eventId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 25, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbEventExistsConstMeta,
+      argValues: [eventId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbEventExistsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_event_exists",
+        argNames: ["eventId"],
+      );
+
+  @override
+  Future<String?> crateApiDatabaseDbFindUserRepostEventId(
+      {required String userPubkeyHex, required String noteId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(userPubkeyHex, serializer);
+        sse_encode_String(noteId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 26, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbFindUserRepostEventIdConstMeta,
+      argValues: [userPubkeyHex, noteId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbFindUserRepostEventIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_find_user_repost_event_id",
+        argNames: ["userPubkeyHex", "noteId"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetArticles({required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 27, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetArticlesConstMeta,
+      argValues: [limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetArticlesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_articles",
+        argNames: ["limit"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetArticlesByAuthors(
+      {required List<String> authorsHex, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_String(authorsHex, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 28, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetArticlesByAuthorsConstMeta,
+      argValues: [authorsHex, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetArticlesByAuthorsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_articles_by_authors",
+        argNames: ["authorsHex", "limit"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetBatchInteractionCounts(
+      {required List<String> noteIds}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_String(noteIds, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 29, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetBatchInteractionCountsConstMeta,
+      argValues: [noteIds],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetBatchInteractionCountsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_batch_interaction_counts",
+        argNames: ["noteIds"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetBatchInteractionData(
+      {required List<String> noteIds, required String userPubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_String(noteIds, serializer);
+        sse_encode_String(userPubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 30, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetBatchInteractionDataConstMeta,
+      argValues: [noteIds, userPubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetBatchInteractionDataConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_batch_interaction_data",
+        argNames: ["noteIds", "userPubkeyHex"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetDetailedInteractions(
+      {required String noteId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(noteId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 31, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetDetailedInteractionsConstMeta,
+      argValues: [noteId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetDetailedInteractionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_detailed_interactions",
+        argNames: ["noteId"],
+      );
+
+  @override
+  Future<String?> crateApiDatabaseDbGetEvent({required String eventId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(eventId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 32, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetEventConstMeta,
+      argValues: [eventId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetEventConstMeta => const TaskConstMeta(
+        debugName: "db_get_event",
+        argNames: ["eventId"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetFeedNotes(
+      {required List<String> authorsHex, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_String(authorsHex, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 33, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetFeedNotesConstMeta,
+      argValues: [authorsHex, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetFeedNotesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_feed_notes",
+        argNames: ["authorsHex", "limit"],
+      );
+
+  @override
+  Future<List<String>> crateApiDatabaseDbGetFollowingList(
+      {required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 34, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetFollowingListConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetFollowingListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_following_list",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetHashtagNotes(
+      {required String hashtag, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(hashtag, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 35, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetHashtagNotesConstMeta,
+      argValues: [hashtag, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetHashtagNotesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_hashtag_notes",
+        argNames: ["hashtag", "limit"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetInteractionCounts(
+      {required String noteId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(noteId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 36, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetInteractionCountsConstMeta,
+      argValues: [noteId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetInteractionCountsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_interaction_counts",
+        argNames: ["noteId"],
+      );
+
+  @override
+  Future<List<String>> crateApiDatabaseDbGetMuteList(
+      {required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 37, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetMuteListConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetMuteListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_mute_list",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetNotifications(
+      {required String userPubkeyHex, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(userPubkeyHex, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 38, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetNotificationsConstMeta,
+      argValues: [userPubkeyHex, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetNotificationsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_notifications",
+        argNames: ["userPubkeyHex", "limit"],
+      );
+
+  @override
+  Future<String?> crateApiDatabaseDbGetProfile({required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 39, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetProfileConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetProfileConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_profile",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetProfileNotes(
+      {required String pubkeyHex, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 40, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetProfileNotesConstMeta,
+      argValues: [pubkeyHex, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetProfileNotesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_profile_notes",
+        argNames: ["pubkeyHex", "limit"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetProfiles(
+      {required List<String> pubkeysHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_String(pubkeysHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 41, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetProfilesConstMeta,
+      argValues: [pubkeysHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetProfilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_profiles",
+        argNames: ["pubkeysHex"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetRandomProfiles({required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 42, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetRandomProfilesConstMeta,
+      argValues: [limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetRandomProfilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_random_profiles",
+        argNames: ["limit"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbGetReplies(
+      {required String noteId, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(noteId, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 43, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbGetRepliesConstMeta,
+      argValues: [noteId, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbGetRepliesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_get_replies",
+        argNames: ["noteId", "limit"],
+      );
+
+  @override
+  Future<bool> crateApiDatabaseDbHasFollowingList({required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 44, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbHasFollowingListConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbHasFollowingListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_has_following_list",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<bool> crateApiDatabaseDbHasMuteList({required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 45, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbHasMuteListConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbHasMuteListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_has_mute_list",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<bool> crateApiDatabaseDbHasProfile({required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 46, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbHasProfileConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbHasProfileConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_has_profile",
+        argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<bool> crateApiDatabaseDbHasUserReacted(
+      {required String noteId, required String userPubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(noteId, serializer);
+        sse_encode_String(userPubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 47, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbHasUserReactedConstMeta,
+      argValues: [noteId, userPubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbHasUserReactedConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_has_user_reacted",
+        argNames: ["noteId", "userPubkeyHex"],
+      );
+
+  @override
+  Future<bool> crateApiDatabaseDbHasUserReposted(
+      {required String noteId, required String userPubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(noteId, serializer);
+        sse_encode_String(userPubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 48, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbHasUserRepostedConstMeta,
+      argValues: [noteId, userPubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbHasUserRepostedConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_has_user_reposted",
+        argNames: ["noteId", "userPubkeyHex"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbQueryEvents(
+      {required String filterJson, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(filterJson, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 49, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbQueryEventsConstMeta,
+      argValues: [filterJson, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbQueryEventsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_query_events",
+        argNames: ["filterJson", "limit"],
+      );
+
+  @override
+  Future<bool> crateApiDatabaseDbSaveEvent({required String eventJson}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(eventJson, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 50, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbSaveEventConstMeta,
+      argValues: [eventJson],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbSaveEventConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_save_event",
+        argNames: ["eventJson"],
+      );
+
+  @override
+  Future<int> crateApiDatabaseDbSaveEvents({required String eventsJson}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(eventsJson, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 51, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_u_32,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbSaveEventsConstMeta,
+      argValues: [eventsJson],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbSaveEventsConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_save_events",
+        argNames: ["eventsJson"],
+      );
+
+  @override
+  Future<void> crateApiDatabaseDbSaveFollowingList(
+      {required String pubkeyHex, required List<String> followsHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        sse_encode_list_String(followsHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 52, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbSaveFollowingListConstMeta,
+      argValues: [pubkeyHex, followsHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbSaveFollowingListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_save_following_list",
+        argNames: ["pubkeyHex", "followsHex"],
+      );
+
+  @override
+  Future<void> crateApiDatabaseDbSaveMuteList(
+      {required String pubkeyHex, required List<String> mutedHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        sse_encode_list_String(mutedHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 53, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbSaveMuteListConstMeta,
+      argValues: [pubkeyHex, mutedHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbSaveMuteListConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_save_mute_list",
+        argNames: ["pubkeyHex", "mutedHex"],
+      );
+
+  @override
+  Future<void> crateApiDatabaseDbSaveProfile(
+      {required String pubkeyHex, required String profileJson}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        sse_encode_String(profileJson, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 54, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbSaveProfileConstMeta,
+      argValues: [pubkeyHex, profileJson],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbSaveProfileConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_save_profile",
+        argNames: ["pubkeyHex", "profileJson"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbSearchNotes(
+      {required String query, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(query, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 55, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbSearchNotesConstMeta,
+      argValues: [query, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbSearchNotesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_search_notes",
+        argNames: ["query", "limit"],
+      );
+
+  @override
+  Future<String> crateApiDatabaseDbSearchProfiles(
+      {required String query, required int limit}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(query, serializer);
+        sse_encode_u_32(limit, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 56, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbSearchProfilesConstMeta,
+      argValues: [query, limit],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbSearchProfilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "db_search_profiles",
+        argNames: ["query", "limit"],
+      );
+
+  @override
+  Future<void> crateApiDatabaseDbWipe() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 57, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiDatabaseDbWipeConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDatabaseDbWipeConstMeta => const TaskConstMeta(
+        debugName: "db_wipe",
+        argNames: [],
+      );
+
+  @override
   Future<void> crateApiRelayDisconnectRelays() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 22, port: port_);
+            funcId: 58, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -919,7 +1956,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_String(pubkeysHex, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 23, port: port_);
+            funcId: 59, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -945,7 +1982,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(hexStr, serializer);
         sse_encode_String(prefix, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -964,6 +2001,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String?> crateApiRelayFetchEventById(
+      {required String eventId, required int timeoutSecs}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(eventId, serializer);
+        sse_encode_u_32(timeoutSecs, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 61, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiRelayFetchEventByIdConstMeta,
+      argValues: [eventId, timeoutSecs],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiRelayFetchEventByIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "fetch_event_by_id",
+        argNames: ["eventId", "timeoutSecs"],
+      );
+
+  @override
   Future<String> crateApiRelayFetchEvents(
       {required String filterJson, required int timeoutSecs}) {
     return handler.executeNormal(NormalTask(
@@ -972,7 +2036,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(filterJson, serializer);
         sse_encode_u_32(timeoutSecs, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 25, port: port_);
+            funcId: 62, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -994,7 +2058,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_record_string_string,
@@ -1017,7 +2081,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1041,7 +2105,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 28, port: port_);
+            funcId: 65, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_32,
@@ -1065,7 +2129,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(privateKeyHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1088,7 +2152,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 30, port: port_);
+            funcId: 67, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_String,
@@ -1111,7 +2175,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 31, port: port_);
+            funcId: 68, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1131,28 +2195,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<void> crateApiRelayInitClient(
-      {required List<String> relayUrls, String? privateKeyHex}) {
+      {required List<String> relayUrls,
+      String? privateKeyHex,
+      String? dbPath}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_String(relayUrls, serializer);
         sse_encode_opt_String(privateKeyHex, serializer);
+        sse_encode_opt_String(dbPath, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 32, port: port_);
+            funcId: 69, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiRelayInitClientConstMeta,
-      argValues: [relayUrls, privateKeyHex],
+      argValues: [relayUrls, privateKeyHex, dbPath],
       apiImpl: this,
     ));
   }
 
   TaskConstMeta get kCrateApiRelayInitClientConstMeta => const TaskConstMeta(
         debugName: "init_client",
-        argNames: ["relayUrls", "privateKeyHex"],
+        argNames: ["relayUrls", "privateKeyHex", "dbPath"],
       );
 
   @override
@@ -1161,7 +2228,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 33, port: port_);
+            funcId: 70, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -1185,7 +2252,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventJson, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -1208,7 +2275,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(mnemonic, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1232,7 +2299,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(bech32Str, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1255,7 +2322,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(bech32Str, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1279,7 +2346,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventIdHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1303,7 +2370,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(privkeyHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1327,7 +2394,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(pubkeyHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 77)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1356,7 +2423,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(payload, serializer);
         sse_encode_String(receiverSkHex, serializer);
         sse_encode_String(senderPkHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 41)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1384,7 +2451,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(content, serializer);
         sse_encode_String(senderSkHex, serializer);
         sse_encode_String(receiverPkHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 42)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1408,7 +2475,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(url, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 43, port: port_);
+            funcId: 80, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1432,7 +2499,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventJson, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 44, port: port_);
+            funcId: 81, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1458,7 +2525,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(eventJson, serializer);
         sse_encode_list_String(relayUrls, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 45, port: port_);
+            funcId: 82, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1483,7 +2550,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventIdHex, serializer);
         sse_encode_String(privateKeyHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1501,6 +2568,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Stream<String> crateApiRelaySubscribeToEvents({required String filterJson}) {
+    final sink = RustStreamSink<String>();
+    unawaited(handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(filterJson, serializer);
+        sse_encode_StreamSink_String_Sse(sink, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 84, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiRelaySubscribeToEventsConstMeta,
+      argValues: [filterJson, sink],
+      apiImpl: this,
+    )));
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiRelaySubscribeToEventsConstMeta =>
+      const TaskConstMeta(
+        debugName: "subscribe_to_events",
+        argNames: ["filterJson", "sink"],
+      );
+
+  @override
   String crateApiNip17UnwrapGiftWrap(
       {required String receiverPrivateKeyHex, required String giftWrapJson}) {
     return handler.executeSync(SyncTask(
@@ -1508,7 +2603,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(receiverPrivateKeyHex, serializer);
         sse_encode_String(giftWrapJson, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 85)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1533,7 +2628,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(privateKeyHex, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 48, port: port_);
+            funcId: 86, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1556,7 +2651,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(mnemonic, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -1580,7 +2675,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventJson, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -1601,6 +2696,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return AnyhowException(raw as String);
+  }
+
+  @protected
+  RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
   }
 
   @protected
@@ -1693,6 +2794,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_String(deserializer);
     return AnyhowException(inner);
+  }
+
+  @protected
+  RustStreamSink<String> sse_decode_StreamSink_String_Sse(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
   }
 
   @protected
@@ -1810,6 +2918,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       AnyhowException self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.message, serializer);
+  }
+
+  @protected
+  void sse_encode_StreamSink_String_Sse(
+      RustStreamSink<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+        self.setupAndSerialize(
+            codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        )),
+        serializer);
   }
 
   @protected

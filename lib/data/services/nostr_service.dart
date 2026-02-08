@@ -271,7 +271,7 @@ class NostrService {
     int? limit,
   }) {
     final filter = <String, dynamic>{
-      'kinds': [7, 1, 6, 9735],
+      'kinds': [7, 1, 5, 6, 9735],
       '#e': eventIds,
     };
     if (limit != null) filter['limit'] = limit;

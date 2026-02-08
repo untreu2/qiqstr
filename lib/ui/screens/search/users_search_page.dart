@@ -9,6 +9,7 @@ import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
@@ -121,9 +122,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
         ),
       UserSearchLoaded(
         :final filteredUsers,
-        :final randomUsers,
         :final isSearching,
-        :final isLoadingRandom
       ) =>
         isSearching
             ? Center(
@@ -183,45 +182,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                           );
                         },
                       )
-                    : isLoadingRandom
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(
-                                    color: context.colors.primary),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Loading users...',
-                                  style: TextStyle(
-                                      color: context.colors.textSecondary),
-                                ),
-                              ],
-                            ),
-                          )
-                        : randomUsers.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No users to discover yet',
-                                  style: TextStyle(
-                                      color: context.colors.textSecondary),
-                                ),
-                              )
-                            : ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: randomUsers.length,
-                                itemBuilder: (context, index) {
-                                  final user = randomUsers[index];
-                                  return Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildUserItem(context, user),
-                                      if (index < randomUsers.length - 1)
-                                        const _UserSeparator(),
-                                    ],
-                                  );
-                                },
-                              ),
+                    : const SizedBox(),
       _ => const SizedBox(),
     };
   }
@@ -261,7 +222,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     return BlocProvider<UserSearchBloc>(
       create: (context) {
         final bloc = AppDI.get<UserSearchBloc>();
-        bloc.add(const UserSearchInitialized());
         _searchBloc = bloc;
         _searchController.addListener(_onSearchChanged);
         return bloc;
@@ -351,11 +311,13 @@ class _UserItemWidget extends StatefulWidget {
 
 class _UserItemWidgetState extends State<_UserItemWidget> {
   String? _currentUserHex;
+  Map<String, dynamic>? _loadedProfile;
 
   @override
   void initState() {
     super.initState();
     _loadCurrentUserHex();
+    _loadAndSyncProfile();
   }
 
   Future<void> _loadCurrentUserHex() async {
@@ -365,6 +327,70 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
       setState(() {
         _currentUserHex = hex;
       });
+    }
+  }
+
+  String get _displayName {
+    final loaded = _loadedProfile?['name'] as String? ?? '';
+    if (loaded.isNotEmpty) return loaded;
+    return widget.user['name'] as String? ?? '';
+  }
+
+  String get _displayImage {
+    final loaded = _loadedProfile?['profileImage'] as String? ?? '';
+    if (loaded.isNotEmpty) return loaded;
+    return widget.user['profileImage'] as String? ?? '';
+  }
+
+  Future<void> _loadAndSyncProfile() async {
+    if (!mounted) return;
+    final pubkey = widget.user['pubkeyHex'] as String? ??
+        widget.user['pubkey'] as String? ??
+        '';
+    if (pubkey.isEmpty) return;
+
+    final profileRepo = AppDI.get<ProfileRepository>();
+    final profile = await profileRepo.getProfile(pubkey);
+
+    if (profile != null && mounted) {
+      setState(() {
+        _loadedProfile = {
+          'pubkeyHex': profile.pubkey,
+          'name': profile.name ?? '',
+          'profileImage': profile.picture ?? '',
+          'about': profile.about ?? '',
+          'banner': profile.banner ?? '',
+          'nip05': profile.nip05 ?? '',
+          'lud16': profile.lud16 ?? '',
+          'website': profile.website ?? '',
+        };
+      });
+    }
+
+    final hasName = (profile?.name ?? '').isNotEmpty;
+    final hasImage = (profile?.picture ?? '').isNotEmpty;
+
+    if (!hasName || !hasImage) {
+      final syncService = AppDI.get<SyncService>();
+      try {
+        await syncService.syncProfile(pubkey);
+        if (!mounted) return;
+        final synced = await profileRepo.getProfile(pubkey);
+        if (synced != null && mounted) {
+          setState(() {
+            _loadedProfile = {
+              'pubkeyHex': synced.pubkey,
+              'name': synced.name ?? '',
+              'profileImage': synced.picture ?? '',
+              'about': synced.about ?? '',
+              'banner': synced.banner ?? '',
+              'nip05': synced.nip05 ?? '',
+              'lud16': synced.lud16 ?? '',
+              'website': synced.website ?? '',
+            };
+          });
+        }
+      } catch (_) {}
     }
   }
 
@@ -481,6 +507,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                 final navContext = widget.parentContext;
                 if (navContext != null && navContext.mounted) {
                   Future.microtask(() {
+                    if (!navContext.mounted) return;
                     try {
                       final router = GoRouter.of(navContext);
                       final currentLocation =
@@ -517,8 +544,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  _buildAvatar(
-                      context, widget.user['profileImage'] as String? ?? ''),
+                  _buildAvatar(context, _displayImage),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Row(
@@ -530,8 +556,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                               Flexible(
                                 child: Text(
                                   () {
-                                    final name =
-                                        widget.user['name'] as String? ?? '';
+                                    final name = _displayName;
                                     return name.length > 25
                                         ? '${name.substring(0, 25)}...'
                                         : name;
@@ -544,17 +569,6 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if ((widget.user['nip05'] as String? ?? '')
-                                      .isNotEmpty &&
-                                  (widget.user['nip05Verified'] as bool? ??
-                                      false)) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.verified,
-                                  size: 16,
-                                  color: context.colors.accent,
-                                ),
-                              ],
                             ],
                           ),
                         ),

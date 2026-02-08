@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/isar_database_service.dart';
-import '../../../models/event_model.dart';
+import '../../../data/services/rust_database_service.dart';
 import 'profile_info_event.dart';
 import 'profile_info_state.dart';
 
@@ -23,9 +21,11 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
   final AuthService _authService;
-  final IsarDatabaseService _db;
+  final RustDatabaseService _db;
   final String userPubkeyHex;
-  StreamSubscription<EventModel?>? _profileSubscription;
+  StreamSubscription<Map<String, dynamic>?>? _profileSubscription;
+  Timer? _followingPollTimer;
+  Timer? _followsYouPollTimer;
 
   ProfileInfoBloc({
     required FollowingRepository followingRepository,
@@ -33,12 +33,12 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     required SyncService syncService,
     required AuthService authService,
     required this.userPubkeyHex,
-    IsarDatabaseService? db,
+    RustDatabaseService? db,
   })  : _followingRepository = followingRepository,
         _profileRepository = profileRepository,
         _syncService = syncService,
         _authService = authService,
-        _db = db ?? IsarDatabaseService.instance,
+        _db = db ?? RustDatabaseService.instance,
         super(const ProfileInfoInitial()) {
     on<ProfileInfoInitialized>(_onProfileInfoInitialized);
     on<ProfileInfoUserUpdated>(_onProfileInfoUserUpdated);
@@ -53,7 +53,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   ) async {
     final currentState = state;
     if (currentState is ProfileInfoLoaded) {
-      _loadFollowerCountsInBackground(currentState);
+      _syncCountsInBackground(currentState);
       return;
     }
 
@@ -64,11 +64,23 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     final isCurrentUser =
         currentUserHex.isNotEmpty && currentUserHex == targetHex;
 
+    int followingCount = 0;
+    try {
+      final localFollows =
+          await _followingRepository.getFollowingList(targetHex);
+      if (localFollows != null) followingCount = localFollows.length;
+    } catch (_) {}
+
     emit(ProfileInfoLoaded(
       user: event.user ?? {},
       currentUserHex: currentUserHex,
-      isLoadingCounts: true,
+      isLoadingCounts: false,
+      followingCount: followingCount,
     ));
+
+    if (followingCount == 0) {
+      _startFollowingPoll(targetHex);
+    }
 
     _watchProfile(targetHex);
     _syncProfileInBackground(targetHex);
@@ -77,7 +89,32 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       _loadFollowStateInBackground(targetHex, currentUserHex);
     }
 
-    _loadFollowerCountsInBackground(state as ProfileInfoLoaded);
+    _syncCountsInBackground(state as ProfileInfoLoaded);
+  }
+
+  void _startFollowingPoll(String pubkeyHex) {
+    _followingPollTimer?.cancel();
+    int attempts = 0;
+    _followingPollTimer =
+        Timer.periodic(const Duration(seconds: 1), (timer) async {
+      attempts++;
+      if (isClosed || attempts > 15) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final follows =
+            await _followingRepository.getFollowingList(pubkeyHex);
+        if (follows != null && follows.isNotEmpty) {
+          timer.cancel();
+          if (!isClosed && state is ProfileInfoLoaded) {
+            add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+              followingCount: follows.length,
+            )));
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   void _syncProfileInBackground(String pubkey) {
@@ -91,40 +128,22 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
 
   void _watchProfile(String pubkey) {
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(pubkey).listen((event) {
-      if (isClosed || event == null) return;
+    _profileSubscription = _db.watchProfile(pubkey).listen((profileData) {
+      if (isClosed || profileData == null) return;
       final currentState = state;
       if (currentState is! ProfileInfoLoaded) return;
 
-      final profile = _parseProfileContent(event.content);
-      if (profile == null) return;
-
       final updatedUser = Map<String, dynamic>.from(currentState.user);
-      updatedUser['name'] = profile['name'] ?? updatedUser['name'];
+      updatedUser['name'] = profileData['name'] ?? updatedUser['name'];
       updatedUser['profileImage'] =
-          profile['profileImage'] ?? updatedUser['profileImage'];
-      updatedUser['banner'] = profile['banner'] ?? updatedUser['banner'];
-      updatedUser['about'] = profile['about'] ?? updatedUser['about'];
-      updatedUser['nip05'] = profile['nip05'] ?? updatedUser['nip05'];
-      updatedUser['website'] = profile['website'] ?? updatedUser['website'];
+          profileData['picture'] ?? updatedUser['profileImage'];
+      updatedUser['banner'] = profileData['banner'] ?? updatedUser['banner'];
+      updatedUser['about'] = profileData['about'] ?? updatedUser['about'];
+      updatedUser['nip05'] = profileData['nip05'] ?? updatedUser['nip05'];
+      updatedUser['website'] = profileData['website'] ?? updatedUser['website'];
 
       add(_InternalStateUpdate(currentState.copyWith(user: updatedUser)));
     });
-  }
-
-  Map<String, String>? _parseProfileContent(String content) {
-    if (content.isEmpty) return null;
-    try {
-      final parsed = jsonDecode(content) as Map<String, dynamic>;
-      final result = <String, String>{};
-      parsed.forEach((key, value) {
-        result[key == 'picture' ? 'profileImage' : key] =
-            value?.toString() ?? '';
-      });
-      return result;
-    } catch (_) {
-      return null;
-    }
   }
 
   void _loadFollowStateInBackground(String targetHex, String currentUserHex) {
@@ -145,14 +164,12 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
           )));
         }
 
-        await _syncService.syncFollowingList(targetHex);
-        if (isClosed) return;
         _refreshDoesUserFollowMeInBackground(targetHex, currentUserHex);
       } catch (_) {}
     });
   }
 
-  void _loadFollowerCountsInBackground(ProfileInfoLoaded currentState) {
+  void _syncCountsInBackground(ProfileInfoLoaded currentState) {
     final pubkeyHex = currentState.user['pubkeyHex'] as String? ??
         currentState.user['pubkey'] as String? ??
         userPubkeyHex;
@@ -161,36 +178,10 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     Future.microtask(() async {
       if (isClosed) return;
       try {
-        final follows = await _followingRepository.getFollowingList(pubkeyHex);
-
-        if (isClosed) return;
-        if (state is ProfileInfoLoaded) {
+        final count = await _profileRepository.getFollowerCount(pubkeyHex);
+        if (!isClosed && state is ProfileInfoLoaded) {
           add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followingCount: follows?.length ?? 0,
-            isLoadingCounts: false,
-          )));
-        }
-      } catch (_) {
-        if (isClosed) return;
-        if (state is ProfileInfoLoaded) {
-          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followingCount: 0,
-            followerCount: 0,
-            isLoadingCounts: false,
-          )));
-        }
-      }
-    });
-
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        final followerCount =
-            await _profileRepository.getFollowerCount(pubkeyHex);
-        if (isClosed) return;
-        if (state is ProfileInfoLoaded) {
-          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followerCount: followerCount,
+            followerCount: count,
           )));
         }
       } catch (_) {}
@@ -200,9 +191,10 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       if (isClosed) return;
       try {
         await _syncService.syncFollowingList(pubkeyHex);
-        final follows = await _followingRepository.getFollowingList(pubkeyHex);
         if (isClosed) return;
-        if (state is ProfileInfoLoaded) {
+        final follows =
+            await _followingRepository.getFollowingList(pubkeyHex);
+        if (!isClosed && state is ProfileInfoLoaded) {
           add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
             followingCount: follows?.length ?? 0,
           )));
@@ -218,15 +210,47 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       try {
         final targetFollows =
             await _followingRepository.getFollowingList(targetHex);
-        final doesUserFollowMe = targetFollows
-                ?.any((f) => f.toLowerCase() == currentUserHex.toLowerCase()) ??
-            false;
+        if (targetFollows != null && targetFollows.isNotEmpty) {
+          final doesUserFollowMe = targetFollows
+              .any((f) => f.toLowerCase() == currentUserHex.toLowerCase());
 
-        if (isClosed) return;
-        final currentState = state;
-        if (currentState is ProfileInfoLoaded) {
-          add(_InternalStateUpdate(
-              currentState.copyWith(doesUserFollowMe: doesUserFollowMe)));
+          if (isClosed) return;
+          final currentState = state;
+          if (currentState is ProfileInfoLoaded) {
+            add(_InternalStateUpdate(
+                currentState.copyWith(doesUserFollowMe: doesUserFollowMe)));
+          }
+        } else {
+          _startFollowsYouPoll(targetHex, currentUserHex);
+        }
+      } catch (_) {
+        _startFollowsYouPoll(targetHex, currentUserHex);
+      }
+    });
+  }
+
+  void _startFollowsYouPoll(String targetHex, String currentUserHex) {
+    _followsYouPollTimer?.cancel();
+    int attempts = 0;
+    _followsYouPollTimer =
+        Timer.periodic(const Duration(seconds: 1), (timer) async {
+      attempts++;
+      if (isClosed || attempts > 15) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final targetFollows =
+            await _followingRepository.getFollowingList(targetHex);
+        if (targetFollows != null && targetFollows.isNotEmpty) {
+          timer.cancel();
+          final doesUserFollowMe = targetFollows
+              .any((f) => f.toLowerCase() == currentUserHex.toLowerCase());
+          if (!isClosed && state is ProfileInfoLoaded) {
+            add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+              doesUserFollowMe: doesUserFollowMe,
+            )));
+          }
         }
       } catch (_) {}
     });
@@ -247,7 +271,6 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     if (currentState is ProfileInfoLoaded) {
       final updated = currentState.copyWith(user: event.user);
       emit(updated);
-      _loadFollowerCountsInBackground(updated);
     }
   }
 
@@ -280,7 +303,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       }
 
       await _syncService.publishFollow(followingPubkeys: updatedFollows);
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<void> _onProfileInfoMuteToggled(
@@ -312,11 +335,13 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       }
 
       await _syncService.publishMute(mutedPubkeys: updatedMutes);
-    } catch (e) {}
+    } catch (_) {}
   }
 
   @override
   Future<void> close() {
+    _followingPollTimer?.cancel();
+    _followsYouPollTimer?.cancel();
     _profileSubscription?.cancel();
     return super.close();
   }

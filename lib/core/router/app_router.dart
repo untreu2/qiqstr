@@ -142,9 +142,12 @@ class AppRouter {
                           state.uri.queryParameters['rootNoteId'] ?? '';
                       final focusedNoteId =
                           state.uri.queryParameters['focusedNoteId'];
+                      final initialNoteData =
+                          state.extra as Map<String, dynamic>?;
                       return ThreadPage(
                         rootNoteId: rootNoteId,
                         focusedNoteId: focusedNoteId,
+                        initialNoteData: initialNoteData,
                       );
                     },
                   ),
@@ -304,9 +307,12 @@ class AppRouter {
                           state.uri.queryParameters['rootNoteId'] ?? '';
                       final focusedNoteId =
                           state.uri.queryParameters['focusedNoteId'];
+                      final initialNoteData =
+                          state.extra as Map<String, dynamic>?;
                       return ThreadPage(
                         rootNoteId: rootNoteId,
                         focusedNoteId: focusedNoteId,
+                        initialNoteData: initialNoteData,
                       );
                     },
                   ),
@@ -396,9 +402,12 @@ class AppRouter {
         builder: (context, state) {
           final rootNoteId = state.uri.queryParameters['rootNoteId'] ?? '';
           final focusedNoteId = state.uri.queryParameters['focusedNoteId'];
+          final initialNoteData =
+              state.extra as Map<String, dynamic>?;
           return ThreadPage(
             rootNoteId: rootNoteId,
             focusedNoteId: focusedNoteId,
+            initialNoteData: initialNoteData,
           );
         },
       ),

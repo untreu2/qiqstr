@@ -28,9 +28,19 @@ class ProfileRepositoryImpl extends BaseRepository
 
   @override
   Stream<UserProfile?> watchProfile(String pubkey) {
-    return db.watchProfile(pubkey).map((event) {
-      if (event == null) return null;
-      return mapper.toUserProfile(event);
+    return db.watchProfile(pubkey).map((profileData) {
+      if (profileData == null) return null;
+      return UserProfile(
+        pubkey: pubkey,
+        name: profileData['name'] as String?,
+        displayName: profileData['display_name'] as String?,
+        about: profileData['about'] as String?,
+        picture: profileData['picture'] as String?,
+        banner: profileData['banner'] as String?,
+        nip05: profileData['nip05'] as String?,
+        lud16: profileData['lud16'] as String?,
+        website: profileData['website'] as String?,
+      );
     });
   }
 
@@ -44,7 +54,7 @@ class ProfileRepositoryImpl extends BaseRepository
       name: profileData['name'],
       displayName: profileData['display_name'],
       about: profileData['about'],
-      picture: profileData['profileImage'],
+      picture: profileData['picture'],
       banner: profileData['banner'],
       nip05: profileData['nip05'],
       lud16: profileData['lud16'],
@@ -68,7 +78,7 @@ class ProfileRepositoryImpl extends BaseRepository
         name: data['name'],
         displayName: data['display_name'],
         about: data['about'],
-        picture: data['profileImage'],
+        picture: data['picture'],
         banner: data['banner'],
         nip05: data['nip05'],
         lud16: data['lud16'],
@@ -86,15 +96,15 @@ class ProfileRepositoryImpl extends BaseRepository
 
     return results.map((data) {
       return UserProfile(
-        pubkey: data['pubkeyHex'] ?? '',
-        name: data['name'],
-        displayName: data['display_name'],
-        about: data['about'],
-        picture: data['profileImage'],
-        banner: data['banner'],
-        nip05: data['nip05'],
-        lud16: data['lud16'],
-        website: data['website'],
+        pubkey: (data['pubkey'] ?? data['pubkeyHex'] ?? '') as String,
+        name: data['name'] as String?,
+        displayName: data['display_name'] as String?,
+        about: data['about'] as String?,
+        picture: data['picture'] ?? data['profileImage'] as String?,
+        banner: data['banner'] as String?,
+        nip05: data['nip05'] as String?,
+        lud16: data['lud16'] as String?,
+        website: data['website'] as String?,
       );
     }).toList();
   }

@@ -13,7 +13,6 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
   final SyncService _syncService;
   final AuthService _authService;
 
-  String? _currentUserHex;
   StreamSubscription<List<String>>? _followingSubscription;
 
   FollowingBloc({
@@ -39,8 +38,6 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
       emit(const FollowingError('Invalid user npub'));
       return;
     }
-
-    _currentUserHex = userHex;
 
     emit(const FollowingLoaded(followingUsers: [], loadedUsers: {}));
 

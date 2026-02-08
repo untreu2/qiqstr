@@ -1,9 +1,6 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/isar_database_service.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
 import 'note_content_event.dart';
@@ -13,19 +10,14 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
   final ProfileRepository _profileRepository;
   final AuthService _authService;
   final SyncService? _syncService;
-  final IsarDatabaseService _db;
-
-  final Map<String, StreamSubscription> _profileSubscriptions = {};
 
   NoteContentBloc({
     required ProfileRepository profileRepository,
     required AuthService authService,
     SyncService? syncService,
-    IsarDatabaseService? db,
   })  : _profileRepository = profileRepository,
         _authService = authService,
         _syncService = syncService,
-        _db = db ?? IsarDatabaseService.instance,
         super(const NoteContentInitial()) {
     on<NoteContentInitialized>(_onNoteContentInitialized);
     on<_MentionProfileUpdated>(_onMentionProfileUpdated);
@@ -82,7 +74,6 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
       if (actualPubkey == null) continue;
       pubkeysToFetch.add(actualPubkey);
 
-      // Use initial profile if available, otherwise placeholder
       final existingProfile = initialProfiles[actualPubkey];
       if (existingProfile != null &&
           (existingProfile['name'] as String?)?.isNotEmpty == true) {
@@ -96,7 +87,6 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
 
     if (pubkeysToFetch.isEmpty) return;
 
-    // Find which pubkeys still need to be fetched from DB
     final pubkeysNeedingFetch = pubkeysToFetch.where((pubkey) {
       final profile = mentionUsers[pubkey];
       if (profile == null) return true;
@@ -104,10 +94,7 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
       return name == null || name.isEmpty || name == pubkey.substring(0, 8);
     }).toList();
 
-    if (pubkeysNeedingFetch.isEmpty) {
-      _watchProfiles(pubkeysToFetch);
-      return;
-    }
+    if (pubkeysNeedingFetch.isEmpty) return;
 
     try {
       final profiles =
@@ -115,93 +102,67 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
 
       final updatedMentionUsers =
           Map<String, Map<String, dynamic>>.from(mentionUsers);
+      final stillMissing = <String>[];
 
-      for (final entry in profiles.entries) {
-        final profile = entry.value;
-        updatedMentionUsers[entry.key] = {
-          'pubkeyHex': entry.key,
-          'pubkey': entry.key,
-          'npub': _authService.hexToNpub(entry.key) ?? entry.key,
-          'name': profile.name ?? profile.displayName ?? '',
-          'about': profile.about ?? '',
-          'profileImage': profile.picture ?? '',
-          'picture': profile.picture ?? '',
-          'banner': profile.banner ?? '',
-          'website': profile.website ?? '',
-          'nip05': profile.nip05 ?? '',
-          'lud16': profile.lud16 ?? '',
-        };
+      for (final pubkey in pubkeysNeedingFetch) {
+        final profile = profiles[pubkey];
+        if (profile != null &&
+            (profile.name ?? '').isNotEmpty &&
+            (profile.name ?? '') !=
+                pubkey.substring(0, pubkey.length > 8 ? 8 : pubkey.length)) {
+          updatedMentionUsers[pubkey] = _profileToMap(pubkey, profile);
+        } else {
+          stillMissing.add(pubkey);
+        }
       }
 
       emit(NoteContentLoaded(mentionUsers: updatedMentionUsers));
 
-      _watchProfiles(pubkeysToFetch);
-      _syncMissingProfiles(pubkeysNeedingFetch, profiles);
-    } catch (e) {}
-  }
-
-  void _watchProfiles(List<String> pubkeys) {
-    for (final pubkey in pubkeys) {
-      if (_profileSubscriptions.containsKey(pubkey)) continue;
-
-      _profileSubscriptions[pubkey] = _db.watchProfile(pubkey).listen((event) {
-        if (isClosed || event == null) return;
-
-        final content = event.content;
-        if (content.isEmpty) return;
-
-        try {
-          final parsed = _parseProfileContent(content);
-          if (parsed == null) return;
-
-          add(_MentionProfileUpdated(pubkey, {
-            'pubkeyHex': pubkey,
-            'pubkey': pubkey,
-            'npub': _authService.hexToNpub(pubkey) ?? pubkey,
-            'name': parsed['name'] ?? '',
-            'about': parsed['about'] ?? '',
-            'profileImage': parsed['profileImage'] ?? parsed['picture'] ?? '',
-            'picture': parsed['picture'] ?? '',
-            'banner': parsed['banner'] ?? '',
-            'website': parsed['website'] ?? '',
-            'nip05': parsed['nip05'] ?? '',
-            'lud16': parsed['lud16'] ?? '',
-          }));
-        } catch (_) {}
-      });
+      if (stillMissing.isNotEmpty) {
+        _syncAndApplyProfiles(stillMissing, updatedMentionUsers);
+      }
+    } catch (e) {
+      _syncAndApplyProfiles(pubkeysNeedingFetch, mentionUsers);
     }
   }
 
-  Map<String, String>? _parseProfileContent(String content) {
-    if (content.isEmpty) return null;
-    try {
-      final parsed = jsonDecode(content) as Map<String, dynamic>;
-      final result = <String, String>{};
-      parsed.forEach((key, value) {
-        result[key == 'picture' ? 'profileImage' : key] =
-            value?.toString() ?? '';
-      });
-      return result;
-    } catch (_) {
-      return null;
-    }
+  Map<String, dynamic> _profileToMap(String pubkey, dynamic profile) {
+    return {
+      'pubkeyHex': pubkey,
+      'pubkey': pubkey,
+      'npub': _authService.hexToNpub(pubkey) ?? pubkey,
+      'name': profile.name ?? profile.displayName ?? '',
+      'about': profile.about ?? '',
+      'profileImage': profile.picture ?? '',
+      'picture': profile.picture ?? '',
+      'banner': profile.banner ?? '',
+      'website': profile.website ?? '',
+      'nip05': profile.nip05 ?? '',
+      'lud16': profile.lud16 ?? '',
+    };
   }
 
-  void _syncMissingProfiles(
-      List<String> pubkeys, Map<String, dynamic> existingProfiles) {
-    if (_syncService == null) return;
-
-    final missingPubkeys = pubkeys
-        .where((p) =>
-            !existingProfiles.containsKey(p) ||
-            (existingProfiles[p] as dynamic)?.name == null)
-        .toList();
-
-    if (missingPubkeys.isEmpty) return;
+  void _syncAndApplyProfiles(List<String> pubkeys,
+      Map<String, Map<String, dynamic>> currentMentionUsers) {
+    final syncService = _syncService;
+    if (syncService == null || pubkeys.isEmpty) return;
 
     Future.microtask(() async {
+      if (isClosed) return;
       try {
-        await _syncService.syncProfiles(missingPubkeys);
+        await syncService.syncProfiles(pubkeys);
+        if (isClosed) return;
+
+        final profiles = await _profileRepository.getProfiles(pubkeys);
+        if (isClosed) return;
+
+        for (final entry in profiles.entries) {
+          final profile = entry.value;
+          if ((profile.name ?? '').isNotEmpty) {
+            add(_MentionProfileUpdated(
+                entry.key, _profileToMap(entry.key, profile)));
+          }
+        }
       } catch (_) {}
     });
   }
@@ -218,15 +179,6 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
     updatedMentionUsers[event.pubkey] = event.profileData;
 
     emit(NoteContentLoaded(mentionUsers: updatedMentionUsers));
-  }
-
-  @override
-  Future<void> close() {
-    for (final sub in _profileSubscriptions.values) {
-      sub.cancel();
-    }
-    _profileSubscriptions.clear();
-    return super.close();
   }
 
   Future<String?> getCurrentUserHex() async {

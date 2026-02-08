@@ -63,3 +63,12 @@ class DmMessagesError extends DmEvent {
   @override
   List<Object?> get props => [error];
 }
+
+class DmConversationsUpdated extends DmEvent {
+  final List<Map<String, dynamic>> conversations;
+
+  const DmConversationsUpdated(this.conversations);
+
+  @override
+  List<Object?> get props => [conversations];
+}

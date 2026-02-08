@@ -1,9 +1,10 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import '../app_di.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../../data/services/dm_service.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 import '../../../data/services/relay_service.dart';
 import '../../../domain/mappers/event_mapper.dart';
 import '../../../data/sync/sync_service.dart';
@@ -12,10 +13,10 @@ import '../../../data/sync/publishers/event_publisher.dart';
 class ServicesModule extends DIModule {
   @override
   Future<void> register() async {
-    await IsarDatabaseService.instance.initialize();
+    await RustDatabaseService.instance.initialize();
 
-    AppDI.registerLazySingleton<IsarDatabaseService>(
-        () => IsarDatabaseService.instance);
+    AppDI.registerLazySingleton<RustDatabaseService>(
+        () => RustDatabaseService.instance);
     AppDI.registerLazySingleton<AuthService>(() => AuthService.instance);
     AppDI.registerLazySingleton<ValidationService>(
         () => ValidationService.instance);
@@ -28,7 +29,7 @@ class ServicesModule extends DIModule {
           authService: AppDI.get<AuthService>(),
         ));
     AppDI.registerLazySingleton<SyncService>(() => SyncService(
-          db: AppDI.get<IsarDatabaseService>(),
+          db: AppDI.get<RustDatabaseService>(),
           publisher: AppDI.get<EventPublisher>(),
         ));
     await AuthService.instance.refreshCache();
@@ -56,7 +57,11 @@ class ServicesModule extends DIModule {
         await RustRelayService.instance.init(privateKeyHex: privateKeyHex);
 
         if (userPubkeyHex != null) {
-          _discoverOutboxRelays(userPubkeyHex);
+          final prefs = await SharedPreferences.getInstance();
+          final gossipEnabled = prefs.getBool('gossip_model_enabled') ?? false;
+          if (gossipEnabled) {
+            _discoverOutboxRelays(userPubkeyHex);
+          }
         }
       } catch (_) {}
     });
@@ -65,7 +70,7 @@ class ServicesModule extends DIModule {
   void _discoverOutboxRelays(String userPubkeyHex) {
     Future.microtask(() async {
       try {
-        final db = IsarDatabaseService.instance;
+        final db = RustDatabaseService.instance;
         final follows = await db.getFollowingList(userPubkeyHex);
         if (follows != null && follows.isNotEmpty) {
           final allPubkeys = [userPubkeyHex, ...follows];

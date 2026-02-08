@@ -6,12 +6,14 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `get_client`, `state`
+// These functions are ignored because they are not marked as `pub`: `get_client_pub`, `get_client`, `state`, `user_relays_state`
 
 Future<void> initClient(
-        {required List<String> relayUrls, String? privateKeyHex}) =>
+        {required List<String> relayUrls,
+        String? privateKeyHex,
+        String? dbPath}) =>
     RustLib.instance.api.crateApiRelayInitClient(
-        relayUrls: relayUrls, privateKeyHex: privateKeyHex);
+        relayUrls: relayUrls, privateKeyHex: privateKeyHex, dbPath: dbPath);
 
 Future<void> connectRelays() =>
     RustLib.instance.api.crateApiRelayConnectRelays();
@@ -56,6 +58,11 @@ Future<String> fetchEvents(
     RustLib.instance.api.crateApiRelayFetchEvents(
         filterJson: filterJson, timeoutSecs: timeoutSecs);
 
+Future<String?> fetchEventById(
+        {required String eventId, required int timeoutSecs}) =>
+    RustLib.instance.api.crateApiRelayFetchEventById(
+        eventId: eventId, timeoutSecs: timeoutSecs);
+
 Future<String> sendEvent({required String eventJson}) =>
     RustLib.instance.api.crateApiRelaySendEvent(eventJson: eventJson);
 
@@ -68,3 +75,6 @@ Future<String> broadcastEvents(
         {required String eventsJson, List<String>? relayUrls}) =>
     RustLib.instance.api.crateApiRelayBroadcastEvents(
         eventsJson: eventsJson, relayUrls: relayUrls);
+
+Stream<String> subscribeToEvents({required String filterJson}) =>
+    RustLib.instance.api.crateApiRelaySubscribeToEvents(filterJson: filterJson);

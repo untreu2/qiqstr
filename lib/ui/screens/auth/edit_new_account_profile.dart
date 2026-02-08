@@ -94,7 +94,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         AppSnackbar.error(context, 'Upload failed: $e');
       }
     } finally {
@@ -193,12 +193,12 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
           if (!_isUploadingBanner)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: context.colors.background.withOpacity(0.9),
+                      color: context.colors.background.withValues(alpha: 0.9),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -264,13 +264,13 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                       ),
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: context.colors.background.withOpacity(0.9),
+                            color: context.colors.background.withValues(alpha: 0.9),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -315,9 +315,10 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
             AppSnackbar.error(context, state.message);
           }
           if (state is EditNewAccountProfileSaveSuccess) {
+            final router = GoRouter.of(context);
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted) {
-                context.go(
+                router.go(
                     '/suggested-follows?npub=${Uri.encodeComponent(widget.npub)}');
               }
             });

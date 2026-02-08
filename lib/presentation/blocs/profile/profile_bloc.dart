@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -7,7 +6,7 @@ import '../../../data/repositories/following_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/interaction_service.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 import '../../../domain/entities/feed_note.dart';
 import 'profile_event.dart';
 import 'profile_state.dart';
@@ -18,7 +17,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final FollowingRepository _followingRepository;
   final SyncService _syncService;
   final AuthService _authService;
-  final IsarDatabaseService _db;
+  final RustDatabaseService _db;
 
   static const int _pageSize = 30;
   bool _isLoadingMore = false;
@@ -32,13 +31,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     required FollowingRepository followingRepository,
     required SyncService syncService,
     required AuthService authService,
-    IsarDatabaseService? db,
+    RustDatabaseService? db,
   })  : _feedRepository = feedRepository,
         _profileRepository = profileRepository,
         _followingRepository = followingRepository,
         _syncService = syncService,
         _authService = authService,
-        _db = db ?? IsarDatabaseService.instance,
+        _db = db ?? RustDatabaseService.instance,
         super(const ProfileInitial()) {
     on<ProfileLoadRequested>(_onProfileLoaded);
     on<ProfileRefreshed>(_onProfileRefreshed);
@@ -140,15 +139,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   void _watchProfile(String pubkey) {
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(pubkey).listen((event) {
-      if (event == null || isClosed) return;
-      final content = event.content;
-      if (content.isEmpty) return;
+    _profileSubscription = _db.watchProfile(pubkey).listen((profileData) {
+      if (profileData == null || isClosed) return;
 
       try {
-        final parsed = jsonDecode(content) as Map<String, dynamic>;
         final userMap = <String, dynamic>{};
-        parsed.forEach((key, value) {
+        profileData.forEach((key, value) {
           userMap[key == 'picture' ? 'profileImage' : key] =
               value?.toString() ?? '';
         });
@@ -158,31 +154,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     });
   }
 
-  Map<String, dynamic> _parseJson(String content) {
-    try {
-      return Map<String, dynamic>.from(
-        content.isNotEmpty
-            ? (content.startsWith('{') ? _decodeJson(content) : {})
-            : {},
-      );
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Map<String, dynamic> _decodeJson(String content) {
-    final decoded = content;
-    if (decoded.startsWith('{') && decoded.endsWith('}')) {
-      return Map<String, dynamic>.from(
-        Uri.splitQueryString(decoded
-            .substring(1, decoded.length - 1)
-            .replaceAll('"', '')
-            .replaceAll(',', '&')
-            .replaceAll(':', '=')),
-      );
-    }
-    return {};
-  }
 
   void _syncProfileInBackground(String targetHex, Emitter<ProfileState> emit) {
     Future.microtask(() async {
@@ -227,7 +198,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           _loadProfilesForNotes(noteMaps, emit);
         }
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<void> _onProfileFollowToggled(

@@ -143,7 +143,7 @@ class SuggestedFollowsBloc
       final newFollows = <String>{...currentFollows, ...selectedHexes}.toList();
 
       await _syncService.publishFollow(followingPubkeys: newFollows);
-    } catch (e) {}
+    } catch (_) {}
 
     emit(currentState.copyWith(isProcessing: false));
   }

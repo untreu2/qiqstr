@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
@@ -35,6 +34,7 @@ class _DmChatPageState extends State<DmChatPage> {
   bool _isInitialized = false;
   bool _isUploadingMedia = false;
   DmBloc? _dmBloc;
+  final List<String> _attachedMediaUrls = [];
 
   static const _imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   static const _videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
@@ -93,12 +93,9 @@ class _DmChatPageState extends State<DmChatPage> {
       if (!mounted) return;
 
       if (url != null && url.isNotEmpty) {
-        final textController = _textControllers[recipientPubkeyHex];
-        final currentText = textController?.text.trim() ?? '';
-        final content = currentText.isNotEmpty ? '$currentText\n$url' : url;
-
-        _dmBloc!.add(DmMessageSent(recipientPubkeyHex, content));
-        textController?.clear();
+        setState(() {
+          _attachedMediaUrls.add(url);
+        });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to upload media')),
@@ -117,6 +114,33 @@ class _DmChatPageState extends State<DmChatPage> {
         });
       }
     }
+  }
+
+  void _removeAttachedMedia(String url) {
+    setState(() {
+      _attachedMediaUrls.remove(url);
+    });
+  }
+
+  void _sendMessage(String recipientPubkeyHex) {
+    if (_dmBloc == null) return;
+    final textController = _textControllers[recipientPubkeyHex];
+    final text = textController?.text.trim() ?? '';
+
+    if (text.isEmpty && _attachedMediaUrls.isEmpty) return;
+
+    final parts = <String>[];
+    if (text.isNotEmpty) parts.add(text);
+    for (final url in _attachedMediaUrls) {
+      parts.add(url);
+    }
+
+    final content = parts.join('\n');
+    _dmBloc!.add(DmMessageSent(recipientPubkeyHex, content));
+    textController?.clear();
+    setState(() {
+      _attachedMediaUrls.clear();
+    });
   }
 
   @override
@@ -476,81 +500,186 @@ class _DmChatPageState extends State<DmChatPage> {
     }
     final textController = _textControllers[recipientPubkeyHex]!;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final colors = context.colors;
 
     return Container(
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
-        top: 16,
+        top: 8,
         bottom: 16 + bottomPadding,
       ),
       decoration: BoxDecoration(
-        color: context.colors.background,
+        color: colors.background,
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            onTap: _isUploadingMedia
-                ? null
-                : () => _selectMedia(recipientPubkeyHex),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: context.colors.overlayLight,
-                shape: BoxShape.circle,
+          if (_attachedMediaUrls.isNotEmpty || _isUploadingMedia)
+            _buildAttachedMediaPreview(colors),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _isUploadingMedia
+                    ? null
+                    : () => _selectMedia(recipientPubkeyHex),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colors.overlayLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: _isUploadingMedia
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colors.textPrimary,
+                          ),
+                        )
+                      : Icon(
+                          CarbonIcons.image,
+                          color: colors.textPrimary,
+                          size: 22,
+                        ),
+                ),
               ),
-              child: _isUploadingMedia
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: context.colors.textPrimary,
-                      ),
-                    )
-                  : Icon(
-                      CarbonIcons.image,
-                      color: context.colors.textPrimary,
-                      size: 22,
-                    ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: CustomInputField(
-              controller: textController,
-              hintText: 'Type a message...',
-              maxLines: null,
-              height: null,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 12,
+              const SizedBox(width: 8),
+              Expanded(
+                child: CustomInputField(
+                  controller: textController,
+                  hintText: 'Type a message...',
+                  maxLines: null,
+                  height: null,
+                  textCapitalization: TextCapitalization.sentences,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () {
-              final content = textController.text.trim();
-              if (content.isNotEmpty && _dmBloc != null) {
-                _dmBloc!.add(DmMessageSent(recipientPubkeyHex, content));
-                textController.clear();
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: context.colors.textPrimary,
-                shape: BoxShape.circle,
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _sendMessage(recipientPubkeyHex),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colors.textPrimary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CarbonIcons.arrow_up,
+                    color: colors.background,
+                    size: 22,
+                  ),
+                ),
               ),
-              child: Icon(
-                CarbonIcons.arrow_up,
-                color: context.colors.background,
-                size: 22,
-              ),
-            ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAttachedMediaPreview(AppThemeColors colors) {
+    return SizedBox(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _attachedMediaUrls.length + (_isUploadingMedia ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (_isUploadingMedia && index == _attachedMediaUrls.length) {
+            return Container(
+              width: 80,
+              height: 80,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: colors.overlayLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final url = _attachedMediaUrls[index];
+          return Stack(
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _isImageUrl(url)
+                      ? CachedNetworkImage(
+                          imageUrl: url,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            color: colors.overlayLight,
+                            child: Center(
+                              child: Icon(
+                                CarbonIcons.image,
+                                color: colors.textSecondary,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                          errorWidget: (_, __, ___) => Container(
+                            color: colors.overlayLight,
+                            child: Icon(
+                              CarbonIcons.image,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        )
+                      : Container(
+                          color: colors.overlayLight,
+                          child: Center(
+                            child: Icon(
+                              CarbonIcons.play_filled,
+                              color: colors.textSecondary,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+              Positioned(
+                top: 4,
+                right: 12,
+                child: GestureDetector(
+                  onTap: () => _removeAttachedMedia(url),
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: colors.background,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.close,
+                      color: colors.textPrimary,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

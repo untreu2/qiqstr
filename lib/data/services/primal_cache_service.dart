@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../constants/relays.dart';
 
-const int USER_FOLLOWER_COUNTS = 10000133;
-const int NOTIFICATION = 10000110;
+const int userFollowerCounts = 10000133;
+const int notification = 10000110;
 
 class PrimalCacheService {
   static PrimalCacheService? _instance;
@@ -25,7 +25,7 @@ class PrimalCacheService {
       _pendingNotificationRequests = {};
   final Map<String, List<Map<String, dynamic>>> _notificationBuffers = {};
   int _subscriptionCounter = 0;
-  StreamSubscription? _subscription;
+  StreamSubscription? _subscription; // ignore: unused_field
 
   Future<WebSocket?> _ensureConnection() async {
     if (_ws != null && _ws!.readyState == WebSocket.open) return _ws;
@@ -78,7 +78,7 @@ class PrimalCacheService {
         final event = decoded[2] as Map<String, dynamic>;
         final kind = event['kind'] as int?;
 
-        if (kind == NOTIFICATION &&
+        if (kind == notification &&
             _pendingNotificationRequests.containsKey(subscriptionId)) {
           try {
             final content = event['content'];
@@ -100,7 +100,7 @@ class PrimalCacheService {
               print('[PrimalCacheService] Notification parse error: $e');
             }
           }
-        } else if (kind == USER_FOLLOWER_COUNTS &&
+        } else if (kind == userFollowerCounts &&
             _pendingCountRequests.containsKey(subscriptionId)) {
           final completer = _pendingCountRequests.remove(subscriptionId);
           if (completer != null && !completer.isCompleted) {

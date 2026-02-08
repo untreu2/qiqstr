@@ -164,7 +164,14 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                         version: QrVersions.auto,
                         size: 200.0,
                         backgroundColor: colors.background,
-                        foregroundColor: colors.textPrimary,
+                        eyeStyle: QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
+                          color: colors.textPrimary,
+                        ),
+                        dataModuleStyle: QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: colors.textPrimary,
+                        ),
                       ),
               ),
             const SizedBox(height: 16),

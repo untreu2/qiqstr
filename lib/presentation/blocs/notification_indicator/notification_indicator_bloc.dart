@@ -1,7 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 import 'notification_indicator_event.dart';
 import 'notification_indicator_state.dart';
 
@@ -9,14 +9,14 @@ class NotificationIndicatorBloc
     extends Bloc<NotificationIndicatorEvent, NotificationIndicatorState> {
   final SyncService _syncService;
   final AuthService _authService;
-  final IsarDatabaseService _db;
+  final RustDatabaseService _db;
 
   int _lastCheckedTimestamp = 0;
 
   NotificationIndicatorBloc({
     required SyncService syncService,
     required AuthService authService,
-    required IsarDatabaseService db,
+    required RustDatabaseService db,
   })  : _syncService = syncService,
         _authService = authService,
         _db = db,
@@ -44,7 +44,7 @@ class NotificationIndicatorBloc
 
       if (notifications.isNotEmpty) {
         final latestTimestamp = notifications
-            .map((e) => e.createdAt)
+            .map((e) => (e['created_at'] as int?) ?? 0)
             .reduce((a, b) => a > b ? a : b);
 
         final hasNew = _lastCheckedTimestamp > 0 &&

@@ -1,6 +1,5 @@
 import 'dart:async';
 import '../../domain/entities/article.dart';
-import '../../models/event_model.dart';
 import 'base_repository.dart';
 
 abstract class ArticleRepository {
@@ -26,19 +25,7 @@ class ArticleRepositoryImpl extends BaseRepository
 
   @override
   Future<List<Article>> getArticles({int limit = 50}) async {
-    final articlesData = await db.getCachedArticles(limit: limit);
-    final events = <EventModel>[];
-
-    for (final data in articlesData) {
-      final eventId = data['id'] as String?;
-      if (eventId != null) {
-        final event = await db.getEventModel(eventId);
-        if (event != null) {
-          events.add(event);
-        }
-      }
-    }
-
+    final events = await db.getCachedArticles(limit: limit);
     return await _hydrateArticles(events);
   }
 
@@ -47,12 +34,13 @@ class ArticleRepositoryImpl extends BaseRepository
     final event = await db.getEventModel(articleId);
     if (event == null) return null;
 
-    final profile = await db.getUserProfile(event.pubkey);
+    final pubkey = event['pubkey'] as String? ?? '';
+    final profile = await db.getUserProfile(pubkey);
 
     return mapper.toArticle(
       event,
       authorName: profile?['name'] ?? profile?['display_name'],
-      authorImage: profile?['profileImage'],
+      authorImage: profile?['picture'],
     );
   }
 
@@ -61,19 +49,25 @@ class ArticleRepositoryImpl extends BaseRepository
     await db.saveArticles(articles);
   }
 
-  Future<List<Article>> _hydrateArticles(List<EventModel> events) async {
+  Future<List<Article>> _hydrateArticles(
+      List<Map<String, dynamic>> events) async {
     if (events.isEmpty) return [];
 
-    final pubkeys = events.map((e) => e.pubkey).toSet().toList();
+    final pubkeys = events
+        .map((e) => e['pubkey'] as String? ?? '')
+        .where((p) => p.isNotEmpty)
+        .toSet()
+        .toList();
     final profiles = await db.getUserProfiles(pubkeys);
 
     return events.map((event) {
-      final profile = profiles[event.pubkey];
+      final pubkey = event['pubkey'] as String? ?? '';
+      final profile = profiles[pubkey];
 
       return mapper.toArticle(
         event,
         authorName: profile?['name'] ?? profile?['display_name'],
-        authorImage: profile?['profileImage'],
+        authorImage: profile?['picture'],
       );
     }).toList();
   }

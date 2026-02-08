@@ -187,74 +187,57 @@ class _NoteWidgetState extends State<NoteWidget> {
       final profileRepo = AppDI.get<ProfileRepository>();
       final syncService = AppDI.get<SyncService>();
 
-      final currentAuthor =
-          widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
-      final currentReposter = _reposterId != null
-          ? (widget.profiles[_reposterId] ??
-              _locallyLoadedProfiles[_reposterId])
-          : null;
-
-      final shouldLoadAuthor = currentAuthor == null ||
-          (currentAuthor['profileImage'] as String? ?? '').isEmpty ||
-          (currentAuthor['name'] as String? ?? '').isEmpty ||
-          (currentAuthor['name'] as String? ?? '') ==
-              _authorId.substring(
-                  0, _authorId.length > 8 ? 8 : _authorId.length);
-
-      if (shouldLoadAuthor) {
-        final profile = await profileRepo.getProfile(_authorId);
-        if (profile != null && mounted && !_isDisposed) {
-          _locallyLoadedProfiles[_authorId] = {
-            'pubkeyHex': profile.pubkey,
-            'name': profile.name ?? '',
-            'about': profile.about ?? '',
-            'profileImage': profile.picture ?? '',
-            'banner': profile.banner ?? '',
-            'website': profile.website ?? '',
-            'nip05': profile.nip05 ?? '',
-            'lud16': profile.lud16 ?? '',
-            'updatedAt': DateTime.now(),
-            'nip05Verified': false,
-          };
-          _updateUserData();
-        } else if (profile == null) {
-          _syncProfileInBackground(syncService, _authorId);
-        }
-      }
+      await _loadAndSyncProfile(profileRepo, syncService, _authorId);
 
       if (_reposterId != null) {
-        final reposterId = _reposterId;
-        final shouldLoadReposter = currentReposter == null ||
-            (currentReposter['profileImage'] as String? ?? '').isEmpty ||
-            (currentReposter['name'] as String? ?? '').isEmpty ||
-            (currentReposter['name'] as String? ?? '') ==
-                reposterId.substring(
-                    0, reposterId.length > 8 ? 8 : reposterId.length);
-
-        if (shouldLoadReposter) {
-          final profile = await profileRepo.getProfile(reposterId);
-          if (profile != null && mounted && !_isDisposed) {
-            _locallyLoadedProfiles[reposterId] = {
-              'pubkeyHex': profile.pubkey,
-              'name': profile.name ?? '',
-              'about': profile.about ?? '',
-              'profileImage': profile.picture ?? '',
-              'banner': profile.banner ?? '',
-              'website': profile.website ?? '',
-              'nip05': profile.nip05 ?? '',
-              'lud16': profile.lud16 ?? '',
-              'updatedAt': DateTime.now(),
-              'nip05Verified': false,
-            };
-            _updateUserData();
-          } else if (profile == null) {
-            _syncProfileInBackground(syncService, reposterId);
-          }
-        }
+        await _loadAndSyncProfile(profileRepo, syncService, _reposterId);
       }
     } catch (e) {
       debugPrint('[NoteWidget] Load users async error: $e');
     }
+  }
+
+  Future<void> _loadAndSyncProfile(
+      ProfileRepository profileRepo, SyncService syncService, String pubkey) async {
+    if (_isDisposed || !mounted) return;
+
+    final current =
+        widget.profiles[pubkey] ?? _locallyLoadedProfiles[pubkey];
+    final hasName = (current?['name'] as String? ?? '').isNotEmpty &&
+        (current?['name'] as String? ?? '') !=
+            pubkey.substring(0, pubkey.length > 8 ? 8 : pubkey.length);
+    final hasImage = (current?['profileImage'] as String? ?? '').isNotEmpty;
+
+    if (current == null || !hasName || !hasImage) {
+      final profile = await profileRepo.getProfile(pubkey);
+      if (profile != null && mounted && !_isDisposed) {
+        _applyProfile(pubkey, profile);
+      }
+
+      final profileLoaded = profile != null &&
+          (profile.picture ?? '').isNotEmpty &&
+          (profile.name ?? '').isNotEmpty;
+
+      if (!profileLoaded) {
+        _syncProfileInBackground(syncService, pubkey);
+      }
+    }
+  }
+
+  void _applyProfile(String pubkey, dynamic profile) {
+    _locallyLoadedProfiles[pubkey] = {
+      'pubkeyHex': profile.pubkey,
+      'name': profile.name ?? '',
+      'about': profile.about ?? '',
+      'profileImage': profile.picture ?? '',
+      'banner': profile.banner ?? '',
+      'website': profile.website ?? '',
+      'nip05': profile.nip05 ?? '',
+      'lud16': profile.lud16 ?? '',
+      'updatedAt': DateTime.now(),
+      'nip05Verified': false,
+    };
+    _updateUserData();
   }
 
   void _syncProfileInBackground(SyncService syncService, String pubkey) {
@@ -267,19 +250,7 @@ class _NoteWidgetState extends State<NoteWidget> {
         final profileRepo = AppDI.get<ProfileRepository>();
         final profile = await profileRepo.getProfile(pubkey);
         if (profile != null && mounted && !_isDisposed) {
-          _locallyLoadedProfiles[pubkey] = {
-            'pubkeyHex': profile.pubkey,
-            'name': profile.name ?? '',
-            'about': profile.about ?? '',
-            'profileImage': profile.picture ?? '',
-            'banner': profile.banner ?? '',
-            'website': profile.website ?? '',
-            'nip05': profile.nip05 ?? '',
-            'lud16': profile.lud16 ?? '',
-            'updatedAt': DateTime.now(),
-            'nip05Verified': false,
-          };
-          _updateUserData();
+          _applyProfile(pubkey, profile);
         }
       } catch (_) {}
     });
@@ -337,7 +308,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (hasRelevantChange) {
         _updateUserData();
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   void _updateUserData() {
@@ -396,7 +367,7 @@ class _NoteWidgetState extends State<NoteWidget> {
           _stateNotifier.value = newState;
         }
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   String _calculateTimestamp(DateTime timestamp) {
@@ -547,7 +518,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (mounted && !_isDisposed) {
         _navigateToProfile(id);
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   void _navigateToThreadPage() {
@@ -559,15 +530,12 @@ class _NoteWidgetState extends State<NoteWidget> {
 
       final noteRootId = widget.note['rootId'] as String?;
       if (_isRepost && noteRootId != null && noteRootId.isNotEmpty) {
-        // For reposts, navigate to the original note's thread and focus on it
         rootId = noteRootId;
         focusedId = noteRootId;
       } else if (_isReply && noteRootId != null && noteRootId.isNotEmpty) {
-        // For replies, use the root as thread root but focus on this reply
         rootId = noteRootId;
         focusedId = _noteId;
       } else {
-        // For root notes, use note as both root and focused
         rootId = _noteId;
         focusedId = _noteId;
       }
@@ -575,16 +543,16 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (widget.onNoteTap != null) {
         widget.onNoteTap!(_noteId, rootId);
       } else {
+        final noteData = Map<String, dynamic>.from(widget.note);
         final currentLocation = GoRouterState.of(context).matchedLocation;
+        final query =
+            'rootNoteId=${Uri.encodeComponent(rootId)}&focusedNoteId=${Uri.encodeComponent(focusedId)}';
         if (currentLocation.startsWith('/home/feed')) {
-          context.push(
-              '/home/feed/thread?rootNoteId=${Uri.encodeComponent(rootId)}&focusedNoteId=${Uri.encodeComponent(focusedId)}');
+          context.push('/home/feed/thread?$query', extra: noteData);
         } else if (currentLocation.startsWith('/home/notifications')) {
-          context.push(
-              '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(rootId)}&focusedNoteId=${Uri.encodeComponent(focusedId)}');
+          context.push('/home/notifications/thread?$query', extra: noteData);
         } else {
-          context.push(
-              '/thread?rootNoteId=${Uri.encodeComponent(rootId)}&focusedNoteId=${Uri.encodeComponent(focusedId)}');
+          context.push('/thread?$query', extra: noteData);
         }
       }
     } catch (e) {

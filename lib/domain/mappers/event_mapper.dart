@@ -1,5 +1,4 @@
 import 'dart:convert';
-import '../../models/event_model.dart';
 import '../entities/feed_note.dart';
 import '../entities/user_profile.dart';
 import '../entities/notification_item.dart';
@@ -7,7 +6,7 @@ import '../entities/article.dart';
 
 class EventMapper {
   FeedNote toFeedNote(
-    EventModel event, {
+    Map<String, dynamic> event, {
     String? authorName,
     String? authorImage,
     String? authorNip05,
@@ -16,15 +15,16 @@ class EventMapper {
     int replyCount = 0,
     int zapCount = 0,
   }) {
-    final tags = event.getTags();
+    final tags = _getTags(event);
+    final kind = event['kind'] as int? ?? 1;
 
-    bool isRepost = event.kind == 6;
+    bool isRepost = kind == 6;
     String? repostedBy;
     int? repostCreatedAt;
-    String content = event.content;
-    String pubkey = event.pubkey;
-    String id = event.eventId;
-    int createdAt = event.createdAt;
+    String content = event['content'] as String? ?? '';
+    String pubkey = event['pubkey'] as String? ?? '';
+    String id = event['id'] as String? ?? '';
+    int createdAt = event['created_at'] as int? ?? 0;
 
     String? rootId;
     String? parentId;
@@ -72,8 +72,8 @@ class EventMapper {
     isReply = (rootId != null || parentId != null) && !isQuote;
 
     if (isRepost) {
-      repostedBy = event.pubkey;
-      repostCreatedAt = event.createdAt;
+      repostedBy = pubkey;
+      repostCreatedAt = createdAt;
 
       for (final tag in tags) {
         if (tag.isNotEmpty && tag[0] == 'e' && tag.length > 1) {
@@ -155,7 +155,7 @@ class EventMapper {
     );
   }
 
-  UserProfile toUserProfile(EventModel event) {
+  UserProfile toUserProfile(Map<String, dynamic> event) {
     String? name;
     String? displayName;
     String? about;
@@ -164,9 +164,12 @@ class EventMapper {
     String? nip05;
     String? lud16;
     String? website;
+    final pubkey = event['pubkey'] as String? ?? '';
+    final createdAt = event['created_at'] as int? ?? 0;
 
     try {
-      final content = jsonDecode(event.content) as Map<String, dynamic>;
+      final contentStr = event['content'] as String? ?? '{}';
+      final content = jsonDecode(contentStr) as Map<String, dynamic>;
       name = content['name'] as String?;
       displayName = content['display_name'] as String?;
       about = content['about'] as String?;
@@ -178,7 +181,7 @@ class EventMapper {
     } catch (_) {}
 
     return UserProfile(
-      pubkey: event.pubkey,
+      pubkey: pubkey,
       name: name,
       displayName: displayName,
       about: about,
@@ -187,22 +190,27 @@ class EventMapper {
       nip05: nip05,
       lud16: lud16,
       website: website,
-      createdAt: event.createdAt,
+      createdAt: createdAt,
     );
   }
 
   NotificationItem toNotificationItem(
-    EventModel event, {
+    Map<String, dynamic> event, {
     String? fromName,
     String? fromImage,
   }) {
-    final tags = event.getTags();
+    final tags = _getTags(event);
+    final kind = event['kind'] as int? ?? 1;
+    final eventId = event['id'] as String? ?? '';
+    final pubkey = event['pubkey'] as String? ?? '';
+    final content = event['content'] as String? ?? '';
+    final createdAt = event['created_at'] as int? ?? 0;
 
     NotificationType type;
     String? targetNoteId;
     int? zapAmount;
 
-    switch (event.kind) {
+    switch (kind) {
       case 1:
         bool hasMention = false;
         for (final tag in tags) {
@@ -238,13 +246,39 @@ class EventMapper {
         break;
       case 9735:
         type = NotificationType.zap;
+        String? zapSender;
         for (final tag in tags) {
           if (tag.isNotEmpty && tag[0] == 'e' && tag.length > 1) {
             targetNoteId = tag[1];
           }
-          if (tag.isNotEmpty && tag[0] == 'amount' && tag.length > 1) {
-            zapAmount = int.tryParse(tag[1]);
+          if (tag.isNotEmpty && tag[0] == 'description' && tag.length > 1) {
+            try {
+              final zapReq = jsonDecode(tag[1]) as Map<String, dynamic>;
+              zapSender = zapReq['pubkey'] as String?;
+              final zapTags = zapReq['tags'] as List<dynamic>? ?? [];
+              for (final zt in zapTags) {
+                if (zt is List && zt.length >= 2 && zt[0] == 'amount') {
+                  final millisats = int.tryParse(zt[1].toString());
+                  if (millisats != null) {
+                    zapAmount = millisats ~/ 1000;
+                  }
+                }
+              }
+            } catch (_) {}
           }
+        }
+        if (zapSender != null && zapSender.isNotEmpty) {
+          return NotificationItem(
+            id: eventId,
+            type: type,
+            fromPubkey: zapSender,
+            targetNoteId: targetNoteId,
+            content: content,
+            createdAt: createdAt,
+            fromName: fromName,
+            fromImage: fromImage,
+            zapAmount: zapAmount,
+          );
         }
         break;
       default:
@@ -252,12 +286,12 @@ class EventMapper {
     }
 
     return NotificationItem(
-      id: event.eventId,
+      id: eventId,
       type: type,
-      fromPubkey: event.pubkey,
+      fromPubkey: pubkey,
       targetNoteId: targetNoteId,
-      content: event.content,
-      createdAt: event.createdAt,
+      content: content,
+      createdAt: createdAt,
       fromName: fromName,
       fromImage: fromImage,
       zapAmount: zapAmount,
@@ -265,11 +299,15 @@ class EventMapper {
   }
 
   Article toArticle(
-    EventModel event, {
+    Map<String, dynamic> event, {
     String? authorName,
     String? authorImage,
   }) {
-    final tags = event.getTags();
+    final tags = _getTags(event);
+    final eventId = event['id'] as String? ?? '';
+    final pubkey = event['pubkey'] as String? ?? '';
+    final content = event['content'] as String? ?? '';
+    final createdAt = event['created_at'] as int? ?? 0;
 
     String title = '';
     String? image;
@@ -306,15 +344,15 @@ class EventMapper {
     }
 
     return Article(
-      id: event.eventId,
-      pubkey: event.pubkey,
+      id: eventId,
+      pubkey: pubkey,
       title: title,
-      content: event.content,
+      content: content,
       image: image,
       summary: summary,
       dTag: dTag,
-      publishedAt: publishedAt ?? event.createdAt,
-      createdAt: event.createdAt,
+      publishedAt: publishedAt ?? createdAt,
+      createdAt: createdAt,
       hashtags: hashtags,
       authorName: authorName,
       authorImage: authorImage,
@@ -331,5 +369,15 @@ class EventMapper {
       'tags': note.tags,
       'sig': '',
     };
+  }
+
+  List<List<String>> _getTags(Map<String, dynamic> event) {
+    final rawTags = event['tags'] as List<dynamic>? ?? [];
+    return rawTags.map((tag) {
+      if (tag is List) {
+        return tag.map((t) => t.toString()).toList();
+      }
+      return <String>[];
+    }).toList();
   }
 }

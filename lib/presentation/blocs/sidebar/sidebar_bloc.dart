@@ -1,13 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 import '../../../data/services/relay_service.dart';
-import '../../../models/event_model.dart';
 import 'sidebar_event.dart';
 import 'sidebar_state.dart';
 
@@ -16,24 +14,26 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
   final AuthService _authService;
-  final IsarDatabaseService _db;
+  final RustDatabaseService _db;
 
   String? _currentUserHex;
   String? _currentNpub;
-  StreamSubscription<EventModel?>? _profileSubscription;
+  StreamSubscription<Map<String, dynamic>?>? _profileSubscription;
   Timer? _relayCountTimer;
+  Timer? _countsTimer;
+  Timer? _followingPollTimer;
 
   SidebarBloc({
     required FollowingRepository followingRepository,
     required ProfileRepository profileRepository,
     required SyncService syncService,
     required AuthService authService,
-    IsarDatabaseService? db,
+    RustDatabaseService? db,
   })  : _followingRepository = followingRepository,
         _profileRepository = profileRepository,
         _syncService = syncService,
         _authService = authService,
-        _db = db ?? IsarDatabaseService.instance,
+        _db = db ?? RustDatabaseService.instance,
         super(const SidebarInitial()) {
     on<SidebarInitialized>(_onSidebarInitialized);
     on<SidebarRefreshed>(_onSidebarRefreshed);
@@ -69,9 +69,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
 
   void _watchProfile(String userHex) {
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(userHex).listen((event) {
-      if (isClosed || event == null) return;
-      add(_SidebarProfileUpdated(event));
+    _profileSubscription = _db.watchProfile(userHex).listen((profileData) {
+      if (isClosed || profileData == null) return;
+      add(_SidebarProfileUpdated(profileData));
     });
   }
 
@@ -82,32 +82,24 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     if (state is! SidebarLoaded) return;
     final currentState = state as SidebarLoaded;
 
-    final userMap = _buildUserMapFromEvent(event.profile);
+    final userMap = _buildUserMapFromProfile(event.profileData);
     emit(currentState.copyWith(currentUser: userMap));
   }
 
-  Map<String, dynamic> _buildUserMapFromEvent(EventModel event) {
-    final content = event.content;
-    Map<String, dynamic> parsed = {};
-
-    try {
-      if (content.isNotEmpty) {
-        parsed = jsonDecode(content) as Map<String, dynamic>;
-      }
-    } catch (_) {}
-
+  Map<String, dynamic> _buildUserMapFromProfile(
+      Map<String, dynamic> profileData) {
     return {
       'npub': _currentNpub ?? '',
       'pubkeyHex': _currentUserHex ?? '',
-      'name': parsed['name'] ?? parsed['display_name'] ?? '',
-      'display_name': parsed['display_name'] ?? '',
-      'about': parsed['about'] ?? '',
-      'picture': parsed['picture'] ?? '',
-      'profileImage': parsed['picture'] ?? '',
-      'banner': parsed['banner'] ?? '',
-      'nip05': parsed['nip05'] ?? '',
-      'lud16': parsed['lud16'] ?? '',
-      'website': parsed['website'] ?? '',
+      'name': profileData['name'] ?? profileData['display_name'] ?? '',
+      'display_name': profileData['display_name'] ?? '',
+      'about': profileData['about'] ?? '',
+      'picture': profileData['picture'] ?? '',
+      'profileImage': profileData['picture'] ?? '',
+      'banner': profileData['banner'] ?? '',
+      'nip05': profileData['nip05'] ?? '',
+      'lud16': profileData['lud16'] ?? '',
+      'website': profileData['website'] ?? '',
     };
   }
 
@@ -127,10 +119,19 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     if (_currentUserHex == null) return;
     try {
       await _syncService.syncProfile(_currentUserHex!);
+      _fetchCounts(_currentUserHex!);
     } catch (_) {}
   }
 
   void _loadFollowerCounts(String userPubkeyHex) {
+    _fetchCounts(userPubkeyHex);
+    _startFollowingPoll(userPubkeyHex);
+    _countsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _fetchCounts(userPubkeyHex);
+    });
+  }
+
+  void _fetchCounts(String userPubkeyHex) {
     Future.microtask(() async {
       if (isClosed) return;
       try {
@@ -144,6 +145,33 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
         if (isClosed) return;
         add(_SidebarCountsUpdated(0, 0));
       }
+    });
+  }
+
+  void _startFollowingPoll(String pubkeyHex) {
+    _followingPollTimer?.cancel();
+    int attempts = 0;
+    _followingPollTimer =
+        Timer.periodic(const Duration(seconds: 1), (timer) async {
+      attempts++;
+      if (isClosed || attempts > 15) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final follows =
+            await _followingRepository.getFollowingList(pubkeyHex);
+        if (follows != null && follows.isNotEmpty) {
+          timer.cancel();
+          if (!isClosed && state is SidebarLoaded) {
+            final followerCount =
+                await _profileRepository.getFollowerCount(pubkeyHex);
+            if (!isClosed) {
+              add(_SidebarCountsUpdated(follows.length, followerCount));
+            }
+          }
+        }
+      } catch (_) {}
     });
   }
 
@@ -191,16 +219,18 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   Future<void> close() {
     _profileSubscription?.cancel();
     _relayCountTimer?.cancel();
+    _countsTimer?.cancel();
+    _followingPollTimer?.cancel();
     return super.close();
   }
 }
 
 class _SidebarProfileUpdated extends SidebarEvent {
-  final EventModel profile;
-  const _SidebarProfileUpdated(this.profile);
+  final Map<String, dynamic> profileData;
+  const _SidebarProfileUpdated(this.profileData);
 
   @override
-  List<Object?> get props => [profile];
+  List<Object?> get props => [profileData];
 }
 
 class _SidebarCountsUpdated extends SidebarEvent {

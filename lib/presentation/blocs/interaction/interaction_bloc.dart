@@ -4,7 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/interaction_service.dart';
-import '../../../data/services/isar_database_service.dart';
+import 'dart:convert';
+import '../../../data/services/rust_database_service.dart';
 import 'interaction_event.dart';
 import 'interaction_state.dart';
 
@@ -142,10 +143,10 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       final noteAuthor =
           note?['pubkey'] as String? ?? note?['author'] as String? ?? '';
       String originalContent = '';
-      final eventModel =
-          await IsarDatabaseService.instance.getEventModel(noteId);
-      if (eventModel != null) {
-        originalContent = eventModel.rawEvent;
+      final eventData =
+          await RustDatabaseService.instance.getEventModel(noteId);
+      if (eventData != null) {
+        originalContent = jsonEncode(eventData);
       }
 
       await _syncService.publishRepost(
@@ -165,7 +166,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     _interactionService.markUnreposted(noteId);
 
     try {
-      final db = IsarDatabaseService.instance;
+      final db = RustDatabaseService.instance;
       final repostEventId =
           await db.findUserRepostEventId(currentUserHex, noteId);
       if (repostEventId != null) {
@@ -178,6 +179,13 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       InteractionNoteDeleted event, Emitter<InteractionState> emit) async {
     try {
       await _syncService.publishDeletion(eventIds: [noteId]);
+      final currentState =
+          state is InteractionLoaded ? (state as InteractionLoaded) : null;
+      if (currentState != null) {
+        emit(currentState.copyWith(noteDeleted: true));
+      } else {
+        emit(const InteractionLoaded(noteDeleted: true));
+      }
     } catch (_) {}
   }
 

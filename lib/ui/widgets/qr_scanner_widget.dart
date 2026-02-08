@@ -46,14 +46,18 @@ class _QrScannerWidgetState extends State<QrScannerWidget> {
         final scannedText = scanData.code ?? "";
         if (scannedText.isNotEmpty) {
           widget.onScanComplete(scannedText);
-          Navigator.pop(context);
+          if (mounted) {
+            Navigator.pop(context);
+          }
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text("Scan failed, please try again"),
-              backgroundColor: context.colors.error,
-            ),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text("Scan failed, please try again"),
+                backgroundColor: context.colors.error,
+              ),
+            );
+          }
           _scanned = false;
         }
       }

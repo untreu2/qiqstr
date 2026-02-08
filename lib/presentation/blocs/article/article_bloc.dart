@@ -4,8 +4,7 @@ import '../../../data/repositories/article_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/sync/sync_service.dart';
-import '../../../data/services/isar_database_service.dart';
-import '../../../models/event_model.dart';
+import '../../../data/services/rust_database_service.dart';
 import '../../../domain/mappers/event_mapper.dart' as mappers;
 import 'article_event.dart';
 import 'article_state.dart';
@@ -31,26 +30,27 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   final ProfileRepository _profileRepository;
   final FollowingRepository _followingRepository;
   final SyncService _syncService;
-  final IsarDatabaseService _db;
+  final RustDatabaseService _db;
   final mappers.EventMapper _mapper;
 
   static const int _pageSize = 50;
-  StreamSubscription<List<EventModel>>? _articlesSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _articlesSubscription;
   String _currentUserHex = '';
   List<String>? _followingList;
+  bool _initialSyncDone = false;
 
   ArticleBloc({
     required ArticleRepository articleRepository,
     required ProfileRepository profileRepository,
     required FollowingRepository followingRepository,
     required SyncService syncService,
-    IsarDatabaseService? db,
+    RustDatabaseService? db,
     mappers.EventMapper? mapper,
   })  : _articleRepository = articleRepository,
         _profileRepository = profileRepository,
         _followingRepository = followingRepository,
         _syncService = syncService,
-        _db = db ?? IsarDatabaseService.instance,
+        _db = db ?? RustDatabaseService.instance,
         _mapper = mapper ?? mappers.EventMapper(),
         super(const ArticleInitial()) {
     on<ArticleInitialized>(_onArticleInitialized);
@@ -72,17 +72,60 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     _followingList =
         await _followingRepository.getFollowingList(_currentUserHex);
 
+    final cachedEvents = await _db.getCachedArticles(
+      limit: _pageSize,
+      authors: _followingList,
+    );
+    if (!isClosed && cachedEvents.isNotEmpty) {
+      final articleMaps = _eventsToArticleMaps(cachedEvents);
+      articleMaps.sort((a, b) {
+        final aTime = a['created_at'] as int? ?? 0;
+        final bTime = b['created_at'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
+      if (articleMaps.isNotEmpty) {
+        emit(ArticleLoaded(
+          articles: articleMaps,
+          filteredArticles: articleMaps,
+          profiles: const {},
+          currentUserHex: _currentUserHex,
+        ));
+        _loadAuthorProfilesInBackground(articleMaps);
+      }
+    }
+
     _watchArticles();
+
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        await _syncService.syncArticles(
+          authors: _followingList,
+          limit: _pageSize,
+        );
+      } catch (_) {}
+      _initialSyncDone = true;
+      if (!isClosed && state is ArticleLoading) {
+        final events = await _db.getCachedArticles(
+          limit: _pageSize,
+          authors: _followingList,
+        );
+        final mapped = _eventsToArticleMaps(events);
+        if (mapped.isEmpty) {
+          add(_InternalArticlesUpdate(const []));
+        }
+      }
+    });
   }
 
   void _watchArticles() {
     _articlesSubscription?.cancel();
-    _articlesSubscription =
-        _db.watchArticles(limit: _pageSize).listen((events) {
+    _articlesSubscription = _db
+        .watchArticles(limit: _pageSize, authors: _followingList)
+        .listen((events) {
       if (isClosed) return;
 
-      final filteredEvents = _filterByFollowing(events);
-      final articleMaps = _eventsToArticleMaps(filteredEvents);
+      final articleMaps = _eventsToArticleMaps(events);
 
       articleMaps.sort((a, b) {
         final aTime = a['created_at'] as int? ?? 0;
@@ -95,14 +138,8 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     });
   }
 
-  List<EventModel> _filterByFollowing(List<EventModel> events) {
-    if (_followingList == null || _followingList!.isEmpty) {
-      return events;
-    }
-    return events.where((e) => _followingList!.contains(e.pubkey)).toList();
-  }
-
-  List<Map<String, dynamic>> _eventsToArticleMaps(List<EventModel> events) {
+  List<Map<String, dynamic>> _eventsToArticleMaps(
+      List<Map<String, dynamic>> events) {
     return events.map<Map<String, dynamic>>((event) {
       final article = _mapper.toArticle(event);
       return article.toMap();
@@ -144,6 +181,8 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     final articles = event.articles;
 
     if (articles.isEmpty) {
+      if (state is ArticleLoaded) return;
+      if (!_initialSyncDone) return;
       emit(const ArticleEmpty());
       return;
     }
@@ -216,7 +255,13 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   ) async {
     _followingList =
         await _followingRepository.getFollowingList(_currentUserHex);
-    await _syncService.syncFeed(_currentUserHex);
+    try {
+      await _syncService.syncArticles(
+        authors: _followingList,
+        limit: _pageSize,
+        force: true,
+      );
+    } catch (_) {}
   }
 
   Future<void> _onArticleLoadMoreRequested(

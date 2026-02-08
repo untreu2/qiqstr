@@ -31,7 +31,7 @@ import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/sync/sync_service.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 
 class BlocsModule extends DIModule {
   @override
@@ -85,7 +85,7 @@ class BlocsModule extends DIModule {
         () => NotificationIndicatorBloc(
               syncService: AppDI.get<SyncService>(),
               authService: AppDI.get<AuthService>(),
-              db: AppDI.get<IsarDatabaseService>(),
+              db: AppDI.get<RustDatabaseService>(),
             ));
 
     AppDI.registerLazySingleton<SidebarBloc>(() => SidebarBloc(

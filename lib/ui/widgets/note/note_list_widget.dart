@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/interaction_service.dart';
+import '../../../core/di/app_di.dart';
 
 class NoteListWidget extends StatefulWidget {
   final List<Map<String, dynamic>> notes;
@@ -42,12 +45,17 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   bool _hasTriggeredLoadMore = false;
   bool _hasTriggeredEmptyRefresh = false;
   Timer? _updateTimer;
+  Timer? _interactionSyncTimer;
+  final Set<String> _syncedNoteIds = {};
+  bool _isSyncing = false;
+  bool _initialSyncDone = false;
 
   @override
   void initState() {
     super.initState();
     widget.scrollController?.addListener(_onScroll);
     _checkAndTriggerEmptyRefresh();
+    _scheduleInitialInteractionSync();
   }
 
   @override
@@ -57,6 +65,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         oldWidget.isLoading != widget.isLoading) {
       if (widget.notes.isNotEmpty) {
         _hasTriggeredEmptyRefresh = false;
+        if (!_initialSyncDone) {
+          _scheduleInitialInteractionSync();
+        }
       } else {
         _checkAndTriggerEmptyRefresh();
       }
@@ -80,6 +91,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   void dispose() {
     _updateTimer?.cancel();
+    _interactionSyncTimer?.cancel();
     widget.scrollController?.removeListener(_onScroll);
     super.dispose();
   }
@@ -102,6 +114,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
 
     _scheduleUpdate();
+    _scheduleInteractionSync();
   }
 
   void _scheduleUpdate() {
@@ -111,6 +124,79 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         setState(() {});
       }
     });
+  }
+
+  void _scheduleInitialInteractionSync() {
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (!mounted || widget.notes.isEmpty || _initialSyncDone) return;
+      _initialSyncDone = true;
+      _syncVisibleInteractions();
+    });
+  }
+
+  void _scheduleInteractionSync() {
+    _interactionSyncTimer?.cancel();
+    _interactionSyncTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) _syncVisibleInteractions();
+    });
+  }
+
+  void _syncVisibleInteractions() {
+    if (_isSyncing || widget.notes.isEmpty) return;
+
+    final visibleRange = _getVisibleNoteRange();
+    final start = (visibleRange.$1 - 5).clamp(0, widget.notes.length - 1);
+    final end =
+        (visibleRange.$2 + 5).clamp(0, widget.notes.length - 1);
+
+    final noteIds = <String>[];
+    for (var i = start; i <= end; i++) {
+      final noteId = widget.notes[i]['id'] as String? ?? '';
+      if (noteId.isNotEmpty && !_syncedNoteIds.contains(noteId)) {
+        noteIds.add(noteId);
+      }
+    }
+
+    if (noteIds.isEmpty) return;
+
+    _isSyncing = true;
+    Future.microtask(() async {
+      try {
+        final syncService = AppDI.get<SyncService>();
+        await syncService.syncInteractionsForNotes(noteIds);
+        for (final id in noteIds) {
+          _syncedNoteIds.add(id);
+        }
+        if (_syncedNoteIds.length > 200) {
+          final toRemove =
+              _syncedNoteIds.take(_syncedNoteIds.length - 200).toList();
+          for (final id in toRemove) {
+            _syncedNoteIds.remove(id);
+          }
+        }
+        InteractionService.instance.refreshAllActive();
+      } catch (_) {}
+      _isSyncing = false;
+    });
+  }
+
+  (int, int) _getVisibleNoteRange() {
+    final controller = widget.scrollController;
+    if (controller == null || !controller.hasClients) {
+      return (0, (widget.notes.length - 1).clamp(0, 9));
+    }
+
+    final viewportTop = controller.offset;
+    final viewportBottom = viewportTop + controller.position.viewportDimension;
+    const estimatedNoteHeight = 200.0;
+
+    final firstVisible = (viewportTop / estimatedNoteHeight).floor();
+    final lastVisible = (viewportBottom / estimatedNoteHeight).ceil();
+
+    return (
+      firstVisible.clamp(0, widget.notes.length - 1),
+      lastVisible.clamp(0, widget.notes.length - 1),
+    );
   }
 
   @override
@@ -132,13 +218,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     if (widget.notes.isEmpty) {
       _checkAndTriggerEmptyRefresh();
-      if (widget.isLoading) {
-        return const SliverToBoxAdapter(
-          child: _LoadingState(),
-        );
-      }
       return const SliverToBoxAdapter(
-        child: _EmptyState(),
+        child: _LoadingState(),
       );
     }
 
@@ -288,45 +369,6 @@ class _NoteSeparator extends StatelessWidget {
           decoration: BoxDecoration(
             color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.article_outlined,
-              size: 64,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No notes available',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Try refreshing or check back later',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-            ),
-          ],
         ),
       ),
     );

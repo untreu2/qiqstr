@@ -86,7 +86,7 @@ pub fn unwrap_gift_wrap(
         "rumor": {
             "id": unwrapped.rumor.id.map(|id| id.to_hex()).unwrap_or_default(),
             "pubkey": unwrapped.rumor.pubkey.to_hex(),
-            "created_at": unwrapped.rumor.created_at.as_u64(),
+            "created_at": unwrapped.rumor.created_at.as_secs(),
             "kind": unwrapped.rumor.kind.as_u16(),
             "tags": tags,
             "content": unwrapped.rumor.content,

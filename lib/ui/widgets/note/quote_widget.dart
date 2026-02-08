@@ -52,7 +52,32 @@ class QuoteWidget extends StatelessWidget {
                   ),
                 ),
               ),
-            QuoteWidgetError() => const SizedBox.shrink(),
+            QuoteWidgetError() => Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.colors.border, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.link_off,
+                      size: 16,
+                      color: context.colors.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Event not found',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             QuoteWidgetLoaded(
               :final note,
               :final user,

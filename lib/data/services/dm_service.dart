@@ -1,16 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:isar/isar.dart';
 import '../../core/base/result.dart';
-import '../../models/event_model.dart';
 import 'auth_service.dart';
-import 'isar_database_service.dart';
 import 'relay_service.dart';
 import '../../src/rust/api/nip17.dart' as rust_nip17;
+import '../../src/rust/api/database.dart' as rust_db;
 
 class DmService {
   final AuthService _authService;
-  final IsarDatabaseService _isarService = IsarDatabaseService.instance;
   String? _currentUserPubkeyHex;
   bool _initialized = false;
 
@@ -18,6 +15,7 @@ class DmService {
   final Map<String, StreamController<List<Map<String, dynamic>>>>
       _messageStreams = {};
   final Set<String> _failedUnwrapIds = {};
+  StreamSubscription<Map<String, dynamic>>? _realtimeSubscription;
 
   List<Map<String, dynamic>>? _cachedConversations;
   DateTime? _lastConversationsFetch;
@@ -132,7 +130,8 @@ class DmService {
         'senderPubkeyHex': sender,
         'recipientPubkeyHex': otherUserPubkeyHex,
         'content': content,
-        'createdAt': DateTime.fromMillisecondsSinceEpoch(rumorCreatedAt * 1000),
+        'createdAt':
+            DateTime.fromMillisecondsSinceEpoch(rumorCreatedAt * 1000),
         'isFromCurrentUser': isFromCurrentUser,
       };
     } catch (_) {
@@ -166,9 +165,8 @@ class DmService {
 
     final cachedDMs = await _getDMEvents(_currentUserPubkeyHex!, limit: 60);
 
-    for (final event in cachedDMs) {
+    for (final eventData in cachedDMs) {
       try {
-        final eventData = event.toEventData();
         final message = _unwrapGiftWrap(eventData, privateKey);
         if (message == null) continue;
 
@@ -337,7 +335,7 @@ class DmService {
       for (final eventData in relayEvents) {
         await _saveEvent(eventData);
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<Result<List<Map<String, dynamic>>>> getMessages(
@@ -432,7 +430,7 @@ class DmService {
         _mergeAndCapMessages(otherUserPubkeyHex, messagesMap.values,
             notify: true);
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   List<Map<String, dynamic>> _mergeAndCapMessages(
@@ -578,6 +576,8 @@ class DmService {
 
     final cachedMessages = _messagesCache[otherUserPubkeyHex] ?? [];
 
+    _startRealtimeSubscription();
+
     return Stream.multi((sink) {
       sink.add(List.from(cachedMessages));
 
@@ -595,27 +595,80 @@ class DmService {
     });
   }
 
-  Future<List<EventModel>> _getDMEvents(String userPubkey, {int? limit}) async {
+  Future<void> _startRealtimeSubscription() async {
+    if (_realtimeSubscription != null) return;
+
+    final initResult = await _ensureInitialized();
+    if (initResult.isError || _currentUserPubkeyHex == null) return;
+
+    final privateKey = await _getPrivateKey();
+    if (privateKey == null) return;
+
+    try {
+      final filter = {
+        'kinds': [1059],
+        '#p': [_currentUserPubkeyHex!],
+      };
+
+      final stream = RustRelayService.instance.subscribeToEvents(filter);
+
+      _realtimeSubscription = stream.listen(
+        (eventData) {
+          _handleRealtimeEvent(eventData, privateKey);
+        },
+        onError: (_) {
+          _realtimeSubscription = null;
+        },
+        onDone: () {
+          _realtimeSubscription = null;
+        },
+      );
+    } catch (_) {}
+  }
+
+  void _handleRealtimeEvent(
+      Map<String, dynamic> eventData, String privateKey) {
+    try {
+      final message = _unwrapGiftWrap(eventData, privateKey);
+      if (message == null) return;
+
+      final otherUserPubkeyHex = message['isFromCurrentUser'] == true
+          ? message['recipientPubkeyHex'] as String
+          : message['senderPubkeyHex'] as String;
+
+      if (otherUserPubkeyHex.isEmpty) return;
+
+      if (!_messagesCache.containsKey(otherUserPubkeyHex)) {
+        _messagesCache[otherUserPubkeyHex] = [];
+      }
+
+      final existingMessages = _messagesCache[otherUserPubkeyHex]!;
+      final msgId = message['id'] as String? ?? '';
+      if (msgId.isNotEmpty &&
+          !existingMessages.any((m) => (m['id'] as String? ?? '') == msgId)) {
+        existingMessages.add(message);
+        _sortAndCapMessages(otherUserPubkeyHex);
+        _notifyMessageStream(otherUserPubkeyHex);
+      }
+
+      _updateConversationCache(otherUserPubkeyHex, message);
+      _saveEvent(eventData);
+    } catch (_) {}
+  }
+
+  Future<List<Map<String, dynamic>>> _getDMEvents(String userPubkey,
+      {int? limit}) async {
     try {
       if (userPubkey.isEmpty) return [];
-      final db = await _isarService.isar;
-      final giftWraps =
-          await db.eventModels.where().kindEqualToAnyCreatedAt(1059).findAll();
-
-      final matchingEvents = <EventModel>[];
-
-      for (final event in giftWraps) {
-        final pTagValues = event.getTagValues('p');
-        if (pTagValues.contains(userPubkey)) {
-          matchingEvents.add(event);
-        }
-      }
-
-      matchingEvents.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      if (limit != null && matchingEvents.length > limit) {
-        return matchingEvents.sublist(0, limit);
-      }
-      return matchingEvents;
+      final filterJson = jsonEncode({
+        'kinds': [1059],
+        '#p': [userPubkey],
+        'limit': limit ?? 100,
+      });
+      final json =
+          await rust_db.dbQueryEvents(filterJson: filterJson, limit: limit ?? 100);
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
       return [];
     }
@@ -623,17 +676,19 @@ class DmService {
 
   Future<void> _saveEvent(Map<String, dynamic> eventData) async {
     try {
-      final eventId = eventData['id'] as String? ?? '';
-      if (eventId.isEmpty) return;
-      final db = await _isarService.isar;
-      final eventModel = EventModel.fromEventData(eventData);
-      await db.writeTxn(() async {
-        final existing =
-            await db.eventModels.where().eventIdEqualTo(eventId).findFirst();
-        if (existing == null) {
-          await db.eventModels.put(eventModel);
-        }
-      });
+      final eventJson = jsonEncode(eventData);
+      await rust_db.dbSaveEvent(eventJson: eventJson);
     } catch (_) {}
+  }
+
+  void dispose() {
+    _realtimeSubscription?.cancel();
+    _realtimeSubscription = null;
+    for (final controller in _messageStreams.values) {
+      controller.close();
+    }
+    _messageStreams.clear();
+    _messagesCache.clear();
+    _cachedConversations = null;
   }
 }

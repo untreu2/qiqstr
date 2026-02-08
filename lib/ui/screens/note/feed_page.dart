@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -12,11 +13,15 @@ import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
 import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
+import '../../widgets/article/article_widget.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/feed/feed_event.dart';
 import '../../../presentation/blocs/feed/feed_state.dart';
+import '../../../presentation/blocs/article/article_bloc.dart';
+import '../../../presentation/blocs/article/article_event.dart';
+import '../../../presentation/blocs/article/article_state.dart';
 import '../../../data/services/relay_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
@@ -28,6 +33,7 @@ import '../../../presentation/blocs/user_tile/user_tile_state.dart';
 import '../../widgets/common/custom_input_field.dart';
 import 'package:flutter/services.dart';
 import '../../../data/repositories/following_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
@@ -47,6 +53,7 @@ class FeedPageState extends State<FeedPage> {
   bool _showAppBar = true;
   bool isFirstOpen = false;
   bool _isSearchMode = false;
+  bool _isReadsMode = false;
 
   final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier =
       ValueNotifier([]);
@@ -54,6 +61,8 @@ class FeedPageState extends State<FeedPage> {
   Timer? _relayCountTimer;
   Timer? _searchDebounceTimer;
   final ValueNotifier<int> _connectedRelaysCount = ValueNotifier(0);
+  int _totalRelays = 0;
+  int _connectedRelays = 0;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   UserSearchBloc? _searchBloc;
@@ -68,7 +77,7 @@ class FeedPageState extends State<FeedPage> {
         .addListener(() => _onSearchChanged(_searchController.text));
     _updateRelayCount();
     _relayCountTimer =
-        Timer.periodic(const Duration(seconds: 10), (_) => _updateRelayCount());
+        Timer.periodic(const Duration(seconds: 1), (_) => _updateRelayCount());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
@@ -77,9 +86,19 @@ class FeedPageState extends State<FeedPage> {
   void _updateRelayCount() async {
     if (!mounted) return;
     try {
-      final count = await RustRelayService.instance.getConnectedRelayCount();
-      if (mounted && _connectedRelaysCount.value != count) {
-        _connectedRelaysCount.value = count;
+      final status = await RustRelayService.instance.getRelayStatus();
+      if (!mounted) return;
+      final summary = status['summary'] as Map<String, dynamic>? ?? {};
+      final total = summary['totalRelays'] as int? ?? 0;
+      final connected = summary['connectedRelays'] as int? ?? 0;
+      if (mounted) {
+        setState(() {
+          _totalRelays = total;
+          _connectedRelays = connected;
+        });
+        if (_connectedRelaysCount.value != connected) {
+          _connectedRelaysCount.value = connected;
+        }
       }
     } catch (e) {
       debugPrint('[FeedPage] Error updating relay count: $e');
@@ -363,22 +382,34 @@ class FeedPageState extends State<FeedPage> {
                           const SizedBox(width: 12),
                           GestureDetector(
                             onTap: () {
-                              final currentLocation =
-                                  GoRouterState.of(context).matchedLocation;
-                              if (currentLocation.startsWith('/home/feed')) {
-                                context.push('/home/feed/explore');
-                              } else {
-                                context.push('/home/feed/explore');
-                              }
+                              context.push('/relays');
                             },
-                            child: SvgPicture.asset(
-                              'assets/newspaper.svg',
-                              width: 20,
-                              height: 20,
-                              colorFilter: ColorFilter.mode(
-                                colors.textPrimary,
-                                BlendMode.srcIn,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CustomPaint(
+                                    painter: _RelayPiePainter(
+                                      connected: _connectedRelays,
+                                      total: _totalRelays,
+                                      connectedColor: const Color(0xFF4CAF50),
+                                      disconnectedColor: colors.textSecondary.withValues(alpha: 0.3),
+                                      emptyColor: colors.textSecondary.withValues(alpha: 0.15),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '$_connectedRelays/$_totalRelays',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -436,10 +467,16 @@ class FeedPageState extends State<FeedPage> {
             return bloc;
           },
         ),
+        BlocProvider<ArticleBloc>(
+          create: (context) {
+            final bloc = AppDI.get<ArticleBloc>();
+            bloc.add(ArticleInitialized(userHex: widget.userHex));
+            return bloc;
+          },
+        ),
         BlocProvider<UserSearchBloc>(
           create: (context) {
             final bloc = AppDI.get<UserSearchBloc>();
-            bloc.add(const UserSearchInitialized());
             _searchBloc = bloc;
             return bloc;
           },
@@ -455,8 +492,16 @@ class FeedPageState extends State<FeedPage> {
               backgroundColor: colors.background,
               body: Stack(
                 children: [
-                  _buildFeedContent(context, feedState, topPadding,
-                      headerHeight, isHashtagMode, colors),
+                  if (_isReadsMode)
+                    BlocBuilder<ArticleBloc, ArticleState>(
+                      builder: (context, articleState) {
+                        return _buildReadsContent(context, articleState,
+                            feedState, topPadding, headerHeight, colors);
+                      },
+                    )
+                  else
+                    _buildFeedContent(context, feedState, topPadding,
+                        headerHeight, isHashtagMode, colors),
                   if (isHashtagMode) ...[
                     BackButtonWidget.floating(),
                     Positioned(
@@ -492,6 +537,8 @@ class FeedPageState extends State<FeedPage> {
                       ),
                     ),
                   ],
+                  if (!isHashtagMode && !_isSearchMode)
+                    _buildFeedModeToggle(context, colors),
                 ],
               ),
             ),
@@ -521,7 +568,8 @@ class FeedPageState extends State<FeedPage> {
         :final profiles,
         :final currentUserHex,
         :final isLoadingMore,
-        :final canLoadMore
+        :final canLoadMore,
+        :final isSyncing
       ) =>
         Builder(
           builder: (context) {
@@ -562,6 +610,33 @@ class FeedPageState extends State<FeedPage> {
                   ),
                   if (_isSearchMode)
                     _buildUserSearchResults(context)
+                  else if (notes.isEmpty && isSyncing)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Loading your feed...',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                   else
                     widgets.NoteListWidget(
                       notes: notes,
@@ -610,6 +685,232 @@ class FeedPageState extends State<FeedPage> {
             style: TextStyle(color: colors.textSecondary),
             textAlign: TextAlign.center,
           ),
+        ),
+      _ => Center(
+          child: CircularProgressIndicator(color: colors.accent),
+        ),
+    };
+  }
+
+  Widget _buildFeedModeToggle(BuildContext context, AppThemeColors colors) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    return Positioned(
+      bottom: bottomPadding + 20,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: colors.textPrimary,
+            borderRadius: BorderRadius.circular(25),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  if (_isReadsMode) {
+                    setState(() => _isReadsMode = false);
+                  }
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color:
+                        !_isReadsMode ? colors.background : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        CarbonIcons.blog,
+                        size: 16,
+                        color: !_isReadsMode
+                            ? colors.textPrimary
+                            : colors.background.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Notes',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: !_isReadsMode
+                              ? colors.textPrimary
+                              : colors.background.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  if (!_isReadsMode) {
+                    setState(() => _isReadsMode = true);
+                  }
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color:
+                        _isReadsMode ? colors.background : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SvgPicture.asset(
+                        'assets/newspaper.svg',
+                        width: 16,
+                        height: 16,
+                        colorFilter: ColorFilter.mode(
+                          _isReadsMode
+                              ? colors.textPrimary
+                              : colors.background.withValues(alpha: 0.7),
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Reads',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _isReadsMode
+                              ? colors.textPrimary
+                              : colors.background.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReadsContent(
+    BuildContext context,
+    ArticleState articleState,
+    FeedState feedState,
+    double topPadding,
+    double headerHeight,
+    AppThemeColors colors,
+  ) {
+    Map<String, dynamic>? user;
+    if (feedState is FeedLoaded) {
+      user = feedState.profiles[feedState.currentUserHex];
+    }
+
+    return switch (articleState) {
+      ArticleInitial() || ArticleLoading() => CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics()),
+          slivers: [
+            SliverPersistentHeader(
+              floating: true,
+              delegate: _PinnedHeaderDelegate(
+                height: headerHeight,
+                child: AnimatedOpacity(
+                  opacity: _showAppBar ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: _buildHeader(context, topPadding, user),
+                ),
+              ),
+            ),
+            SliverFillRemaining(
+              child: Center(
+                child: CircularProgressIndicator(
+                    color: colors.accent, strokeWidth: 2),
+              ),
+            ),
+          ],
+        ),
+      ArticleLoaded(
+        :final filteredArticles,
+        :final profiles,
+        :final currentUserHex,
+        :final isLoadingMore,
+        :final canLoadMore
+      ) =>
+        RefreshIndicator(
+          onRefresh: () async {
+            context.read<ArticleBloc>().add(const ArticleRefreshed());
+          },
+          color: colors.textPrimary,
+          child: CustomScrollView(
+            key: const PageStorageKey<String>('reads_scroll'),
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics()),
+            cacheExtent: 600,
+            slivers: [
+              SliverPersistentHeader(
+                floating: true,
+                delegate: _PinnedHeaderDelegate(
+                  height: headerHeight,
+                  child: AnimatedOpacity(
+                    opacity: _showAppBar ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: _buildHeader(context, topPadding, user),
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 4)),
+              ArticleListWidget(
+                articles: filteredArticles,
+                currentUserHex: currentUserHex,
+                profiles: profiles,
+                isLoading: isLoadingMore,
+                canLoadMore: canLoadMore,
+                onLoadMore: () {
+                  context
+                      .read<ArticleBloc>()
+                      .add(const ArticleLoadMoreRequested());
+                },
+                onEmptyRefresh: () {
+                  context.read<ArticleBloc>().add(const ArticleRefreshed());
+                },
+                scrollController: _scrollController,
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
+          ),
+        ),
+      ArticleEmpty() => CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics()),
+          slivers: [
+            SliverPersistentHeader(
+              floating: true,
+              delegate: _PinnedHeaderDelegate(
+                height: headerHeight,
+                child: AnimatedOpacity(
+                  opacity: _showAppBar ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: _buildHeader(context, topPadding, user),
+                ),
+              ),
+            ),
+            SliverFillRemaining(
+              child: Center(
+                child: Text(
+                  'No articles available',
+                  style: TextStyle(color: colors.textSecondary),
+                ),
+              ),
+            ),
+          ],
         ),
       _ => Center(
           child: CircularProgressIndicator(color: colors.accent),
@@ -686,9 +987,7 @@ class FeedPageState extends State<FeedPage> {
             :final filteredUsers,
             :final filteredNotes,
             :final noteProfiles,
-            :final randomUsers,
             :final isSearching,
-            :final isLoadingRandom
           ) =>
             isSearching
                 ? SliverToBoxAdapter(
@@ -749,59 +1048,7 @@ class FeedPageState extends State<FeedPage> {
                     : (filteredUsers.isNotEmpty || filteredNotes.isNotEmpty)
                         ? _buildSearchResultsList(
                             context, filteredUsers, filteredNotes, noteProfiles)
-                        : isLoadingRandom
-                            ? SliverToBoxAdapter(
-                                child: Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(32.0),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        CircularProgressIndicator(
-                                            color: context.colors.primary),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'Loading users...',
-                                          style: TextStyle(
-                                              color:
-                                                  context.colors.textSecondary),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              )
-                            : randomUsers.isEmpty
-                                ? SliverToBoxAdapter(
-                                    child: Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(32.0),
-                                        child: Text(
-                                          'No users to discover yet',
-                                          style: TextStyle(
-                                              color:
-                                                  context.colors.textSecondary),
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : SliverList(
-                                    delegate: SliverChildBuilderDelegate(
-                                      (context, index) {
-                                        final user = randomUsers[index];
-                                        return Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            _FeedUserItemWidget(user: user),
-                                            if (index < randomUsers.length - 1)
-                                              const _FeedUserSeparator(),
-                                          ],
-                                        );
-                                      },
-                                      childCount: randomUsers.length,
-                                    ),
-                                  ),
+                        : const SliverToBoxAdapter(child: SizedBox()),
           _ => const SliverToBoxAdapter(child: SizedBox()),
         };
       },
@@ -952,11 +1199,13 @@ class _FeedUserItemWidget extends StatefulWidget {
 
 class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
   String? _currentUserHex;
+  Map<String, dynamic>? _loadedProfile;
 
   @override
   void initState() {
     super.initState();
     _loadCurrentUserHex();
+    _loadAndSyncProfile();
   }
 
   Future<void> _loadCurrentUserHex() async {
@@ -966,6 +1215,70 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
       setState(() {
         _currentUserHex = hex;
       });
+    }
+  }
+
+  String get _displayName {
+    final loaded = _loadedProfile?['name'] as String? ?? '';
+    if (loaded.isNotEmpty) return loaded;
+    return widget.user['name'] as String? ?? '';
+  }
+
+  String get _displayImage {
+    final loaded = _loadedProfile?['profileImage'] as String? ?? '';
+    if (loaded.isNotEmpty) return loaded;
+    return widget.user['profileImage'] as String? ?? '';
+  }
+
+  Future<void> _loadAndSyncProfile() async {
+    if (!mounted) return;
+    final pubkey = widget.user['pubkeyHex'] as String? ??
+        widget.user['pubkey'] as String? ??
+        '';
+    if (pubkey.isEmpty) return;
+
+    final profileRepo = AppDI.get<ProfileRepository>();
+    final profile = await profileRepo.getProfile(pubkey);
+
+    if (profile != null && mounted) {
+      setState(() {
+        _loadedProfile = {
+          'pubkeyHex': profile.pubkey,
+          'name': profile.name ?? '',
+          'profileImage': profile.picture ?? '',
+          'about': profile.about ?? '',
+          'banner': profile.banner ?? '',
+          'nip05': profile.nip05 ?? '',
+          'lud16': profile.lud16 ?? '',
+          'website': profile.website ?? '',
+        };
+      });
+    }
+
+    final hasName = (profile?.name ?? '').isNotEmpty;
+    final hasImage = (profile?.picture ?? '').isNotEmpty;
+
+    if (!hasName || !hasImage) {
+      final syncService = AppDI.get<SyncService>();
+      try {
+        await syncService.syncProfile(pubkey);
+        if (!mounted) return;
+        final synced = await profileRepo.getProfile(pubkey);
+        if (synced != null && mounted) {
+          setState(() {
+            _loadedProfile = {
+              'pubkeyHex': synced.pubkey,
+              'name': synced.name ?? '',
+              'profileImage': synced.picture ?? '',
+              'about': synced.about ?? '',
+              'banner': synced.banner ?? '',
+              'nip05': synced.nip05 ?? '',
+              'lud16': synced.lud16 ?? '',
+              'website': synced.website ?? '',
+            };
+          });
+        }
+      } catch (_) {}
     }
   }
 
@@ -1091,8 +1404,7 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  _buildAvatar(
-                      context, widget.user['profileImage'] as String? ?? ''),
+                  _buildAvatar(context, _displayImage),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Row(
@@ -1104,8 +1416,7 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
                               Flexible(
                                 child: Text(
                                   () {
-                                    final name =
-                                        widget.user['name'] as String? ?? '';
+                                    final name = _displayName;
                                     return name.length > 25
                                         ? '${name.substring(0, 25)}...'
                                         : name;
@@ -1118,17 +1429,6 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if ((widget.user['nip05'] as String? ?? '')
-                                      .isNotEmpty &&
-                                  (widget.user['nip05Verified'] as bool? ??
-                                      false)) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.verified,
-                                  size: 16,
-                                  color: context.colors.accent,
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -1236,4 +1536,58 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) =>
       height != oldDelegate.height || child != oldDelegate.child;
+}
+
+class _RelayPiePainter extends CustomPainter {
+  final int connected;
+  final int total;
+  final Color connectedColor;
+  final Color disconnectedColor;
+  final Color emptyColor;
+
+  _RelayPiePainter({
+    required this.connected,
+    required this.total,
+    required this.connectedColor,
+    required this.disconnectedColor,
+    required this.emptyColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    if (total <= 0) {
+      paint.color = emptyColor;
+      canvas.drawCircle(center, radius, paint);
+      return;
+    }
+
+    if (connected == total) {
+      paint.color = connectedColor;
+      canvas.drawCircle(center, radius, paint);
+      return;
+    }
+
+    if (connected == 0) {
+      paint.color = disconnectedColor;
+      canvas.drawCircle(center, radius, paint);
+      return;
+    }
+
+    paint.color = disconnectedColor;
+    canvas.drawCircle(center, radius, paint);
+
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final connectedAngle = 2 * pi * (connected / total);
+
+    paint.color = connectedColor;
+    canvas.drawArc(rect, -pi / 2, connectedAngle, true, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RelayPiePainter oldDelegate) =>
+      connected != oldDelegate.connected || total != oldDelegate.total;
 }

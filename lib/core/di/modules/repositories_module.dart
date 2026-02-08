@@ -1,5 +1,5 @@
 import '../app_di.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 import '../../../domain/mappers/event_mapper.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -11,7 +11,7 @@ import '../../../data/repositories/following_repository.dart';
 class RepositoriesModule extends DIModule {
   @override
   Future<void> register() async {
-    final db = AppDI.get<IsarDatabaseService>();
+    final db = AppDI.get<RustDatabaseService>();
     final mapper = AppDI.get<EventMapper>();
 
     AppDI.registerLazySingleton<FeedRepository>(

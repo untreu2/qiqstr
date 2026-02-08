@@ -265,7 +265,9 @@ Future<void> _processZapPayment(
       'lud16': profile.lud16 ?? '',
     };
 
-    await _payZapWithWallet(context, user, note, sats, comment);
+    if (context.mounted) {
+      await _payZapWithWallet(context, user, note, sats, comment);
+    }
   } catch (e) {
     if (context.mounted) {
       AppSnackbar.error(context, 'Failed to process zap: $e',

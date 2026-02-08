@@ -16,6 +16,7 @@ class InteractionLoaded extends InteractionState {
   final bool hasReacted;
   final bool hasReposted;
   final bool hasZapped;
+  final bool noteDeleted;
 
   const InteractionLoaded({
     this.reactionCount = 0,
@@ -25,6 +26,7 @@ class InteractionLoaded extends InteractionState {
     this.hasReacted = false,
     this.hasReposted = false,
     this.hasZapped = false,
+    this.noteDeleted = false,
   });
 
   InteractionLoaded copyWith({
@@ -35,6 +37,7 @@ class InteractionLoaded extends InteractionState {
     bool? hasReacted,
     bool? hasReposted,
     bool? hasZapped,
+    bool? noteDeleted,
   }) {
     return InteractionLoaded(
       reactionCount: reactionCount ?? this.reactionCount,
@@ -44,6 +47,7 @@ class InteractionLoaded extends InteractionState {
       hasReacted: hasReacted ?? this.hasReacted,
       hasReposted: hasReposted ?? this.hasReposted,
       hasZapped: hasZapped ?? this.hasZapped,
+      noteDeleted: noteDeleted ?? this.noteDeleted,
     );
   }
 
@@ -56,5 +60,6 @@ class InteractionLoaded extends InteractionState {
         hasReacted,
         hasReposted,
         hasZapped,
+        noteDeleted,
       ];
 }

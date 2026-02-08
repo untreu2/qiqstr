@@ -13,7 +13,7 @@ import 'data/services/logging_service.dart';
 import 'core/di/app_di.dart';
 import 'core/router/app_router.dart';
 import 'core/bloc/observers/app_bloc_observer.dart';
-import 'package:bloc/bloc.dart';
+
 import 'src/rust/frb_generated.dart';
 
 void main() {

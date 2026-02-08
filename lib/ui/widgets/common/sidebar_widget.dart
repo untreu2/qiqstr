@@ -53,7 +53,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                           followerCount: state.followerCount,
                           followingCount: state.followingCount,
                           isLoadingCounts: state.isLoadingCounts,
-                          connectedRelayCount: state.connectedRelayCount,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -89,15 +88,12 @@ class _UserProfileHeader extends StatelessWidget {
   final int followerCount;
   final int followingCount;
   final bool isLoadingCounts;
-  final int connectedRelayCount;
-
   const _UserProfileHeader({
     required this.user,
     required this.colors,
     required this.followerCount,
     required this.followingCount,
     required this.isLoadingCounts,
-    required this.connectedRelayCount,
   });
 
   @override
@@ -175,35 +171,8 @@ class _UserProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _buildFollowerInfo(context),
-          const SizedBox(height: 6),
-          _buildRelayCount(),
         ],
       ),
-    );
-  }
-
-  Widget _buildRelayCount() {
-    return Row(
-      children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: connectedRelayCount > 0
-                ? const Color(0xFF4CAF50)
-                : colors.textSecondary,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          '$connectedRelayCount relays connected',
-          style: TextStyle(
-            fontSize: 13,
-            color: colors.textSecondary,
-          ),
-        ),
-      ],
     );
   }
 

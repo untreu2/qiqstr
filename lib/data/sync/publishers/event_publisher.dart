@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../services/auth_service.dart';
-import '../../../models/event_model.dart';
 
 class EventPublisher {
   final AuthService _authService;
@@ -19,22 +17,19 @@ class EventPublisher {
     return result.data!;
   }
 
-  Future<EventModel> createNote({
+  Future<Map<String, dynamic>> createNote({
     required String content,
     List<List<String>>? tags,
   }) async {
     final privateKey = await _getPrivateKey();
-
-    final event = NostrService.createNoteEvent(
+    return NostrService.createNoteEvent(
       content: content,
       privateKey: privateKey,
       tags: tags,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createReply({
+  Future<Map<String, dynamic>> createReply({
     required String content,
     required String rootId,
     String? replyToId,
@@ -53,33 +48,28 @@ class EventPublisher {
       relayUrl: relayUrl,
     );
 
-    final event = NostrService.createReplyEvent(
+    return NostrService.createReplyEvent(
       content: content,
       privateKey: privateKey,
       tags: tags,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createQuote({
+  Future<Map<String, dynamic>> createQuote({
     required String content,
     required String quotedNoteId,
     String? quotedAuthor,
   }) async {
     final privateKey = await _getPrivateKey();
-
-    final event = NostrService.createQuoteEvent(
+    return NostrService.createQuoteEvent(
       content: content,
       quotedEventId: quotedNoteId,
       quotedEventPubkey: quotedAuthor,
       privateKey: privateKey,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createReaction({
+  Future<Map<String, dynamic>> createReaction({
     required String targetEventId,
     required String targetAuthor,
     String content = '+',
@@ -88,18 +78,16 @@ class EventPublisher {
     final relays = await RustRelayService.instance.getRelayList();
     final relayUrl = relays.isNotEmpty ? relays.first : null;
 
-    final event = NostrService.createReactionEvent(
+    return NostrService.createReactionEvent(
       targetEventId: targetEventId,
       targetAuthor: targetAuthor,
       content: content,
       privateKey: privateKey,
       relayUrl: relayUrl,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createRepost({
+  Future<Map<String, dynamic>> createRepost({
     required String noteId,
     required String noteAuthor,
     required String originalContent,
@@ -108,75 +96,60 @@ class EventPublisher {
     final relays = await RustRelayService.instance.getRelayList();
     final relayUrl = relays.isNotEmpty ? relays.first : null;
 
-    final event = NostrService.createRepostEvent(
+    return NostrService.createRepostEvent(
       noteId: noteId,
       noteAuthor: noteAuthor,
       content: originalContent,
       privateKey: privateKey,
       relayUrl: relayUrl,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createDeletion({
+  Future<Map<String, dynamic>> createDeletion({
     required List<String> eventIds,
     String? reason,
   }) async {
     final privateKey = await _getPrivateKey();
-
-    final event = NostrService.createDeletionEvent(
+    return NostrService.createDeletionEvent(
       eventIds: eventIds,
       privateKey: privateKey,
       reason: reason,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createFollow({
+  Future<Map<String, dynamic>> createFollow({
     required List<String> followingPubkeys,
   }) async {
     final privateKey = await _getPrivateKey();
-
-    final event = NostrService.createFollowEvent(
+    return NostrService.createFollowEvent(
       followingPubkeys: followingPubkeys,
       privateKey: privateKey,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createMute({
+  Future<Map<String, dynamic>> createMute({
     required List<String> mutedPubkeys,
   }) async {
     final privateKey = await _getPrivateKey();
-
-    final event = NostrService.createMuteEvent(
+    return NostrService.createMuteEvent(
       mutedPubkeys: mutedPubkeys,
       privateKey: privateKey,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<EventModel> createProfileUpdate({
+  Future<Map<String, dynamic>> createProfileUpdate({
     required Map<String, dynamic> profileContent,
   }) async {
     final privateKey = await _getPrivateKey();
-
-    final event = NostrService.createProfileEvent(
+    return NostrService.createProfileEvent(
       profileContent: profileContent,
       privateKey: privateKey,
     );
-
-    return _eventToModel(event);
   }
 
-  Future<bool> broadcast(EventModel eventModel) async {
+  Future<bool> broadcast(Map<String, dynamic> event) async {
     try {
-      final eventJson = eventModel.toEventData();
-      return await RustRelayService.instance.broadcastEvent(eventJson);
+      return await RustRelayService.instance.broadcastEvent(event);
     } catch (e) {
       if (kDebugMode) {
         print('[EventPublisher] Broadcast error: $e');
@@ -194,10 +167,6 @@ class EventPublisher {
       }
       return false;
     }
-  }
-
-  EventModel _eventToModel(Map<String, dynamic> eventData) {
-    return EventModel.fromEventData(eventData)..syncStatus = SyncStatus.pending;
   }
 
   Future<String?> uploadMedia(String filePath,

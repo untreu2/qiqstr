@@ -22,6 +22,7 @@ class ThreadLoaded extends ThreadState {
   final String? focusedNoteId;
   final String currentUserHex;
   final Map<String, dynamic>? currentUser;
+  final bool repliesSynced;
 
   const ThreadLoaded({
     required this.rootNote,
@@ -33,6 +34,7 @@ class ThreadLoaded extends ThreadState {
     this.focusedNoteId,
     required this.currentUserHex,
     this.currentUser,
+    this.repliesSynced = false,
   });
 
   @override
@@ -46,6 +48,7 @@ class ThreadLoaded extends ThreadState {
         focusedNoteId,
         currentUserHex,
         currentUser,
+        repliesSynced,
       ];
 
   ThreadLoaded copyWith({
@@ -58,6 +61,7 @@ class ThreadLoaded extends ThreadState {
     String? focusedNoteId,
     String? currentUserHex,
     Map<String, dynamic>? currentUser,
+    bool? repliesSynced,
   }) {
     return ThreadLoaded(
       rootNote: rootNote ?? this.rootNote,
@@ -69,6 +73,7 @@ class ThreadLoaded extends ThreadState {
       focusedNoteId: focusedNoteId ?? this.focusedNoteId,
       currentUserHex: currentUserHex ?? this.currentUserHex,
       currentUser: currentUser ?? this.currentUser,
+      repliesSynced: repliesSynced ?? this.repliesSynced,
     );
   }
 }

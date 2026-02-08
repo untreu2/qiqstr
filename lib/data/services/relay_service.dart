@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/constants/relays.dart';
 import '../../src/rust/api/relay.dart' as rust_relay;
@@ -14,11 +15,19 @@ class RustRelayService {
 
   bool _initialized = false;
   List<String> _currentRelayUrls = [];
+  String? _dbPath;
 
   RustRelayService._internal();
 
   bool get isInitialized => _initialized;
   List<String> get relayUrls => List.from(_currentRelayUrls);
+
+  Future<String> _getDbPath() async {
+    if (_dbPath != null) return _dbPath!;
+    final dir = await getApplicationDocumentsDirectory();
+    _dbPath = '${dir.path}/nostr-lmdb';
+    return _dbPath!;
+  }
 
   Future<void> init({
     List<String>? relayUrls,
@@ -26,15 +35,17 @@ class RustRelayService {
   }) async {
     final urls = relayUrls ?? await getRelaySetMainSockets();
     _currentRelayUrls = List.from(urls);
+    final dbPath = await _getDbPath();
 
     await rust_relay.initClient(
       relayUrls: urls,
       privateKeyHex: privateKeyHex,
+      dbPath: dbPath,
     );
     _initialized = true;
 
     if (kDebugMode) {
-      print('[RustRelayService] Initialized with ${urls.length} relays');
+      print('[RustRelayService] Initialized with ${urls.length} relays, db: $dbPath');
     }
 
     unawaited(rust_relay.connectRelays().catchError((_) {}));
@@ -198,6 +209,15 @@ class RustRelayService {
     }
   }
 
+  Stream<Map<String, dynamic>> subscribeToEvents(
+    Map<String, dynamic> filter,
+  ) {
+    final filterJson = jsonEncode(filter);
+    return rust_relay
+        .subscribeToEvents(filterJson: filterJson)
+        .map((eventJson) => jsonDecode(eventJson) as Map<String, dynamic>);
+  }
+
   Future<void> reloadCustomRelays() async {
     try {
       final customRelays = await getRelaySetMainSockets();
@@ -218,15 +238,19 @@ class RustRelayService {
 
       await reinit(relayUrls: customRelays);
 
+      final flagFutures = <Future>[];
       for (final url in customRelays) {
         final flags = relayFlags[url];
         if (flags != null) {
           final isRead = flags['read'] ?? true;
           final isWrite = flags['write'] ?? true;
           if (!isRead || !isWrite) {
-            await rust_relay.addRelayWithFlags(url: url, read: isRead, write: isWrite);
+            flagFutures.add(rust_relay.addRelayWithFlags(url: url, read: isRead, write: isWrite));
           }
         }
+      }
+      if (flagFutures.isNotEmpty) {
+        await Future.wait(flagFutures);
       }
 
       if (kDebugMode) {

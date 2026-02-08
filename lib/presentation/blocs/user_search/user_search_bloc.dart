@@ -1,7 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/isar_database_service.dart';
+import '../../../data/services/rust_database_service.dart';
 import '../../../utils/string_optimizer.dart';
 import 'user_search_event.dart';
 import 'user_search_state.dart';
@@ -9,59 +9,17 @@ import 'user_search_state.dart';
 class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
   final ProfileRepository _profileRepository;
   final AuthService _authService;
-  final IsarDatabaseService _db;
+  final RustDatabaseService _db;
 
   UserSearchBloc({
     required ProfileRepository profileRepository,
     required AuthService authService,
-    IsarDatabaseService? db,
+    RustDatabaseService? db,
   })  : _profileRepository = profileRepository,
         _authService = authService,
-        _db = db ?? IsarDatabaseService.instance,
-        super(const UserSearchInitial()) {
-    on<UserSearchInitialized>(_onUserSearchInitialized);
+        _db = db ?? RustDatabaseService.instance,
+        super(const UserSearchLoaded(filteredUsers: [])) {
     on<UserSearchQueryChanged>(_onUserSearchQueryChanged);
-  }
-
-  Future<void> _onUserSearchInitialized(
-    UserSearchInitialized event,
-    Emitter<UserSearchState> emit,
-  ) async {
-    emit(const UserSearchLoaded(
-      filteredUsers: [],
-      randomUsers: [],
-      isLoadingRandom: true,
-    ));
-
-    final randomProfiles =
-        await _profileRepository.getRandomUsersWithImages(limit: 50);
-
-    final userModels = randomProfiles.map((profileData) {
-      final pubkeyHex = profileData['pubkeyHex'] as String? ??
-          profileData['pubkey'] as String? ??
-          '';
-      return <String, dynamic>{
-        'pubkeyHex': pubkeyHex,
-        'npub': _authService.hexToNpub(pubkeyHex) ?? pubkeyHex,
-        'name': profileData['name'] ?? '',
-        'about': profileData['about'] ?? '',
-        'profileImage':
-            profileData['profileImage'] ?? profileData['picture'] ?? '',
-        'banner': profileData['banner'] ?? '',
-        'website': profileData['website'] ?? '',
-        'nip05': profileData['nip05'] ?? '',
-        'lud16': profileData['lud16'] ?? '',
-        'updatedAt': DateTime.now(),
-        'nip05Verified': false,
-        'followerCount': 0,
-      };
-    }).toList();
-
-    emit(UserSearchLoaded(
-      filteredUsers: [],
-      randomUsers: userModels,
-      isLoadingRandom: false,
-    ));
   }
 
   Future<void> _onUserSearchQueryChanged(
@@ -70,45 +28,19 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
   ) async {
     final query = event.query.trim();
 
-    final currentState = state;
-    final existingRandomUsers = currentState is UserSearchLoaded
-        ? currentState.randomUsers
-        : const <Map<String, dynamic>>[];
-
     if (query.isEmpty) {
-      if (currentState is UserSearchLoaded) {
-        emit(currentState.copyWith(
-          filteredUsers: [],
-          filteredNotes: [],
-          noteProfiles: {},
-          isSearching: false,
-        ));
-      } else {
-        emit(UserSearchLoaded(
-          filteredUsers: [],
-          filteredNotes: [],
-          noteProfiles: {},
-          randomUsers: existingRandomUsers,
-          isSearching: false,
-        ));
-      }
+      emit(const UserSearchLoaded(filteredUsers: []));
       return;
     }
 
+    final currentState = state;
     if (currentState is UserSearchLoaded) {
       emit(currentState.copyWith(isSearching: true));
     } else {
-      emit(UserSearchLoaded(
-        filteredUsers: [],
-        filteredNotes: [],
-        noteProfiles: {},
-        randomUsers: existingRandomUsers,
-        isSearching: true,
-      ));
+      emit(const UserSearchLoaded(filteredUsers: [], isSearching: true));
     }
 
     try {
-      // Search users and notes in parallel
       final userResultsFuture = _profileRepository.searchProfiles(query);
       final noteResultsFuture = _db.searchNotes(query, limit: 30);
 
@@ -134,12 +66,11 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
         };
       }).toList();
 
-      // Convert note events to note maps
       final notes = <Map<String, dynamic>>[];
       final authorPubkeys = <String>{};
 
       for (final event in noteResults) {
-        final noteMap = _eventToNoteMap(event);
+        final noteMap = _eventToNoteMap(event as Map<String, dynamic>);
         if (noteMap != null) {
           notes.add(noteMap);
           final author = noteMap['pubkey'] as String? ??
@@ -151,7 +82,6 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
         }
       }
 
-      // Fetch profiles for note authors
       final noteProfiles = <String, Map<String, dynamic>>{};
       if (authorPubkeys.isNotEmpty) {
         final profiles =
@@ -172,35 +102,24 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
         }
       }
 
-      final updatedState = state;
-      if (updatedState is UserSearchLoaded) {
-        emit(updatedState.copyWith(
-          filteredUsers: users,
-          filteredNotes: notes,
-          noteProfiles: noteProfiles,
-          isSearching: false,
-        ));
-      } else {
-        emit(UserSearchLoaded(
-          filteredUsers: users,
-          filteredNotes: notes,
-          noteProfiles: noteProfiles,
-          randomUsers: existingRandomUsers,
-          isSearching: false,
-        ));
-      }
+      emit(UserSearchLoaded(
+        filteredUsers: users,
+        filteredNotes: notes,
+        noteProfiles: noteProfiles,
+        isSearching: false,
+      ));
     } catch (e) {
       emit(UserSearchError(e.toString()));
     }
   }
 
-  Map<String, dynamic>? _eventToNoteMap(dynamic event) {
+  Map<String, dynamic>? _eventToNoteMap(Map<String, dynamic> event) {
     try {
-      final eventId = event.eventId as String? ?? '';
-      final pubkey = event.pubkey as String? ?? '';
-      final content = event.content as String? ?? '';
-      final createdAt = event.createdAt as int? ?? 0;
-      final kind = event.kind as int? ?? 1;
+      final eventId = event['id'] as String? ?? '';
+      final pubkey = event['pubkey'] as String? ?? '';
+      final content = event['content'] as String? ?? '';
+      final createdAt = event['created_at'] as int? ?? 0;
+      final kind = event['kind'] as int? ?? 1;
 
       if (eventId.isEmpty || kind != 1) return null;
 
