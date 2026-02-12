@@ -12,6 +12,13 @@ class DmBloc extends Bloc<DmEvent, DmState> {
   final List<StreamSubscription> _subscriptions = [];
   String? _currentChatPubkeyHex;
   Timer? _conversationsTimer;
+  List<Map<String, dynamic>>? _cachedConversations;
+
+  List<Map<String, dynamic>> _fullMessages = [];
+  int _chatDisplayLimit = 20;
+  static const int _chatPageSize = 20;
+
+  List<Map<String, dynamic>>? get cachedConversations => _cachedConversations;
 
   DmBloc({
     required DmService dmService,
@@ -28,13 +35,30 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     on<DmMessagesUpdated>(_onDmMessagesUpdated);
     on<DmMessagesError>(_onDmMessagesError);
     on<DmConversationsUpdated>(_onDmConversationsUpdated);
+    on<DmLoadMoreMessagesRequested>(_onDmLoadMoreMessagesRequested);
+  }
+
+  void _emitChatState(String pubkeyHex, Emitter<DmState> emit) {
+    final total = _fullMessages.length;
+    final displayCount =
+        total > _chatDisplayLimit ? _chatDisplayLimit : total;
+    final displayMessages = total > _chatDisplayLimit
+        ? _fullMessages.sublist(total - displayCount)
+        : List<Map<String, dynamic>>.from(_fullMessages);
+    emit(DmChatLoaded(
+      pubkeyHex: pubkeyHex,
+      messages: displayMessages,
+      hasMore: total > _chatDisplayLimit,
+    ));
   }
 
   void _onDmMessagesUpdated(
     DmMessagesUpdated event,
     Emitter<DmState> emit,
   ) {
-    emit(DmChatLoaded(pubkeyHex: event.pubkeyHex, messages: event.messages));
+    if (event.pubkeyHex != _currentChatPubkeyHex) return;
+    _fullMessages = List<Map<String, dynamic>>.from(event.messages);
+    _emitChatState(event.pubkeyHex, emit);
   }
 
   void _onDmMessagesError(
@@ -52,6 +76,12 @@ class DmBloc extends Bloc<DmEvent, DmState> {
       return;
     }
 
+    if (_cachedConversations != null) {
+      emit(DmConversationsLoaded(_cachedConversations!));
+      _startConversationsPolling();
+      return;
+    }
+
     emit(const DmLoading());
 
     final result = await _dmService.getConversations();
@@ -63,6 +93,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
     final conversations = result.data!;
     final enriched = await _enrichConversations(conversations);
+    _cachedConversations = enriched;
     emit(DmConversationsLoaded(enriched));
 
     _startConversationsPolling();
@@ -86,10 +117,9 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmConversationsUpdated event,
     Emitter<DmState> emit,
   ) {
-    if (state is DmConversationsLoaded || state is DmChatLoaded) {
-      if (state is! DmChatLoaded) {
-        emit(DmConversationsLoaded(event.conversations));
-      }
+    _cachedConversations = event.conversations;
+    if (state is DmConversationsLoaded) {
+      emit(DmConversationsLoaded(event.conversations));
     }
   }
 
@@ -137,7 +167,14 @@ class DmBloc extends Bloc<DmEvent, DmState> {
       return;
     }
 
+    for (final subscription in _subscriptions) {
+      subscription.cancel();
+    }
+    _subscriptions.clear();
+
     _currentChatPubkeyHex = event.pubkeyHex;
+    _chatDisplayLimit = _chatPageSize;
+    _fullMessages = [];
     emit(const DmLoading());
 
     _subscriptions.add(
@@ -155,13 +192,24 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     final result = await _dmService.getMessages(event.pubkeyHex);
     result.fold(
       (messages) {
+        _fullMessages = List<Map<String, dynamic>>.from(messages);
         if (state is! DmChatLoaded ||
             (state as DmChatLoaded).messages.isEmpty) {
-          emit(DmChatLoaded(pubkeyHex: event.pubkeyHex, messages: messages));
+          _emitChatState(event.pubkeyHex, emit);
         }
       },
       (error) => emit(DmError(error)),
     );
+  }
+
+  void _onDmLoadMoreMessagesRequested(
+    DmLoadMoreMessagesRequested event,
+    Emitter<DmState> emit,
+  ) {
+    if (event.pubkeyHex != _currentChatPubkeyHex) return;
+    if (_fullMessages.length <= _chatDisplayLimit) return;
+    _chatDisplayLimit += _chatPageSize;
+    _emitChatState(event.pubkeyHex, emit);
   }
 
   Future<void> _onDmMessageSent(
@@ -203,12 +251,18 @@ class DmBloc extends Bloc<DmEvent, DmState> {
   ) {
     if (state is DmChatLoaded) {
       final currentState = state as DmChatLoaded;
+      _fullMessages.removeWhere((m) {
+        final messageId = m['id'] as String? ?? '';
+        return messageId.isNotEmpty && messageId == event.messageId;
+      });
       final updatedMessages = currentState.messages.where((m) {
         final messageId = m['id'] as String? ?? '';
         return messageId.isNotEmpty && messageId != event.messageId;
       }).toList();
-      emit(DmChatLoaded(
-          pubkeyHex: currentState.pubkeyHex, messages: updatedMessages));
+      emit(currentState.copyWith(
+        messages: updatedMessages,
+        hasMore: _fullMessages.length > _chatDisplayLimit,
+      ));
     }
   }
 
@@ -216,6 +270,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmConversationRefreshed event,
     Emitter<DmState> emit,
   ) async {
+    _currentChatPubkeyHex = null;
     emit(const DmLoading());
     await _onDmConversationOpened(DmConversationOpened(event.pubkeyHex), emit);
   }

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/article/article_widget.dart';
-import '../../widgets/common/back_button_widget.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../presentation/blocs/article/article_event.dart';
@@ -57,27 +57,6 @@ class _ExplorePageState extends State<ExplorePage> {
     }
   }
 
-  Widget _buildHeader(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            'Reads',
-            style: GoogleFonts.poppins(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -86,7 +65,7 @@ class _ExplorePageState extends State<ExplorePage> {
       return Scaffold(
         backgroundColor: colors.background,
         body: Center(
-          child: CircularProgressIndicator(color: colors.accent),
+          child: CircularProgressIndicator(color: colors.accent, strokeWidth: 2),
         ),
       );
     }
@@ -103,12 +82,22 @@ class _ExplorePageState extends State<ExplorePage> {
             backgroundColor: colors.background,
             body: Stack(
               children: [
-                _buildArticleContent(
-                  context,
-                  articleState,
-                  colors,
+                _buildArticleContent(context, articleState, colors),
+                TopActionBarWidget(
+                  onBackPressed: () => context.pop(),
+                  centerBubble: Text(
+                    'Reads',
+                    style: TextStyle(
+                      color: colors.background,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onCenterBubbleTap: () {
+                    scrollToTop();
+                  },
+                  showShareButton: false,
                 ),
-                const BackButtonWidget.floating(),
               ],
             ),
           );
@@ -122,12 +111,31 @@ class _ExplorePageState extends State<ExplorePage> {
     ArticleState articleState,
     AppThemeColors colors,
   ) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return switch (articleState) {
-      ArticleInitial() => Center(
-          child: CircularProgressIndicator(color: colors.accent),
-        ),
-      ArticleLoading() => Center(
-          child: CircularProgressIndicator(color: colors.accent),
+      ArticleInitial() || ArticleLoading() => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: colors.textSecondary,
+                  strokeWidth: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading articles...',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: colors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ArticleLoaded(
         :final filteredArticles,
@@ -149,10 +157,7 @@ class _ExplorePageState extends State<ExplorePage> {
             cacheExtent: 600,
             slivers: [
               SliverToBoxAdapter(
-                child: _buildHeader(context),
-              ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 4),
+                child: SizedBox(height: topPadding + 72),
               ),
               ArticleListWidget(
                 articles: filteredArticles,
@@ -177,55 +182,101 @@ class _ExplorePageState extends State<ExplorePage> {
           ),
         ),
       ArticleError(:final message) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 48,
-                color: colors.error,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                style: TextStyle(color: colors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () {
-                  context.read<ArticleBloc>().add(const ArticleRefreshed());
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: colors.textSecondary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Something went wrong',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
                   ),
-                  decoration: BoxDecoration(
-                    color: colors.accent,
-                    borderRadius: BorderRadius.circular(20),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: colors.textSecondary,
                   ),
-                  child: Text(
-                    'Retry',
-                    style: TextStyle(
-                      color: colors.background,
-                      fontWeight: FontWeight.w600,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: () {
+                    context
+                        .read<ArticleBloc>()
+                        .add(const ArticleRefreshed());
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.textPrimary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        color: colors.background,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ArticleEmpty() => Center(
-          child: Text(
-            'No articles available',
-            style: TextStyle(color: colors.textSecondary),
-            textAlign: TextAlign.center,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.article_outlined,
+                  size: 48,
+                  color: colors.textSecondary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No articles yet',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Long-form content from people you follow will appear here.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: colors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
       _ => Center(
-          child: CircularProgressIndicator(color: colors.accent),
+          child: CircularProgressIndicator(
+            color: colors.accent,
+            strokeWidth: 2,
+          ),
         ),
     };
   }

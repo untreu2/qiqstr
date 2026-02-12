@@ -88,7 +88,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Failed to load article: $e';
+        _error = 'Failed to load article';
         _isLoading = false;
       });
     }
@@ -120,18 +120,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
   String _formatDate(DateTime timestamp) {
     final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[timestamp.month - 1]} ${timestamp.day}, ${timestamp.year}';
   }
@@ -158,9 +148,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
-    } catch (e) {
-      debugPrint('Could not launch URL: $url');
-    }
+    } catch (_) {}
   }
 
   @override
@@ -203,13 +191,23 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   Widget _buildLoadingState(AppThemeColors colors) {
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(color: colors.accent),
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              color: colors.textSecondary,
+              strokeWidth: 2,
+            ),
+          ),
           const SizedBox(height: 16),
           Text(
             'Loading article...',
-            style: TextStyle(color: colors.textSecondary),
+            style: TextStyle(
+              fontSize: 14,
+              color: colors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -218,54 +216,57 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
   Widget _buildErrorState(AppThemeColors colors) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: colors.error,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Failed to load article',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: colors.textPrimary,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: colors.textSecondary,
             ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load article',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
               _error!,
-              style: TextStyle(color: colors.textSecondary),
+              style: TextStyle(
+                fontSize: 14,
+                color: colors.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 24),
-          GestureDetector(
-            onTap: _loadArticle,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
-              decoration: BoxDecoration(
-                color: colors.accent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                'Retry',
-                style: TextStyle(
-                  color: colors.background,
-                  fontWeight: FontWeight.w600,
+            const SizedBox(height: 24),
+            GestureDetector(
+              onTap: _loadArticle,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.textPrimary,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Retry',
+                  style: TextStyle(
+                    color: colors.background,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -320,314 +321,295 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             parent: BouncingScrollPhysics()),
         slivers: [
           SliverToBoxAdapter(
-            child: SizedBox(height: topPadding + 80),
+            child: SizedBox(height: topPadding + 72),
+          ),
+          if (imageUrl.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      height: 220,
+                      color: colors.overlayLight,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: colors.textSecondary,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                imageUrl.isNotEmpty ? 24 : 0,
+                20,
+                0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textPrimary,
+                      height: 1.2,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  if (summary.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      summary,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: colors.textSecondary,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  GestureDetector(
+                    onTap: _navigateToProfile,
+                    child: Row(
+                      children: [
+                        _buildAuthorAvatar(authorImage, colors),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            displayName,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _formatDate(publishedAt),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                ],
+              ),
+            ),
           ),
           SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (imageUrl.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: MarkdownBody(
+                data: content,
+                selectable: true,
+                extensionSet: md.ExtensionSet(
+                  md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                  <md.InlineSyntax>[
+                    md.EmojiSyntax(),
+                    ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
+                  ],
+                ),
+                styleSheet: _buildMarkdownStyleSheet(colors),
+                onTapLink: (text, href, title) {
+                  if (href != null) {
+                    _launchUrl(href);
+                  }
+                },
+                imageBuilder: (uri, title, alt) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        width: double.infinity,
-                        height: 200,
-                        fit: BoxFit.cover,
+                        imageUrl: uri.toString(),
+                        fit: BoxFit.contain,
                         placeholder: (context, url) => Container(
-                          height: 200,
+                          height: 150,
                           color: colors.overlayLight,
                           child: Center(
                             child: CircularProgressIndicator(
-                              color: colors.accent,
+                              color: colors.textSecondary,
                               strokeWidth: 2,
                             ),
                           ),
                         ),
-                        errorWidget: (context, url, error) => Container(
-                          height: 200,
-                          color: colors.overlayLight,
-                          child: Icon(
-                            Icons.image_not_supported,
-                            color: colors.textSecondary,
-                            size: 48,
-                          ),
-                        ),
+                        errorWidget: (context, url, error) =>
+                            const SizedBox.shrink(),
                       ),
                     ),
-                  ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    imageUrl.isEmpty ? 0 : 20,
-                    20,
-                    0,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: colors.textPrimary,
-                          height: 1.2,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      if (summary.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          summary,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: colors.textSecondary,
-                            height: 1.5,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      GestureDetector(
-                        onTap: _navigateToProfile,
-                        child: Row(
-                          children: [
-                            ClipOval(
-                              child: authorImage.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: authorImage,
-                                      width: 40,
-                                      height: 40,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(
-                                        width: 40,
-                                        height: 40,
-                                        color: colors.overlayLight,
-                                        child: Icon(
-                                          Icons.person,
-                                          size: 20,
-                                          color: colors.textSecondary,
-                                        ),
-                                      ),
-                                      errorWidget: (context, url, error) =>
-                                          Container(
-                                        width: 40,
-                                        height: 40,
-                                        color: colors.overlayLight,
-                                        child: Icon(
-                                          Icons.person,
-                                          size: 20,
-                                          color: colors.textSecondary,
-                                        ),
-                                      ),
-                                    )
-                                  : Container(
-                                      width: 40,
-                                      height: 40,
-                                      color: colors.overlayLight,
-                                      child: Icon(
-                                        Icons.person,
-                                        size: 20,
-                                        color: colors.textSecondary,
-                                      ),
-                                    ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                displayName,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.textPrimary,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              _formatDate(publishedAt),
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        height: 1,
-                        color: colors.divider.withValues(alpha: 0.3),
-                      ),
-                      const SizedBox(height: 20),
-                      MarkdownBody(
-                        data: content,
-                        selectable: true,
-                        extensionSet: md.ExtensionSet(
-                          md.ExtensionSet.gitHubFlavored.blockSyntaxes,
-                          <md.InlineSyntax>[
-                            md.EmojiSyntax(),
-                            ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
-                          ],
-                        ),
-                        styleSheet: MarkdownStyleSheet(
-                          p: TextStyle(
-                            fontSize: 16,
-                            color: colors.textPrimary,
-                            height: 1.7,
-                          ),
-                          h1: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: colors.textPrimary,
-                            height: 1.3,
-                          ),
-                          h2: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textPrimary,
-                            height: 1.3,
-                          ),
-                          h3: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                            height: 1.3,
-                          ),
-                          h4: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                            height: 1.3,
-                          ),
-                          h5: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                            height: 1.3,
-                          ),
-                          h6: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                            height: 1.3,
-                          ),
-                          em: TextStyle(
-                            fontSize: 16,
-                            fontStyle: FontStyle.italic,
-                            color: colors.textPrimary,
-                          ),
-                          strong: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textPrimary,
-                          ),
-                          blockquote: TextStyle(
-                            fontSize: 16,
-                            color: colors.textSecondary,
-                            fontStyle: FontStyle.italic,
-                            height: 1.5,
-                          ),
-                          blockquoteDecoration: BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: colors.accent,
-                                width: 4,
-                              ),
-                            ),
-                          ),
-                          blockquotePadding: const EdgeInsets.only(left: 16),
-                          code: TextStyle(
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                            backgroundColor: colors.overlayLight,
-                            fontFamily: 'monospace',
-                          ),
-                          codeblockDecoration: BoxDecoration(
-                            color: colors.overlayLight,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          codeblockPadding: const EdgeInsets.all(16),
-                          a: TextStyle(
-                            fontSize: 16,
-                            color: colors.accent,
-                            decoration: TextDecoration.underline,
-                          ),
-                          listBullet: TextStyle(
-                            fontSize: 16,
-                            color: colors.textPrimary,
-                          ),
-                          tableHead: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                          ),
-                          tableBody: TextStyle(
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                          ),
-                          tableBorder: TableBorder.all(
-                            color: colors.divider,
-                            width: 1,
-                          ),
-                          horizontalRuleDecoration: BoxDecoration(
-                            border: Border(
-                              top: BorderSide(
-                                color: colors.divider,
-                                width: 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                        onTapLink: (text, href, title) {
-                          if (href != null) {
-                            _launchUrl(href);
-                          }
-                        },
-                        imageBuilder: (uri, title, alt) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: CachedNetworkImage(
-                                imageUrl: uri.toString(),
-                                fit: BoxFit.contain,
-                                placeholder: (context, url) => Container(
-                                  height: 150,
-                                  color: colors.overlayLight,
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      color: colors.accent,
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  height: 100,
-                                  color: colors.overlayLight,
-                                  child: Icon(
-                                    Icons.image_not_supported,
-                                    color: colors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
           SliverToBoxAdapter(
-            child:
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 100),
+            child: SizedBox(
+                height: MediaQuery.of(context).padding.bottom + 100),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAuthorAvatar(String imageUrl, AppThemeColors colors) {
+    return ClipOval(
+      child: Container(
+        width: 40,
+        height: 40,
+        color: colors.avatarPlaceholder,
+        child: imageUrl.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: imageUrl,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
+                placeholder: (context, url) => Icon(
+                  Icons.person,
+                  size: 20,
+                  color: colors.textSecondary,
+                ),
+                errorWidget: (context, url, error) => Icon(
+                  Icons.person,
+                  size: 20,
+                  color: colors.textSecondary,
+                ),
+              )
+            : Icon(
+                Icons.person,
+                size: 20,
+                color: colors.textSecondary,
+              ),
+      ),
+    );
+  }
+
+  MarkdownStyleSheet _buildMarkdownStyleSheet(AppThemeColors colors) {
+    return MarkdownStyleSheet(
+      p: TextStyle(
+        fontSize: 16,
+        color: colors.textPrimary,
+        height: 1.75,
+      ),
+      h1: TextStyle(
+        fontSize: 26,
+        fontWeight: FontWeight.w800,
+        color: colors.textPrimary,
+        height: 1.3,
+      ),
+      h2: TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        color: colors.textPrimary,
+        height: 1.3,
+      ),
+      h3: TextStyle(
+        fontSize: 19,
+        fontWeight: FontWeight.w600,
+        color: colors.textPrimary,
+        height: 1.3,
+      ),
+      h4: TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        color: colors.textPrimary,
+        height: 1.3,
+      ),
+      h5: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: colors.textPrimary,
+        height: 1.3,
+      ),
+      h6: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: colors.textSecondary,
+        height: 1.3,
+      ),
+      em: TextStyle(
+        fontSize: 16,
+        fontStyle: FontStyle.italic,
+        color: colors.textPrimary,
+      ),
+      strong: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: colors.textPrimary,
+      ),
+      blockquote: TextStyle(
+        fontSize: 16,
+        color: colors.textSecondary,
+        fontStyle: FontStyle.italic,
+        height: 1.6,
+      ),
+      blockquoteDecoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: colors.textSecondary.withValues(alpha: 0.4),
+            width: 3,
+          ),
+        ),
+      ),
+      blockquotePadding: const EdgeInsets.only(left: 16),
+      code: TextStyle(
+        fontSize: 14,
+        color: colors.textPrimary,
+        backgroundColor: colors.overlayLight,
+        fontFamily: 'monospace',
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: colors.overlayLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      codeblockPadding: const EdgeInsets.all(16),
+      a: TextStyle(
+        fontSize: 16,
+        color: colors.accent,
+        decoration: TextDecoration.underline,
+        decorationColor: colors.accent.withValues(alpha: 0.4),
+      ),
+      listBullet: TextStyle(
+        fontSize: 16,
+        color: colors.textPrimary,
+      ),
+      tableHead: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: colors.textPrimary,
+      ),
+      tableBody: TextStyle(
+        fontSize: 14,
+        color: colors.textPrimary,
+      ),
+      tableBorder: TableBorder.all(
+        color: colors.divider.withValues(alpha: 0.3),
+        width: 1,
+      ),
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: colors.divider.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
+        ),
       ),
     );
   }

@@ -14,6 +14,8 @@ import '../../presentation/blocs/theme/theme_state.dart';
 import '../../presentation/blocs/notification_indicator/notification_indicator_bloc.dart';
 import '../../presentation/blocs/notification_indicator/notification_indicator_event.dart';
 import '../../presentation/blocs/notification_indicator/notification_indicator_state.dart';
+import '../../presentation/blocs/dm/dm_bloc.dart';
+import '../../presentation/blocs/dm/dm_event.dart' as dm_events;
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -49,9 +51,10 @@ class _HomeNavigatorState extends State<HomeNavigator>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
-        debugPrint(
-            '[HomeNavigator] initState: initializing NotificationIndicatorBloc');
         indicatorBloc.add(const NotificationIndicatorInitialized());
+
+        final dmBloc = AppDI.get<DmBloc>();
+        dmBloc.add(const dm_events.DmConversationsLoadRequested());
       }
     });
   }
@@ -64,8 +67,6 @@ class _HomeNavigatorState extends State<HomeNavigator>
   }
 
   Widget _buildCustomBottomBar(bool hasNewNotifications) {
-    debugPrint(
-        '[HomeNavigator] _buildCustomBottomBar: hasNewNotifications=$hasNewNotifications');
     final themeState = context.themeState;
     final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
 
@@ -384,8 +385,6 @@ class _HomeNavigatorState extends State<HomeNavigator>
     }
 
     final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
-    debugPrint(
-        '[HomeNavigator] build: indicatorBloc=$indicatorBloc, currentState=${indicatorBloc.state}');
 
     return BlocProvider<NotificationIndicatorBloc>.value(
       value: indicatorBloc,
@@ -404,8 +403,6 @@ class _HomeNavigatorState extends State<HomeNavigator>
                 final hasNewNotifications =
                     state is NotificationIndicatorLoaded &&
                         state.hasNewNotifications;
-                debugPrint(
-                    '[HomeNavigator] BlocBuilder: hasNewNotifications=$hasNewNotifications');
                 return _buildCustomBottomBar(hasNewNotifications);
               },
             ),

@@ -28,18 +28,32 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
   @override
   Stream<List<FeedNote>> watchFeed(String userPubkey,
       {int limit = 100}) async* {
-    final follows = await db.getFollowingList(userPubkey);
-    if (follows == null || follows.isEmpty) {
+    if (userPubkey.isEmpty || userPubkey.length != 64) {
       yield [];
       return;
     }
 
-    final initial = await db.getCachedFeedNotes(follows, limit: limit);
+    var follows = await db.getFollowingList(userPubkey);
+
+    if (follows == null || follows.isEmpty) {
+      yield [];
+      await for (final _ in db.onChange) {
+        follows = await db.getFollowingList(userPubkey);
+        if (follows != null && follows.isNotEmpty) break;
+      }
+      if (follows == null || follows.isEmpty) return;
+    }
+
+    final activeFollows = follows;
+
+    final initial = await db.getCachedFeedNotes(activeFollows, limit: limit);
     if (initial.isNotEmpty) {
       yield await _hydrateNotes(initial);
     }
 
-    yield* db.watchFeedNotes(follows, limit: limit).asyncMap((events) async {
+    yield* db
+        .watchFeedNotes(activeFollows, limit: limit)
+        .asyncMap((events) async {
       return await _hydrateNotes(events);
     });
   }

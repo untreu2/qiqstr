@@ -43,6 +43,16 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     feed_event.FeedInitialized event,
     Emitter<FeedState> emit,
   ) async {
+    if (event.userHex.isEmpty) return;
+
+    if (state is FeedLoaded) {
+      final current = state as FeedLoaded;
+      if (current.currentUserHex == event.userHex &&
+          current.hashtag == event.hashtag) {
+        return;
+      }
+    }
+
     _currentUserHex = event.userHex;
 
     final initialProfiles = <String, Map<String, dynamic>>{};
@@ -75,20 +85,48 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     _feedSubscription?.cancel();
     _feedSubscription = _feedRepository
         .watchFeed(userHex, limit: limit ?? _currentLimit)
-        .listen((notes) {
-      if (isClosed) return;
-      add(feed_event.FeedNotesUpdated(notes));
-    });
+        .listen(
+      (notes) {
+        if (isClosed) return;
+        add(feed_event.FeedNotesUpdated(notes));
+      },
+      onError: (_) {
+        if (isClosed) return;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!isClosed) _watchFeed(userHex, limit: limit);
+        });
+      },
+      onDone: () {
+        if (isClosed) return;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!isClosed) _watchFeed(userHex, limit: limit);
+        });
+      },
+    );
   }
 
   void _watchHashtagFeed(String hashtag, {int? limit}) {
     _feedSubscription?.cancel();
     _feedSubscription = _feedRepository
         .watchHashtagFeed(hashtag, limit: limit ?? _currentLimit)
-        .listen((notes) {
-      if (isClosed) return;
-      add(feed_event.FeedNotesUpdated(notes));
-    });
+        .listen(
+      (notes) {
+        if (isClosed) return;
+        add(feed_event.FeedNotesUpdated(notes));
+      },
+      onError: (_) {
+        if (isClosed) return;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!isClosed) _watchHashtagFeed(hashtag, limit: limit);
+        });
+      },
+      onDone: () {
+        if (isClosed) return;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!isClosed) _watchHashtagFeed(hashtag, limit: limit);
+        });
+      },
+    );
   }
 
   void _syncHashtagInBackground(String hashtag, Emitter<FeedState>? emit) {
@@ -178,22 +216,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     try {
       _currentLimit += _pageSize;
 
-      _feedSubscription?.cancel();
-
       if (currentState.hashtag != null) {
-        _feedSubscription = _feedRepository
-            .watchHashtagFeed(currentState.hashtag!, limit: _currentLimit)
-            .listen((notes) {
-          if (isClosed) return;
-          add(feed_event.FeedNotesUpdated(notes));
-        });
+        _watchHashtagFeed(currentState.hashtag!, limit: _currentLimit);
       } else if (_currentUserHex != null) {
-        _feedSubscription = _feedRepository
-            .watchFeed(_currentUserHex!, limit: _currentLimit)
-            .listen((notes) {
-          if (isClosed) return;
-          add(feed_event.FeedNotesUpdated(notes));
-        });
+        _watchFeed(_currentUserHex!, limit: _currentLimit);
       }
 
       emit(currentState.copyWith(isLoadingMore: false));

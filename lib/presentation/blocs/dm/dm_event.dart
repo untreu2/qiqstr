@@ -106,3 +106,12 @@ class DmConversationsUpdated extends DmEvent {
   @override
   List<Object?> get props => [conversations];
 }
+
+class DmLoadMoreMessagesRequested extends DmEvent {
+  final String pubkeyHex;
+
+  const DmLoadMoreMessagesRequested(this.pubkeyHex);
+
+  @override
+  List<Object?> get props => [pubkeyHex];
+}

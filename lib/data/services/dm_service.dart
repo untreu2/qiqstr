@@ -15,6 +15,7 @@ class DmService {
   final Map<String, StreamController<List<Map<String, dynamic>>>>
       _messageStreams = {};
   final Set<String> _failedUnwrapIds = {};
+  final Map<String, Map<String, dynamic>?> _decryptedEventCache = {};
   StreamSubscription<Map<String, dynamic>>? _realtimeSubscription;
 
   List<Map<String, dynamic>>? _cachedConversations;
@@ -173,6 +174,21 @@ class DmService {
     }
   }
 
+  Map<String, dynamic>? _unwrapGiftWrapCached(
+    Map<String, dynamic> eventData,
+    String privateKey,
+  ) {
+    final eventId = eventData['id'] as String? ?? '';
+    if (eventId.isNotEmpty && _decryptedEventCache.containsKey(eventId)) {
+      return _decryptedEventCache[eventId];
+    }
+    final result = _unwrapGiftWrap(eventData, privateKey);
+    if (eventId.isNotEmpty) {
+      _decryptedEventCache[eventId] = result;
+    }
+    return result;
+  }
+
   Future<Result<List<Map<String, dynamic>>>> getConversations(
       {bool forceRefresh = false}) async {
     if (!forceRefresh &&
@@ -200,7 +216,7 @@ class DmService {
 
     for (final eventData in cachedDMs) {
       try {
-        final message = _unwrapGiftWrap(eventData, privateKey);
+        final message = _unwrapGiftWrapCached(eventData, privateKey);
         if (message == null) continue;
 
         final otherUserPubkeyHex = message['isFromCurrentUser'] == true
@@ -267,7 +283,7 @@ class DmService {
         if (processedEventIds.contains(eventId)) continue;
         processedEventIds.add(eventId);
 
-        final message = _unwrapGiftWrap(eventData, privateKey);
+        final message = _unwrapGiftWrapCached(eventData, privateKey);
         if (message == null) continue;
 
         final otherUserPubkeyHex = message['isFromCurrentUser'] == true
@@ -340,8 +356,8 @@ class DmService {
       final bTime = b['createdAt'] as DateTime? ?? DateTime(2000);
       return aTime.compareTo(bTime);
     });
-    if (msgs.length > 50) {
-      _messagesCache[key] = msgs.sublist(msgs.length - 50);
+    if (msgs.length > 500) {
+      _messagesCache[key] = msgs.sublist(msgs.length - 500);
     }
   }
 
@@ -371,6 +387,34 @@ class DmService {
     } catch (_) {}
   }
 
+  Future<List<Map<String, dynamic>>> _loadMessagesFromDb(
+      String otherUserPubkeyHex, String privateKey) async {
+    try {
+      final cachedDMs = await _getDMEvents(_currentUserPubkeyHex!, limit: 200);
+      final messages = <Map<String, dynamic>>[];
+
+      for (var i = 0; i < cachedDMs.length; i++) {
+        if (i > 0 && i % 5 == 0) {
+          await Future.delayed(Duration.zero);
+        }
+
+        final message = _unwrapGiftWrapCached(cachedDMs[i], privateKey);
+        if (message == null) continue;
+
+        final msgOther = message['isFromCurrentUser'] == true
+            ? message['recipientPubkeyHex'] as String
+            : message['senderPubkeyHex'] as String;
+        if (msgOther != otherUserPubkeyHex) continue;
+
+        messages.add(message);
+      }
+
+      return messages;
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<Result<List<Map<String, dynamic>>>> getMessages(
       String otherUserPubkeyHex) async {
     final initResult = await _ensureInitialized();
@@ -387,6 +431,14 @@ class DmService {
     final privateKey = await _getPrivateKey();
     if (privateKey == null) {
       return Result.error('Not authenticated');
+    }
+
+    final dbMessages =
+        await _loadMessagesFromDb(otherUserPubkeyHex, privateKey);
+    if (dbMessages.isNotEmpty) {
+      final merged = _mergeAndCapMessages(otherUserPubkeyHex, dbMessages);
+      _fetchMessagesInBackground(otherUserPubkeyHex);
+      return Result.success(merged);
     }
 
     try {
@@ -407,7 +459,7 @@ class DmService {
         final eventId = eventData['id'] as String? ?? '';
         if (messagesMap.containsKey(eventId)) continue;
 
-        final message = _unwrapGiftWrap(eventData, privateKey);
+        final message = _unwrapGiftWrapCached(eventData, privateKey);
         if (message == null) continue;
 
         final msgOther = message['isFromCurrentUser'] == true
@@ -416,6 +468,7 @@ class DmService {
         if (msgOther != otherUserPubkeyHex) continue;
 
         messagesMap[message['id'] as String? ?? eventId] = message;
+        _saveEvent(eventData);
       }
 
       final merged =
@@ -448,7 +501,7 @@ class DmService {
         final eventId = eventData['id'] as String? ?? '';
         if (messagesMap.containsKey(eventId)) continue;
 
-        final message = _unwrapGiftWrap(eventData, privateKey);
+        final message = _unwrapGiftWrapCached(eventData, privateKey);
         if (message == null) continue;
 
         final msgOther = message['isFromCurrentUser'] == true
@@ -457,6 +510,7 @@ class DmService {
         if (msgOther != otherUserPubkeyHex) continue;
 
         messagesMap[message['id'] as String? ?? eventId] = message;
+        _saveEvent(eventData);
       }
 
       if (messagesMap.isNotEmpty) {
@@ -489,7 +543,7 @@ class DmService {
         return aTime.compareTo(bTime);
       });
     final capped =
-        merged.length > 50 ? merged.sublist(merged.length - 50) : merged;
+        merged.length > 500 ? merged.sublist(merged.length - 500) : merged;
 
     _messagesCache[otherUserPubkeyHex] = capped;
     if (notify) _notifyMessageStream(otherUserPubkeyHex);
@@ -535,7 +589,7 @@ class DmService {
         'content': content,
         'createdAt': DateTime.now(),
         'isFromCurrentUser': true,
-        'kind': 14, // Text message
+        'kind': 14,
       };
 
       if (!_messagesCache.containsKey(recipientPubkeyHex)) {
@@ -553,14 +607,6 @@ class DmService {
     }
   }
 
-  
-  
-  
-  
-  
-  
-  
-  
   Future<Result<void>> sendEncryptedMediaMessage({
     required String recipientPubkeyHex,
     required String encryptedFileUrl,
@@ -620,7 +666,7 @@ class DmService {
         'content': encryptedFileUrl,
         'createdAt': DateTime.now(),
         'isFromCurrentUser': true,
-        'kind': 15, // File message
+        'kind': 15,
         'mimeType': mimeType,
         'encryptionKey': encryptionKey,
         'encryptionNonce': encryptionNonce,
@@ -704,9 +750,12 @@ class DmService {
     _startRealtimeSubscription();
 
     return Stream.multi((sink) {
-      sink.add(List.from(cachedMessages));
-
-      _fetchMessagesInBackground(otherUserPubkeyHex);
+      if (cachedMessages.isNotEmpty) {
+        sink.add(List.from(cachedMessages));
+        _fetchMessagesInBackground(otherUserPubkeyHex);
+      } else {
+        _loadDbThenFetchRelay(otherUserPubkeyHex, sink);
+      }
 
       final subscription = controller.stream.listen(
         (messages) => sink.add(messages),
@@ -718,6 +767,22 @@ class DmService {
         subscription.cancel();
       };
     });
+  }
+
+  Future<void> _loadDbThenFetchRelay(
+      String otherUserPubkeyHex, Sink<List<Map<String, dynamic>>> sink) async {
+    try {
+      final privateKey = await _getPrivateKey();
+      if (privateKey != null) {
+        final dbMessages =
+            await _loadMessagesFromDb(otherUserPubkeyHex, privateKey);
+        if (dbMessages.isNotEmpty) {
+          final merged = _mergeAndCapMessages(otherUserPubkeyHex, dbMessages);
+          sink.add(merged);
+        }
+      }
+    } catch (_) {}
+    _fetchMessagesInBackground(otherUserPubkeyHex);
   }
 
   Future<void> _startRealtimeSubscription() async {
@@ -754,7 +819,7 @@ class DmService {
   void _handleRealtimeEvent(
       Map<String, dynamic> eventData, String privateKey) {
     try {
-      final message = _unwrapGiftWrap(eventData, privateKey);
+      final message = _unwrapGiftWrapCached(eventData, privateKey);
       if (message == null) return;
 
       final otherUserPubkeyHex = message['isFromCurrentUser'] == true
@@ -814,6 +879,7 @@ class DmService {
     }
     _messageStreams.clear();
     _messagesCache.clear();
+    _decryptedEventCache.clear();
     _cachedConversations = null;
   }
 }

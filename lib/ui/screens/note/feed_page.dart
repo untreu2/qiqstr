@@ -451,15 +451,14 @@ class FeedPageState extends State<FeedPage> {
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
 
+    final feedBloc = AppDI.get<FeedBloc>();
+    feedBloc.add(FeedInitialized(
+        userHex: widget.userHex, hashtag: widget.hashtag));
+
     return MultiBlocProvider(
       providers: [
-        BlocProvider<FeedBloc>(
-          create: (context) {
-            final bloc = AppDI.get<FeedBloc>();
-            bloc.add(FeedInitialized(
-                userHex: widget.userHex, hashtag: widget.hashtag));
-            return bloc;
-          },
+        BlocProvider<FeedBloc>.value(
+          value: feedBloc,
         ),
         BlocProvider<ArticleBloc>(
           create: (context) {

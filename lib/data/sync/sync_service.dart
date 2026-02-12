@@ -268,11 +268,15 @@ class SyncService {
       final events = await _queryRelays(filter);
 
       final parentIds = _extractParentIds(events);
-      if (parentIds.isNotEmpty) {
-        final parentFilter =
-            NostrService.createEventByIdFilter(eventIds: parentIds);
-        final parentEvents = await _queryRelays(parentFilter);
-        await _saveEventsAndProfiles([...events, ...parentEvents]);
+      final referencedIds = _extractReferencedEventIds(events);
+      final allRelatedIds = <String>{...parentIds, ...referencedIds};
+
+      if (allRelatedIds.isNotEmpty) {
+        final relatedFilter =
+            NostrService.createEventByIdFilter(
+                eventIds: allRelatedIds.toList());
+        final relatedEvents = await _queryRelays(relatedFilter);
+        await _saveEventsAndProfiles([...events, ...relatedEvents]);
       } else {
         await _saveEventsAndProfiles(events);
       }

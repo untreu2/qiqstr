@@ -98,6 +98,7 @@ class _WebViewPageState extends State<WebViewPage> {
         children: [
           Column(
             children: [
+              const SizedBox(height: 72),
               Expanded(
                 child: ClipRRect(
                   borderRadius:

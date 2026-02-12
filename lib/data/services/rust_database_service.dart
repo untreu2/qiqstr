@@ -31,8 +31,6 @@ class RustDatabaseService {
 
   Future<void> close() async {}
 
-  // --- Profile methods ---
-
   Future<Map<String, String>?> getUserProfile(String pubkeyHex) async {
     try {
       final json = await rust_db.dbGetProfile(pubkeyHex: pubkeyHex);
@@ -125,8 +123,6 @@ class RustDatabaseService {
     });
   }
 
-  // --- Following list methods ---
-
   Future<List<String>?> getFollowingList(String userPubkeyHex) async {
     try {
       final list =
@@ -176,8 +172,6 @@ class RustDatabaseService {
     });
   }
 
-  // --- Mute list methods ---
-
   Future<List<String>?> getMuteList(String userPubkeyHex) async {
     try {
       final list = await rust_db.dbGetMuteList(pubkeyHex: userPubkeyHex);
@@ -214,8 +208,6 @@ class RustDatabaseService {
       if (kDebugMode) print('[RustDB] deleteMuteList error: $e');
     }
   }
-
-  // --- Feed notes methods ---
 
   Future<List<Map<String, dynamic>>> getCachedFeedNotes(
       List<String> authorPubkeys,
@@ -299,8 +291,6 @@ class RustDatabaseService {
     });
   }
 
-  // --- Event methods ---
-
   Future<Map<String, dynamic>?> getEvent(String eventId) async {
     try {
       final json = await rust_db.dbGetEvent(eventId: eventId);
@@ -334,8 +324,6 @@ class RustDatabaseService {
     }
   }
 
-  // --- Reply methods ---
-
   Future<List<Map<String, dynamic>>> getReplies(String noteId,
       {int limit = 500}) async {
     try {
@@ -356,8 +344,6 @@ class RustDatabaseService {
         .startWith(null)
         .asyncMap((_) => getReplies(noteId, limit: limit));
   }
-
-  // --- Notification methods ---
 
   Future<List<Map<String, dynamic>>> getCachedNotifications(
       String userPubkey,
@@ -391,8 +377,6 @@ class RustDatabaseService {
         .startWith(null)
         .asyncMap((_) => getCachedNotifications(userPubkey, limit: limit));
   }
-
-  // --- Interaction methods ---
 
   Future<Map<String, int>> getInteractionCounts(String noteId) async {
     try {
@@ -482,8 +466,6 @@ class RustDatabaseService {
     }
   }
 
-  // --- Article methods ---
-
   Future<List<Map<String, dynamic>>> getCachedArticles(
       {int limit = 50, List<String>? authors}) async {
     try {
@@ -520,8 +502,6 @@ class RustDatabaseService {
         .asyncMap((_) => getCachedArticles(limit: limit, authors: authors));
   }
 
-  // --- Search methods ---
-
   Future<List<Map<String, dynamic>>> searchNotes(String query,
       {int limit = 50}) async {
     try {
@@ -534,8 +514,6 @@ class RustDatabaseService {
       return [];
     }
   }
-
-  // --- Utility methods ---
 
   Future<void> wipe() async {
     try {
@@ -612,8 +590,6 @@ class RustDatabaseService {
       return 0;
     }
   }
-
-  // --- Helpers ---
 
   Map<String, String> _metadataToProfileMap(
       String pubkey, Map<String, dynamic> metadata) {

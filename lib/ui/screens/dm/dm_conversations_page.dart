@@ -21,29 +21,28 @@ class DmConversationsPage extends StatefulWidget {
 
 class _DmConversationsPageState extends State<DmConversationsPage>
     with AutomaticKeepAliveClientMixin {
-  bool _isInitialized = false;
-
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return BlocProvider<DmBloc>(
-      create: (context) {
-        final bloc = AppDI.get<DmBloc>();
-        if (!_isInitialized) {
-          _isInitialized = true;
-          Future.microtask(() {
-            if (mounted) {
-              bloc.add(const dm_events.DmConversationsLoadRequested());
-            }
-          });
-        }
-        return bloc;
-      },
+    final bloc = AppDI.get<DmBloc>();
+    if (bloc.state is! DmConversationsLoaded && bloc.state is! DmLoading) {
+      bloc.add(const dm_events.DmConversationsLoadRequested());
+    }
+    return BlocProvider<DmBloc>.value(
+      value: bloc,
       child: BlocBuilder<DmBloc, DmState>(
         builder: (context, state) {
+          if (state is DmConversationsLoaded) {
+            return _buildConversationList(context, state);
+          }
+          final cached = bloc.cachedConversations;
+          if (cached != null) {
+            return _buildConversationList(
+                context, DmConversationsLoaded(cached));
+          }
           return _buildConversationList(context, state);
         },
       ),

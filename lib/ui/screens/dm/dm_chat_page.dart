@@ -35,9 +35,9 @@ class DmChatPage extends StatefulWidget {
 class _DmChatPageState extends State<DmChatPage> {
   final Map<String, Map<String, dynamic>?> _userCache = {};
   final Map<String, TextEditingController> _textControllers = {};
-  bool _isInitialized = false;
   bool _isUploadingMedia = false;
   DmBloc? _dmBloc;
+  final ScrollController _scrollController = ScrollController();
   
   final List<Map<String, dynamic>> _attachedEncryptedMedia = [];
   final Map<String, Future<Widget>> _mediaCache = {};
@@ -59,6 +59,7 @@ class _DmChatPageState extends State<DmChatPage> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     for (final controller in _textControllers.values) {
       controller.dispose();
     }
@@ -66,8 +67,6 @@ class _DmChatPageState extends State<DmChatPage> {
     super.dispose();
   }
 
-  
-  
   Future<void> _selectMedia(String recipientPubkeyHex) async {
     if (_isUploadingMedia || !mounted || _dmBloc == null) return;
 
@@ -157,15 +156,12 @@ class _DmChatPageState extends State<DmChatPage> {
     }
   }
 
-  
   void _removeAttachedMedia(int index) {
     setState(() {
       _attachedEncryptedMedia.removeAt(index);
     });
   }
 
-  
-  
   void _sendMessage(String recipientPubkeyHex) {
     if (_dmBloc == null) return;
     final textController = _textControllers[recipientPubkeyHex];
@@ -197,21 +193,25 @@ class _DmChatPageState extends State<DmChatPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _dmBloc = AppDI.get<DmBloc>();
+    _dmBloc!.add(DmConversationOpened(widget.pubkeyHex));
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 200) {
+      _dmBloc?.add(DmLoadMoreMessagesRequested(widget.pubkeyHex));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return BlocProvider<DmBloc>(
-      create: (context) {
-        final bloc = AppDI.get<DmBloc>();
-        _dmBloc = bloc;
-        if (!_isInitialized) {
-          _isInitialized = true;
-          Future.microtask(() {
-            if (mounted) {
-              bloc.add(DmConversationOpened(widget.pubkeyHex));
-            }
-          });
-        }
-        return bloc;
-      },
+    return BlocProvider<DmBloc>.value(
+      value: _dmBloc!,
       child: BlocBuilder<DmBloc, DmState>(
         buildWhen: (previous, current) {
           if (previous.runtimeType != current.runtimeType) return true;
@@ -261,7 +261,7 @@ class _DmChatPageState extends State<DmChatPage> {
       body: Stack(
         children: [
           switch (state) {
-            DmChatLoaded(:final messages, :final pubkeyHex)
+            DmChatLoaded(:final messages, :final pubkeyHex, :final hasMore)
                 when pubkeyHex == otherUserPubkeyHex =>
               messages.isEmpty
                   ? Center(
@@ -274,7 +274,10 @@ class _DmChatPageState extends State<DmChatPage> {
                       builder: (context) {
                         final bottomPadding =
                             MediaQuery.of(context).padding.bottom;
+                        final itemCount =
+                            messages.length + (hasMore ? 1 : 0);
                         return ListView.builder(
+                          controller: _scrollController,
                           padding: EdgeInsets.only(
                             top: topPadding + 60,
                             bottom: 80 + bottomPadding,
@@ -282,10 +285,23 @@ class _DmChatPageState extends State<DmChatPage> {
                             right: 16,
                           ),
                           reverse: true,
-                          itemCount: messages.length,
+                          itemCount: itemCount,
                           addAutomaticKeepAlives: true,
                           addRepaintBoundaries: true,
                           itemBuilder: (context, index) {
+                            if (hasMore && index == itemCount - 1) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  ),
+                                ),
+                              );
+                            }
                             final message =
                                 messages[messages.length - 1 - index];
                             final messageId = message['id'] as String? ?? 
@@ -424,7 +440,6 @@ class _DmChatPageState extends State<DmChatPage> {
     return (text: textLines.join('\n').trim(), mediaUrls: mediaUrls);
   }
 
-  
   Widget _buildMessageBubble(
       BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
@@ -579,8 +594,6 @@ class _DmChatPageState extends State<DmChatPage> {
     );
   }
 
-  
-  
   Widget _buildEncryptedMediaBubble(
       BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
@@ -818,8 +831,6 @@ class _DmChatPageState extends State<DmChatPage> {
     );
   }
 
-  
-  
   Future<Widget> _decryptAndDisplayMedia({
     required String encryptedUrl,
     required String decryptionKey,
@@ -832,6 +843,17 @@ class _DmChatPageState extends State<DmChatPage> {
     required AppLocalizations l10n,
   }) async {
     try {
+      final encryptedMediaService = EncryptedMediaService.instance;
+      final fileExtension =
+          encryptedMediaService.getFileExtensionFromMimeType(mimeType);
+
+      final cachedPath = await encryptedMediaService.getDecryptedCachePath(
+          originalHash, fileExtension);
+      if (cachedPath != null) {
+        return _buildDecryptedMediaWidget(
+            cachedPath, isImage, isVideo, colors, l10n);
+      }
+
       final httpClient = HttpClient();
       final request = await httpClient.getUrl(Uri.parse(encryptedUrl));
       final response = await request.close();
@@ -842,9 +864,6 @@ class _DmChatPageState extends State<DmChatPage> {
       );
       httpClient.close();
 
-      final encryptedMediaService = EncryptedMediaService.instance;
-      final fileExtension = encryptedMediaService.getFileExtensionFromMimeType(mimeType);
-      
       final decryptResult = await encryptedMediaService.decryptMediaFile(
         encryptedBytes: Uint8List.fromList(encryptedBytes),
         decryptionKey: decryptionKey,
@@ -887,68 +906,8 @@ class _DmChatPageState extends State<DmChatPage> {
       }
 
       final decryptedFilePath = decryptResult.data!;
-
-      if (isImage) {
-        return GestureDetector(
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute(
-                builder: (_) => PhotoViewerWidget(imageUrls: [decryptedFilePath]),
-              ),
-            );
-          },
-          child: Image.file(
-            File(decryptedFilePath),
-            key: ValueKey(decryptedFilePath),
-            fit: BoxFit.cover,
-            width: double.infinity,
-            errorBuilder: (_, __, ___) => Container(
-              height: 100,
-              color: colors.overlayLight,
-              child: Icon(CarbonIcons.image, color: colors.textSecondary),
-            ),
-          ),
-        );
-      } else if (isVideo) {
-        return Container(
-          height: 200,
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(CarbonIcons.play_filled_alt,
-                  color: colors.textSecondary, size: 48),
-              const SizedBox(height: 8),
-              Text(
-                l10n.videoTapToPlay,
-                style: TextStyle(
-                  color: colors.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        );
-      } else {
-        return Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Icon(CarbonIcons.document, size: 20, color: colors.textSecondary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  l10n.fileType(fileExtension),
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
+      return _buildDecryptedMediaWidget(
+          decryptedFilePath, isImage, isVideo, colors, l10n);
     } catch (e) {
       return Container(
         height: 100,
@@ -963,6 +922,77 @@ class _DmChatPageState extends State<DmChatPage> {
               style: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildDecryptedMediaWidget(
+    String filePath,
+    bool isImage,
+    bool isVideo,
+    dynamic colors,
+    AppLocalizations l10n,
+  ) {
+    if (isImage) {
+      return GestureDetector(
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(
+              builder: (_) => PhotoViewerWidget(imageUrls: [filePath]),
+            ),
+          );
+        },
+        child: Image.file(
+          File(filePath),
+          key: ValueKey(filePath),
+          fit: BoxFit.cover,
+          width: double.infinity,
+          errorBuilder: (_, __, ___) => Container(
+            height: 100,
+            color: colors.overlayLight,
+            child: Icon(CarbonIcons.image, color: colors.textSecondary),
+          ),
+        ),
+      );
+    } else if (isVideo) {
+      return Container(
+        height: 200,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(CarbonIcons.play_filled_alt,
+                color: colors.textSecondary, size: 48),
+            const SizedBox(height: 8),
+            Text(
+              l10n.videoTapToPlay,
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      final ext = filePath.split('.').last;
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(CarbonIcons.document, size: 20, color: colors.textSecondary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                l10n.fileType(ext),
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 13,
+                ),
               ),
             ),
           ],

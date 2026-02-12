@@ -41,7 +41,7 @@ class BlocsModule extends DIModule {
           validationService: AppDI.get<ValidationService>(),
         ));
 
-    AppDI.registerFactory<FeedBloc>(() => FeedBloc(
+    AppDI.registerLazySingleton<FeedBloc>(() => FeedBloc(
           feedRepository: AppDI.get<FeedRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
           syncService: AppDI.get<SyncService>(),
@@ -61,7 +61,7 @@ class BlocsModule extends DIModule {
           authService: AppDI.get<AuthService>(),
         ));
 
-    AppDI.registerFactory<DmBloc>(() => DmBloc(
+    AppDI.registerLazySingleton<DmBloc>(() => DmBloc(
           dmService: AppDI.get<DmService>(),
           profileRepository: AppDI.get<ProfileRepository>(),
         ));

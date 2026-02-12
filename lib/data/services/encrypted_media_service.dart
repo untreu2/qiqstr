@@ -186,6 +186,24 @@ class EncryptedMediaService {
   }
 
   
+  Future<String?> getDecryptedCachePath(
+      String originalHash, String fileExtension) async {
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      final decryptedCacheDir = Directory('${cacheDir.path}/decrypted_media');
+      final decryptedFileName =
+          'decrypted_${originalHash.substring(0, 16)}.$fileExtension';
+      final decryptedFile =
+          File('${decryptedCacheDir.path}/$decryptedFileName');
+      if (await decryptedFile.exists()) {
+        return decryptedFile.path;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> cleanupEncryptedFile(String encryptedFilePath) async {
     try {
       final file = File(encryptedFilePath);

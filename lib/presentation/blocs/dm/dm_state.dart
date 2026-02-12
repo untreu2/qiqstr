@@ -24,14 +24,31 @@ class DmConversationsLoaded extends DmState {
 class DmChatLoaded extends DmState {
   final String pubkeyHex;
   final List<Map<String, dynamic>> messages;
+  final bool hasMore;
+  final bool isLoadingMore;
 
   const DmChatLoaded({
     required this.pubkeyHex,
     required this.messages,
+    this.hasMore = false,
+    this.isLoadingMore = false,
   });
 
+  DmChatLoaded copyWith({
+    List<Map<String, dynamic>>? messages,
+    bool? hasMore,
+    bool? isLoadingMore,
+  }) {
+    return DmChatLoaded(
+      pubkeyHex: pubkeyHex,
+      messages: messages ?? this.messages,
+      hasMore: hasMore ?? this.hasMore,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    );
+  }
+
   @override
-  List<Object?> get props => [pubkeyHex, messages];
+  List<Object?> get props => [pubkeyHex, messages, hasMore, isLoadingMore];
 }
 
 class DmError extends DmState {

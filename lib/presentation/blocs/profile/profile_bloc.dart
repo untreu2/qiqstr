@@ -154,7 +154,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     });
   }
 
-
   void _syncProfileInBackground(String targetHex, Emitter<ProfileState> emit) {
     Future.microtask(() async {
       if (isClosed) return;
@@ -460,7 +459,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           '';
       if (pubkeyHex.isNotEmpty) {
         updatedProfiles[pubkeyHex] = event.user;
-        emit(currentState.copyWith(profiles: updatedProfiles));
+        if (pubkeyHex == currentState.currentProfileHex) {
+          emit(currentState.copyWith(
+            user: event.user,
+            profiles: updatedProfiles,
+          ));
+        } else {
+          emit(currentState.copyWith(profiles: updatedProfiles));
+        }
       }
     }
   }
@@ -553,8 +559,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final newNoteMaps = _feedNotesToMaps(event.notes);
     final currentNotes = currentState.notes;
 
-    // Merge: keep all current notes and add any new ones from DB
-    // This preserves load-more results while adding fresh data
     if (currentNotes.isEmpty) {
       emit(currentState.copyWith(notes: newNoteMaps));
     } else {
@@ -563,13 +567,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           .where((id) => id.isNotEmpty)
           .toSet();
 
-      // Find truly new notes not in current list
       final trulyNewNotes = newNoteMaps.where((n) {
         final noteId = n['id'] as String? ?? '';
         return noteId.isNotEmpty && !currentIds.contains(noteId);
       }).toList();
 
-      // Update existing notes with fresh data and add new ones
       final updatedNotes = <Map<String, dynamic>>[];
       final newNoteMap = <String, Map<String, dynamic>>{};
       for (final note in newNoteMaps) {
@@ -577,7 +579,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         if (id.isNotEmpty) newNoteMap[id] = note;
       }
 
-      // Update existing notes with fresh interaction counts etc.
       for (final note in currentNotes) {
         final id = note['id'] as String? ?? '';
         if (newNoteMap.containsKey(id)) {
@@ -587,7 +588,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         }
       }
 
-      // Add truly new notes at appropriate positions (sorted by time)
       if (trulyNewNotes.isNotEmpty) {
         updatedNotes.addAll(trulyNewNotes);
         updatedNotes.sort((a, b) {

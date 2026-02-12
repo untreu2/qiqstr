@@ -173,8 +173,8 @@ class _ArticleWidgetState extends State<ArticleWidget> {
           color: colors.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: colors.divider.withValues(alpha: 0.3),
-            width: 1,
+            color: colors.textSecondary.withValues(alpha: 0.2),
+            width: 1.5,
           ),
         ),
         child: Column(
