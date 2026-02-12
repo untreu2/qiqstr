@@ -676,6 +676,12 @@ abstract class AppLocalizations {
   /// **'Event not found'**
   String get eventNotFound;
 
+  /// No description provided for @articleNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Article not found'**
+  String get articleNotFound;
+
   /// No description provided for @copy.
   ///
   /// In en, this message translates to:

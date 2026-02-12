@@ -114,7 +114,7 @@ class SyncService {
 
       await Future.wait([
         _saveEvents(profileEvents),
-        _saveEvents(noteEvents),
+        _saveEventsAndProfiles(noteEvents),
       ]);
 
       _markSynced(key);
@@ -218,7 +218,7 @@ class SyncService {
           eventIds: [noteId], limit: 500);
       final events = await _queryRelays(filter);
       if (events.isNotEmpty) {
-        await _saveEvents(events);
+        await _saveEventsAndProfiles(events);
       }
     });
   }
@@ -230,7 +230,7 @@ class SyncService {
           eventIds: noteIds, limit: noteIds.length * 10);
       final events = await _queryRelays(filter);
       if (events.isNotEmpty) {
-        await _saveEvents(events);
+        await _saveEventsAndProfiles(events);
       }
     });
   }
@@ -266,7 +266,6 @@ class SyncService {
     await _sync('note', () async {
       final filter = NostrService.createEventByIdFilter(eventIds: [noteId]);
       final events = await _queryRelays(filter);
-      await _saveEvents(events);
 
       final parentIds = _extractParentIds(events);
       if (parentIds.isNotEmpty) {
@@ -403,6 +402,7 @@ class SyncService {
         (eventData) async {
           try {
             await _db.saveEvents([eventData]);
+            _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}
         },
         onError: (_) {
@@ -428,6 +428,7 @@ class SyncService {
         (eventData) async {
           try {
             await _db.saveEvents([eventData]);
+            _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}
         },
         onError: (_) {
@@ -481,9 +482,7 @@ class SyncService {
     final eventJson = jsonEncode(event);
     try {
       await _relayService.sendEvent(eventJson);
-    } catch (_) {
-      // Relay hatası olsa bile event database'e kaydedildi
-    }
+    } catch (_) {}
     
     return event;
   }
@@ -498,25 +497,110 @@ class SyncService {
     await _db.saveEvents(events);
   }
 
+  Set<String> _extractAllPubkeys(List<Map<String, dynamic>> events) {
+    final pubkeys = <String>{};
+    for (final event in events) {
+      final pubkey = event['pubkey'] as String?;
+      if (pubkey != null && pubkey.isNotEmpty) {
+        pubkeys.add(pubkey);
+      }
+      final kind = event['kind'] as int? ?? 1;
+      if (kind == 6) {
+        final tags = event['tags'] as List<dynamic>? ?? [];
+        for (final tag in tags) {
+          if (tag is List &&
+              tag.isNotEmpty &&
+              tag[0] == 'p' &&
+              tag.length > 1) {
+            final originalAuthor = tag[1] as String?;
+            if (originalAuthor != null && originalAuthor.isNotEmpty) {
+              pubkeys.add(originalAuthor);
+            }
+          }
+        }
+      }
+    }
+    return pubkeys;
+  }
+
+  Future<void> _syncMissingProfiles(Set<String> pubkeys) async {
+    if (pubkeys.isEmpty) return;
+    final existingProfiles = await _db.getUserProfiles(pubkeys.toList());
+    final missingProfiles =
+        pubkeys.where((p) => !existingProfiles.containsKey(p)).toList();
+    if (missingProfiles.isNotEmpty) {
+      await syncProfiles(missingProfiles);
+    }
+  }
+
+  void _syncMissingProfilesInBackground(List<Map<String, dynamic>> events) {
+    Future.microtask(() async {
+      try {
+        final pubkeys = _extractAllPubkeys(events);
+        await _syncMissingProfiles(pubkeys);
+      } catch (_) {}
+    });
+  }
+
   Future<void> _saveEventsAndProfiles(List<Map<String, dynamic>> events) async {
     if (events.isEmpty) return;
 
-    final pubkeys = events
-        .map((e) => e['pubkey'] as String?)
-        .where((p) => p != null && p.isNotEmpty)
-        .cast<String>()
-        .toSet();
+    await _saveEvents(events);
+    _syncMissingProfilesInBackground(events);
+    _fetchReferencedEventsInBackground(events);
+  }
 
-    if (pubkeys.isNotEmpty) {
-      final existingProfiles = await _db.getUserProfiles(pubkeys.toList());
-      final missingProfiles =
-          pubkeys.where((p) => !existingProfiles.containsKey(p)).toList();
-      if (missingProfiles.isNotEmpty) {
-        await syncProfiles(missingProfiles);
+  Set<String> _extractReferencedEventIds(List<Map<String, dynamic>> events) {
+    final refIds = <String>{};
+    final ownIds =
+        events.map((e) => e['id'] as String? ?? '').where((id) => id.isNotEmpty).toSet();
+
+    for (final event in events) {
+      final tags = event['tags'] as List<dynamic>? ?? [];
+      for (final tag in tags) {
+        if (tag is List && tag.length > 1) {
+          final tagType = tag[0] as String?;
+          final refId = tag[1] as String?;
+          if (refId == null || refId.isEmpty || ownIds.contains(refId)) continue;
+
+          if (tagType == 'q') {
+            refIds.add(refId);
+          } else if (tagType == 'e') {
+            final marker =
+                tag.length >= 4 ? tag[3] as String? : null;
+            if (marker == 'mention' || marker == null) {
+              refIds.add(refId);
+            }
+          }
+        }
       }
     }
+    return refIds;
+  }
 
-    await _saveEvents(events);
+  void _fetchReferencedEventsInBackground(List<Map<String, dynamic>> events) {
+    Future.microtask(() async {
+      try {
+        final refIds = _extractReferencedEventIds(events);
+        if (refIds.isEmpty) return;
+
+        final missingIds = <String>[];
+        for (final id in refIds) {
+          final exists = await _db.eventExists(id);
+          if (!exists) missingIds.add(id);
+        }
+        if (missingIds.isEmpty) return;
+
+        final filter =
+            NostrService.createEventByIdFilter(eventIds: missingIds);
+        final fetchedEvents = await _queryRelays(filter);
+        if (fetchedEvents.isNotEmpty) {
+          final pubkeys = _extractAllPubkeys(fetchedEvents);
+          await _syncMissingProfiles(pubkeys);
+          await _saveEvents(fetchedEvents);
+        }
+      } catch (_) {}
+    });
   }
 
   List<String> _extractParentIds(List<Map<String, dynamic>> events) {

@@ -472,29 +472,59 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Future.microtask(() async {
       if (isClosed || state is! ProfileLoaded) return;
 
-      final authorIds = notes
-          .map((n) => n['pubkey'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet()
-          .toList();
+      final currentState = state as ProfileLoaded;
+      final authorIds = <String>{};
+      for (final n in notes) {
+        final pubkey = n['pubkey'] as String? ?? '';
+        if (pubkey.isNotEmpty && !currentState.profiles.containsKey(pubkey)) {
+          authorIds.add(pubkey);
+        }
+        final repostedBy = n['repostedBy'] as String? ?? '';
+        if (repostedBy.isNotEmpty &&
+            !currentState.profiles.containsKey(repostedBy)) {
+          authorIds.add(repostedBy);
+        }
+      }
 
       if (authorIds.isEmpty) return;
 
       try {
-        final profiles = await _profileRepository.getProfiles(authorIds);
+        final profiles =
+            await _profileRepository.getProfiles(authorIds.toList());
+        if (isClosed) return;
 
-        if (isClosed || state is! ProfileLoaded) return;
-        final currentState = state as ProfileLoaded;
+        final updatedProfiles = <String, Map<String, dynamic>>{};
+        final missingPubkeys = <String>[];
 
-        final updatedProfiles =
-            Map<String, Map<String, dynamic>>.from(currentState.profiles);
-
-        for (final entry in profiles.entries) {
-          updatedProfiles[entry.key] = entry.value.toMap();
+        for (final pubkey in authorIds) {
+          final profile = profiles[pubkey];
+          if (profile != null) {
+            updatedProfiles[pubkey] = profile.toMap();
+          } else {
+            missingPubkeys.add(pubkey);
+          }
         }
 
-        if (!isClosed && state is ProfileLoaded) {
+        if (updatedProfiles.isNotEmpty && !isClosed) {
           add(ProfileProfilesLoaded(updatedProfiles));
+        }
+
+        if (missingPubkeys.isNotEmpty) {
+          await _syncService.syncProfiles(missingPubkeys);
+          if (isClosed) return;
+
+          final synced =
+              await _profileRepository.getProfiles(missingPubkeys);
+          if (isClosed) return;
+
+          final syncedProfiles = <String, Map<String, dynamic>>{};
+          for (final entry in synced.entries) {
+            syncedProfiles[entry.key] = entry.value.toMap();
+          }
+
+          if (syncedProfiles.isNotEmpty && !isClosed) {
+            add(ProfileProfilesLoaded(syncedProfiles));
+          }
         }
       } catch (_) {}
     });

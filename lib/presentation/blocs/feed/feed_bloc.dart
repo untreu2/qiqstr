@@ -142,14 +142,22 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     _currentLimit = _pageSize;
 
     final currentState = state;
-    if (currentState is FeedLoaded && currentState.hashtag != null) {
-      try {
-        await _syncService.syncHashtag(currentState.hashtag!, force: true);
-      } catch (_) {}
-    } else {
-      try {
-        await _syncService.syncFeed(_currentUserHex!, force: true);
-      } catch (_) {}
+    if (currentState is FeedLoaded) {
+      emit(currentState.copyWith(isSyncing: true));
+
+      if (currentState.hashtag != null) {
+        _syncHashtagInBackground(currentState.hashtag!, null);
+      } else {
+        Future.microtask(() async {
+          if (isClosed) return;
+          try {
+            await _syncService.syncFeed(_currentUserHex!, force: true);
+          } catch (_) {}
+          if (!isClosed && state is FeedLoaded) {
+            add(feed_event.FeedSyncCompleted());
+          }
+        });
+      }
     }
   }
 
@@ -287,26 +295,58 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       if (isClosed || state is! FeedLoaded) return;
 
       final currentState = state as FeedLoaded;
-      final authorIds = notes
-          .map((n) => n['pubkey'] as String? ?? '')
-          .where(
-              (id) => id.isNotEmpty && !currentState.profiles.containsKey(id))
-          .toSet()
-          .toList();
+      final authorIds = <String>{};
+      for (final n in notes) {
+        final pubkey = n['pubkey'] as String? ?? '';
+        if (pubkey.isNotEmpty && !currentState.profiles.containsKey(pubkey)) {
+          authorIds.add(pubkey);
+        }
+        final repostedBy = n['repostedBy'] as String? ?? '';
+        if (repostedBy.isNotEmpty &&
+            !currentState.profiles.containsKey(repostedBy)) {
+          authorIds.add(repostedBy);
+        }
+      }
 
       if (authorIds.isEmpty) return;
 
       try {
-        final profiles = await _profileRepository.getProfiles(authorIds);
+        final profiles =
+            await _profileRepository.getProfiles(authorIds.toList());
         if (isClosed) return;
 
         final updatedProfiles = <String, Map<String, dynamic>>{};
-        for (final entry in profiles.entries) {
-          updatedProfiles[entry.key] = entry.value.toMap();
+        final missingPubkeys = <String>[];
+
+        for (final pubkey in authorIds) {
+          final profile = profiles[pubkey];
+          if (profile != null) {
+            updatedProfiles[pubkey] = profile.toMap();
+          } else {
+            missingPubkeys.add(pubkey);
+          }
         }
 
         if (updatedProfiles.isNotEmpty) {
           add(feed_event.FeedProfilesLoaded(updatedProfiles));
+        }
+
+        if (missingPubkeys.isNotEmpty) {
+          await _syncService.syncProfiles(missingPubkeys);
+          if (isClosed) return;
+
+          final synced =
+              await _profileRepository.getProfiles(missingPubkeys);
+          if (isClosed) return;
+
+          final syncedProfiles = <String, Map<String, dynamic>>{};
+          for (final entry in synced.entries) {
+            syncedProfiles[entry.key] = entry.value.toMap();
+          }
+
+          if (syncedProfiles.isNotEmpty) {
+            add(feed_event.FeedProfilesLoaded(syncedProfiles));
+          }
         }
       } catch (_) {}
     });

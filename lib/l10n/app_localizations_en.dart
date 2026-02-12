@@ -297,6 +297,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get eventNotFound => 'Event not found';
 
   @override
+  String get articleNotFound => 'Article not found';
+
+  @override
   String get copy => 'Copy';
 
   @override

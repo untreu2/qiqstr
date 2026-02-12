@@ -110,6 +110,7 @@
   "article": "Article",
   
   "eventNotFound": "Event not found",
+  "articleNotFound": "Article not found",
   
   "copy": "Copy",
   "copiedToClipboard": "Copied to clipboard",

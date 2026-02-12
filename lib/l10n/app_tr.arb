@@ -110,6 +110,7 @@
   "article": "Makale",
   
   "eventNotFound": "Etkinlik bulunamadı",
+  "articleNotFound": "Makale bulunamadı",
   
   "copy": "Kopyala",
   "copiedToClipboard": "Panoya kopyalandı",

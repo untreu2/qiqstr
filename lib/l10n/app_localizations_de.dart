@@ -309,6 +309,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get eventNotFound => 'Ereignis nicht gefunden';
 
   @override
+  String get articleNotFound => 'Artikel nicht gefunden';
+
+  @override
   String get copy => 'Kopieren';
 
   @override

@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import '../../constants/relays.dart';
 
 const int userFollowerCounts = 10000133;
-const int notification = 10000110;
 
 class PrimalCacheService {
   static PrimalCacheService? _instance;
@@ -19,11 +18,6 @@ class PrimalCacheService {
   WebSocket? _ws;
   bool _connecting = false;
   final Map<String, Completer<Map<String, int>>> _pendingCountRequests = {};
-  final Map<String, Completer<Map<String, Map<String, dynamic>>>>
-      _pendingProfileRequests = {};
-  final Map<String, Completer<List<Map<String, dynamic>>>>
-      _pendingNotificationRequests = {};
-  final Map<String, List<Map<String, dynamic>>> _notificationBuffers = {};
   int _subscriptionCounter = 0;
   StreamSubscription? _subscription; // ignore: unused_field
 
@@ -78,29 +72,7 @@ class PrimalCacheService {
         final event = decoded[2] as Map<String, dynamic>;
         final kind = event['kind'] as int?;
 
-        if (kind == notification &&
-            _pendingNotificationRequests.containsKey(subscriptionId)) {
-          try {
-            final content = event['content'];
-            Map<String, dynamic> notifData;
-            if (content is String) {
-              notifData = jsonDecode(content) as Map<String, dynamic>;
-            } else if (content is Map) {
-              notifData = Map<String, dynamic>.from(content);
-            } else {
-              return;
-            }
-
-            if (!_notificationBuffers.containsKey(subscriptionId)) {
-              _notificationBuffers[subscriptionId] = [];
-            }
-            _notificationBuffers[subscriptionId]!.add(notifData);
-          } catch (e) {
-            if (kDebugMode) {
-              print('[PrimalCacheService] Notification parse error: $e');
-            }
-          }
-        } else if (kind == userFollowerCounts &&
+        if (kind == userFollowerCounts &&
             _pendingCountRequests.containsKey(subscriptionId)) {
           final completer = _pendingCountRequests.remove(subscriptionId);
           if (completer != null && !completer.isCompleted) {
@@ -121,44 +93,10 @@ class PrimalCacheService {
               completer.complete({});
             }
           }
-        } else if (_pendingProfileRequests.containsKey(subscriptionId)) {
-          final completer = _pendingProfileRequests.remove(subscriptionId);
-          if (completer != null && !completer.isCompleted) {
-            try {
-              final content = jsonDecode(event['content'] as String)
-                  as Map<String, dynamic>;
-              final profiles = <String, Map<String, dynamic>>{};
-              content.forEach((key, value) {
-                if (value is Map<String, dynamic>) {
-                  profiles[key] = value;
-                } else if (value is Map) {
-                  profiles[key] = Map<String, dynamic>.from(value);
-                }
-              });
-              completer.complete(profiles);
-            } catch (e) {
-              if (kDebugMode) {
-                print('[PrimalCacheService] Profile parse error: $e');
-              }
-              completer.complete({});
-            }
-          }
         }
       } else if (messageType == 'EOSE') {
         final countCompleter = _pendingCountRequests.remove(subscriptionId);
         countCompleter?.complete({});
-
-        final profileCompleter = _pendingProfileRequests.remove(subscriptionId);
-        profileCompleter?.complete({});
-
-        final notificationCompleter =
-            _pendingNotificationRequests.remove(subscriptionId);
-        if (notificationCompleter != null &&
-            !notificationCompleter.isCompleted) {
-          final notifications =
-              _notificationBuffers.remove(subscriptionId) ?? [];
-          notificationCompleter.complete(notifications);
-        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -235,118 +173,8 @@ class PrimalCacheService {
     }
   }
 
-  Future<Map<String, Map<String, dynamic>>> fetchUserInfos(
-      List<String> pubkeyHexes) async {
-    if (pubkeyHexes.isEmpty) return {};
-
-    final subscriptionId =
-        'primal_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
-    final completer = Completer<Map<String, Map<String, dynamic>>>();
-    _pendingProfileRequests[subscriptionId] = completer;
-
-    try {
-      final request = [
-        'REQ',
-        subscriptionId,
-        {
-          'cache': [
-            'user_infos',
-            {'pubkeys': pubkeyHexes}
-          ]
-        }
-      ];
-
-      final sent = await _send(jsonEncode(request));
-      if (!sent) {
-        _pendingProfileRequests.remove(subscriptionId);
-        return {};
-      }
-
-      final result = await completer.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          _pendingProfileRequests.remove(subscriptionId);
-          return <String, Map<String, dynamic>>{};
-        },
-      );
-
-      _closeSubscription(subscriptionId);
-      return result;
-    } catch (e) {
-      _pendingProfileRequests.remove(subscriptionId);
-      _closeSubscription(subscriptionId);
-      if (kDebugMode) {
-        print('[PrimalCacheService] User infos request error: $e');
-      }
-      return {};
-    }
-  }
-
   Future<int> fetchFollowerCount(String pubkeyHex) async {
     final counts = await fetchFollowerCounts([pubkeyHex]);
     return counts[pubkeyHex] ?? 0;
-  }
-
-  Future<List<Map<String, dynamic>>> fetchNotifications({
-    required String pubkeyHex,
-    int? since,
-    int? until,
-    int limit = 100,
-  }) async {
-    final subscriptionId =
-        'primal_notif_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
-    final completer = Completer<List<Map<String, dynamic>>>();
-    _pendingNotificationRequests[subscriptionId] = completer;
-
-    try {
-      final requestParams = <String, dynamic>{
-        'pubkey': pubkeyHex,
-        'limit': limit,
-      };
-      if (since != null) {
-        requestParams['since'] = since;
-      }
-      if (until != null) {
-        requestParams['until'] = until;
-      }
-
-      final request = [
-        'REQ',
-        subscriptionId,
-        {
-          'cache': ['get_notifications', requestParams]
-        }
-      ];
-
-      final sent = await _send(jsonEncode(request));
-      if (!sent) {
-        _pendingNotificationRequests.remove(subscriptionId);
-        _notificationBuffers.remove(subscriptionId);
-        return [];
-      }
-
-      _notificationBuffers[subscriptionId] = [];
-
-      final result = await completer.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          _pendingNotificationRequests.remove(subscriptionId);
-          _notificationBuffers.remove(subscriptionId);
-          return <Map<String, dynamic>>[];
-        },
-      );
-
-      _closeSubscription(subscriptionId);
-      _notificationBuffers.remove(subscriptionId);
-      return result;
-    } catch (e) {
-      _pendingNotificationRequests.remove(subscriptionId);
-      _notificationBuffers.remove(subscriptionId);
-      _closeSubscription(subscriptionId);
-      if (kDebugMode) {
-        print('[PrimalCacheService] Notifications request error: $e');
-      }
-      return [];
-    }
   }
 }

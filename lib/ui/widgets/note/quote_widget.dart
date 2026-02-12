@@ -5,6 +5,8 @@ import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_event.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_state.dart';
@@ -28,6 +30,7 @@ class QuoteWidget extends StatelessWidget {
         final bloc = QuoteWidgetBloc(
           feedRepository: AppDI.get<FeedRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
           bech32: bech32,
         );
         bloc.add(QuoteWidgetLoadRequested(bech32: bech32));
@@ -69,7 +72,7 @@ class QuoteWidget extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Event not found',
+                      AppLocalizations.of(context)!.eventNotFound,
                       style: TextStyle(
                         fontSize: 14,
                         color: context.colors.textSecondary,

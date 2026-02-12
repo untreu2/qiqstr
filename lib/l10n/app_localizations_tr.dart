@@ -301,6 +301,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get eventNotFound => 'Etkinlik bulunamadı';
 
   @override
+  String get articleNotFound => 'Makale bulunamadı';
+
+  @override
   String get copy => 'Kopyala';
 
   @override

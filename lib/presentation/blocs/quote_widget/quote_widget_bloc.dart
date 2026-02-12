@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../data/services/rust_database_service.dart';
 import '../../../utils/string_optimizer.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
@@ -21,6 +22,7 @@ class _InternalProfileUpdate extends QuoteWidgetEvent {
 class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
   final FeedRepository _feedRepository;
   final ProfileRepository _profileRepository;
+  final SyncService _syncService;
   final RustDatabaseService _db;
   final String bech32;
 
@@ -29,10 +31,12 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
   QuoteWidgetBloc({
     required FeedRepository feedRepository,
     required ProfileRepository profileRepository,
+    required SyncService syncService,
     required this.bech32,
     RustDatabaseService? db,
   })  : _feedRepository = feedRepository,
         _profileRepository = profileRepository,
+        _syncService = syncService,
         _db = db ?? RustDatabaseService.instance,
         super(const QuoteWidgetInitial()) {
     on<QuoteWidgetLoadRequested>(_onQuoteWidgetLoadRequested);
@@ -153,12 +157,7 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
         
         if (eventJson != null) {
           eventData = jsonDecode(eventJson) as Map<String, dynamic>;
-          
-          Future.microtask(() async {
-            try {
-              await _db.saveEvents([eventData!]);
-            } catch (_) {}
-          });
+          await _db.saveEvents([eventData]);
         } else {
           emit(const QuoteWidgetError());
           return;
@@ -199,7 +198,16 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
 
       Map<String, dynamic>? user;
       if (noteAuthor.isNotEmpty) {
-        final profile = await _profileRepository.getProfile(noteAuthor);
+        var profile = await _profileRepository.getProfile(noteAuthor);
+
+        if (profile == null ||
+            (profile.name ?? '').isEmpty &&
+                (profile.picture ?? '').isEmpty) {
+          await _syncService.syncProfile(noteAuthor);
+          if (isClosed) return;
+          profile = await _profileRepository.getProfile(noteAuthor);
+        }
+
         if (profile != null) {
           user = {
             'pubkeyHex': noteAuthor,

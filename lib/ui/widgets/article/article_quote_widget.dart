@@ -7,6 +7,7 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../l10n/app_localizations.dart';
 
 
 class ArticleQuoteWidget extends StatefulWidget {
@@ -33,12 +34,6 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
     _loadArticle();
   }
 
-  String _stringToHex(String input) {
-    return input.codeUnits
-        .map((c) => c.toRadixString(16).padLeft(2, '0'))
-        .join();
-  }
-
   Future<void> _loadArticle() async {
     try {
       final decoded = _decodeNaddr(widget.naddr);
@@ -52,7 +47,7 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
 
       final kind = decoded['kind'] as int?;
       final pubkey = decoded['pubkey'] as String?;
-      final dTag = decoded['dTag'] as String?;
+      final identifier = decoded['identifier'] as String?;
 
       if (kind != null && kind != 30023) {
         setState(() {
@@ -62,7 +57,7 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
         return;
       }
 
-      if (pubkey == null && dTag == null) {
+      if (pubkey == null && identifier == null) {
         setState(() {
           _hasError = true;
           _isLoading = false;
@@ -71,75 +66,17 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
       }
 
       final articleRepo = AppDI.get<ArticleRepository>();
-      var articles = await articleRepo.getArticles(limit: 50);
+      var articles = await articleRepo.getArticles(limit: 100);
 
-      Map<String, dynamic>? foundArticle;
-      for (final article in articles) {
-        final articleDTag = article.dTag;
-        final articlePubkey = article.pubkey;
-        final articleDTagHex = _stringToHex(articleDTag);
-        
-        bool matches = false;
-        if (pubkey != null && dTag != null) {
-          matches = articlePubkey == pubkey && articleDTagHex == dTag;
-        } else if (pubkey != null) {
-          matches = articlePubkey == pubkey;
-        } else if (dTag != null) {
-          matches = articleDTagHex == dTag;
-        }
-
-        if (matches) {
-          foundArticle = {
-            'id': article.id,
-            'dTag': article.dTag,
-            'title': article.title,
-            'summary': article.summary,
-            'image': article.image,
-            'content': article.content,
-            'pubkey': article.pubkey,
-            'author': article.authorName,
-            'authorImage': article.authorImage,
-            'timestamp': article.createdAt,
-          };
-          break;
-        }
-      }
+      Map<String, dynamic>? foundArticle =
+          _findArticle(articles, pubkey, identifier);
 
       if (foundArticle == null && pubkey != null) {
         final syncService = AppDI.get<SyncService>();
-        await syncService.syncArticles(authors: [pubkey], limit: 10);
-        
-        await Future.delayed(const Duration(milliseconds: 500));
-        articles = await articleRepo.getArticles(limit: 50);
-        
-        for (final article in articles) {
-          final articleDTag = article.dTag;
-          final articlePubkey = article.pubkey;
-          final articleDTagHex = _stringToHex(articleDTag);
-          
-          bool matches = false;
-          if (dTag != null) {
-            matches = articlePubkey == pubkey && articleDTagHex == dTag;
-          } else {
-            matches = articlePubkey == pubkey;
-          }
+        await syncService.syncArticles(authors: [pubkey], limit: 20);
 
-          if (matches) {
-            foundArticle = {
-              'id': article.id,
-              'dTag': article.dTag,
-              'title': article.title,
-              'summary': article.summary,
-              'image': article.image,
-              'content': article.content,
-              'pubkey': article.pubkey,
-              'author': article.authorName,
-              'authorImage': article.authorImage,
-              'timestamp': article.createdAt,
-            };
-            break;
-          }
-        }
+        articles = await articleRepo.getArticles(limit: 100);
+        foundArticle = _findArticle(articles, pubkey, identifier);
       }
 
       if (foundArticle != null) {
@@ -162,13 +99,46 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
     }
   }
 
+  Map<String, dynamic>? _findArticle(
+      List articles, String? pubkey, String? identifier) {
+    for (final article in articles) {
+      final articleDTag = article.dTag;
+      final articlePubkey = article.pubkey;
+
+      bool matches = false;
+      if (pubkey != null && identifier != null) {
+        matches = articlePubkey == pubkey && articleDTag == identifier;
+      } else if (pubkey != null) {
+        matches = articlePubkey == pubkey;
+      } else if (identifier != null) {
+        matches = articleDTag == identifier;
+      }
+
+      if (matches) {
+        return {
+          'id': article.id,
+          'dTag': article.dTag,
+          'title': article.title,
+          'summary': article.summary,
+          'image': article.image,
+          'content': article.content,
+          'pubkey': article.pubkey,
+          'author': article.authorName,
+          'authorImage': article.authorImage,
+          'timestamp': article.createdAt,
+        };
+      }
+    }
+    return null;
+  }
+
   Map<String, dynamic>? _decodeNaddr(String naddr) {
     try {
       final cleanNaddr =
           naddr.startsWith('nostr:') ? naddr.substring(6) : naddr;
 
       final result = decodeTlvBech32Full(cleanNaddr);
-      final dTagHex = result['identifier'] as String?;
+      final identifier = result['identifier'] as String?;
       final pubkey = result['pubkey'] as String?;
       final kindValue = result['kind'];
       int? kind;
@@ -181,7 +151,7 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
       return {
         'kind': kind,
         'pubkey': pubkey,
-        'dTag': dTagHex,
+        'identifier': identifier,
       };
     } catch (e) {
       return null;
@@ -191,11 +161,20 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
   Future<void> _loadAuthorProfile(String pubkeyHex) async {
     try {
       final profileRepo = AppDI.get<ProfileRepository>();
-      final profile = await profileRepo.getProfile(pubkeyHex);
+      var profile = await profileRepo.getProfile(pubkeyHex);
+
+      if (profile == null ||
+          (profile.name ?? '').isEmpty && (profile.picture ?? '').isEmpty) {
+        final syncService = AppDI.get<SyncService>();
+        await syncService.syncProfile(pubkeyHex);
+        if (!mounted) return;
+        profile = await profileRepo.getProfile(pubkeyHex);
+      }
+
       if (profile != null && mounted) {
         setState(() {
           _author = {
-            'pubkeyHex': profile.pubkey,
+            'pubkeyHex': profile!.pubkey,
             'name': profile.name ?? '',
             'about': profile.about ?? '',
             'profileImage': profile.picture ?? '',
@@ -226,6 +205,7 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final l10n = AppLocalizations.of(context)!;
 
     if (_isLoading) {
       return Container(
@@ -247,10 +227,36 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
     }
 
     if (_hasError || _article == null) {
-      return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colors.border, width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 16,
+              color: colors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              l10n.articleNotFound,
+              style: TextStyle(
+                fontSize: 14,
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
-    final title = _article!['title'] as String? ?? 'Untitled Article';
+    final title =
+        _article!['title'] as String? ?? l10n.untitledArticle;
     final summary = _article!['summary'] as String? ?? '';
     final imageUrl = _article!['image'] as String? ?? '';
     final authorName = _author?['name'] as String? ?? '';
@@ -303,7 +309,7 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Article',
+                        l10n.article,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,

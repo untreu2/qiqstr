@@ -150,6 +150,7 @@ class BlocsModule extends DIModule {
     AppDI.registerFactory<QuoteWidgetBloc>(() => QuoteWidgetBloc(
           feedRepository: AppDI.get<FeedRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
           bech32: '',
         ));
 
