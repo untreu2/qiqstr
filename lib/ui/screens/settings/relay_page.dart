@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../src/rust/api/events.dart' as rust_events;
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import '../../theme/theme_manager.dart';
@@ -21,55 +20,6 @@ import '../../widgets/dialogs/add_relay_dialog.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/dialogs/broadcast_events_dialog.dart';
 import '../../../data/services/event_counts_service.dart';
-
-class RelayInfo {
-  final String? name;
-  final String? description;
-  final String? banner;
-  final String? icon;
-  final String? pubkey;
-  final String? contact;
-  final List<int>? supportedNips;
-  final String? software;
-  final String? version;
-  final Map<String, dynamic>? limitation;
-  final bool? paymentRequired;
-  final bool? authRequired;
-
-  RelayInfo({
-    this.name,
-    this.description,
-    this.banner,
-    this.icon,
-    this.pubkey,
-    this.contact,
-    this.supportedNips,
-    this.software,
-    this.version,
-    this.limitation,
-    this.paymentRequired,
-    this.authRequired,
-  });
-
-  factory RelayInfo.fromJson(Map<String, dynamic> json) {
-    return RelayInfo(
-      name: json['name'] as String?,
-      description: json['description'] as String?,
-      banner: json['banner'] as String?,
-      icon: json['icon'] as String?,
-      pubkey: json['pubkey'] as String?,
-      contact: json['contact'] as String?,
-      supportedNips: json['supported_nips'] != null
-          ? List<int>.from(json['supported_nips'] as List)
-          : null,
-      software: json['software'] as String?,
-      version: json['version'] as String?,
-      limitation: json['limitation'] as Map<String, dynamic>?,
-      paymentRequired: json['limitation']?['payment_required'] as bool?,
-      authRequired: json['limitation']?['auth_required'] as bool?,
-    );
-  }
-}
 
 class RelayPage extends StatefulWidget {
   const RelayPage({super.key});
@@ -89,8 +39,10 @@ class _RelayPageState extends State<RelayPage> {
   bool _isPublishingRelays = false;
   bool _disposed = false;
   bool _gossipModelEnabled = false;
-  final Map<String, RelayInfo?> _relayInfos = {};
-  final Map<String, bool> _expandedRelays = {};
+  int _connectedRelayCount = 0;
+  int _totalRelayCount = 0;
+  int _totalBytesSent = 0;
+  int _totalBytesReceived = 0;
   final Map<String, Map<String, dynamic>> _relayStats = {};
   late ScrollController _scrollController;
   final ValueNotifier<bool> _showTitleBubble = ValueNotifier(false);
@@ -142,18 +94,30 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final status = await RustRelayService.instance.getRelayStatus();
       if (_disposed || !mounted) return;
+
+      final summary = status['summary'] as Map<String, dynamic>?;
       final relays = status['relays'] as List<dynamic>? ?? [];
       final newStats = <String, Map<String, dynamic>>{};
+      int bytesSent = 0;
+      int bytesReceived = 0;
+
       for (final relay in relays) {
         final r = relay as Map<String, dynamic>;
         final url = r['url'] as String? ?? '';
         if (url.isNotEmpty) {
           newStats[url] = r;
+          bytesSent += (r['bytesSent'] as int? ?? 0);
+          bytesReceived += (r['bytesReceived'] as int? ?? 0);
         }
       }
+
       setState(() {
         _relayStats.clear();
         _relayStats.addAll(newStats);
+        _connectedRelayCount = summary?['connectedRelays'] as int? ?? 0;
+        _totalRelayCount = summary?['totalRelays'] as int? ?? 0;
+        _totalBytesSent = bytesSent;
+        _totalBytesReceived = bytesReceived;
       });
     } catch (_) {}
   }
@@ -198,9 +162,6 @@ class _RelayPageState extends State<RelayPage> {
         _isLoading = false;
       });
 
-      for (final relay in _relays) {
-        _fetchRelayInfo(relay);
-      }
     } catch (e) {
       setState(() {
         _relays = List.from(relaySetMainSockets);
@@ -213,36 +174,6 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(context, '${l10n.errorLoadingRelays}: ${e.toString()}');
-      }
-    }
-  }
-
-  Future<void> _fetchRelayInfo(String relayUrl) async {
-    if (_relayInfos.containsKey(relayUrl)) return;
-
-    try {
-      final uri = Uri.parse(relayUrl).replace(scheme: 'https');
-      final response = await http.get(uri, headers: {
-        'Accept': 'application/nostr+json'
-      }).timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        final decoded =
-            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-        if (mounted && !_disposed) {
-          setState(() {
-            _relayInfos[relayUrl] = RelayInfo.fromJson(decoded);
-          });
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching relay info for $relayUrl: $e');
-      }
-      if (mounted && !_disposed) {
-        setState(() {
-          _relayInfos[relayUrl] = null;
-        });
       }
     }
   }
@@ -590,7 +521,6 @@ class _RelayPageState extends State<RelayPage> {
 
       await _saveRelays();
       _addRelayController.clear();
-      _fetchRelayInfo(url);
 
       if (mounted) {
         context.pop();
@@ -668,8 +598,6 @@ class _RelayPageState extends State<RelayPage> {
     setState(() {
       _relays.remove(url);
       _relayFlags.remove(url);
-      _relayInfos.remove(url);
-      _expandedRelays.remove(url);
     });
 
     await _saveRelays();
@@ -732,6 +660,17 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
+  String _formatBytes(int bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    } else if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else if (bytes >= 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '$bytes B';
+  }
+
   Widget _buildHeader(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return TitleWidget(
@@ -742,46 +681,59 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
+  Widget _buildRelayStatsSection(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          Icon(
+            CarbonIcons.network_3,
+            color: context.colors.textSecondary,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$_connectedRelayCount/$_totalRelayCount ${l10n.connected.toLowerCase()} • ${_formatBytes(_totalBytesSent + _totalBytesReceived)}',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: context.colors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGossipModelToggle(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.colors.overlayLight,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.gossipMode,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        l10n.gossipModeDescription,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: context.colors.textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    l10n.gossipMode,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
                 Switch.adaptive(
                   value: _gossipModelEnabled,
                   onChanged: (value) async {
@@ -804,8 +756,20 @@ class _RelayPageState extends State<RelayPage> {
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              l10n.gossipModeDescription,
+              style: TextStyle(
+                fontSize: 13,
+                color: context.colors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -878,366 +842,52 @@ class _RelayPageState extends State<RelayPage> {
     final relayStatus = stats?['status'] as String? ?? 'disconnected';
     final isConnected = relayStatus == 'connected';
     final isConnecting = relayStatus == 'connecting' || relayStatus == 'pending';
-    final info = _relayInfos[relay];
-    final isExpanded = _expandedRelays[relay] ?? false;
 
     return RepaintBoundary(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isConnected
-                  ? Colors.green.withValues(alpha: 0.3)
-                  : context.colors.divider.withValues(alpha: 0.1),
-              width: 1,
-            ),
-          ),
-          child: Column(
-            children: [
-              InkWell(
-                onTap: () {
-                  setState(() {
-                    _expandedRelays[relay] = !isExpanded;
-                  });
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isConnected
-                              ? Colors.green
-                              : isConnecting
-                                  ? Colors.orange
-                                  : Colors.red.withValues(alpha: 0.5),
-                          boxShadow: isConnected
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.green.withValues(alpha: 0.4),
-                                    blurRadius: 6,
-                                    spreadRadius: 1,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              info?.name ?? relay.replaceAll('wss://', '').replaceAll('ws://', '').split('/').first,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                            const SizedBox(height: 4),
-                            _buildRelayFlagChips(relay, l10n),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => _removeRelay(relay, isMainRelay),
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: context.colors.error.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            CarbonIcons.trash_can,
-                            size: 16,
-                            color: context.colors.error,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                        color: context.colors.textSecondary.withValues(alpha: 0.6),
-                        size: 20,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (isExpanded)
-                Container(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: context.colors.divider.withValues(alpha: 0.1),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 12),
-                      _buildInfoRow('URL', relay, context),
-                      if (info != null) ...[
-                        if (info.description != null) ...[
-                          const SizedBox(height: 10),
-                          _buildInfoRow(l10n.description, info.description!, context),
-                        ],
-                        if (info.software != null) ...[
-                          const SizedBox(height: 10),
-                          _buildInfoRow(l10n.software, info.software!, context),
-                        ],
-                        if (info.version != null) ...[
-                          const SizedBox(height: 10),
-                          _buildInfoRow(l10n.version, info.version!, context),
-                        ],
-                        if (info.supportedNips != null && info.supportedNips!.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            l10n.supportedNIPs,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.textSecondary,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: info.supportedNips!.take(15).map((nip) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: context.colors.background,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: context.colors.divider.withValues(alpha: 0.2),
-                                  ),
-                                ),
-                                child: Text(
-                                  'NIP-$nip',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: context.colors.textSecondary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ],
-                      if (stats != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: context.colors.background,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.connectionStatistics,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.colors.textSecondary,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _buildStatRow(l10n.status, stats['status'] ?? l10n.unknown),
-                              _buildStatRow(l10n.attempts, '${stats['attempts'] ?? 0}'),
-                              _buildStatRow(l10n.successful, '${stats['success'] ?? 0}'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value, BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: context.colors.textSecondary,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              color: context.colors.textPrimary,
-              height: 1.3,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRelayFlagChips(String relay, AppLocalizations l10n) {
-    final flags = _relayFlags[relay] ?? {'read': true, 'write': true};
-    final isRead = flags['read'] ?? true;
-    final isWrite = flags['write'] ?? true;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildFlagChip(
-          label: l10n.read,
-          active: isRead,
-          activeColor: const Color(0xFF4CAF50),
-          onTap: () {
-            final newRead = !isRead;
-            if (!newRead && !isWrite) return;
-            setState(() {
-              _relayFlags[relay] = {
-                'read': newRead,
-                'write': isWrite,
-              };
-            });
-            _saveRelays();
-          },
-        ),
-        const SizedBox(width: 6),
-        _buildFlagChip(
-          label: l10n.write,
-          active: isWrite,
-          activeColor: const Color(0xFF2196F3),
-          onTap: () {
-            final newWrite = !isWrite;
-            if (!isRead && !newWrite) return;
-            setState(() {
-              _relayFlags[relay] = {
-                'read': isRead,
-                'write': newWrite,
-              };
-            });
-            _saveRelays();
-          },
-        ),
-        if (_relayInfos[relay]?.paymentRequired == true) ...[
-          const SizedBox(width: 6),
-          _buildInfoChip(l10n.paid, const Color(0xFFFFA726)),
-        ],
-        if (_relayInfos[relay]?.authRequired == true) ...[
-          const SizedBox(width: 6),
-          _buildInfoChip(l10n.auth, const Color(0xFFAB47BC)),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildFlagChip({
-    required String label,
-    required bool active,
-    required Color activeColor,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: active ? activeColor.withValues(alpha: 0.15) : context.colors.background,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: active ? activeColor.withValues(alpha: 0.5) : context.colors.divider.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(16),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: active ? activeColor : context.colors.textSecondary,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.3,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10,
-          color: color,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.3,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: context.colors.textSecondary,
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isConnected
+                    ? Colors.green
+                    : isConnecting
+                        ? Colors.orange
+                        : Colors.red.withValues(alpha: 0.5),
+              ),
             ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: context.colors.textPrimary,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                relay,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _removeRelay(relay, isMainRelay),
+              child: Icon(
+                CarbonIcons.trash_can,
+                size: 18,
+                color: context.colors.textTertiary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1256,10 +906,10 @@ class _RelayPageState extends State<RelayPage> {
 
     final relayWidgets = <Widget>[];
     for (int i = 0; i < _relays.length; i++) {
-      relayWidgets.add(_buildRelayTile(_relays[i], true, l10n));
-      if (i < _relays.length - 1) {
-        relayWidgets.add(const SizedBox(height: 8));
-      }
+      relayWidgets.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: _buildRelayTile(_relays[i], true, l10n),
+      ));
     }
 
     return Scaffold(
@@ -1275,6 +925,9 @@ class _RelayPageState extends State<RelayPage> {
               ),
               SliverToBoxAdapter(
                 child: _buildHeader(context),
+              ),
+              SliverToBoxAdapter(
+                child: _buildRelayStatsSection(context),
               ),
               SliverToBoxAdapter(
                 child: _buildActionButtons(context, l10n),

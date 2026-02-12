@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -38,7 +37,6 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
-import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 
 class FeedPage extends StatefulWidget {
   final String userHex;
@@ -68,8 +66,7 @@ class FeedPageState extends State<FeedPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   UserSearchBloc? _searchBloc;
-  final AdvancedDrawerController _advancedDrawerController =
-      AdvancedDrawerController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -312,7 +309,7 @@ class FeedPageState extends State<FeedPage> {
                         children: [
                           GestureDetector(
                             onTap: () {
-                              _advancedDrawerController.showDrawer();
+                              _scaffoldKey.currentState?.openDrawer();
                             },
                             child: user != null
                                 ? Container(
@@ -392,24 +389,16 @@ class FeedPageState extends State<FeedPage> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CustomPaint(
-                                    painter: _RelayPiePainter(
-                                      connected: _connectedRelays,
-                                      total: _totalRelays,
-                                      connectedColor: const Color(0xFF4CAF50),
-                                      disconnectedColor: colors.textSecondary.withValues(alpha: 0.3),
-                                      emptyColor: colors.textSecondary.withValues(alpha: 0.15),
-                                    ),
-                                  ),
+                                Icon(
+                                  CarbonIcons.network_3,
+                                  size: 15,
+                                  color: colors.textSecondary,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   '$_connectedRelays/$_totalRelays',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 12.5,
                                     color: colors.textSecondary,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -489,13 +478,11 @@ class FeedPageState extends State<FeedPage> {
       ],
       child: BlocBuilder<FeedBloc, FeedState>(
         builder: (context, feedState) {
-          return AdvancedDrawer(
-            controller: _advancedDrawerController,
+          return Scaffold(
+            key: _scaffoldKey,
+            backgroundColor: colors.background,
             drawer: const SidebarWidget(),
-            animationDuration: const Duration(milliseconds: 200),
-            child: Scaffold(
-              backgroundColor: colors.background,
-              body: Stack(
+            body: Stack(
                 children: [
                   if (isHashtagMode)
                     _buildFeedContent(context, feedState, topPadding,
@@ -558,7 +545,6 @@ class FeedPageState extends State<FeedPage> {
                     _buildFeedModeToggle(context, colors),
                 ],
               ),
-            ),
           );
         },
       ),
@@ -1585,56 +1571,3 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       height != oldDelegate.height || child != oldDelegate.child;
 }
 
-class _RelayPiePainter extends CustomPainter {
-  final int connected;
-  final int total;
-  final Color connectedColor;
-  final Color disconnectedColor;
-  final Color emptyColor;
-
-  _RelayPiePainter({
-    required this.connected,
-    required this.total,
-    required this.connectedColor,
-    required this.disconnectedColor,
-    required this.emptyColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    if (total <= 0) {
-      paint.color = emptyColor;
-      canvas.drawCircle(center, radius, paint);
-      return;
-    }
-
-    if (connected == total) {
-      paint.color = connectedColor;
-      canvas.drawCircle(center, radius, paint);
-      return;
-    }
-
-    if (connected == 0) {
-      paint.color = disconnectedColor;
-      canvas.drawCircle(center, radius, paint);
-      return;
-    }
-
-    paint.color = disconnectedColor;
-    canvas.drawCircle(center, radius, paint);
-
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    final connectedAngle = 2 * pi * (connected / total);
-
-    paint.color = connectedColor;
-    canvas.drawArc(rect, -pi / 2, connectedAngle, true, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _RelayPiePainter oldDelegate) =>
-      connected != oldDelegate.connected || total != oldDelegate.total;
-}

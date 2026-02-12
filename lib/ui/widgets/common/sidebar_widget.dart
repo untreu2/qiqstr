@@ -35,10 +35,10 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         builder: (context, state) {
           final colors = context.colors;
 
-          return Container(
-            decoration: BoxDecoration(
-              color: colors.background,
-              borderRadius: const BorderRadius.only(
+          return Drawer(
+            backgroundColor: colors.background,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.only(
                 topRight: Radius.circular(24),
                 bottomRight: Radius.circular(24),
               ),
@@ -135,45 +135,75 @@ class _UserProfileHeader extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        () {
-                          final l10n = AppLocalizations.of(context)!;
-                          final name = user['name'] as String? ?? '';
-                          return name.isNotEmpty ? name : l10n.anonymous;
-                        }(),
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            () {
+                              final l10n = AppLocalizations.of(context)!;
+                              final name = user['name'] as String? ?? '';
+                              return name.isNotEmpty ? name : l10n.anonymous;
+                            }(),
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                              height: 1.4,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        if (() {
+                          final nip05 = user['nip05'] as String? ?? '';
+                          final nip05Verified =
+                              user['nip05Verified'] as bool? ?? false;
+                          return nip05.isNotEmpty && nip05Verified;
+                        }()) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.verified,
+                            size: 20,
+                            color: colors.accent,
+                          ),
+                        ],
+                      ],
                     ),
-                    if (() {
-                      final nip05 = user['nip05'] as String? ?? '';
-                      final nip05Verified =
-                          user['nip05Verified'] as bool? ?? false;
-                      return nip05.isNotEmpty && nip05Verified;
-                    }()) ...[
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.verified,
-                        size: 20,
-                        color: colors.accent,
-                      ),
-                    ],
+                    _buildNpubInfo(),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           _buildFollowerInfo(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNpubInfo() {
+    final npub = user['npub'] as String? ?? '';
+    if (npub.isEmpty) return const SizedBox.shrink();
+
+    final displayNpub = npub.length > 16
+        ? '${npub.substring(0, 10)}...${npub.substring(npub.length - 6)}'
+        : npub;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        displayNpub,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          color: colors.textSecondary,
+          letterSpacing: 0.3,
+          height: 1.4,
+        ),
       ),
     );
   }
@@ -182,7 +212,7 @@ class _UserProfileHeader extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     if (isLoadingCounts) {
       return const Padding(
-        padding: EdgeInsets.only(top: 4.0),
+        padding: EdgeInsets.only(top: 0),
         child: SizedBox(
           height: 16,
           width: 16,
@@ -191,9 +221,7 @@ class _UserProfileHeader extends StatelessWidget {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 4.0),
-      child: Row(
+    return Row(
         children: [
           Text(
             '$followerCount',
@@ -233,7 +261,6 @@ class _UserProfileHeader extends StatelessWidget {
             ),
           ),
         ],
-      ),
     );
   }
 }
