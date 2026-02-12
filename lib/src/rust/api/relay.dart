@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `get_client_pub`, `get_client`, `state`, `user_relays_state`
+// These functions are ignored because they are not marked as `pub`: `db_path_state`, `get_client_pub`, `get_client`, `state`, `user_relays_state`
 
 Future<void> initClient(
         {required List<String> relayUrls,
@@ -88,3 +88,6 @@ Future<String> deleteEvents(
 
 Stream<String> subscribeToEvents({required String filterJson}) =>
     RustLib.instance.api.crateApiRelaySubscribeToEvents(filterJson: filterJson);
+
+Future<BigInt> getDatabaseSizeMb() =>
+    RustLib.instance.api.crateApiRelayGetDatabaseSizeMb();

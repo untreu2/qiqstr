@@ -1226,4 +1226,70 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get trySearchingDifferentTerm => 'Farklı bir terim ile arama yapın.';
+
+  @override
+  String get databaseCache => 'Veritabanı Önbelleği';
+
+  @override
+  String get databaseCacheSubtitle =>
+      'Yerel depolamayı yönetin ve eski olayları temizleyin.';
+
+  @override
+  String get databaseOverview => 'Veritabanı Genel Bakış';
+
+  @override
+  String get databaseSize => 'Veritabanı Boyutu';
+
+  @override
+  String get totalEvents => 'Toplam Olay';
+
+  @override
+  String get eventBreakdown => 'Olay Dağılımı';
+
+  @override
+  String get textNotes => 'Metin Notları';
+
+  @override
+  String get profiles => 'Profiller';
+
+  @override
+  String get contactLists => 'İletişim Listeleri';
+
+  @override
+  String get articles => 'Makaleler';
+
+  @override
+  String get cleanupInfo => 'Temizleme Bilgisi';
+
+  @override
+  String get cleanupInfoDescription =>
+      'Veritabanı 1 GB\'ı aştığında eski olayları otomatik temizler.';
+
+  @override
+  String get cleanupInfoBullet1 => '30 günden eski olayları kaldırır';
+
+  @override
+  String get cleanupInfoBullet2 => 'Profilleri ve iletişim listelerini korur';
+
+  @override
+  String get cleanupInfoBullet3 => 'Uygulama başlangıcında otomatik çalışır';
+
+  @override
+  String get cleanupOldEvents => 'Eski Olayları Temizle (30+ gün)';
+
+  @override
+  String get cleanupDatabase => 'Veritabanını Temizle';
+
+  @override
+  String get cleanupDatabaseConfirmation =>
+      'Bu işlem 30 günden eski olayları silecek. Profiller ve listeler korunacak. Devam edilsin mi?';
+
+  @override
+  String get cleanupCompleted => 'Temizleme tamamlandı';
+
+  @override
+  String get eventsDeleted => 'olay silindi';
+
+  @override
+  String get cleanup => 'Temizle';
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
@@ -316,6 +317,42 @@ class _EventManagerPageState extends State<EventManagerPage> {
     }
   }
 
+  IconData _getKindIcon(int kind) {
+    switch (kind) {
+      case 0:
+        return CarbonIcons.user;
+      case 1:
+        return CarbonIcons.document;
+      case 3:
+        return CarbonIcons.user_multiple;
+      case 4:
+        return CarbonIcons.locked;
+      case 5:
+        return CarbonIcons.trash_can;
+      case 6:
+        return CarbonIcons.repeat;
+      case 7:
+        return CarbonIcons.favorite;
+      case 9735:
+        return CarbonIcons.flash;
+      case 10000:
+        return CarbonIcons.notification_off;
+      case 10002:
+        return CarbonIcons.network_3;
+      default:
+        return CarbonIcons.document_blank;
+    }
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 1000000) {
+      return '${(number / 1000000).toStringAsFixed(1)}M';
+    } else if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}K';
+    }
+    return number.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -328,8 +365,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
             controller: _scrollController,
             slivers: [
               SliverToBoxAdapter(
-                child:
-                    SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
               ),
               SliverToBoxAdapter(
                 child: TitleWidget(
@@ -340,15 +376,11 @@ class _EventManagerPageState extends State<EventManagerPage> {
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: PrimaryButton(
-                    label:
-                        _isRebroadcasting ? l10n.rebroadcasting : l10n.rebroadcast,
+                    label: _isRebroadcasting ? l10n.rebroadcasting : l10n.rebroadcast,
                     icon: Icons.send,
-                    onPressed: (_isLoading || _isRebroadcasting)
-                        ? null
-                        : _rebroadcastAllEvents,
+                    onPressed: (_isLoading || _isRebroadcasting) ? null : _rebroadcastAllEvents,
                     isLoading: _isRebroadcasting,
                     size: ButtonSize.large,
                   ),
@@ -356,14 +388,11 @@ class _EventManagerPageState extends State<EventManagerPage> {
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: SecondaryButton(
                     label: 'Delete Account',
                     icon: Icons.delete_forever,
-                    onPressed: (_isLoading || _isRebroadcasting)
-                        ? null
-                        : _showDeleteAccountDialog,
+                    onPressed: (_isLoading || _isRebroadcasting) ? null : _showDeleteAccountDialog,
                     size: ButtonSize.large,
                     backgroundColor: context.colors.error.withValues(alpha: 0.1),
                     foregroundColor: context.colors.error,
@@ -378,21 +407,30 @@ class _EventManagerPageState extends State<EventManagerPage> {
                       if (index == 0) {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
-                          child: Text(
-                            _isLoading
-                                ? 'Loading events...'
-                                : 'You have $_totalEventCount event${_totalEventCount != 1 ? 's' : ''}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: context.colors.textSecondary,
-                            ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                CarbonIcons.data_connected,
+                                color: context.colors.textSecondary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _isLoading
+                                    ? 'Loading...'
+                                    : '${_formatNumber(_totalEventCount)} events on relays',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: context.colors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       }
 
-                      final sortedKinds = _eventCountsByKind.keys.toList()
-                        ..sort();
+                      final sortedKinds = _eventCountsByKind.keys.toList()..sort();
                       if (index - 1 >= sortedKinds.length) {
                         return const SizedBox.shrink();
                       }
@@ -400,41 +438,45 @@ class _EventManagerPageState extends State<EventManagerPage> {
                       final kind = sortedKinds[index - 1];
                       final count = _eventCountsByKind[kind] ?? 0;
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: context.colors.overlayLight,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _getKindName(kind),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: context.colors.overlayLight,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _getKindIcon(kind),
+                                color: context.colors.textPrimary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _getKindName(kind),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: context.colors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                _formatNumber(count),
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                   color: context.colors.textPrimary,
                                 ),
                               ),
-                            ),
-                            Text(
-                              '$count',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.textPrimary,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     },
                     childCount: _eventCountsByKind.length + 1,
-                    addAutomaticKeepAlives: true,
-                    addRepaintBoundaries: false,
                   ),
                 ),
               ),

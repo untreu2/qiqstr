@@ -769,3 +769,70 @@ pub async fn db_search_notes(query: String, limit: u32) -> Result<String> {
     }
     Ok(serde_json::to_string(&results)?)
 }
+
+pub async fn db_get_oldest_events(limit: u32) -> Result<String> {
+    let client = get_client_pub().await?;
+    let filter = Filter::new().limit(limit as usize);
+    let events = client.database().query(filter).await?;
+    
+    let mut events_vec: Vec<Event> = events.into_iter().collect();
+    events_vec.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    
+    let json: Vec<serde_json::Value> = events_vec
+        .into_iter()
+        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .collect();
+    Ok(serde_json::to_string(&json)?)
+}
+
+pub async fn db_cleanup_old_events(days_to_keep: u32) -> Result<u32> {
+    let client = get_client_pub().await?;
+    let now = Timestamp::now();
+    let cutoff = now.as_secs() - (days_to_keep as u64 * 86400);
+    let cutoff_ts = Timestamp::from(cutoff);
+    
+    let filter = Filter::new()
+        .kinds([
+            Kind::TextNote,
+            Kind::Repost,
+            Kind::Reaction,
+            Kind::ZapReceipt,
+        ])
+        .until(cutoff_ts);
+    
+    let events = client.database().query(filter.clone()).await?;
+    let count = events.len() as u32;
+    
+    if count > 0 {
+        client.database().delete(filter).await?;
+    }
+    
+    Ok(count)
+}
+
+pub async fn db_get_database_stats() -> Result<String> {
+    let client = get_client_pub().await?;
+    
+    let text_notes = client.database().count(Filter::new().kind(Kind::TextNote)).await?;
+    let metadata = client.database().count(Filter::new().kind(Kind::Metadata)).await?;
+    let contacts = client.database().count(Filter::new().kind(Kind::ContactList)).await?;
+    let reactions = client.database().count(Filter::new().kind(Kind::Reaction)).await?;
+    let reposts = client.database().count(Filter::new().kind(Kind::Repost)).await?;
+    let zaps = client.database().count(Filter::new().kind(Kind::ZapReceipt)).await?;
+    let articles = client.database().count(Filter::new().kind(Kind::LongFormTextNote)).await?;
+    
+    let all_events = client.database().count(Filter::new()).await?;
+    
+    let stats = serde_json::json!({
+        "totalEvents": all_events,
+        "textNotes": text_notes,
+        "metadata": metadata,
+        "contacts": contacts,
+        "reactions": reactions,
+        "reposts": reposts,
+        "zaps": zaps,
+        "articles": articles,
+    });
+    
+    Ok(stats.to_string())
+}

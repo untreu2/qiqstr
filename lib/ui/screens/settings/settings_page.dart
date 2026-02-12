@@ -123,6 +123,14 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildSettingsItem(
             context: context,
+            title: l10n.databaseCache,
+            subtitle: '',
+            icon: CarbonIcons.data_base,
+            onTap: () => context.push('/database'),
+          ),
+          const SizedBox(height: 8),
+          _buildSettingsItem(
+            context: context,
             title: l10n.keys,
             subtitle: '',
             icon: CarbonIcons.password,

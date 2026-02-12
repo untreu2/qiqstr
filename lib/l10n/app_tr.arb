@@ -524,5 +524,30 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "databaseCache": "Veritabanı Önbelleği",
+  "databaseCacheSubtitle": "Yerel depolamayı yönetin ve eski olayları temizleyin.",
+  "databaseOverview": "Veritabanı Genel Bakış",
+  "databaseSize": "Veritabanı Boyutu",
+  "totalEvents": "Toplam Olay",
+  "eventBreakdown": "Olay Dağılımı",
+  "textNotes": "Metin Notları",
+  "profiles": "Profiller",
+  "contactLists": "İletişim Listeleri",
+  "reactions": "Tepkiler",
+  "reposts": "Yeniden Paylaşımlar",
+  "zaps": "Zap'ler",
+  "articles": "Makaleler",
+  "cleanupInfo": "Temizleme Bilgisi",
+  "cleanupInfoDescription": "Veritabanı 1 GB'ı aştığında eski olayları otomatik temizler.",
+  "cleanupInfoBullet1": "30 günden eski olayları kaldırır",
+  "cleanupInfoBullet2": "Profilleri ve iletişim listelerini korur",
+  "cleanupInfoBullet3": "Uygulama başlangıcında otomatik çalışır",
+  "cleanupOldEvents": "Eski Olayları Temizle (30+ gün)",
+  "cleanupDatabase": "Veritabanını Temizle",
+  "cleanupDatabaseConfirmation": "Bu işlem 30 günden eski olayları silecek. Profiller ve listeler korunacak. Devam edilsin mi?",
+  "cleanupCompleted": "Temizleme tamamlandı",
+  "eventsDeleted": "olay silindi",
+  "cleanup": "Temizle"
 }

@@ -1221,4 +1221,70 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get trySearchingDifferentTerm =>
       'Try searching with a different term.';
+
+  @override
+  String get databaseCache => 'Database Cache';
+
+  @override
+  String get databaseCacheSubtitle =>
+      'Manage local storage and cleanup old events.';
+
+  @override
+  String get databaseOverview => 'Database Overview';
+
+  @override
+  String get databaseSize => 'Database Size';
+
+  @override
+  String get totalEvents => 'Total Events';
+
+  @override
+  String get eventBreakdown => 'Event Breakdown';
+
+  @override
+  String get textNotes => 'Text Notes';
+
+  @override
+  String get profiles => 'Profiles';
+
+  @override
+  String get contactLists => 'Contact Lists';
+
+  @override
+  String get articles => 'Articles';
+
+  @override
+  String get cleanupInfo => 'Cleanup Information';
+
+  @override
+  String get cleanupInfoDescription =>
+      'Automatically cleans up old events when database exceeds 1 GB.';
+
+  @override
+  String get cleanupInfoBullet1 => 'Removes events older than 30 days';
+
+  @override
+  String get cleanupInfoBullet2 => 'Preserves profiles and contact lists';
+
+  @override
+  String get cleanupInfoBullet3 => 'Runs automatically on app startup';
+
+  @override
+  String get cleanupOldEvents => 'Cleanup Old Events (30+ days)';
+
+  @override
+  String get cleanupDatabase => 'Cleanup Database';
+
+  @override
+  String get cleanupDatabaseConfirmation =>
+      'This will delete events older than 30 days. Profiles and lists will be preserved. Continue?';
+
+  @override
+  String get cleanupCompleted => 'Cleanup completed';
+
+  @override
+  String get eventsDeleted => 'events deleted';
+
+  @override
+  String get cleanup => 'Cleanup';
 }

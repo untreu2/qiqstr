@@ -15,6 +15,7 @@ import '../../ui/screens/note/note_statistics_page.dart';
 import '../../ui/screens/settings/settings_page.dart';
 import '../../ui/screens/settings/keys_page.dart';
 import '../../ui/screens/settings/relay_page.dart';
+import '../../ui/screens/settings/database_page.dart';
 import '../../ui/screens/settings/display_page.dart';
 import '../../ui/screens/settings/payments_page.dart';
 import '../../ui/screens/settings/muted_page.dart';
@@ -471,6 +472,11 @@ class AppRouter {
         path: '/relays',
         name: 'relays',
         builder: (context, state) => const RelayPage(),
+      ),
+      GoRoute(
+        path: '/database',
+        name: 'database',
+        builder: (context, state) => const DatabasePage(),
       ),
       GoRoute(
         path: '/display',

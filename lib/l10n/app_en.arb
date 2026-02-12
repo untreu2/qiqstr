@@ -591,5 +591,30 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "databaseCache": "Database Cache",
+  "databaseCacheSubtitle": "Manage local storage and cleanup old events.",
+  "databaseOverview": "Database Overview",
+  "databaseSize": "Database Size",
+  "totalEvents": "Total Events",
+  "eventBreakdown": "Event Breakdown",
+  "textNotes": "Text Notes",
+  "profiles": "Profiles",
+  "contactLists": "Contact Lists",
+  "reactions": "Reactions",
+  "reposts": "Reposts",
+  "zaps": "Zaps",
+  "articles": "Articles",
+  "cleanupInfo": "Cleanup Information",
+  "cleanupInfoDescription": "Automatically cleans up old events when database exceeds 1 GB.",
+  "cleanupInfoBullet1": "Removes events older than 30 days",
+  "cleanupInfoBullet2": "Preserves profiles and contact lists",
+  "cleanupInfoBullet3": "Runs automatically on app startup",
+  "cleanupOldEvents": "Cleanup Old Events (30+ days)",
+  "cleanupDatabase": "Cleanup Database",
+  "cleanupDatabaseConfirmation": "This will delete events older than 30 days. Profiles and lists will be preserved. Continue?",
+  "cleanupCompleted": "Cleanup completed",
+  "eventsDeleted": "events deleted",
+  "cleanup": "Cleanup"
 }

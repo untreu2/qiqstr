@@ -1255,4 +1255,70 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get trySearchingDifferentTerm =>
       'Versuche es mit einem anderen Suchbegriff.';
+
+  @override
+  String get databaseCache => 'Datenbank-Cache';
+
+  @override
+  String get databaseCacheSubtitle =>
+      'Verwalten Sie lokalen Speicher und bereinigen Sie alte Ereignisse.';
+
+  @override
+  String get databaseOverview => 'Datenbankübersicht';
+
+  @override
+  String get databaseSize => 'Datenbankgröße';
+
+  @override
+  String get totalEvents => 'Gesamte Ereignisse';
+
+  @override
+  String get eventBreakdown => 'Ereignisaufschlüsselung';
+
+  @override
+  String get textNotes => 'Textnotizen';
+
+  @override
+  String get profiles => 'Profile';
+
+  @override
+  String get contactLists => 'Kontaktlisten';
+
+  @override
+  String get articles => 'Artikel';
+
+  @override
+  String get cleanupInfo => 'Bereinigungsinformationen';
+
+  @override
+  String get cleanupInfoDescription =>
+      'Bereinigt automatisch alte Ereignisse, wenn die Datenbank 1 GB überschreitet.';
+
+  @override
+  String get cleanupInfoBullet1 => 'Entfernt Ereignisse älter als 30 Tage';
+
+  @override
+  String get cleanupInfoBullet2 => 'Bewahrt Profile und Kontaktlisten';
+
+  @override
+  String get cleanupInfoBullet3 => 'Läuft automatisch beim App-Start';
+
+  @override
+  String get cleanupOldEvents => 'Bereinigen (30+ Tage)';
+
+  @override
+  String get cleanupDatabase => 'Datenbank bereinigen';
+
+  @override
+  String get cleanupDatabaseConfirmation =>
+      'Dies wird Ereignisse löschen, die älter als 30 Tage sind. Profile und Listen bleiben erhalten. Fortfahren?';
+
+  @override
+  String get cleanupCompleted => 'Bereinigung abgeschlossen';
+
+  @override
+  String get eventsDeleted => 'Ereignisse gelöscht';
+
+  @override
+  String get cleanup => 'Bereinigen';
 }

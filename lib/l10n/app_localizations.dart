@@ -2397,6 +2397,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Try searching with a different term.'**
   String get trySearchingDifferentTerm;
+
+  /// No description provided for @databaseCache.
+  ///
+  /// In en, this message translates to:
+  /// **'Database Cache'**
+  String get databaseCache;
+
+  /// No description provided for @databaseCacheSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage local storage and cleanup old events.'**
+  String get databaseCacheSubtitle;
+
+  /// No description provided for @databaseOverview.
+  ///
+  /// In en, this message translates to:
+  /// **'Database Overview'**
+  String get databaseOverview;
+
+  /// No description provided for @databaseSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Database Size'**
+  String get databaseSize;
+
+  /// No description provided for @totalEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Events'**
+  String get totalEvents;
+
+  /// No description provided for @eventBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Event Breakdown'**
+  String get eventBreakdown;
+
+  /// No description provided for @textNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Text Notes'**
+  String get textNotes;
+
+  /// No description provided for @profiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Profiles'**
+  String get profiles;
+
+  /// No description provided for @contactLists.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact Lists'**
+  String get contactLists;
+
+  /// No description provided for @articles.
+  ///
+  /// In en, this message translates to:
+  /// **'Articles'**
+  String get articles;
+
+  /// No description provided for @cleanupInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleanup Information'**
+  String get cleanupInfo;
+
+  /// No description provided for @cleanupInfoDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically cleans up old events when database exceeds 1 GB.'**
+  String get cleanupInfoDescription;
+
+  /// No description provided for @cleanupInfoBullet1.
+  ///
+  /// In en, this message translates to:
+  /// **'Removes events older than 30 days'**
+  String get cleanupInfoBullet1;
+
+  /// No description provided for @cleanupInfoBullet2.
+  ///
+  /// In en, this message translates to:
+  /// **'Preserves profiles and contact lists'**
+  String get cleanupInfoBullet2;
+
+  /// No description provided for @cleanupInfoBullet3.
+  ///
+  /// In en, this message translates to:
+  /// **'Runs automatically on app startup'**
+  String get cleanupInfoBullet3;
+
+  /// No description provided for @cleanupOldEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleanup Old Events (30+ days)'**
+  String get cleanupOldEvents;
+
+  /// No description provided for @cleanupDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleanup Database'**
+  String get cleanupDatabase;
+
+  /// No description provided for @cleanupDatabaseConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete events older than 30 days. Profiles and lists will be preserved. Continue?'**
+  String get cleanupDatabaseConfirmation;
+
+  /// No description provided for @cleanupCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleanup completed'**
+  String get cleanupCompleted;
+
+  /// No description provided for @eventsDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'events deleted'**
+  String get eventsDeleted;
+
+  /// No description provided for @cleanup.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleanup'**
+  String get cleanup;
 }
 
 class _AppLocalizationsDelegate

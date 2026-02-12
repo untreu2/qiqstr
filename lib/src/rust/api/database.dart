@@ -148,3 +148,13 @@ Future<void> dbWipe() => RustLib.instance.api.crateApiDatabaseDbWipe();
 Future<String> dbSearchNotes({required String query, required int limit}) =>
     RustLib.instance.api
         .crateApiDatabaseDbSearchNotes(query: query, limit: limit);
+
+Future<String> dbGetOldestEvents({required int limit}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetOldestEvents(limit: limit);
+
+Future<int> dbCleanupOldEvents({required int daysToKeep}) =>
+    RustLib.instance.api
+        .crateApiDatabaseDbCleanupOldEvents(daysToKeep: daysToKeep);
+
+Future<String> dbGetDatabaseStats() =>
+    RustLib.instance.api.crateApiDatabaseDbGetDatabaseStats();

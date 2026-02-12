@@ -524,5 +524,30 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "databaseCache": "Datenbank-Cache",
+  "databaseCacheSubtitle": "Verwalten Sie lokalen Speicher und bereinigen Sie alte Ereignisse.",
+  "databaseOverview": "Datenbankübersicht",
+  "databaseSize": "Datenbankgröße",
+  "totalEvents": "Gesamte Ereignisse",
+  "eventBreakdown": "Ereignisaufschlüsselung",
+  "textNotes": "Textnotizen",
+  "profiles": "Profile",
+  "contactLists": "Kontaktlisten",
+  "reactions": "Reaktionen",
+  "reposts": "Reposts",
+  "zaps": "Zaps",
+  "articles": "Artikel",
+  "cleanupInfo": "Bereinigungsinformationen",
+  "cleanupInfoDescription": "Bereinigt automatisch alte Ereignisse, wenn die Datenbank 1 GB überschreitet.",
+  "cleanupInfoBullet1": "Entfernt Ereignisse älter als 30 Tage",
+  "cleanupInfoBullet2": "Bewahrt Profile und Kontaktlisten",
+  "cleanupInfoBullet3": "Läuft automatisch beim App-Start",
+  "cleanupOldEvents": "Bereinigen (30+ Tage)",
+  "cleanupDatabase": "Datenbank bereinigen",
+  "cleanupDatabaseConfirmation": "Dies wird Ereignisse löschen, die älter als 30 Tage sind. Profile und Listen bleiben erhalten. Fortfahren?",
+  "cleanupCompleted": "Bereinigung abgeschlossen",
+  "eventsDeleted": "Ereignisse gelöscht",
+  "cleanup": "Bereinigen"
 }

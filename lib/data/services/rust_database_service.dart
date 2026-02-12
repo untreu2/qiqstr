@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import '../../src/rust/api/database.dart' as rust_db;
+import '../../src/rust/api/relay.dart' as rust_relay;
 
 class RustDatabaseService {
   static final RustDatabaseService _instance = RustDatabaseService._internal();
@@ -25,6 +26,7 @@ class RustDatabaseService {
 
   Future<void> initialize() async {
     _initialized = true;
+    autoCleanupIfNeeded();
   }
 
   Future<void> close() async {}
@@ -540,6 +542,74 @@ class RustDatabaseService {
       await rust_db.dbWipe();
     } catch (e) {
       if (kDebugMode) print('[RustDB] wipe error: $e');
+    }
+  }
+
+  Future<int> cleanupOldEvents({int daysToKeep = 30}) async {
+    try {
+      final count = await rust_db.dbCleanupOldEvents(daysToKeep: daysToKeep);
+      notifyChange();
+      return count;
+    } catch (e) {
+      if (kDebugMode) print('[LMDB] cleanupOldEvents error: $e');
+      return 0;
+    }
+  }
+
+  Future<Map<String, dynamic>> getDatabaseStats() async {
+    try {
+      final json = await rust_db.dbGetDatabaseStats();
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      return decoded;
+    } catch (e) {
+      if (kDebugMode) print('[LMDB] getDatabaseStats error: $e');
+      return {};
+    }
+  }
+
+  Future<void> autoCleanupIfNeeded() async {
+    try {
+      final sizeMb = await getDatabaseSizeMB();
+      final stats = await getDatabaseStats();
+      final totalEvents = stats['totalEvents'] as int? ?? 0;
+      
+      if (kDebugMode) {
+        print('[LMDB] Database size: ${sizeMb}MB | Total events: $totalEvents');
+      }
+      
+      if (sizeMb > 1024) {
+        if (kDebugMode) {
+          print('[LMDB] Database size exceeded 1GB threshold, starting cleanup...');
+        }
+        
+        final deletedCount = await cleanupOldEvents(daysToKeep: 30);
+        final newSize = await getDatabaseSizeMB();
+        final newStats = await getDatabaseStats();
+        final newTotalEvents = newStats['totalEvents'] as int? ?? 0;
+        
+        if (kDebugMode) {
+          print('[LMDB] Cleanup completed:');
+          print('[LMDB]   - Deleted events: $deletedCount');
+          print('[LMDB]   - Old size: ${sizeMb}MB → New size: ${newSize}MB');
+          print('[LMDB]   - Old events: $totalEvents → New events: $newTotalEvents');
+        }
+      } else {
+        if (kDebugMode) {
+          print('[LMDB] Database size OK (below 1GB threshold)');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('[LMDB] autoCleanupIfNeeded error: $e');
+    }
+  }
+
+  Future<int> getDatabaseSizeMB() async {
+    try {
+      final size = await rust_relay.getDatabaseSizeMb();
+      return size.toInt();
+    } catch (e) {
+      if (kDebugMode) print('[LMDB] getDatabaseSizeMB error: $e');
+      return 0;
     }
   }
 

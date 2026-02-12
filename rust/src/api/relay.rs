@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -22,6 +23,7 @@ const MIN_RELAY_FREQUENCY: usize = 2;
 
 static CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
 static USER_RELAYS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
+static DB_PATH: OnceLock<RwLock<Option<String>>> = OnceLock::new();
 
 fn state() -> &'static RwLock<Option<Client>> {
     CLIENT.get_or_init(|| RwLock::new(None))
@@ -29,6 +31,10 @@ fn state() -> &'static RwLock<Option<Client>> {
 
 fn user_relays_state() -> &'static RwLock<Vec<String>> {
     USER_RELAYS.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+fn db_path_state() -> &'static RwLock<Option<String>> {
+    DB_PATH.get_or_init(|| RwLock::new(None))
 }
 
 async fn get_client() -> Result<Client> {
@@ -56,9 +62,13 @@ pub async fn init_client(
 
     if let Some(ref path) = db_path {
         let database = NostrLMDB::builder(path)
-            .map_size(256 * 1024 * 1024)
+            .map_size(2 * 1024 * 1024 * 1024) // 2 GB
             .build()?;
         builder = builder.database(database);
+        
+        // DB path'i kaydet
+        let mut db_path_lock = db_path_state().write().await;
+        *db_path_lock = Some(path.clone());
     }
 
     let client = builder.build();
@@ -658,4 +668,24 @@ pub async fn subscribe_to_events(
     }
 
     Ok(())
+}
+
+pub async fn get_database_size_mb() -> Result<u64> {
+    let db_path_lock = db_path_state().read().await;
+    
+    if let Some(path) = db_path_lock.as_ref() {
+        // LMDB data.mdb dosyasının boyutunu kontrol et
+        let data_file = format!("{}/data.mdb", path);
+        
+        match fs::metadata(&data_file) {
+            Ok(metadata) => {
+                let size_bytes = metadata.len();
+                let size_mb = size_bytes / (1024 * 1024);
+                Ok(size_mb)
+            }
+            Err(_) => Ok(0),
+        }
+    } else {
+        Ok(0)
+    }
 }
