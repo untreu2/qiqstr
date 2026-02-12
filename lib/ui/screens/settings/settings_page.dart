@@ -23,6 +23,31 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  late ScrollController _scrollController;
+  final ValueNotifier<bool> _showTitleBubble = ValueNotifier(false);
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()..addListener(_scrollListener);
+  }
+
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final shouldShow = _scrollController.offset > 100;
+      if (_showTitleBubble.value != shouldShow) {
+        _showTitleBubble.value = shouldShow;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _showTitleBubble.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -34,22 +59,47 @@ class _SettingsPageState extends State<SettingsPage> {
               backgroundColor: context.colors.background,
               body: Stack(
                 children: [
-                  SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(context, l10n),
-                        const SizedBox(height: 16),
-                        _buildSettingsSection(context, l10n),
-                        const SizedBox(height: 150),
-                      ],
-                    ),
+                  CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                            height:
+                                MediaQuery.of(context).padding.top + 60),
+                      ),
+                      SliverToBoxAdapter(
+                        child: _buildHeader(context, l10n),
+                      ),
+                      SliverToBoxAdapter(
+                        child: const SizedBox(height: 16),
+                      ),
+                      SliverToBoxAdapter(
+                        child: _buildSettingsSection(context, l10n),
+                      ),
+                      SliverToBoxAdapter(
+                        child: const SizedBox(height: 150),
+                      ),
+                    ],
                   ),
                   TopActionBarWidget(
-                    topOffset: 6,
                     onBackPressed: () => context.pop(),
                     showShareButton: false,
-                    centerBubble: null,
+                    centerBubble: Text(
+                      l10n.settings,
+                      style: TextStyle(
+                        color: context.colors.background,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    centerBubbleVisibility: _showTitleBubble,
+                    onCenterBubbleTap: () {
+                      _scrollController.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    },
                   ),
                   _buildLanguageButton(context, l10n, localeState),
                 ],
@@ -62,20 +112,17 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
-    return Padding(
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
-      child: TitleWidget(
-        title: l10n.settings,
-        fontSize: 32,
-        subtitle: l10n.settingsSubtitle,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      ),
+    return TitleWidget(
+      title: l10n.settings,
+      fontSize: 32,
+      subtitle: l10n.settingsSubtitle,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
     );
   }
 
   Widget _buildLanguageButton(BuildContext context, AppLocalizations l10n, LocaleState localeState) {
     return Positioned(
-      top: MediaQuery.of(context).padding.top + 6,
+      top: MediaQuery.of(context).padding.top + 14,
       right: 16,
       child: Container(
         width: 44,

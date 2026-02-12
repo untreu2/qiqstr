@@ -84,6 +84,58 @@ class ServicesModule extends DIModule {
     }
   }
 
+  static Future<void> reinitializeForAccountSwitch() async {
+    try {
+      final authService = AuthService.instance;
+      String? privateKeyHex;
+      String? userPubkeyHex;
+
+      final pkResult = await authService.getCurrentUserPrivateKey();
+      if (!pkResult.isError && pkResult.data != null) {
+        privateKeyHex = pkResult.data;
+      }
+      final pubResult = await authService.getCurrentUserPublicKeyHex();
+      if (!pubResult.isError && pubResult.data != null) {
+        userPubkeyHex = pubResult.data;
+      }
+
+      await RustRelayService.instance.init(privateKeyHex: privateKeyHex);
+
+      if (userPubkeyHex != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final gossipEnabled = prefs.getBool('gossip_model_enabled') ?? false;
+        if (gossipEnabled) {
+          Future.microtask(() async {
+            try {
+              final db = RustDatabaseService.instance;
+              final follows = await db.getFollowingList(userPubkeyHex!);
+              if (follows != null && follows.isNotEmpty) {
+                final allPubkeys = [userPubkeyHex, ...follows];
+                await RustRelayService.instance
+                    .discoverAndConnectOutboxRelays(allPubkeys);
+              } else {
+                await RustRelayService.instance
+                    .discoverAndConnectOutboxRelays([userPubkeyHex]);
+              }
+            } catch (e) {
+              if (kDebugMode) {
+                print('[ServicesModule] Error discovering outbox relays: $e');
+              }
+            }
+          });
+        }
+      }
+
+      if (kDebugMode) {
+        print('[ServicesModule] Re-initialized for account switch');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[ServicesModule] Error during account switch reinit: $e');
+      }
+    }
+  }
+
   void _discoverOutboxRelays(String userPubkeyHex) {
     Future.microtask(() async {
       try {

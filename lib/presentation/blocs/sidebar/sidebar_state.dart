@@ -1,4 +1,5 @@
 import '../../../core/bloc/base/base_state.dart';
+import '../../../data/services/auth_service.dart';
 
 abstract class SidebarState extends BaseState {
   const SidebarState();
@@ -18,6 +19,8 @@ class SidebarLoaded extends SidebarState {
   final int followingCount;
   final bool isLoadingCounts;
   final int connectedRelayCount;
+  final List<StoredAccount> storedAccounts;
+  final Map<String, String> accountProfileImages;
 
   const SidebarLoaded({
     required this.currentUser,
@@ -25,6 +28,8 @@ class SidebarLoaded extends SidebarState {
     this.followingCount = 0,
     this.isLoadingCounts = true,
     this.connectedRelayCount = 0,
+    this.storedAccounts = const [],
+    this.accountProfileImages = const {},
   });
 
   SidebarLoaded copyWith({
@@ -33,6 +38,8 @@ class SidebarLoaded extends SidebarState {
     int? followingCount,
     bool? isLoadingCounts,
     int? connectedRelayCount,
+    List<StoredAccount>? storedAccounts,
+    Map<String, String>? accountProfileImages,
   }) {
     return SidebarLoaded(
       currentUser: currentUser ?? this.currentUser,
@@ -40,10 +47,12 @@ class SidebarLoaded extends SidebarState {
       followingCount: followingCount ?? this.followingCount,
       isLoadingCounts: isLoadingCounts ?? this.isLoadingCounts,
       connectedRelayCount: connectedRelayCount ?? this.connectedRelayCount,
+      storedAccounts: storedAccounts ?? this.storedAccounts,
+      accountProfileImages: accountProfileImages ?? this.accountProfileImages,
     );
   }
 
   @override
   List<Object?> get props =>
-      [currentUser, followerCount, followingCount, isLoadingCounts, connectedRelayCount];
+      [currentUser, followerCount, followingCount, isLoadingCounts, connectedRelayCount, storedAccounts, accountProfileImages];
 }

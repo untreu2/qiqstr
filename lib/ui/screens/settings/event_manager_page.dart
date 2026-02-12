@@ -10,8 +10,7 @@ import '../../widgets/common/common_buttons.dart';
 import '../../../data/services/event_counts_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../../src/rust/api/relay.dart' as rust_relay;
-import '../../../core/di/app_di.dart';
-import '../../../data/services/auth_service.dart';
+import '../../../utils/logout.dart';
 import '../../../l10n/app_localizations.dart';
 
 class EventManagerPage extends StatefulWidget {
@@ -261,11 +260,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
         await Future.delayed(const Duration(seconds: 2));
         
         if (mounted) {
-          final authService = AppDI.get<AuthService>();
-          await authService.logout();
-          if (mounted) {
-            context.go('/login');
-          }
+          await Logout.performLogout(context);
         }
       } else {
         final vanishFailed = vanishResult['totalFailed'] as int? ?? 0;

@@ -153,7 +153,7 @@ class _DatabasePageState extends State<DatabasePage> {
                               Text(
                                 _isLoading
                                     ? 'Loading...'
-                                    : '${_databaseSizeMB} MB • ${_formatNumber(totalEvents)} events',
+                                    : '$_databaseSizeMB MB • ${_formatNumber(totalEvents)} events',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,

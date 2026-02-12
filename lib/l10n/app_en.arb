@@ -617,5 +617,7 @@
   "cleanupDatabaseConfirmation": "This will delete events older than 30 days. Profiles and lists will be preserved. Continue?",
   "cleanupCompleted": "Cleanup completed",
   "eventsDeleted": "events deleted",
-  "cleanup": "Cleanup"
+  "cleanup": "Cleanup",
+  "addAccount": "Add account",
+  "switchAccount": "Switch account"
 }

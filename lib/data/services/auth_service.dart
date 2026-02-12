@@ -1,9 +1,41 @@
+import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/base/result.dart';
 import 'coinos_service.dart';
 import 'rust_nostr_bridge.dart';
 import 'validation_service.dart';
+
+class StoredAccount {
+  final String npub;
+  final String privateKeyHex;
+  final String? mnemonic;
+
+  const StoredAccount({
+    required this.npub,
+    required this.privateKeyHex,
+    this.mnemonic,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'npub': npub,
+        'privateKeyHex': privateKeyHex,
+        if (mnemonic != null) 'mnemonic': mnemonic,
+      };
+
+  factory StoredAccount.fromJson(Map<String, dynamic> json) => StoredAccount(
+        npub: json['npub'] as String,
+        privateKeyHex: json['privateKeyHex'] as String,
+        mnemonic: json['mnemonic'] as String?,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is StoredAccount && npub == other.npub;
+
+  @override
+  int get hashCode => npub.hashCode;
+}
 
 class AuthResult {
   final String npub;
@@ -53,6 +85,89 @@ class AuthService {
     if (npubResult.isSuccess && npubResult.data != null) {
       _cachedNpub = npubResult.data;
       _cachedPubkeyHex = npubToHex(npubResult.data!);
+
+      // Migrate existing account to multi-account list if not already there
+      final accounts = await getStoredAccounts();
+      if (accounts.isEmpty) {
+        await _addCurrentAccountToList();
+      }
+    }
+  }
+
+  // --- Multi-account support ---
+
+  static const String _accountsKey = 'stored_accounts';
+
+  Future<List<StoredAccount>> getStoredAccounts() async {
+    try {
+      final raw = await _secureStorage.read(key: _accountsKey);
+      if (raw == null || raw.isEmpty) return [];
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => StoredAccount.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _saveAccountToList(StoredAccount account) async {
+    final accounts = await getStoredAccounts();
+    accounts.removeWhere((a) => a.npub == account.npub);
+    accounts.insert(0, account);
+    await _secureStorage.write(
+      key: _accountsKey,
+      value: jsonEncode(accounts.map((a) => a.toJson()).toList()),
+    );
+  }
+
+  Future<void> removeAccountFromList(String npub) async {
+    final accounts = await getStoredAccounts();
+    accounts.removeWhere((a) => a.npub == npub);
+    await _secureStorage.write(
+      key: _accountsKey,
+      value: jsonEncode(accounts.map((a) => a.toJson()).toList()),
+    );
+  }
+
+  Future<Result<String>> switchAccount(String npub) async {
+    try {
+      final accounts = await getStoredAccounts();
+      final target = accounts.where((a) => a.npub == npub).firstOrNull;
+      if (target == null) {
+        return const Result.error('Account not found');
+      }
+
+      await Future.wait([
+        _secureStorage.write(key: 'npub', value: target.npub),
+        _secureStorage.write(key: 'privateKey', value: target.privateKeyHex),
+      ]);
+
+      if (target.mnemonic != null) {
+        await _secureStorage.write(key: 'mnemonic', value: target.mnemonic!);
+      } else {
+        await _secureStorage.delete(key: 'mnemonic');
+      }
+
+      _cachedNpub = target.npub;
+      _cachedPubkeyHex = npubToHex(target.npub);
+
+      return Result.success(target.npub);
+    } catch (e) {
+      return Result.error('Failed to switch account: ${e.toString()}');
+    }
+  }
+
+  Future<void> _addCurrentAccountToList() async {
+    final npub = await _secureStorage.read(key: 'npub');
+    final privateKey = await _secureStorage.read(key: 'privateKey');
+    final mnemonic = await _secureStorage.read(key: 'mnemonic');
+    if (npub != null && privateKey != null) {
+      await _saveAccountToList(StoredAccount(
+        npub: npub,
+        privateKeyHex: privateKey,
+        mnemonic: mnemonic,
+      ));
     }
   }
 
@@ -128,6 +243,11 @@ class AuthService {
       _cachedNpub = npub;
       _cachedPubkeyHex = npubToHex(npub);
 
+      await _saveAccountToList(StoredAccount(
+        npub: npub,
+        privateKeyHex: privateKey,
+      ));
+
       return Result.success(npub);
     } catch (e) {
       return Result.error('Login failed: ${e.toString()}');
@@ -149,6 +269,11 @@ class AuthService {
 
       _cachedNpub = npub;
       _cachedPubkeyHex = npubToHex(npub);
+
+      await _saveAccountToList(StoredAccount(
+        npub: npub,
+        privateKeyHex: privateKey,
+      ));
 
       return Result.success(npub);
     } catch (e) {
@@ -186,6 +311,14 @@ class AuthService {
         _secureStorage.write(key: 'privateKey', value: privateKey),
       ]);
 
+      _cachedNpub = npub;
+      _cachedPubkeyHex = npubToHex(npub);
+
+      await _saveAccountToList(StoredAccount(
+        npub: npub,
+        privateKeyHex: privateKey,
+      ));
+
       return Result.success(npub);
     } catch (e) {
       return Result.error('Login with private key failed: ${e.toString()}');
@@ -197,6 +330,8 @@ class AuthService {
       await Future.wait([
         _secureStorage.delete(key: 'npub'),
         _secureStorage.delete(key: 'privateKey'),
+        _secureStorage.delete(key: 'mnemonic'),
+        _secureStorage.delete(key: _accountsKey),
       ]);
 
       _cachedNpub = null;
@@ -478,6 +613,12 @@ class AuthService {
 
       _cachedNpub = npub;
       _cachedPubkeyHex = npubToHex(npub);
+
+      await _saveAccountToList(StoredAccount(
+        npub: npub,
+        privateKeyHex: privateKey,
+        mnemonic: mnemonic.trim(),
+      ));
 
       return Result.success(npub);
     } catch (e) {

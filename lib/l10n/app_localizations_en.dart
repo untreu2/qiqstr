@@ -1290,4 +1290,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cleanup => 'Cleanup';
+
+  @override
+  String get addAccount => 'Add account';
+
+  @override
+  String get switchAccount => 'Switch account';
 }

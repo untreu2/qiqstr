@@ -35,6 +35,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<ThreadProfilesUpdated>(_onThreadProfilesUpdated);
     on<_ThreadRepliesUpdated>(_onThreadRepliesUpdated);
     on<_ThreadRepliesSyncCompleted>(_onThreadRepliesSyncCompleted);
+    on<_ThreadCurrentUserLoaded>(_onThreadCurrentUserLoaded);
   }
 
   void _onThreadProfilesUpdated(
@@ -47,6 +48,22 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           currentState.userProfiles)
         ..addAll(event.profiles);
       emit(currentState.copyWith(userProfiles: merged));
+    }
+  }
+
+  void _onThreadCurrentUserLoaded(
+    _ThreadCurrentUserLoaded event,
+    Emitter<ThreadState> emit,
+  ) {
+    if (state is ThreadLoaded) {
+      final currentState = state as ThreadLoaded;
+      final merged = Map<String, Map<String, dynamic>>.from(
+          currentState.userProfiles)
+        ..[currentState.currentUserHex] = event.profileMap;
+      emit(currentState.copyWith(
+        currentUser: event.profileMap,
+        userProfiles: merged,
+      ));
     }
   }
 
@@ -199,9 +216,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         final profile = await _profileRepository.getProfile(currentUserHex);
         if (isClosed || state is! ThreadLoaded) return;
         if (profile != null) {
-          add(ThreadProfilesUpdated({
-            currentUserHex: profile.toMap(),
-          }));
+          final profileMap = profile.toMap();
+          add(_ThreadCurrentUserLoaded(profileMap));
         }
       } catch (_) {}
     });
@@ -534,4 +550,12 @@ class _ThreadRepliesUpdated extends ThreadEvent {
 
 class _ThreadRepliesSyncCompleted extends ThreadEvent {
   const _ThreadRepliesSyncCompleted();
+}
+
+class _ThreadCurrentUserLoaded extends ThreadEvent {
+  final Map<String, dynamic> profileMap;
+  const _ThreadCurrentUserLoaded(this.profileMap);
+
+  @override
+  List<Object?> get props => [profileMap];
 }

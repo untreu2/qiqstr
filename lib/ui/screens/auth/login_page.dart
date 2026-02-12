@@ -5,12 +5,13 @@ import 'package:qiqstr/data/services/auth_service.dart';
 
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
-
+import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../../l10n/app_localizations.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final bool isAddAccount;
+  const LoginPage({super.key, this.isAddAccount = false});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -213,10 +214,18 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       backgroundColor: context.colors.background,
       body: SafeArea(
-        child: Center(
-          child: _isLoading
-              ? _buildLoadingScreen()
-              : SingleChildScrollView(child: _buildLoginForm()),
+        child: Stack(
+          children: [
+            Center(
+              child: _isLoading
+                  ? _buildLoadingScreen()
+                  : SingleChildScrollView(child: _buildLoginForm()),
+            ),
+            if (widget.isAddAccount)
+              BackButtonWidget.floating(
+                onPressed: () => context.pop(),
+              ),
+          ],
         ),
       ),
     );

@@ -2529,6 +2529,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cleanup'**
   String get cleanup;
+
+  /// No description provided for @addAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Add account'**
+  String get addAccount;
+
+  /// No description provided for @switchAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch account'**
+  String get switchAccount;
 }
 
 class _AppLocalizationsDelegate

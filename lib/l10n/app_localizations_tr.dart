@@ -1295,4 +1295,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get cleanup => 'Temizle';
+
+  @override
+  String get addAccount => 'Hesap ekle';
+
+  @override
+  String get switchAccount => 'Hesap değiştir';
 }

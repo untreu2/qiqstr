@@ -50,7 +50,10 @@ class AppRouter {
       GoRoute(
         path: '/login',
         name: 'login',
-        builder: (context, state) => const LoginPage(),
+        builder: (context, state) {
+          final isAddAccount = state.uri.queryParameters['addAccount'] == 'true';
+          return LoginPage(isAddAccount: isAddAccount);
+        },
       ),
       GoRoute(
         path: '/keys-info',
@@ -84,6 +87,7 @@ class AppRouter {
           final uri = Uri.parse(location);
           final npub = uri.queryParameters['npub'] ?? '';
           return HomeNavigator(
+            key: ValueKey('home_$npub'),
             npub: npub,
             navigationShell: navigationShell,
           );
@@ -99,7 +103,11 @@ class AppRouter {
                   final uri = Uri.parse(location);
                   final userHex = _normalizeToHex(uri.queryParameters['npub']);
                   final hashtag = uri.queryParameters['hashtag'];
-                  return FeedPage(userHex: userHex, hashtag: hashtag);
+                  return FeedPage(
+                    key: ValueKey('feed_$userHex'),
+                    userHex: userHex,
+                    hashtag: hashtag,
+                  );
                 },
                 routes: [
                   GoRoute(
@@ -539,11 +547,14 @@ class AppRouter {
     }
 
     if (isAuthenticated && isLoginRoute) {
-      final npubResult = await authService.getCurrentUserNpub();
-      if (npubResult.isSuccess &&
-          npubResult.data != null &&
-          npubResult.data!.isNotEmpty) {
-        return '/home/feed?npub=${Uri.encodeComponent(npubResult.data!)}';
+      final isAddAccount = state.uri.queryParameters['addAccount'] == 'true';
+      if (!isAddAccount) {
+        final npubResult = await authService.getCurrentUserNpub();
+        if (npubResult.isSuccess &&
+            npubResult.data != null &&
+            npubResult.data!.isNotEmpty) {
+          return '/home/feed?npub=${Uri.encodeComponent(npubResult.data!)}';
+        }
       }
     }
 

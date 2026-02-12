@@ -550,5 +550,7 @@
   "cleanupDatabaseConfirmation": "Bu işlem 30 günden eski olayları silecek. Profiller ve listeler korunacak. Devam edilsin mi?",
   "cleanupCompleted": "Temizleme tamamlandı",
   "eventsDeleted": "olay silindi",
-  "cleanup": "Temizle"
+  "cleanup": "Temizle",
+  "addAccount": "Hesap ekle",
+  "switchAccount": "Hesap değiştir"
 }

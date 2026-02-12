@@ -40,6 +40,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     on<_SidebarProfileUpdated>(_onSidebarProfileUpdated);
     on<_SidebarCountsUpdated>(_onSidebarCountsUpdated);
     on<_SidebarRelayCountUpdated>(_onSidebarRelayCountUpdated);
+    on<_SidebarAccountsLoaded>(_onAccountsLoaded);
   }
 
   Future<void> _onSidebarInitialized(
@@ -62,6 +63,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
       _loadFollowerCounts(_currentUserHex!);
       _syncInBackground(_currentUserHex!);
       _startRelayCountPolling();
+      _loadStoredAccounts();
     } catch (e) {
       emit(const SidebarLoaded(currentUser: {}));
     }
@@ -215,6 +217,45 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     ));
   }
 
+  void _loadStoredAccounts() {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final accounts = await _authService.getStoredAccounts();
+        if (isClosed) return;
+
+        // Load profile images for each account from database
+        final profileImages = <String, String>{};
+        for (final account in accounts) {
+          final hex = _authService.npubToHex(account.npub);
+          if (hex != null) {
+            final profile = await _db.getUserProfile(hex);
+            if (profile != null) {
+              final picture = profile['picture'] ?? '';
+              if (picture.isNotEmpty) {
+                profileImages[account.npub] = picture;
+              }
+            }
+          }
+        }
+
+        if (isClosed) return;
+        add(_SidebarAccountsLoaded(accounts, profileImages));
+      } catch (_) {}
+    });
+  }
+
+  void _onAccountsLoaded(
+    _SidebarAccountsLoaded event,
+    Emitter<SidebarState> emit,
+  ) {
+    if (state is! SidebarLoaded) return;
+    emit((state as SidebarLoaded).copyWith(
+      storedAccounts: event.accounts,
+      accountProfileImages: event.profileImages,
+    ));
+  }
+
   @override
   Future<void> close() {
     _profileSubscription?.cancel();
@@ -248,4 +289,13 @@ class _SidebarRelayCountUpdated extends SidebarEvent {
 
   @override
   List<Object?> get props => [count];
+}
+
+class _SidebarAccountsLoaded extends SidebarEvent {
+  final List<StoredAccount> accounts;
+  final Map<String, String> profileImages;
+  const _SidebarAccountsLoaded(this.accounts, this.profileImages);
+
+  @override
+  List<Object?> get props => [accounts, profileImages];
 }

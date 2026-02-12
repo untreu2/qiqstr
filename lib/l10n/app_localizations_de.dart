@@ -1324,4 +1324,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get cleanup => 'Bereinigen';
+
+  @override
+  String get addAccount => 'Konto hinzufügen';
+
+  @override
+  String get switchAccount => 'Konto wechseln';
 }

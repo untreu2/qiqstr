@@ -24,6 +24,11 @@ class AppDI {
 
     await _getIt.allReady();
   }
+
+  static Future<void> resetAndReinitialize() async {
+    await _getIt.reset();
+    await initialize();
+  }
 }
 
 abstract class DIModule {
