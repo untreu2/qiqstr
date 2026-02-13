@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,16 +11,12 @@ import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
 import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
-import '../../widgets/article/article_widget.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/feed/feed_event.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../presentation/blocs/feed/feed_state.dart';
-import '../../../presentation/blocs/article/article_bloc.dart';
-import '../../../presentation/blocs/article/article_event.dart';
-import '../../../presentation/blocs/article/article_state.dart';
 import '../../../data/services/relay_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
@@ -49,15 +44,14 @@ class FeedPage extends StatefulWidget {
 
 class FeedPageState extends State<FeedPage> {
   late ScrollController _scrollController;
-  late PageController _pageController;
   bool _showAppBar = true;
   bool isFirstOpen = false;
   bool _isSearchMode = false;
-  int _currentPageIndex = 0;
+  bool _scrollToTopOnNextBuild = false;
+  double _lastScrollOffset = 0;
 
   final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier =
       ValueNotifier([]);
-  Timer? _scrollDebounceTimer;
   Timer? _relayCountTimer;
   Timer? _searchDebounceTimer;
   final ValueNotifier<int> _connectedRelaysCount = ValueNotifier(0);
@@ -73,7 +67,6 @@ class FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
-    _pageController = PageController();
     _searchController
         .addListener(() => _onSearchChanged(_searchController.text));
     _updateRelayCount();
@@ -123,41 +116,33 @@ class FeedPageState extends State<FeedPage> {
   void _scrollListener() {
     if (!_scrollController.hasClients) return;
 
-    _scrollDebounceTimer?.cancel();
-    _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
-      if (!mounted || !_scrollController.hasClients) return;
+    final offset = _scrollController.offset;
+    final delta = offset - _lastScrollOffset;
+    _lastScrollOffset = offset;
 
-      final offset = _scrollController.offset;
-      final direction = _scrollController.position.userScrollDirection;
+    bool shouldShow;
+    if (offset < 50) {
+      shouldShow = true;
+    } else if (delta < -2) {
+      shouldShow = true;
+    } else if (delta > 2) {
+      shouldShow = false;
+    } else {
+      return;
+    }
 
-      bool shouldShow;
-
-      if (offset < 50) {
-        shouldShow = true;
-      } else if (direction == ScrollDirection.forward) {
-        shouldShow = true;
-      } else if (direction == ScrollDirection.reverse) {
-        shouldShow = false;
-      } else {
-        shouldShow = _showAppBar;
-      }
-
-      if (_showAppBar != shouldShow) {
-        setState(() {
-          _showAppBar = shouldShow;
-        });
-      }
-    });
+    if (_showAppBar != shouldShow) {
+      _showAppBar = shouldShow;
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
-    _scrollDebounceTimer?.cancel();
     _relayCountTimer?.cancel();
     _searchDebounceTimer?.cancel();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
-    _pageController.dispose();
     _notesNotifier.dispose();
     _connectedRelaysCount.dispose();
     _searchController.dispose();
@@ -475,13 +460,6 @@ class FeedPageState extends State<FeedPage> {
         BlocProvider<FeedBloc>.value(
           value: feedBloc,
         ),
-        BlocProvider<ArticleBloc>(
-          create: (context) {
-            final bloc = AppDI.get<ArticleBloc>();
-            bloc.add(ArticleInitialized(userHex: widget.userHex));
-            return bloc;
-          },
-        ),
         BlocProvider<UserSearchBloc>(
           create: (context) {
             final bloc = AppDI.get<UserSearchBloc>();
@@ -498,28 +476,8 @@ class FeedPageState extends State<FeedPage> {
             drawer: const SidebarWidget(),
             body: Stack(
                 children: [
-                  if (isHashtagMode)
-                    _buildFeedContent(context, feedState, topPadding,
-                        headerHeight, isHashtagMode, colors)
-                  else
-                    PageView(
-                      controller: _pageController,
-                      onPageChanged: (index) {
-                        setState(() {
-                          _currentPageIndex = index;
-                        });
-                      },
-                      children: [
-                        _buildFeedContent(context, feedState, topPadding,
-                            headerHeight, isHashtagMode, colors),
-                        BlocBuilder<ArticleBloc, ArticleState>(
-                          builder: (context, articleState) {
-                            return _buildReadsContent(context, articleState,
-                                feedState, topPadding, headerHeight, colors);
-                          },
-                        ),
-                      ],
-                    ),
+                  _buildFeedContent(context, feedState, topPadding,
+                      headerHeight, isHashtagMode, colors),
                   if (isHashtagMode) ...[
                     BackButtonWidget.floating(),
                     Positioned(
@@ -555,8 +513,15 @@ class FeedPageState extends State<FeedPage> {
                       ),
                     ),
                   ],
-                  if (!isHashtagMode && !_isSearchMode)
-                    _buildFeedModeToggle(context, colors),
+                  if (feedState is FeedLoaded &&
+                      feedState.pendingNotesCount > 0 &&
+                      !_isSearchMode)
+                    _buildNewNotesButton(
+                      context,
+                      feedState.pendingNotesCount,
+                      headerHeight,
+                      colors,
+                    ),
                 ],
               ),
           );
@@ -593,6 +558,17 @@ class FeedPageState extends State<FeedPage> {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_notesNotifier.value != notes) {
                 _notesNotifier.value = notes;
+              }
+              if (_scrollToTopOnNextBuild) {
+                _scrollToTopOnNextBuild = false;
+                if (_scrollController.hasClients) {
+                  _scrollController.jumpTo(0);
+                }
+                if (mounted) {
+                  setState(() {
+                    _showAppBar = true;
+                  });
+                }
               }
             });
 
@@ -714,247 +690,70 @@ class FeedPageState extends State<FeedPage> {
     };
   }
 
-  Widget _buildFeedModeToggle(BuildContext context, AppThemeColors colors) {
+  Widget _buildNewNotesButton(
+    BuildContext context,
+    int count,
+    double headerHeight,
+    AppThemeColors colors,
+  ) {
     final l10n = AppLocalizations.of(context)!;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    return Positioned(
-      bottom: bottomPadding + 20,
+    final double topPadding = MediaQuery.of(context).padding.top;
+    final double top = _showAppBar ? headerHeight + 8 : topPadding + 8;
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      top: top,
       left: 0,
       right: 0,
       child: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(25),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: colors.textPrimary.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      if (_currentPageIndex != 0) {
-                        _pageController.animateToPage(
-                          0,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _currentPageIndex == 0
-                            ? colors.background
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            CarbonIcons.blog,
-                            size: 16,
-                            color: _currentPageIndex == 0
-                                ? colors.textPrimary
-                                : colors.background.withValues(alpha: 0.7),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            l10n.notes,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: _currentPageIndex == 0
-                                  ? colors.textPrimary
-                                  : colors.background.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+        child: GestureDetector(
+          onTap: () {
+            _scrollToTopOnNextBuild = true;
+            context.read<FeedBloc>().add(const FeedNewNotesAccepted());
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(25),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: colors.textPrimary.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: colors.background,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      if (_currentPageIndex != 1) {
-                        _pageController.animateToPage(
-                          1,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _currentPageIndex == 1
-                            ? colors.background
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.arrow_upward_rounded,
+                        size: 16,
+                        color: colors.textPrimary,
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SvgPicture.asset(
-                            'assets/newspaper.svg',
-                            width: 16,
-                            height: 16,
-                            colorFilter: ColorFilter.mode(
-                              _currentPageIndex == 1
-                                  ? colors.textPrimary
-                                  : colors.background.withValues(alpha: 0.7),
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            l10n.reads,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: _currentPageIndex == 1
-                                  ? colors.textPrimary
-                                  : colors.background.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
+                      const SizedBox(width: 6),
+                      Text(
+                        l10n.newNotesAvailable(count),
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
       ),
     );
-  }
-
-  Widget _buildReadsContent(
-    BuildContext context,
-    ArticleState articleState,
-    FeedState feedState,
-    double topPadding,
-    double headerHeight,
-    AppThemeColors colors,
-  ) {
-    Map<String, dynamic>? user = _loggedInUserProfile;
-    if (user == null && feedState is FeedLoaded) {
-      user = feedState.profiles[feedState.currentUserHex];
-    }
-
-    return switch (articleState) {
-      ArticleInitial() || ArticleLoading() => CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics()),
-          slivers: [
-            SliverPersistentHeader(
-              floating: true,
-              delegate: _PinnedHeaderDelegate(
-                height: headerHeight,
-                child: AnimatedOpacity(
-                  opacity: _showAppBar ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: _buildHeader(context, topPadding, user),
-                ),
-              ),
-            ),
-            SliverFillRemaining(
-              child: Center(
-                child: CircularProgressIndicator(
-                    color: colors.accent, strokeWidth: 2),
-              ),
-            ),
-          ],
-        ),
-      ArticleLoaded(
-        :final filteredArticles,
-        :final profiles,
-        :final currentUserHex,
-        :final isLoadingMore,
-        :final canLoadMore
-      ) =>
-        RefreshIndicator(
-          onRefresh: () async {
-            context.read<ArticleBloc>().add(const ArticleRefreshed());
-          },
-          color: colors.textPrimary,
-          child: CustomScrollView(
-            key: const PageStorageKey<String>('reads_scroll'),
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics()),
-            cacheExtent: 600,
-            slivers: [
-              SliverPersistentHeader(
-                floating: true,
-                delegate: _PinnedHeaderDelegate(
-                  height: headerHeight,
-                  child: AnimatedOpacity(
-                    opacity: _showAppBar ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 300),
-                    child: _buildHeader(context, topPadding, user),
-                  ),
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 4)),
-              ArticleListWidget(
-                articles: filteredArticles,
-                currentUserHex: currentUserHex,
-                profiles: profiles,
-                isLoading: isLoadingMore,
-                canLoadMore: canLoadMore,
-                onLoadMore: () {
-                  context
-                      .read<ArticleBloc>()
-                      .add(const ArticleLoadMoreRequested());
-                },
-                onEmptyRefresh: () {
-                  context.read<ArticleBloc>().add(const ArticleRefreshed());
-                },
-                scrollController: _scrollController,
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
-          ),
-        ),
-      ArticleEmpty() => CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics()),
-          slivers: [
-            SliverPersistentHeader(
-              floating: true,
-              delegate: _PinnedHeaderDelegate(
-                height: headerHeight,
-                child: AnimatedOpacity(
-                  opacity: _showAppBar ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: _buildHeader(context, topPadding, user),
-                ),
-              ),
-            ),
-            SliverFillRemaining(
-              child: Center(
-                child: Text(
-                  'No articles available',
-                  style: TextStyle(color: colors.textSecondary),
-                ),
-              ),
-            ),
-          ],
-        ),
-      _ => Center(
-          child: CircularProgressIndicator(color: colors.accent),
-        ),
-    };
   }
 
   Widget _buildUserSearchResults(BuildContext context) {

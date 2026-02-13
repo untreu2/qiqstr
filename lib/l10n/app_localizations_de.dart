@@ -1416,4 +1416,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get websiteOptional => 'Webseite (optional)';
+
+  @override
+  String newNotesAvailable(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count neue Notizen',
+      one: '1 neue Notiz',
+    );
+    return '$_temp0';
+  }
 }

@@ -27,6 +27,7 @@ class FeedLoaded extends FeedState {
   final String? hashtag;
   final bool isLoadingMore;
   final bool isSyncing;
+  final int pendingNotesCount;
 
   const FeedLoaded({
     required this.notes,
@@ -38,6 +39,7 @@ class FeedLoaded extends FeedState {
     this.hashtag,
     this.isLoadingMore = false,
     this.isSyncing = false,
+    this.pendingNotesCount = 0,
   });
 
   @override
@@ -51,6 +53,7 @@ class FeedLoaded extends FeedState {
         hashtag,
         isLoadingMore,
         isSyncing,
+        pendingNotesCount,
       ];
 
   FeedLoaded copyWith({
@@ -63,6 +66,7 @@ class FeedLoaded extends FeedState {
     String? hashtag,
     bool? isLoadingMore,
     bool? isSyncing,
+    int? pendingNotesCount,
   }) {
     return FeedLoaded(
       notes: notes ?? this.notes,
@@ -74,6 +78,7 @@ class FeedLoaded extends FeedState {
       hashtag: hashtag ?? this.hashtag,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isSyncing: isSyncing ?? this.isSyncing,
+      pendingNotesCount: pendingNotesCount ?? this.pendingNotesCount,
     );
   }
 }

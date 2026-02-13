@@ -17,6 +17,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   StreamSubscription<List<FeedNote>>? _feedSubscription;
   bool _isLoadingMore = false;
   int _currentLimit = 50;
+  List<Map<String, dynamic>> _bufferedNotes = [];
+  bool _acceptNextUpdate = false;
 
   FeedBloc({
     required FeedRepository feedRepository,
@@ -36,6 +38,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     on<feed_event.FeedNoteDeleted>(_onFeedNoteDeleted);
     on<feed_event.FeedProfilesLoaded>(_onFeedProfilesLoaded);
     on<feed_event.FeedNotesUpdated>(_onFeedNotesUpdated);
+    on<feed_event.FeedNewNotesAccepted>(_onFeedNewNotesAccepted);
     on<feed_event.FeedSyncCompleted>(_onFeedSyncCompleted);
   }
 
@@ -151,8 +154,49 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final sortedNotes = _feedNotesToMaps(event.notes);
     _sortNotes(sortedNotes, currentState.sortMode);
 
-    emit(currentState.copyWith(notes: sortedNotes));
+    if (currentState.notes.isEmpty || _acceptNextUpdate) {
+      _acceptNextUpdate = false;
+      _bufferedNotes = [];
+      emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
+      _loadProfilesForNotes(sortedNotes);
+      return;
+    }
+
+    final displayedIds = <String>{};
+    for (final n in currentState.notes) {
+      final id = n['id'] as String? ?? '';
+      if (id.isNotEmpty) displayedIds.add(id);
+    }
+
+    int newCount = 0;
+    for (final n in sortedNotes) {
+      final id = n['id'] as String? ?? '';
+      if (id.isNotEmpty && !displayedIds.contains(id)) newCount++;
+    }
+
+    if (newCount > 0) {
+      _bufferedNotes = sortedNotes;
+      emit(currentState.copyWith(pendingNotesCount: newCount));
+    } else {
+      _bufferedNotes = [];
+      emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
+    }
     _loadProfilesForNotes(sortedNotes);
+  }
+
+  void _onFeedNewNotesAccepted(
+    feed_event.FeedNewNotesAccepted event,
+    Emitter<FeedState> emit,
+  ) {
+    if (state is! FeedLoaded) return;
+    final currentState = state as FeedLoaded;
+
+    if (_bufferedNotes.isNotEmpty) {
+      emit(currentState.copyWith(notes: _bufferedNotes, pendingNotesCount: 0));
+      _bufferedNotes = [];
+    } else {
+      emit(currentState.copyWith(pendingNotesCount: 0));
+    }
   }
 
   void _syncInBackground(String userHex, Emitter<FeedState>? emit) {
@@ -180,10 +224,19 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   ) async {
     if (_currentUserHex == null) return;
     _currentLimit = _pageSize;
+    _acceptNextUpdate = true;
 
     final currentState = state;
     if (currentState is FeedLoaded) {
-      emit(currentState.copyWith(isSyncing: true));
+      final notesToShow = _bufferedNotes.isNotEmpty
+          ? _bufferedNotes
+          : currentState.notes;
+      _bufferedNotes = [];
+      emit(currentState.copyWith(
+        notes: notesToShow,
+        isSyncing: true,
+        pendingNotesCount: 0,
+      ));
 
       if (currentState.hashtag != null) {
         _syncHashtagInBackground(currentState.hashtag!, null);
@@ -213,7 +266,9 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
 
     _isLoadingMore = true;
-    emit(currentState.copyWith(isLoadingMore: true));
+    _acceptNextUpdate = true;
+    _bufferedNotes = [];
+    emit(currentState.copyWith(isLoadingMore: true, pendingNotesCount: 0));
 
     try {
       _currentLimit += _pageSize;
@@ -249,6 +304,9 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       final currentState = state as FeedLoaded;
       final sortedNotes = List<Map<String, dynamic>>.from(currentState.notes);
       _sortNotes(sortedNotes, event.mode);
+      if (_bufferedNotes.isNotEmpty) {
+        _sortNotes(_bufferedNotes, event.mode);
+      }
       emit(currentState.copyWith(notes: sortedNotes, sortMode: event.mode));
     }
   }
@@ -262,15 +320,22 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     _feedSubscription?.cancel();
     _currentLimit = _pageSize;
+    _bufferedNotes = [];
 
     if (event.hashtag != null) {
       emit(currentState.copyWith(
-          hashtag: event.hashtag, notes: const [], isSyncing: true));
+          hashtag: event.hashtag,
+          notes: const [],
+          isSyncing: true,
+          pendingNotesCount: 0));
       _watchHashtagFeed(event.hashtag!);
       _syncHashtagInBackground(event.hashtag!, null);
     } else {
       emit(currentState.copyWith(
-          hashtag: null, notes: const [], isSyncing: true));
+          hashtag: null,
+          notes: const [],
+          isSyncing: true,
+          pendingNotesCount: 0));
       if (_currentUserHex != null) {
         _watchFeed(_currentUserHex!);
         _syncInBackground(_currentUserHex!, null);

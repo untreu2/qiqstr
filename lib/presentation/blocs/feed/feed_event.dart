@@ -97,6 +97,10 @@ class FeedNotesUpdated extends FeedEvent {
   List<Object?> get props => [notes];
 }
 
+class FeedNewNotesAccepted extends FeedEvent {
+  const FeedNewNotesAccepted();
+}
+
 class FeedSyncCompleted extends FeedEvent {
   const FeedSyncCompleted();
 }

@@ -2691,6 +2691,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Website (optional)'**
   String get websiteOptional;
+
+  /// No description provided for @newNotesAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 new note} other{{count} new notes}}'**
+  String newNotesAvailable(int count);
 }
 
 class _AppLocalizationsDelegate

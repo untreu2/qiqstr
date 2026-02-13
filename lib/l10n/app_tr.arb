@@ -594,5 +594,14 @@
   "bioTooLong": "Biyografi en fazla 300 karakter olmalıdır",
   "lightningAddressOptional": "Lightning adresi (isteğe bağlı)",
   "invalidLightningAddress": "Lütfen geçerli bir lightning adresi girin (ör. kullanıcı@alan.com)",
-  "websiteOptional": "Web sitesi (isteğe bağlı)"
+  "websiteOptional": "Web sitesi (isteğe bağlı)",
+
+  "newNotesAvailable": "{count, plural, =1{1 yeni not} other{{count} yeni not}}",
+  "@newNotesAvailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

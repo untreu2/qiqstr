@@ -1387,4 +1387,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get websiteOptional => 'Web sitesi (isteğe bağlı)';
+
+  @override
+  String newNotesAvailable(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count yeni not',
+      one: '1 yeni not',
+    );
+    return '$_temp0';
+  }
 }

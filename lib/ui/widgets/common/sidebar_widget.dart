@@ -85,10 +85,10 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                           isLoadingCounts: state.isLoadingCounts,
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _AccountSwitcher(
+                      _SidebarContent(
+                        user: state.currentUser,
+                        colors: colors,
+                        accountSwitcher: _AccountSwitcher(
                           currentNpub:
                               state.currentUser['npub'] as String? ?? '',
                           accounts: state.storedAccounts,
@@ -103,7 +103,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                           },
                         ),
                       ),
-                      _SidebarContent(user: state.currentUser, colors: colors),
                     ],
                   )
                 : Center(
@@ -314,8 +313,13 @@ class _UserProfileHeader extends StatelessWidget {
 class _SidebarContent extends StatelessWidget {
   final Map<String, dynamic> user;
   final AppThemeColors colors;
+  final Widget accountSwitcher;
 
-  const _SidebarContent({required this.user, required this.colors});
+  const _SidebarContent({
+    required this.user,
+    required this.colors,
+    required this.accountSwitcher,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -350,7 +354,27 @@ class _SidebarContent extends StatelessWidget {
               },
             ),
           ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildModernSidebarItem(
+              context: context,
+              colors: colors,
+              svgAsset: 'assets/newspaper.svg',
+              iconSize: 18,
+              label: l10n.reads,
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push('/home/feed/explore');
+              },
+            ),
+          ),
           const Spacer(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: accountSwitcher,
+          ),
+          const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 106),
             child: _buildModernSidebarItem(
@@ -414,25 +438,25 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
               children: [
                 if (widget.isSwitching)
                   SizedBox(
-                    width: 18,
-                    height: 18,
+                    width: 20,
+                    height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: colors.textSecondary,
+                      color: colors.textPrimary,
                     ),
                   )
                 else
                   Icon(
                     CarbonIcons.user_multiple,
                     size: 20,
-                    color: colors.textSecondary,
+                    color: colors.textPrimary,
                   ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     l10n.switchAccount,
                     style: TextStyle(
-                      color: colors.textSecondary,
+                      color: colors.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
@@ -444,7 +468,7 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
                   child: Icon(
                     Icons.keyboard_arrow_down,
                     size: 20,
-                    color: colors.textSecondary,
+                    color: colors.textPrimary,
                   ),
                 ),
               ],
@@ -458,7 +482,7 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
             child: Container(
               decoration: BoxDecoration(
                 color: colors.overlayLight,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
                 children: [
@@ -472,12 +496,12 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
                       onTap: () => widget.onSwitchAccount(account.npub),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                            horizontal: 20, vertical: 12),
                         child: Row(
                           children: [
                             Container(
-                              width: 32,
-                              height: 32,
+                              width: 28,
+                              height: 28,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: colors.avatarPlaceholder,
@@ -494,8 +518,8 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
                                       ? Center(
                                           child: Icon(
                                             Icons.person,
-                                            size: 16,
-                                            color: colors.textSecondary,
+                                            size: 14,
+                                            color: colors.textPrimary,
                                           ),
                                         )
                                       : null,
@@ -506,7 +530,7 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
                                 displayNpub,
                                 style: TextStyle(
                                   color: colors.textPrimary,
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w400,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -521,20 +545,20 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
                     onTap: widget.onAddAccount,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                          horizontal: 20, vertical: 12),
                       child: Row(
                         children: [
                           Icon(
                             CarbonIcons.add,
                             size: 20,
-                            color: colors.textSecondary,
+                            color: colors.textPrimary,
                           ),
                           const SizedBox(width: 10),
                           Text(
                             l10n.addAccount,
                             style: TextStyle(
-                              color: colors.textSecondary,
-                              fontSize: 13,
+                              color: colors.textPrimary,
+                              fontSize: 14,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -564,6 +588,7 @@ Widget _buildModernSidebarItem({
   required VoidCallback onTap,
   Color? iconColor,
   Color? textColor,
+  double? iconSize,
 }) {
   return GestureDetector(
     onTap: onTap,
@@ -579,14 +604,14 @@ Widget _buildModernSidebarItem({
           if (icon != null)
             Icon(
               icon,
-              size: 22,
+              size: iconSize ?? 22,
               color: iconColor ?? colors.textPrimary,
             )
           else if (svgAsset != null)
             SvgPicture.asset(
               svgAsset,
-              width: 22,
-              height: 22,
+              width: iconSize ?? 22,
+              height: iconSize ?? 22,
               colorFilter: ColorFilter.mode(
                 iconColor ?? colors.textPrimary,
                 BlendMode.srcIn,
