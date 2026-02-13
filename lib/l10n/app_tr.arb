@@ -648,5 +648,21 @@
   "all": "Takip edilen",
   "addToFeed": "Akışa ekle",
   "removeFromFeed": "Akıştan kaldır",
-  "addAnotherFeed": "+ Akış ekle"
+  "addAnotherFeed": "+ Akış ekle",
+  "onboardingCoinosTitle": "Bitcoin Wallet",
+  "onboardingCoinosSubtitle": "Anında sat göndermek, almak ve zap yapmak için yerleşik bir Lightning cüzdanı kurun.",
+  "onboardingCoinosConnect": "Cüzdanı Bağla",
+  "onboardingCoinosFeatureSend": "Lightning ile anında Bitcoin ödemesi gönderin",
+  "onboardingCoinosFeatureReceive": "Kendi Lightning adresinizle Bitcoin alın",
+  "onboardingCoinosFeatureZap": "En sevdiğiniz gönderilere ve içerik üreticilerine Bitcoin gönderin",
+  "onboardingCoinosDisclaimer": "Bu cüzdan coinos.io tarafından sağlanmaktadır. Biz fonlarınızı tutmaz, kontrol etmez veya erişim sağlamayız. Cüzdan hizmetine ilişkin tüm sorumluluk coinos.io'ya aittir.",
+  "onboardingCoinosAccept": "Anladım ve kabul ediyorum",
+  "onboardingCoinosConnected": "{username}@coinos.io olarak bağlandı",
+  "@onboardingCoinosConnected": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  }
 }

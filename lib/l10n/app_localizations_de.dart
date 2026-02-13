@@ -1548,4 +1548,38 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get addAnotherFeed => '+ Feed hinzufügen';
+
+  @override
+  String get onboardingCoinosTitle => 'Bitcoin Wallet';
+
+  @override
+  String get onboardingCoinosSubtitle =>
+      'Richten Sie eine integrierte Lightning-Wallet ein, um sofort Sats zu senden, zu empfangen und zu zappen.';
+
+  @override
+  String get onboardingCoinosConnect => 'Wallet verbinden';
+
+  @override
+  String get onboardingCoinosFeatureSend =>
+      'Senden Sie Bitcoin-Zahlungen sofort über Lightning';
+
+  @override
+  String get onboardingCoinosFeatureReceive =>
+      'Empfangen Sie Bitcoin mit Ihrer eigenen Lightning-Adresse';
+
+  @override
+  String get onboardingCoinosFeatureZap =>
+      'Senden Sie Bitcoin an Ihre Lieblingsbeiträge und Ersteller';
+
+  @override
+  String get onboardingCoinosDisclaimer =>
+      'Diese Wallet wird von coinos.io bereitgestellt. Wir verwahren, kontrollieren oder haben keinen Zugriff auf Ihre Gelder. Die gesamte Verantwortung für den Wallet-Dienst liegt bei coinos.io.';
+
+  @override
+  String get onboardingCoinosAccept => 'Ich verstehe und stimme zu';
+
+  @override
+  String onboardingCoinosConnected(String username) {
+    return 'Verbunden als $username@coinos.io';
+  }
 }

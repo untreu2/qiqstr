@@ -68,8 +68,7 @@ class _WalletPageState extends State<WalletPage>
   Widget _buildBalanceSection(BuildContext context, WalletLoaded state) {
     final sats = _getBalanceSats(state);
     final btcPrice = state.btcPriceUsd;
-    final balanceUsd =
-        btcPrice != null ? sats * (btcPrice / 100000000) : null;
+    final balanceUsd = btcPrice != null ? sats * (btcPrice / 100000000) : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -173,8 +172,7 @@ class _WalletPageState extends State<WalletPage>
         child: Padding(
           padding: const EdgeInsets.only(top: 32),
           child: Center(
-            child:
-                CircularProgressIndicator(color: context.colors.textPrimary),
+            child: CircularProgressIndicator(color: context.colors.textPrimary),
           ),
         ),
       );
@@ -185,7 +183,7 @@ class _WalletPageState extends State<WalletPage>
         child: Padding(
           padding: const EdgeInsets.only(top: 32),
           child: Center(
-            child:               Text(
+            child: Text(
               AppLocalizations.of(context)!.noTransactionsYet,
               style: TextStyle(
                 color: context.colors.textSecondary,
@@ -218,9 +216,8 @@ class _WalletPageState extends State<WalletPage>
     final l10n = AppLocalizations.of(context)!;
     final isIncoming = tx['isIncoming'] as bool? ?? false;
     final amount = tx['amount'] as num? ?? 0;
-    final txUsd = btcPrice != null
-        ? amount.abs() * (btcPrice / 100000000)
-        : null;
+    final txUsd =
+        btcPrice != null ? amount.abs() * (btcPrice / 100000000) : null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -271,39 +268,81 @@ class _WalletPageState extends State<WalletPage>
 
   Widget _buildEmptyState(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 64,
-              color: context.colors.textSecondary.withValues(alpha: 0.3),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            l10n.onboardingCoinosSubtitle,
+            style: TextStyle(
+              fontSize: 15,
+              color: context.colors.textSecondary,
+              height: 1.5,
             ),
-            const SizedBox(height: 20),
-            Text(
-              l10n.connectYourWallet,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
-              ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 32),
+          _buildFeatureItem(
+            context,
+            Icons.bolt,
+            l10n.onboardingCoinosFeatureSend,
+          ),
+          const SizedBox(height: 24),
+          _buildFeatureItem(
+            context,
+            Icons.call_received,
+            l10n.onboardingCoinosFeatureReceive,
+          ),
+          const SizedBox(height: 24),
+          _buildFeatureItem(
+            context,
+            Icons.favorite,
+            l10n.onboardingCoinosFeatureZap,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            l10n.onboardingCoinosDisclaimer,
+            style: TextStyle(
+              fontSize: 13,
+              color: context.colors.textSecondary,
+              height: 1.5,
             ),
-            const SizedBox(height: 8),
-            Text(
-              l10n.connectWalletDescription,
-              style: TextStyle(
-                fontSize: 15,
-                color: context.colors.textSecondary,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildFeatureItem(
+      BuildContext context, IconData icon, String description) {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            icon,
+            color: context.colors.textPrimary,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            description,
+            style: TextStyle(
+              fontSize: 16,
+              color: context.colors.textPrimary,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -370,8 +409,7 @@ class _WalletPageState extends State<WalletPage>
           child: GestureDetector(
             onTap: () => _showReceiveDialog(context, state),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.textPrimary,
@@ -401,8 +439,7 @@ class _WalletPageState extends State<WalletPage>
           child: GestureDetector(
             onTap: () => _showSendDialog(context, state),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.textPrimary,
@@ -476,8 +513,8 @@ class _WalletPageState extends State<WalletPage>
             return Scaffold(
               backgroundColor: context.colors.background,
               body: Center(
-                child:
-                    CircularProgressIndicator(color: context.colors.textPrimary),
+                child: CircularProgressIndicator(
+                    color: context.colors.textPrimary),
               ),
             );
           }
@@ -496,7 +533,8 @@ class _WalletPageState extends State<WalletPage>
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: context.colors.error.withValues(alpha: 0.1),
+                              color:
+                                  context.colors.error.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Text(
@@ -524,8 +562,7 @@ class _WalletPageState extends State<WalletPage>
                             left: 16,
                             right: 16,
                             top: 12,
-                            bottom:
-                                MediaQuery.of(context).padding.bottom + 12,
+                            bottom: MediaQuery.of(context).padding.bottom + 12,
                           ),
                           child: _buildConnectButton(context),
                         ),
@@ -541,8 +578,8 @@ class _WalletPageState extends State<WalletPage>
             return Scaffold(
               backgroundColor: context.colors.background,
               body: Center(
-                child:
-                    CircularProgressIndicator(color: context.colors.textPrimary),
+                child: CircularProgressIndicator(
+                    color: context.colors.textPrimary),
               ),
             );
           }
@@ -570,8 +607,7 @@ class _WalletPageState extends State<WalletPage>
                           state.transactions!.isNotEmpty)
                         SliverToBoxAdapter(
                           child: Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
                             child: Text(
                               AppLocalizations.of(context)!.recentTransactions,
                               style: TextStyle(

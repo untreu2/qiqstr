@@ -16,6 +16,9 @@ import '../../presentation/blocs/notification_indicator/notification_indicator_e
 import '../../presentation/blocs/notification_indicator/notification_indicator_state.dart';
 import '../../presentation/blocs/dm/dm_bloc.dart';
 import '../../presentation/blocs/dm/dm_event.dart' as dm_events;
+import '../../presentation/blocs/wallet/wallet_bloc.dart';
+import '../../presentation/blocs/wallet/wallet_event.dart';
+import '../../data/services/coinos_service.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -55,6 +58,9 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
         final dmBloc = AppDI.get<DmBloc>();
         dmBloc.add(const dm_events.DmConversationsLoadRequested());
+
+        final walletBloc = AppDI.get<WalletBloc>();
+        walletBloc.add(const WalletAutoConnectRequested());
       }
     });
   }
@@ -129,7 +135,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
                           HapticFeedback.lightImpact();
                           final result = await ShareNotePage.show(context);
                           if (result == true && mounted) {
-                            final currentIndex = widget.navigationShell.currentIndex;
+                            final currentIndex =
+                                widget.navigationShell.currentIndex;
                             if (currentIndex != 0) {
                               widget.navigationShell.goBranch(0);
                             }
@@ -336,7 +343,7 @@ class _HomeNavigatorState extends State<HomeNavigator>
     );
   }
 
-  void _handleNavigation(int pageViewIndex) {
+  Future<void> _handleNavigation(int pageViewIndex) async {
     final themeState = context.themeState;
     final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
     final originalIndex = navOrder[pageViewIndex];
@@ -352,6 +359,21 @@ class _HomeNavigatorState extends State<HomeNavigator>
           widget.navigationShell.goBranch(pageViewIndex);
         }
       }
+    } else if (originalIndex == 2) {
+      final coinosService = AppDI.get<CoinosService>();
+      final tokenResult = await coinosService.getStoredToken();
+      final hasToken = tokenResult.isSuccess &&
+          tokenResult.data != null &&
+          tokenResult.data!.isNotEmpty;
+      if (!mounted) return;
+      if (!hasToken) {
+        context.push(
+            '/onboarding-coinos?npub=${Uri.encodeComponent(widget.npub)}');
+        return;
+      }
+      _iconAnimationController.reset();
+      _iconAnimationController.forward();
+      widget.navigationShell.goBranch(pageViewIndex);
     } else if (originalIndex == 3) {
       final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
       indicatorBloc.add(const NotificationIndicatorChecked());

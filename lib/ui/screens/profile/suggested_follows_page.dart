@@ -42,7 +42,8 @@ class SuggestedFollowsPage extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircularProgressIndicator(color: context.colors.primary),
+                        CircularProgressIndicator(
+                            color: context.colors.primary),
                         const SizedBox(height: 20),
                         Text(
                           'Loading suggested users...',
@@ -338,7 +339,7 @@ class SuggestedFollowsPage extends StatelessWidget {
   }
 
   void _navigateToHome(BuildContext context) {
-    context.go('/home/feed?npub=${Uri.encodeComponent(npub)}');
+    context.go('/onboarding-coinos?npub=${Uri.encodeComponent(npub)}');
   }
 }
 

@@ -2907,6 +2907,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'+ Add feed'**
   String get addAnotherFeed;
+
+  /// No description provided for @onboardingCoinosTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bitcoin Wallet'**
+  String get onboardingCoinosTitle;
+
+  /// No description provided for @onboardingCoinosSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up a built-in Lightning wallet to send, receive, and zap sats instantly.'**
+  String get onboardingCoinosSubtitle;
+
+  /// No description provided for @onboardingCoinosConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Wallet'**
+  String get onboardingCoinosConnect;
+
+  /// No description provided for @onboardingCoinosFeatureSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send Bitcoin payments instantly via Lightning Network'**
+  String get onboardingCoinosFeatureSend;
+
+  /// No description provided for @onboardingCoinosFeatureReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive Bitcoin with your own Lightning address'**
+  String get onboardingCoinosFeatureReceive;
+
+  /// No description provided for @onboardingCoinosFeatureZap.
+  ///
+  /// In en, this message translates to:
+  /// **'Send Bitcoin to your favorite posts and creators'**
+  String get onboardingCoinosFeatureZap;
+
+  /// No description provided for @onboardingCoinosDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'This wallet is provided by coinos.io. We do not hold, control, or have access to your funds. All responsibility regarding the wallet service lies with coinos.io.'**
+  String get onboardingCoinosDisclaimer;
+
+  /// No description provided for @onboardingCoinosAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand and agree'**
+  String get onboardingCoinosAccept;
+
+  /// No description provided for @onboardingCoinosConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected as {username}@coinos.io'**
+  String onboardingCoinosConnected(String username);
 }
 
 class _AppLocalizationsDelegate

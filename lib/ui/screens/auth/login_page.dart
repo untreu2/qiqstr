@@ -138,7 +138,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _navigateToHome(String npub) async {
     if (mounted) {
-      context.go('/home/feed?npub=${Uri.encodeComponent(npub)}');
+      context.go('/onboarding-coinos?npub=${Uri.encodeComponent(npub)}');
     }
   }
 

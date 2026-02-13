@@ -1518,4 +1518,38 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get addAnotherFeed => '+ Akış ekle';
+
+  @override
+  String get onboardingCoinosTitle => 'Bitcoin Wallet';
+
+  @override
+  String get onboardingCoinosSubtitle =>
+      'Anında sat göndermek, almak ve zap yapmak için yerleşik bir Lightning cüzdanı kurun.';
+
+  @override
+  String get onboardingCoinosConnect => 'Cüzdanı Bağla';
+
+  @override
+  String get onboardingCoinosFeatureSend =>
+      'Lightning ile anında Bitcoin ödemesi gönderin';
+
+  @override
+  String get onboardingCoinosFeatureReceive =>
+      'Kendi Lightning adresinizle Bitcoin alın';
+
+  @override
+  String get onboardingCoinosFeatureZap =>
+      'En sevdiğiniz gönderilere ve içerik üreticilerine Bitcoin gönderin';
+
+  @override
+  String get onboardingCoinosDisclaimer =>
+      'Bu cüzdan coinos.io tarafından sağlanmaktadır. Biz fonlarınızı tutmaz, kontrol etmez veya erişim sağlamayız. Cüzdan hizmetine ilişkin tüm sorumluluk coinos.io\'ya aittir.';
+
+  @override
+  String get onboardingCoinosAccept => 'Anladım ve kabul ediyorum';
+
+  @override
+  String onboardingCoinosConnected(String username) {
+    return '$username@coinos.io olarak bağlandı';
+  }
 }

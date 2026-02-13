@@ -648,5 +648,21 @@
   "all": "Folge ich",
   "addToFeed": "Zum Feed hinzufügen",
   "removeFromFeed": "Aus dem Feed entfernen",
-  "addAnotherFeed": "+ Feed hinzufügen"
+  "addAnotherFeed": "+ Feed hinzufügen",
+  "onboardingCoinosTitle": "Bitcoin Wallet",
+  "onboardingCoinosSubtitle": "Richten Sie eine integrierte Lightning-Wallet ein, um sofort Sats zu senden, zu empfangen und zu zappen.",
+  "onboardingCoinosConnect": "Wallet verbinden",
+  "onboardingCoinosFeatureSend": "Senden Sie Bitcoin-Zahlungen sofort über Lightning",
+  "onboardingCoinosFeatureReceive": "Empfangen Sie Bitcoin mit Ihrer eigenen Lightning-Adresse",
+  "onboardingCoinosFeatureZap": "Senden Sie Bitcoin an Ihre Lieblingsbeiträge und Ersteller",
+  "onboardingCoinosDisclaimer": "Diese Wallet wird von coinos.io bereitgestellt. Wir verwahren, kontrollieren oder haben keinen Zugriff auf Ihre Gelder. Die gesamte Verantwortung für den Wallet-Dienst liegt bei coinos.io.",
+  "onboardingCoinosAccept": "Ich verstehe und stimme zu",
+  "onboardingCoinosConnected": "Verbunden als {username}@coinos.io",
+  "@onboardingCoinosConnected": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  }
 }
