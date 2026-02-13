@@ -36,6 +36,8 @@ class MutedPage extends StatelessWidget {
                     children: [
                       _buildHeader(context, l10n),
                       const SizedBox(height: 16),
+                      _buildMutedWordsSection(context, state, l10n),
+                      const SizedBox(height: 24),
                       _buildMutedSection(context, state, l10n),
                       const SizedBox(height: 150),
                     ],
@@ -62,7 +64,76 @@ class MutedPage extends StatelessWidget {
     );
   }
 
-  static Widget _buildMutedSection(BuildContext context, MutedState state, AppLocalizations l10n) {
+  static Widget _buildMutedWordsSection(BuildContext context, MutedState state, AppLocalizations l10n) {
+    if (state is! MutedLoaded) return const SizedBox();
+
+    final mutedWords = state.mutedWords;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.mutedWordsTitle,
+            style: TextStyle(
+              color: context.colors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _MuteWordInput(),
+          const SizedBox(height: 12),
+          if (mutedWords.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: mutedWords.map((word) {
+                return _buildWordChip(context, word);
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildWordChip(BuildContext context, String word) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.colors.overlayLight,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            word,
+            style: TextStyle(
+              color: context.colors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {
+              context.read<MutedBloc>().add(MutedWordRemoved(word));
+            },
+            child: Icon(
+              CarbonIcons.close,
+              size: 16,
+              color: context.colors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildMutedSection(
+      BuildContext context, MutedState state, AppLocalizations l10n) {
     return switch (state) {
       MutedLoading() => Padding(
           padding: const EdgeInsets.all(32),
@@ -151,11 +222,11 @@ class MutedPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    l10n.mutedUsersCount(mutedUsers.length),
+                    l10n.mutedUsersTitle,
                     style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      color: context.colors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -168,13 +239,12 @@ class MutedPage extends StatelessWidget {
     };
   }
 
-  static Widget _buildUserTile(
-      BuildContext context, MutedLoaded state, Map<String, dynamic> user, AppLocalizations l10n) {
+  static Widget _buildUserTile(BuildContext context, MutedLoaded state,
+      Map<String, dynamic> user, AppLocalizations l10n) {
     final userNpub = user['npub'] as String? ?? '';
     final isUnmuting = state.unmutingStates[userNpub] ?? false;
-    final profileImage = user['profileImage'] as String? ?? '';
+    final profileImage = user['picture'] as String? ?? '';
     final userName = user['name'] as String? ?? '';
-    final nip05 = user['nip05'] as String? ?? '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -227,26 +297,13 @@ class MutedPage extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  userName,
-                  style: TextStyle(
-                    color: context.colors.textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (nip05.isNotEmpty)
-                  Text(
-                    nip05,
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 14,
-                    ),
-                  ),
-              ],
+            child: Text(
+              userName,
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           GestureDetector(
@@ -295,6 +352,80 @@ class MutedPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MuteWordInput extends StatefulWidget {
+  @override
+  State<_MuteWordInput> createState() => _MuteWordInputState();
+}
+
+class _MuteWordInputState extends State<_MuteWordInput> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _addWord() {
+    final word = _controller.text.trim();
+    if (word.isNotEmpty) {
+      context.read<MutedBloc>().add(MutedWordAdded(word));
+      _controller.clear();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: context.colors.overlayLight,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: TextField(
+              controller: _controller,
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontSize: 15,
+              ),
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context)!.addWordToMuteHint,
+                hintStyle: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 15,
+                ),
+                border: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onSubmitted: (_) => _addWord(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: _addWord,
+          child: Container(
+            width: 45,
+            height: 45,
+            decoration: BoxDecoration(
+              color: context.colors.textPrimary,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.add,
+              color: context.colors.background,
+              size: 25,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

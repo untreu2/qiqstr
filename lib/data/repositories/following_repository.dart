@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'base_repository.dart';
+import '../services/encrypted_mute_service.dart';
 
 abstract class FollowingRepository {
   Future<List<String>?> getFollowingList(String userPubkey);
@@ -8,7 +9,7 @@ abstract class FollowingRepository {
   Future<bool> hasFollowingList(String userPubkey);
   Future<void> deleteFollowingList(String userPubkey);
   Future<List<String>?> getMuteList(String userPubkey);
-  Future<void> saveMuteList(String userPubkey, List<String> muteList);
+  Future<List<String>> getMuteWords();
   Future<bool> hasMuteList(String userPubkey);
   Future<void> deleteMuteList(String userPubkey);
   Future<bool> isFollowing(String userPubkey, String targetPubkey);
@@ -66,21 +67,32 @@ class FollowingRepositoryImpl extends BaseRepository
 
   @override
   Future<List<String>?> getMuteList(String userPubkey) async {
+    final muteService = EncryptedMuteService.instance;
+    if (muteService.isInitialized) {
+      final list = muteService.mutedPubkeys;
+      return list.isEmpty ? null : list;
+    }
     return await db.getMuteList(userPubkey);
   }
 
   @override
-  Future<void> saveMuteList(String userPubkey, List<String> muteList) async {
-    await db.saveMuteList(userPubkey, muteList);
+  Future<List<String>> getMuteWords() async {
+    return EncryptedMuteService.instance.mutedWords;
   }
 
   @override
   Future<bool> hasMuteList(String userPubkey) async {
+    final muteService = EncryptedMuteService.instance;
+    if (muteService.isInitialized) {
+      return muteService.mutedPubkeys.isNotEmpty ||
+          muteService.mutedWords.isNotEmpty;
+    }
     return await db.hasMuteList(userPubkey);
   }
 
   @override
   Future<void> deleteMuteList(String userPubkey) async {
+    EncryptedMuteService.instance.clear();
     await db.deleteMuteList(userPubkey);
   }
 
@@ -93,6 +105,10 @@ class FollowingRepositoryImpl extends BaseRepository
 
   @override
   Future<bool> isMuted(String userPubkey, String targetPubkey) async {
+    final muteService = EncryptedMuteService.instance;
+    if (muteService.isInitialized) {
+      return muteService.isUserMuted(targetPubkey);
+    }
     final muteList = await db.getMuteList(userPubkey);
     if (muteList == null) return false;
     return muteList.contains(targetPubkey);
@@ -122,19 +138,11 @@ class FollowingRepositoryImpl extends BaseRepository
 
   @override
   Future<void> mute(String userPubkey, String targetPubkey) async {
-    final currentList = await db.getMuteList(userPubkey) ?? [];
-    if (!currentList.contains(targetPubkey)) {
-      final updatedList = [...currentList, targetPubkey];
-      await db.saveMuteList(userPubkey, updatedList);
-    }
+    EncryptedMuteService.instance.addMutedPubkey(targetPubkey);
   }
 
   @override
   Future<void> unmute(String userPubkey, String targetPubkey) async {
-    final currentList = await db.getMuteList(userPubkey) ?? [];
-    if (currentList.contains(targetPubkey)) {
-      final updatedList = currentList.where((p) => p != targetPubkey).toList();
-      await db.saveMuteList(userPubkey, updatedList);
-    }
+    EncryptedMuteService.instance.removeMutedPubkey(targetPubkey);
   }
 }

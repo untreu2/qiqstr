@@ -3,6 +3,8 @@ import 'dart:convert';
 import '../services/rust_database_service.dart';
 import '../services/relay_service.dart';
 import '../services/nostr_service.dart';
+import '../services/auth_service.dart';
+import '../services/encrypted_mute_service.dart';
 import 'publishers/event_publisher.dart';
 
 final _relayService = RustRelayService.instance;
@@ -176,6 +178,19 @@ class SyncService {
           NostrService.createMuteFilter(authors: [userPubkey], limit: 1);
       final events = await _queryRelays(filter);
       await _saveEvents(events);
+
+      final authService = AuthService.instance;
+      final pkResult = await authService.getCurrentUserPrivateKey();
+      final pubResult = await authService.getCurrentUserPublicKeyHex();
+      if (!pkResult.isError &&
+          pkResult.data != null &&
+          !pubResult.isError &&
+          pubResult.data != null) {
+        await EncryptedMuteService.instance.loadFromDatabase(
+          userPubkeyHex: pubResult.data!,
+          privateKeyHex: pkResult.data!,
+        );
+      }
     });
   }
 
@@ -351,12 +366,15 @@ class SyncService {
     return event;
   }
 
-  Future<Map<String, dynamic>> publishMute(
-      {required List<String> mutedPubkeys}) async {
-    final event =
-        await _publish(() => _publisher.createMute(mutedPubkeys: mutedPubkeys));
-    final pubkey = event['pubkey'] as String? ?? '';
-    await _db.saveMuteList(pubkey, mutedPubkeys);
+  Future<Map<String, dynamic>> publishMute({
+    required List<String> mutedPubkeys,
+    List<String>? mutedWords,
+  }) async {
+    final words = mutedWords ?? EncryptedMuteService.instance.mutedWords;
+    final event = await _publish(() => _publisher.createMute(
+          mutedPubkeys: mutedPubkeys,
+          mutedWords: words,
+        ));
     return event;
   }
 
@@ -401,10 +419,12 @@ class SyncService {
         'authors': follows,
       };
 
+      final muteService = EncryptedMuteService.instance;
       final stream = _relayService.subscribeToEvents(filter);
       _feedSubscription = stream.listen(
         (eventData) async {
           try {
+            if (muteService.shouldFilterEvent(eventData)) return;
             await _db.saveEvents([eventData]);
             _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}
@@ -427,10 +447,12 @@ class SyncService {
         '#p': [userPubkey],
       };
 
+      final muteService = EncryptedMuteService.instance;
       final stream = _relayService.subscribeToEvents(filter);
       _notificationSubscription = stream.listen(
         (eventData) async {
           try {
+            if (muteService.shouldFilterEvent(eventData)) return;
             await _db.saveEvents([eventData]);
             _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}

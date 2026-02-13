@@ -211,7 +211,10 @@
   "pleaseEnterValidAmount": "Lütfen geçerli bir miktar girin",
   
   "mutedTitle": "Sessize Alınmış",
-  "mutedSubtitle": "Sessize alınan kullanıcılarınızı yönetin.",
+  "mutedSubtitle": "Sessize alınan kullanıcıların ve kelimelerin bulunduğu olaylar akışlarınızdan gizlenir. Sessiz listeniz şifrelenmiştir ve yalnızca siz görebilirsiniz.",
+  "mutedWordsTitle": "Kelimeler",
+  "mutedUsersTitle": "Kullanıcılar",
+  "addWordToMuteHint": "Sessize alınacak kelime ekle...",
   "errorLoadingMutedUsers": "Sessize alınan kullanıcılar yüklenirken hata",
   "noMutedUsers": "Sessize alınan kullanıcı yok",
   "youHaventMutedAnyUsersYet": "Henüz hiçbir kullanıcıyı sessize almadınız.",

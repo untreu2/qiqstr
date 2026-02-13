@@ -116,11 +116,13 @@ class NostrService {
   }
 
   static Map<String, dynamic> createMuteEvent({
-    required List<String> mutedPubkeys,
+    required String encryptedContent,
     required String privateKey,
   }) {
-    final json = rust_events.createMuteEvent(
-      mutedPubkeys: mutedPubkeys,
+    final json = rust_events.createSignedEvent(
+      kind: 10000,
+      content: encryptedContent,
+      tags: [],
       privateKeyHex: privateKey,
     );
     return jsonDecode(json) as Map<String, dynamic>;

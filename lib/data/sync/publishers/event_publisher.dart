@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/encrypted_mute_service.dart';
 
 class EventPublisher {
   final AuthService _authService;
@@ -129,11 +130,20 @@ class EventPublisher {
 
   Future<Map<String, dynamic>> createMute({
     required List<String> mutedPubkeys,
+    required List<String> mutedWords,
   }) async {
     final privateKey = await _getPrivateKey();
-    return NostrService.createMuteEvent(
+    final authResult = await _authService.getCurrentUserPublicKeyHex();
+    if (authResult.isError || authResult.data == null) {
+      throw Exception('Not authenticated');
+    }
+    final publicKey = authResult.data!;
+
+    return EncryptedMuteService.instance.createEncryptedMuteEvent(
       mutedPubkeys: mutedPubkeys,
-      privateKey: privateKey,
+      mutedWords: mutedWords,
+      privateKeyHex: privateKey,
+      publicKeyHex: publicKey,
     );
   }
 

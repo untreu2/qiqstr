@@ -161,6 +161,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       try {
         await _syncService.syncFollowingList(userHex);
         if (isClosed) return;
+        await _syncService.syncMuteList(userHex);
+        if (isClosed) return;
         _watchFeed(userHex);
         await _syncService.syncFeed(userHex);
         if (isClosed) return;

@@ -218,7 +218,10 @@
   "pleaseEnterValidAmount": "Please enter a valid amount",
   
   "mutedTitle": "Muted",
-  "mutedSubtitle": "Manage your muted users.",
+  "mutedSubtitle": "Events from muted users and containing muted words are hidden from your feeds. Your mute list is encrypted and only visible to you.",
+  "mutedWordsTitle": "Words",
+  "mutedUsersTitle": "Users",
+  "addWordToMuteHint": "Add a word to mute...",
   "errorLoadingMutedUsers": "Error loading muted users",
   "noMutedUsers": "No muted users",
   "youHaventMutedAnyUsersYet": "You haven't muted any users yet.",

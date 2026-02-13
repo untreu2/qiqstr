@@ -547,7 +547,17 @@ class AppLocalizationsTr extends AppLocalizations {
   String get mutedTitle => 'Sessize Alınmış';
 
   @override
-  String get mutedSubtitle => 'Sessize alınan kullanıcılarınızı yönetin.';
+  String get mutedSubtitle =>
+      'Sessize alınan kullanıcıların ve kelimelerin bulunduğu olaylar akışlarınızdan gizlenir. Sessiz listeniz şifrelenmiştir ve yalnızca siz görebilirsiniz.';
+
+  @override
+  String get mutedWordsTitle => 'Kelimeler';
+
+  @override
+  String get mutedUsersTitle => 'Kullanıcılar';
+
+  @override
+  String get addWordToMuteHint => 'Sessize alınacak kelime ekle...';
 
   @override
   String get errorLoadingMutedUsers =>

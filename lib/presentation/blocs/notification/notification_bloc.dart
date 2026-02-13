@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/encrypted_mute_service.dart';
 import '../../../domain/entities/notification_item.dart';
 import 'notification_event.dart' as notification_event;
 import 'notification_state.dart';
@@ -117,7 +118,16 @@ class NotificationBloc
 
   List<Map<String, dynamic>> _processNotifications(
       List<NotificationItem> items) {
-    return items.map((n) {
+    final muteService = EncryptedMuteService.instance;
+    return items.where((n) {
+      if (muteService.isUserMuted(n.fromPubkey)) {
+        return false;
+      }
+      if (n.content != null && muteService.containsMutedWord(n.content!)) {
+        return false;
+      }
+      return true;
+    }).map((n) {
       final id = n.id;
       return {
         'id': id,

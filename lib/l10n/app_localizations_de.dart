@@ -561,7 +561,17 @@ class AppLocalizationsDe extends AppLocalizations {
   String get mutedTitle => 'Stummgeschaltet';
 
   @override
-  String get mutedSubtitle => 'Verwalten Sie Ihre stummgeschalteten Benutzer.';
+  String get mutedSubtitle =>
+      'Ereignisse von stummgeschalteten Benutzern und mit stummgeschalteten Wörtern werden aus Ihren Feeds ausgeblendet. Ihre Stummschaltungsliste ist verschlüsselt und nur für Sie sichtbar.';
+
+  @override
+  String get mutedWordsTitle => 'Wörter';
+
+  @override
+  String get mutedUsersTitle => 'Benutzer';
+
+  @override
+  String get addWordToMuteHint => 'Wort zum Stummschalten hinzufügen...';
 
   @override
   String get errorLoadingMutedUsers =>
@@ -586,7 +596,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get unmute => 'Stummschaltung aufheben';
+  String get unmute => 'Entmuten';
 
   @override
   String get addRelay => 'Hinzufügen';

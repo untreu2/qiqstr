@@ -542,7 +542,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mutedTitle => 'Muted';
 
   @override
-  String get mutedSubtitle => 'Manage your muted users.';
+  String get mutedSubtitle =>
+      'Events from muted users and containing muted words are hidden from your feeds. Your mute list is encrypted and only visible to you.';
+
+  @override
+  String get mutedWordsTitle => 'Words';
+
+  @override
+  String get mutedUsersTitle => 'Users';
+
+  @override
+  String get addWordToMuteHint => 'Add a word to mute...';
 
   @override
   String get errorLoadingMutedUsers => 'Error loading muted users';

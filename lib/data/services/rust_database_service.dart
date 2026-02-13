@@ -183,6 +183,24 @@ class RustDatabaseService {
     }
   }
 
+  Future<Map<String, dynamic>?> getRawMuteEvent(
+      String userPubkeyHex) async {
+    try {
+      final filterJson = jsonEncode({
+        'kinds': [10000],
+        'authors': [userPubkeyHex],
+      });
+      final eventsJson =
+          await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
+      final events = jsonDecode(eventsJson) as List<dynamic>;
+      if (events.isEmpty) return null;
+      return events.first as Map<String, dynamic>;
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getRawMuteEvent error: $e');
+      return null;
+    }
+  }
+
   Future<void> saveMuteList(
       String userPubkeyHex, List<String> muteList) async {
     try {

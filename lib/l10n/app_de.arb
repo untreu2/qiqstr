@@ -211,12 +211,15 @@
   "pleaseEnterValidAmount": "Bitte geben Sie einen gültigen Betrag ein",
   
   "mutedTitle": "Stummgeschaltet",
-  "mutedSubtitle": "Verwalten Sie Ihre stummgeschalteten Benutzer.",
+  "mutedSubtitle": "Ereignisse von stummgeschalteten Benutzern und mit stummgeschalteten Wörtern werden aus Ihren Feeds ausgeblendet. Ihre Stummschaltungsliste ist verschlüsselt und nur für Sie sichtbar.",
+  "mutedWordsTitle": "Wörter",
+  "mutedUsersTitle": "Benutzer",
+  "addWordToMuteHint": "Wort zum Stummschalten hinzufügen...",
   "errorLoadingMutedUsers": "Fehler beim Laden stummgeschalteter Benutzer",
   "noMutedUsers": "Keine stummgeschalteten Benutzer",
   "youHaventMutedAnyUsersYet": "Sie haben noch keine Benutzer stummgeschaltet.",
   "mutedUsersCount": "{count} stummgeschaltete {count, plural, =1{Benutzer} other{Benutzer}}",
-  "unmute": "Stummschaltung aufheben",
+  "unmute": "Entmuten",
   
   "addRelay": "Hinzufügen",
   "areYouSureLogout": "Sind Sie sicher, dass Sie sich abmelden möchten?",

@@ -1153,8 +1153,26 @@ abstract class AppLocalizations {
   /// No description provided for @mutedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Manage your muted users.'**
+  /// **'Events from muted users and containing muted words are hidden from your feeds. Your mute list is encrypted and only visible to you.'**
   String get mutedSubtitle;
+
+  /// No description provided for @mutedWordsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Words'**
+  String get mutedWordsTitle;
+
+  /// No description provided for @mutedUsersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Users'**
+  String get mutedUsersTitle;
+
+  /// No description provided for @addWordToMuteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a word to mute...'**
+  String get addWordToMuteHint;
 
   /// No description provided for @errorLoadingMutedUsers.
   ///

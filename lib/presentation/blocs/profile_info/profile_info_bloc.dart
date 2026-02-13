@@ -5,6 +5,7 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/rust_database_service.dart';
+import '../../../data/services/encrypted_mute_service.dart';
 import 'profile_info_event.dart';
 import 'profile_info_state.dart';
 
@@ -316,25 +317,21 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     final currentIsMuted = currentState.isMuted ?? false;
 
     try {
-      final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
-      if (pubkeyResult.isError || pubkeyResult.data == null) return;
-      final currentUserHex = pubkeyResult.data!;
-
       final targetHex = _authService.npubToHex(userPubkeyHex) ?? userPubkeyHex;
+      final muteService = EncryptedMuteService.instance;
 
-      final currentMutes =
-          await _followingRepository.getMuteList(currentUserHex) ?? [];
-
-      List<String> updatedMutes;
       if (currentIsMuted) {
-        updatedMutes = currentMutes.where((p) => p != targetHex).toList();
+        muteService.removeMutedPubkey(targetHex);
         emit(currentState.copyWith(isMuted: false));
       } else {
-        updatedMutes = [...currentMutes, targetHex];
+        muteService.addMutedPubkey(targetHex);
         emit(currentState.copyWith(isMuted: true));
       }
 
-      await _syncService.publishMute(mutedPubkeys: updatedMutes);
+      await _syncService.publishMute(
+        mutedPubkeys: muteService.mutedPubkeys,
+        mutedWords: muteService.mutedWords,
+      );
     } catch (_) {}
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../../domain/entities/feed_note.dart';
+import '../services/encrypted_mute_service.dart';
 import 'base_repository.dart';
 
 abstract class FeedRepository {
@@ -163,7 +164,11 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
       {int limit = 100}) async {
     final events = await db.getReplies(noteId, limit: limit);
     if (events.isEmpty) return [];
-    return events.map((e) => mapper.toFeedNote(e).toMap()).toList();
+    final muteService = EncryptedMuteService.instance;
+    return events
+        .where((event) => !muteService.shouldFilterEvent(event))
+        .map((e) => mapper.toFeedNote(e).toMap())
+        .toList();
   }
 
   @override
@@ -193,10 +198,17 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
       List<Map<String, dynamic>> events, {bool filterReplies = true}) async {
     if (events.isEmpty) return [];
 
+    final muteService = EncryptedMuteService.instance;
+    final filteredEvents = events
+        .where((event) => !muteService.shouldFilterEvent(event))
+        .toList();
+
+    if (filteredEvents.isEmpty) return [];
+
     final pubkeys = <String>{};
     final noteIds = <String>[];
 
-    for (final event in events) {
+    for (final event in filteredEvents) {
       final pubkey = event['pubkey'] as String? ?? '';
       final kind = event['kind'] as int? ?? 1;
       final eventId = event['id'] as String? ?? '';
@@ -224,7 +236,7 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
     ]);
 
     final notes = <FeedNote>[];
-    for (final event in events) {
+    for (final event in filteredEvents) {
       final kind = event['kind'] as int? ?? 1;
       final eventId = event['id'] as String? ?? '';
       final originalAuthor = kind == 6

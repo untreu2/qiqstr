@@ -17,6 +17,24 @@ class MutedUserUnmuted extends MutedEvent {
   List<Object?> get props => [userNpub];
 }
 
+class MutedWordAdded extends MutedEvent {
+  final String word;
+
+  const MutedWordAdded(this.word);
+
+  @override
+  List<Object?> get props => [word];
+}
+
+class MutedWordRemoved extends MutedEvent {
+  final String word;
+
+  const MutedWordRemoved(this.word);
+
+  @override
+  List<Object?> get props => [word];
+}
+
 class MutedRefreshed extends MutedEvent {
   const MutedRefreshed();
 }
