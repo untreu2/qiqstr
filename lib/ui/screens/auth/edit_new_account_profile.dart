@@ -13,6 +13,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
+import '../../../l10n/app_localizations.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
   final String npub;
@@ -72,11 +73,12 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     final bloc = context.read<EditNewAccountProfileBloc>();
 
     setState(() {
+      final l10n = AppLocalizations.of(context)!;
       if (isPicture) {
-        _pictureController.text = 'Uploading...';
+        _pictureController.text = l10n.uploadingDotDotDot;
       } else {
         _isUploadingBanner = true;
-        _bannerController.text = 'Uploading...';
+        _bannerController.text = l10n.uploadingDotDotDot;
       }
     });
 
@@ -95,7 +97,8 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       }
     } catch (e) {
       if (context.mounted) {
-        AppSnackbar.error(context, 'Upload failed: $e');
+        final l10n = AppLocalizations.of(context)!;
+        AppSnackbar.error(context, l10n.uploadFailed(e.toString()));
       }
     } finally {
       setState(() {
@@ -120,10 +123,11 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return TitleWidget(
-      title: 'Set Up Profile',
+      title: l10n.setUpProfile,
       fontSize: 32,
-      subtitle: 'Add some basic information to help others discover you.',
+      subtitle: l10n.profileSetupSubtitle,
       useTopPadding: true,
     );
   }
@@ -300,15 +304,16 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       child:
           BlocListener<EditNewAccountProfileBloc, EditNewAccountProfileState>(
         listener: (context, state) {
+          final l10n = AppLocalizations.of(context)!;
           if (state is EditNewAccountProfileLoaded) {
             if (state.uploadedPictureUrl != null) {
               _pictureController.text = state.uploadedPictureUrl!;
               AppSnackbar.success(
-                  context, 'Profile image uploaded successfully.');
+                  context, l10n.profileImageUploadedSuccessfully);
             }
             if (state.uploadedBannerUrl != null) {
               _bannerController.text = state.uploadedBannerUrl!;
-              AppSnackbar.success(context, 'Banner uploaded successfully.');
+              AppSnackbar.success(context, l10n.bannerUploadedSuccessfully);
             }
           }
           if (state is EditNewAccountProfileError) {
@@ -357,75 +362,81 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CustomInputField(
-                                  controller: _nameController,
-                                  labelText: 'Username',
-                                  fillColor: context.colors.inputFill,
-                                  validator: (value) {
-                                    if (value != null &&
-                                        value.trim().length > 50) {
-                                      return 'Username must be 50 characters or less';
-                                    }
-                                    return null;
-                                  },
+                          child: Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context)!;
+                              return Form(
+                                key: _formKey,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    CustomInputField(
+                                      controller: _nameController,
+                                      labelText: l10n.username,
+                                      fillColor: context.colors.inputFill,
+                                      validator: (value) {
+                                        if (value != null &&
+                                            value.trim().length > 50) {
+                                          return l10n.usernameTooLong;
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 20),
+                                    CustomInputField(
+                                      controller: _aboutController,
+                                      labelText: l10n.bio,
+                                      fillColor: context.colors.inputFill,
+                                      maxLines: 3,
+                                      height: null,
+                                      validator: (value) {
+                                        if (value != null &&
+                                            value.trim().length > 300) {
+                                          return l10n.bioTooLong;
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 20),
+                                    CustomInputField(
+                                      controller: _lud16Controller,
+                                      labelText: l10n.lightningAddressOptional,
+                                      fillColor: context.colors.inputFill,
+                                      validator: (value) {
+                                        if (value != null &&
+                                            value.trim().isNotEmpty) {
+                                          final lud16 = value.trim();
+                                          if (!lud16.contains('@') ||
+                                              lud16.split('@').length != 2) {
+                                            return l10n.invalidLightningAddress;
+                                          }
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 20),
+                                    CustomInputField(
+                                      controller: _websiteController,
+                                      labelText: l10n.websiteOptional,
+                                      fillColor: context.colors.inputFill,
+                                      validator: (value) {
+                                        if (value != null &&
+                                            value.trim().isNotEmpty) {
+                                          final website = value.trim();
+                                          if (!website.contains('.') ||
+                                              website.contains(' ')) {
+                                            return l10n
+                                                .pleaseEnterValidWebsiteUrl;
+                                          }
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 60),
+                                  ],
                                 ),
-                                const SizedBox(height: 20),
-                                CustomInputField(
-                                  controller: _aboutController,
-                                  labelText: 'Bio',
-                                  fillColor: context.colors.inputFill,
-                                  maxLines: 3,
-                                  height: null,
-                                  validator: (value) {
-                                    if (value != null &&
-                                        value.trim().length > 300) {
-                                      return 'Bio must be 300 characters or less';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 20),
-                                CustomInputField(
-                                  controller: _lud16Controller,
-                                  labelText: 'Lightning address (optional)',
-                                  fillColor: context.colors.inputFill,
-                                  validator: (value) {
-                                    if (value != null &&
-                                        value.trim().isNotEmpty) {
-                                      final lud16 = value.trim();
-                                      if (!lud16.contains('@') ||
-                                          lud16.split('@').length != 2) {
-                                        return 'Please enter a valid lightning address (e.g., user@domain.com)';
-                                      }
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 20),
-                                CustomInputField(
-                                  controller: _websiteController,
-                                  labelText: 'Website (optional)',
-                                  fillColor: context.colors.inputFill,
-                                  validator: (value) {
-                                    if (value != null &&
-                                        value.trim().isNotEmpty) {
-                                      final website = value.trim();
-                                      if (!website.contains('.') ||
-                                          website.contains(' ')) {
-                                        return 'Please enter a valid website URL';
-                                      }
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 60),
-                              ],
-                            ),
+                              );
+                            },
                           ),
                         ),
                       ],

@@ -193,7 +193,7 @@
   "errorEncodingNsec": "Nsec kodlama hatası",
   "publicKeyNpub": "Açık Anahtar (npub)",
   "privateKeyNsec": "Özel Anahtar (nsec)",
-  "seedPhrase": "Tohum İfadesi",
+  "seedPhrase": "Kurtarma Kelimeleri",
   "shareThisToReceiveMessages": "Mesaj ve zap almak için bunu paylaşın.",
   "keepThisSecret": "Bunu gizli tutun! Asla kimseyle paylaşmayın.",
   "useThisToRecoverAccount": "Hesabınızı kurtarmak için bunu kullanın. Güvenli bir şekilde saklayın.",
@@ -223,7 +223,7 @@
   
   "addRelay": "Röle Ekle",
   "areYouSureLogout": "Çıkış yapmak istediğinizden emin misiniz?",
-  "seedPhraseWarning": "TOHUM İFADENİZİ KAYDETMED İYSENİZ, HESABINIZI SONSUZA KADAR KAYBEDECEKSİNİZ.",
+  "seedPhraseWarning": "KURTARMA KELİMELERİNİZİ KAYDETMEDİYSENİZ, HESABINIZI SONSUZA KADAR KAYBEDECEKSİNİZ.",
   "muteUser": "{user} sessize alınsın mı?",
   "muteUserDescription": "Bu kullanıcıdan gelen notları akışınızda görmeyeceksiniz.",
   "unfollowUser": "{user} takibi bırakılsın mı?",
@@ -233,17 +233,17 @@
   "warning": "Uyarı!",
   "copyKeyWarning": "Bunu hesabınızı qiqstr veya Nostr protokolünü kullanan diğer uygulamalara aktarmak için kullanabilirsiniz. Asla kimseyle paylaşmayın.",
   "relayUrlHint": "wss://relay.example.com",
-  "enterSeedPhraseOrNsec": "Tohum ifadenizi veya nsec'inizi girin...",
+  "enterSeedPhraseOrNsec": "Kurtarma kelimelerinizi veya nsec'inizi girin...",
   "loggingIn": "Giriş yapılıyor...",
-  "errorInvalidInput": "Hata: Geçersiz giriş. Lütfen NSEC veya tohum ifadenizi kontrol edin.",
+  "errorInvalidInput": "Hata: Geçersiz giriş. Lütfen NSEC veya kurtarma kelimelerinizi kontrol edin.",
   "errorCouldNotCreateAccount": "Hata: Yeni hesap oluşturulamadı.",
   "errorPrefix": "Hata: {message}",
   "followers": "takipçi",
   "followingCount": "takip",
   
-  "saveYourSeedPhrase": "Tohum İfadenizi Kaydedin",
-  "thisIsYourOnlyChance": "Tohum ifadenizi kaydetmek için tek şansınız bu. Yazın ve güvenli bir yerde saklayın.",
-  "iHaveSavedMySeedPhrase": "Tohum ifademi kaydettim",
+  "saveYourSeedPhrase": "Kurtarma Kelimelerinizi Kaydedin",
+  "thisIsYourOnlyChance": "Kurtarma kelimelerinizi kaydetmek için tek şansınız bu. Yazın ve güvenli bir yerde saklayın.",
+  "iHaveSavedMySeedPhrase": "Kurtarma kelimelerimi kaydettim",
   "tapToCopy": "Kopyalamak için dokunun",
   "next": "İleri",
   "skip": "Atla",
@@ -340,14 +340,14 @@
   "daysAgo": "{count} gün önce",
   
   "backupYourAccount": "Hesabınızı Yedekleyin",
-  "secureYourAccount": "Hesabınızı tohum ifadenizle güvence altına alın.",
+  "secureYourAccount": "Hesabınızı kurtarma kelimelerinizle güvence altına alın.",
   "important": "Önemli",
-  "writeSeedPhraseInOrder": "Tohum ifadenizi doğru sırayla yazın",
+  "writeSeedPhraseInOrder": "Kurtarma kelimelerinizi doğru sırayla yazın",
   "storeItSafely": "Güvenli bir yerde saklayın",
   "neverShareIt": "Asla kimseyle paylaşmayın",
   "ifYouLoseIt": "Kaybederseniz, hesabınıza sonsuza kadar erişimi kaybedersiniz",
   "accessFromSettings": "Buna daha sonra Ayarlar > Anahtarlar'dan erişebilirsiniz",
-  "iHaveWrittenDownSeedPhrase": "Tohum ifademi yazdım",
+  "iHaveWrittenDownSeedPhrase": "Kurtarma kelimelerimi yazdım",
   
   "noNotesFromThisUser": "Bu kullanıcıdan henüz not yok",
   "fileTooLarge": "Dosya çok büyük (maks 50MB)",
@@ -573,5 +573,26 @@
         "type": "String"
       }
     }
-  }
+  },
+
+  "iAcceptThe": "Kabul ediyorum: ",
+  "termsOfUse": "kullanım koşulları",
+  "acceptanceOfTermsIsRequired": "Kullanım koşullarını kabul etmeniz gerekmektedir",
+
+  "profileSetupSubtitle": "Başkalarının sizi keşfetmesine yardımcı olacak temel bilgileri ekleyin.",
+  "uploadFailed": "Yükleme başarısız: {message}",
+  "@uploadFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "profileImageUploadedSuccessfully": "Profil resmi başarıyla yüklendi.",
+  "bannerUploadedSuccessfully": "Banner başarıyla yüklendi.",
+  "usernameTooLong": "Kullanıcı adı en fazla 50 karakter olmalıdır",
+  "bioTooLong": "Biyografi en fazla 300 karakter olmalıdır",
+  "lightningAddressOptional": "Lightning adresi (isteğe bağlı)",
+  "invalidLightningAddress": "Lütfen geçerli bir lightning adresi girin (ör. kullanıcı@alan.com)",
+  "websiteOptional": "Web sitesi (isteğe bağlı)"
 }

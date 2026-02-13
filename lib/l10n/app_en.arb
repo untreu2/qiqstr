@@ -640,5 +640,26 @@
         "type": "String"
       }
     }
-  }
+  },
+
+  "iAcceptThe": "I accept the ",
+  "termsOfUse": "terms of use",
+  "acceptanceOfTermsIsRequired": "Acceptance of terms is required",
+
+  "profileSetupSubtitle": "Add some basic information to help others discover you.",
+  "uploadFailed": "Upload failed: {message}",
+  "@uploadFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "profileImageUploadedSuccessfully": "Profile image uploaded successfully.",
+  "bannerUploadedSuccessfully": "Banner uploaded successfully.",
+  "usernameTooLong": "Username must be 50 characters or less",
+  "bioTooLong": "Bio must be 300 characters or less",
+  "lightningAddressOptional": "Lightning address (optional)",
+  "invalidLightningAddress": "Please enter a valid lightning address (e.g., user@domain.com)",
+  "websiteOptional": "Website (optional)"
 }

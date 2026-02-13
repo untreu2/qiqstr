@@ -2619,6 +2619,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to create invoice: {message}'**
   String failedToCreateInvoice(String message);
+
+  /// No description provided for @iAcceptThe.
+  ///
+  /// In en, this message translates to:
+  /// **'I accept the '**
+  String get iAcceptThe;
+
+  /// No description provided for @termsOfUse.
+  ///
+  /// In en, this message translates to:
+  /// **'terms of use'**
+  String get termsOfUse;
+
+  /// No description provided for @acceptanceOfTermsIsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceptance of terms is required'**
+  String get acceptanceOfTermsIsRequired;
+
+  /// No description provided for @profileSetupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add some basic information to help others discover you.'**
+  String get profileSetupSubtitle;
+
+  /// No description provided for @uploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed: {message}'**
+  String uploadFailed(String message);
+
+  /// No description provided for @profileImageUploadedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile image uploaded successfully.'**
+  String get profileImageUploadedSuccessfully;
+
+  /// No description provided for @bannerUploadedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Banner uploaded successfully.'**
+  String get bannerUploadedSuccessfully;
+
+  /// No description provided for @usernameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Username must be 50 characters or less'**
+  String get usernameTooLong;
+
+  /// No description provided for @bioTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Bio must be 300 characters or less'**
+  String get bioTooLong;
+
+  /// No description provided for @lightningAddressOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightning address (optional)'**
+  String get lightningAddressOptional;
+
+  /// No description provided for @invalidLightningAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid lightning address (e.g., user@domain.com)'**
+  String get invalidLightningAddress;
+
+  /// No description provided for @websiteOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Website (optional)'**
+  String get websiteOptional;
 }
 
 class _AppLocalizationsDelegate

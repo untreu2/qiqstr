@@ -31,7 +31,7 @@ class _KeysPageState extends State<KeysPage> {
   @override
   void initState() {
     super.initState();
-    _loadKeys();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadKeys());
   }
 
   Future<void> _loadKeys() async {

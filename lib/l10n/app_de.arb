@@ -573,5 +573,26 @@
         "type": "String"
       }
     }
-  }
+  },
+
+  "iAcceptThe": "Ich akzeptiere die ",
+  "termsOfUse": "Nutzungsbedingungen",
+  "acceptanceOfTermsIsRequired": "Die Zustimmung zu den Nutzungsbedingungen ist erforderlich",
+
+  "profileSetupSubtitle": "Fügen Sie grundlegende Informationen hinzu, damit andere Sie entdecken können.",
+  "uploadFailed": "Hochladen fehlgeschlagen: {message}",
+  "@uploadFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "profileImageUploadedSuccessfully": "Profilbild erfolgreich hochgeladen.",
+  "bannerUploadedSuccessfully": "Banner erfolgreich hochgeladen.",
+  "usernameTooLong": "Benutzername darf maximal 50 Zeichen lang sein",
+  "bioTooLong": "Bio darf maximal 300 Zeichen lang sein",
+  "lightningAddressOptional": "Lightning-Adresse (optional)",
+  "invalidLightningAddress": "Bitte geben Sie eine gültige Lightning-Adresse ein (z.B. user@domain.com)",
+  "websiteOptional": "Webseite (optional)"
 }

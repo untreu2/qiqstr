@@ -42,6 +42,9 @@ PODS:
     - Flutter
   - integration_test (0.0.1):
     - Flutter
+  - mobile_scanner (7.0.0):
+    - Flutter
+    - FlutterMacOS
   - rust_lib_qiqstr (0.0.1):
     - Flutter
   - SDWebImage (5.21.5):
@@ -72,6 +75,7 @@ DEPENDENCIES:
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
   - gallery_saver_plus (from `.symlinks/plugins/gallery_saver_plus/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
+  - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - rust_lib_qiqstr (from `.symlinks/plugins/rust_lib_qiqstr/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -100,6 +104,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/gallery_saver_plus/ios"
   integration_test:
     :path: ".symlinks/plugins/integration_test/ios"
+  mobile_scanner:
+    :path: ".symlinks/plugins/mobile_scanner/darwin"
   rust_lib_qiqstr:
     :path: ".symlinks/plugins/rust_lib_qiqstr/ios"
   share_plus:
@@ -124,6 +130,7 @@ SPEC CHECKSUMS:
   flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
   gallery_saver_plus: c4b59c605df1049a02d036ef81d82972b6dfd606
   integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
+  mobile_scanner: 77265f3dc8d580810e91849d4a0811a90467ed5e
   rust_lib_qiqstr: b8e39f441e535e4536e68954978f1aace990120e
   SDWebImage: e9c98383c7572d713c1a0d7dd2783b10599b9838
   share_plus: 8b6f8b3447e494cca5317c8c3073de39b3600d1f

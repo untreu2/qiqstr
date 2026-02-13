@@ -1373,4 +1373,47 @@ class AppLocalizationsDe extends AppLocalizations {
   String failedToCreateInvoice(String message) {
     return 'Rechnung konnte nicht erstellt werden: $message';
   }
+
+  @override
+  String get iAcceptThe => 'Ich akzeptiere die ';
+
+  @override
+  String get termsOfUse => 'Nutzungsbedingungen';
+
+  @override
+  String get acceptanceOfTermsIsRequired =>
+      'Die Zustimmung zu den Nutzungsbedingungen ist erforderlich';
+
+  @override
+  String get profileSetupSubtitle =>
+      'Fügen Sie grundlegende Informationen hinzu, damit andere Sie entdecken können.';
+
+  @override
+  String uploadFailed(String message) {
+    return 'Hochladen fehlgeschlagen: $message';
+  }
+
+  @override
+  String get profileImageUploadedSuccessfully =>
+      'Profilbild erfolgreich hochgeladen.';
+
+  @override
+  String get bannerUploadedSuccessfully => 'Banner erfolgreich hochgeladen.';
+
+  @override
+  String get usernameTooLong =>
+      'Benutzername darf maximal 50 Zeichen lang sein';
+
+  @override
+  String get bioTooLong => 'Bio darf maximal 300 Zeichen lang sein';
+
+  @override
+  String get lightningAddressOptional => 'Lightning-Adresse (optional)';
+
+  @override
+  String get invalidLightningAddress =>
+      'Bitte geben Sie eine gültige Lightning-Adresse ein (z.B. user@domain.com)';
+
+  @override
+  String get websiteOptional => 'Webseite (optional)';
 }

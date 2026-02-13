@@ -495,7 +495,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get privateKeyNsec => 'Özel Anahtar (nsec)';
 
   @override
-  String get seedPhrase => 'Tohum İfadesi';
+  String get seedPhrase => 'Kurtarma Kelimeleri';
 
   @override
   String get shareThisToReceiveMessages =>
@@ -592,7 +592,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get seedPhraseWarning =>
-      'TOHUM İFADENİZİ KAYDETMED İYSENİZ, HESABINIZI SONSUZA KADAR KAYBEDECEKSİNİZ.';
+      'KURTARMA KELİMELERİNİZİ KAYDETMEDİYSENİZ, HESABINIZI SONSUZA KADAR KAYBEDECEKSİNİZ.';
 
   @override
   String muteUser(String user) {
@@ -630,14 +630,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enterSeedPhraseOrNsec =>
-      'Tohum ifadenizi veya nsec\'inizi girin...';
+      'Kurtarma kelimelerinizi veya nsec\'inizi girin...';
 
   @override
   String get loggingIn => 'Giriş yapılıyor...';
 
   @override
   String get errorInvalidInput =>
-      'Hata: Geçersiz giriş. Lütfen NSEC veya tohum ifadenizi kontrol edin.';
+      'Hata: Geçersiz giriş. Lütfen NSEC veya kurtarma kelimelerinizi kontrol edin.';
 
   @override
   String get errorCouldNotCreateAccount => 'Hata: Yeni hesap oluşturulamadı.';
@@ -654,14 +654,14 @@ class AppLocalizationsTr extends AppLocalizations {
   String get followingCount => 'takip';
 
   @override
-  String get saveYourSeedPhrase => 'Tohum İfadenizi Kaydedin';
+  String get saveYourSeedPhrase => 'Kurtarma Kelimelerinizi Kaydedin';
 
   @override
   String get thisIsYourOnlyChance =>
-      'Tohum ifadenizi kaydetmek için tek şansınız bu. Yazın ve güvenli bir yerde saklayın.';
+      'Kurtarma kelimelerinizi kaydetmek için tek şansınız bu. Yazın ve güvenli bir yerde saklayın.';
 
   @override
-  String get iHaveSavedMySeedPhrase => 'Tohum ifademi kaydettim';
+  String get iHaveSavedMySeedPhrase => 'Kurtarma kelimelerimi kaydettim';
 
   @override
   String get tapToCopy => 'Kopyalamak için dokunun';
@@ -913,13 +913,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get secureYourAccount =>
-      'Hesabınızı tohum ifadenizle güvence altına alın.';
+      'Hesabınızı kurtarma kelimelerinizle güvence altına alın.';
 
   @override
   String get important => 'Önemli';
 
   @override
-  String get writeSeedPhraseInOrder => 'Tohum ifadenizi doğru sırayla yazın';
+  String get writeSeedPhraseInOrder =>
+      'Kurtarma kelimelerinizi doğru sırayla yazın';
 
   @override
   String get storeItSafely => 'Güvenli bir yerde saklayın';
@@ -936,7 +937,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Buna daha sonra Ayarlar > Anahtarlar\'dan erişebilirsiniz';
 
   @override
-  String get iHaveWrittenDownSeedPhrase => 'Tohum ifademi yazdım';
+  String get iHaveWrittenDownSeedPhrase => 'Kurtarma kelimelerimi yazdım';
 
   @override
   String get noNotesFromThisUser => 'Bu kullanıcıdan henüz not yok';
@@ -1344,4 +1345,46 @@ class AppLocalizationsTr extends AppLocalizations {
   String failedToCreateInvoice(String message) {
     return 'Fatura oluşturulamadı: $message';
   }
+
+  @override
+  String get iAcceptThe => 'Kabul ediyorum: ';
+
+  @override
+  String get termsOfUse => 'kullanım koşulları';
+
+  @override
+  String get acceptanceOfTermsIsRequired =>
+      'Kullanım koşullarını kabul etmeniz gerekmektedir';
+
+  @override
+  String get profileSetupSubtitle =>
+      'Başkalarının sizi keşfetmesine yardımcı olacak temel bilgileri ekleyin.';
+
+  @override
+  String uploadFailed(String message) {
+    return 'Yükleme başarısız: $message';
+  }
+
+  @override
+  String get profileImageUploadedSuccessfully =>
+      'Profil resmi başarıyla yüklendi.';
+
+  @override
+  String get bannerUploadedSuccessfully => 'Banner başarıyla yüklendi.';
+
+  @override
+  String get usernameTooLong => 'Kullanıcı adı en fazla 50 karakter olmalıdır';
+
+  @override
+  String get bioTooLong => 'Biyografi en fazla 300 karakter olmalıdır';
+
+  @override
+  String get lightningAddressOptional => 'Lightning adresi (isteğe bağlı)';
+
+  @override
+  String get invalidLightningAddress =>
+      'Lütfen geçerli bir lightning adresi girin (ör. kullanıcı@alan.com)';
+
+  @override
+  String get websiteOptional => 'Web sitesi (isteğe bağlı)';
 }

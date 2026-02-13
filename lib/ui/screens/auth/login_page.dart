@@ -1,13 +1,20 @@
+import 'package:carbon_icons/carbon_icons.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qiqstr/data/services/auth_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
+import '../../widgets/dialogs/language_dialog.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../presentation/blocs/locale/locale_bloc.dart';
+import '../../../presentation/blocs/locale/locale_state.dart';
 
 class LoginPage extends StatefulWidget {
   final bool isAddAccount;
@@ -21,7 +28,11 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _inputController = TextEditingController();
   String _message = '';
   bool _isLoading = false;
+  bool _acceptedTerms = false;
   final AuthService _authService = AuthService.instance;
+
+  static const _termsUrl =
+      'https://github.com/untreu2/qiqstr/blob/master/TERMS.md';
 
   @override
   void dispose() {
@@ -31,6 +42,10 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _loginWithInput() async {
     final l10n = AppLocalizations.of(context)!;
+    if (!_acceptedTerms) {
+      setState(() => _message = l10n.acceptanceOfTermsIsRequired);
+      return;
+    }
     if (_inputController.text.trim().isEmpty) return;
     setState(() => _isLoading = true);
 
@@ -74,6 +89,10 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _createNewAccount() async {
     final l10n = AppLocalizations.of(context)!;
+    if (!_acceptedTerms) {
+      setState(() => _message = l10n.acceptanceOfTermsIsRequired);
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final result = await _authService.createAccountWithMnemonic();
@@ -169,8 +188,6 @@ class _LoginPageState extends State<LoginPage> {
               onPressed: _isLoading ? null : _loginWithInput,
               size: ButtonSize.large,
               isLoading: _isLoading,
-              backgroundColor: context.colors.inputFill,
-              foregroundColor: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
@@ -182,13 +199,69 @@ class _LoginPageState extends State<LoginPage> {
               size: ButtonSize.large,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 32),
+          _buildAcceptTerms(),
+          const SizedBox(height: 12),
           if (_message.isNotEmpty)
-            Text(
-              _message,
-              style: TextStyle(
-                  color: context.colors.error, fontWeight: FontWeight.w600),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                _message,
+                style: TextStyle(
+                    color: context.colors.error, fontWeight: FontWeight.w600),
+              ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAcceptTerms() {
+    final l10n = AppLocalizations.of(context)!;
+    return GestureDetector(
+      onTap: () => setState(() => _acceptedTerms = !_acceptedTerms),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: Checkbox(
+              value: _acceptedTerms,
+              onChanged: (value) =>
+                  setState(() => _acceptedTerms = value ?? false),
+              activeColor: context.colors.textPrimary,
+              checkColor: context.colors.background,
+              side: BorderSide(color: context.colors.textSecondary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 14,
+                ),
+                children: [
+                  TextSpan(text: l10n.iAcceptThe),
+                  TextSpan(
+                    text: l10n.termsOfUse,
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      decoration: TextDecoration.underline,
+                    ),
+                    recognizer: TapGestureRecognizer()
+                      ..onTap = () => launchUrl(
+                            Uri.parse(_termsUrl),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -211,21 +284,53 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: _isLoading
-                  ? _buildLoadingScreen()
-                  : SingleChildScrollView(child: _buildLoginForm()),
+    return BlocBuilder<LocaleBloc, LocaleState>(
+      builder: (context, localeState) {
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: SafeArea(
+            child: Stack(
+              children: [
+                Center(
+                  child: _isLoading
+                      ? _buildLoadingScreen()
+                      : SingleChildScrollView(child: _buildLoginForm()),
+                ),
+                if (widget.isAddAccount)
+                  BackButtonWidget.floating(
+                    onPressed: () => context.pop(),
+                  ),
+                _buildLanguageButton(localeState),
+              ],
             ),
-            if (widget.isAddAccount)
-              BackButtonWidget.floating(
-                onPressed: () => context.pop(),
-              ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLanguageButton(LocaleState localeState) {
+    return Positioned(
+      top: 14,
+      right: 16,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: context.colors.textPrimary,
+          borderRadius: BorderRadius.circular(22.0),
+        ),
+        child: GestureDetector(
+          onTap: () => showLanguageDialog(
+            context: context,
+            currentLocale: localeState.locale,
+          ),
+          behavior: HitTestBehavior.opaque,
+          child: Icon(
+            CarbonIcons.language,
+            color: context.colors.background,
+            size: 20,
+          ),
         ),
       ),
     );

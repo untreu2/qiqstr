@@ -1339,4 +1339,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String failedToCreateInvoice(String message) {
     return 'Failed to create invoice: $message';
   }
+
+  @override
+  String get iAcceptThe => 'I accept the ';
+
+  @override
+  String get termsOfUse => 'terms of use';
+
+  @override
+  String get acceptanceOfTermsIsRequired => 'Acceptance of terms is required';
+
+  @override
+  String get profileSetupSubtitle =>
+      'Add some basic information to help others discover you.';
+
+  @override
+  String uploadFailed(String message) {
+    return 'Upload failed: $message';
+  }
+
+  @override
+  String get profileImageUploadedSuccessfully =>
+      'Profile image uploaded successfully.';
+
+  @override
+  String get bannerUploadedSuccessfully => 'Banner uploaded successfully.';
+
+  @override
+  String get usernameTooLong => 'Username must be 50 characters or less';
+
+  @override
+  String get bioTooLong => 'Bio must be 300 characters or less';
+
+  @override
+  String get lightningAddressOptional => 'Lightning address (optional)';
+
+  @override
+  String get invalidLightningAddress =>
+      'Please enter a valid lightning address (e.g., user@domain.com)';
+
+  @override
+  String get websiteOptional => 'Website (optional)';
 }
