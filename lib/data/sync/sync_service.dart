@@ -6,6 +6,7 @@ import '../services/nostr_service.dart';
 import '../services/auth_service.dart';
 import '../services/encrypted_mute_service.dart';
 import '../services/encrypted_bookmark_service.dart';
+import '../services/follow_set_service.dart';
 import 'publishers/event_publisher.dart';
 
 final _relayService = RustRelayService.instance;
@@ -79,6 +80,21 @@ class SyncService {
 
       await _saveEventsAndProfiles(allEvents);
 
+      _markSynced(key);
+    });
+  }
+
+  Future<void> syncListFeed(List<String> pubkeys, {bool force = false}) async {
+    if (pubkeys.isEmpty) return;
+    final key = 'list_feed_${pubkeys.hashCode}';
+    if (!force && !_shouldSync(key)) return;
+
+    await _sync('list_feed', () async {
+      final notesFilter = NostrService.createNotesFilter(
+          authors: pubkeys, kinds: [1, 6], limit: 300);
+
+      final noteEvents = await _queryRelays(notesFilter);
+      await _saveEventsAndProfiles(noteEvents);
       _markSynced(key);
     });
   }
@@ -222,6 +238,43 @@ class SyncService {
   }) async {
     final event = await _publish(() => _publisher.createBookmark(
           bookmarkedEventIds: bookmarkedEventIds,
+        ));
+    return event;
+  }
+
+  Future<void> syncFollowSets(String userPubkey) async {
+    await _sync('follow_sets', () async {
+      final follows = await _db.getFollowingList(userPubkey);
+      final allAuthors = [userPubkey, ...?follows];
+
+      final filter = NostrService.createFollowSetsFilter(
+          authors: allAuthors, limit: 500);
+      final events = await _queryRelays(filter);
+      await _saveEvents(events);
+
+      await FollowSetService.instance
+          .loadFromDatabase(userPubkeyHex: userPubkey);
+
+      if (follows != null && follows.isNotEmpty) {
+        await FollowSetService.instance
+            .loadFollowedUsersSets(followedPubkeys: follows);
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>> publishFollowSet({
+    required String dTag,
+    required String title,
+    required String description,
+    required String image,
+    required List<String> pubkeys,
+  }) async {
+    final event = await _publish(() => _publisher.createFollowSet(
+          dTag: dTag,
+          title: title,
+          description: description,
+          image: image,
+          pubkeys: pubkeys,
         ));
     return event;
   }

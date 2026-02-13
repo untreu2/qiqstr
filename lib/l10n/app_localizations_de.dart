@@ -1476,4 +1476,76 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get bookmarkRemoved => 'Lesezeichen entfernt';
+
+  @override
+  String get listsTitle => 'Listen';
+
+  @override
+  String get listsSubtitle =>
+      'Organisieren Sie Personen, denen Sie folgen, in Gruppen.';
+
+  @override
+  String get noLists => 'Keine Listen';
+
+  @override
+  String get noListsDescription =>
+      'Erstellen Sie eine Liste, um Personen zu organisieren.';
+
+  @override
+  String get errorLoadingLists => 'Fehler beim Laden der Listen';
+
+  @override
+  String get createList => 'Liste erstellen';
+
+  @override
+  String get listNameHint => 'Listenname';
+
+  @override
+  String get listDescriptionHint => 'Beschreibung (optional)';
+
+  @override
+  String get create => 'Erstellen';
+
+  @override
+  String memberCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Mitglieder',
+      one: '1 Mitglied',
+      zero: 'Keine Mitglieder',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMembersInList => 'Keine Mitglieder';
+
+  @override
+  String get noMembersInListDescription =>
+      'Fügen Sie Personen aus ihrem Profil zu dieser Liste hinzu.';
+
+  @override
+  String get removeFromList => 'Entfernen';
+
+  @override
+  String get addToList => 'Zur Liste hinzufügen';
+
+  @override
+  String get deleteList => 'Liste löschen';
+
+  @override
+  String get listsFromFollows => 'Von Personen, denen Sie folgen';
+
+  @override
+  String get all => 'Folge ich';
+
+  @override
+  String get addToFeed => 'Zum Feed hinzufügen';
+
+  @override
+  String get removeFromFeed => 'Aus dem Feed entfernen';
+
+  @override
+  String get addAnotherFeed => '+ Feed hinzufügen';
 }

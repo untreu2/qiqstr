@@ -4,6 +4,7 @@ import '../../services/relay_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/encrypted_mute_service.dart';
 import '../../services/encrypted_bookmark_service.dart';
+import '../../services/follow_set_service.dart';
 
 class EventPublisher {
   final AuthService _authService;
@@ -162,6 +163,24 @@ class EventPublisher {
       bookmarkedEventIds: bookmarkedEventIds,
       privateKeyHex: privateKey,
       publicKeyHex: publicKey,
+    );
+  }
+
+  Future<Map<String, dynamic>> createFollowSet({
+    required String dTag,
+    required String title,
+    required String description,
+    required String image,
+    required List<String> pubkeys,
+  }) async {
+    final privateKey = await _getPrivateKey();
+    return FollowSetService.instance.createFollowSetEvent(
+      dTag: dTag,
+      title: title,
+      description: description,
+      image: image,
+      pubkeys: pubkeys,
+      privateKeyHex: privateKey,
     );
   }
 

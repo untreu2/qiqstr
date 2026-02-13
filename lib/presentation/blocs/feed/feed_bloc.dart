@@ -4,6 +4,7 @@ import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../domain/entities/feed_note.dart';
+import '../../../data/services/follow_set_service.dart';
 import 'feed_event.dart' as feed_event;
 import 'feed_state.dart';
 
@@ -39,6 +40,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     on<feed_event.FeedProfilesLoaded>(_onFeedProfilesLoaded);
     on<feed_event.FeedNotesUpdated>(_onFeedNotesUpdated);
     on<feed_event.FeedNewNotesAccepted>(_onFeedNewNotesAccepted);
+    on<feed_event.FeedListChanged>(_onFeedListChanged);
     on<feed_event.FeedSyncCompleted>(_onFeedSyncCompleted);
   }
 
@@ -209,7 +211,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         if (isClosed) return;
         await _syncService.syncBookmarkList(userHex);
         if (isClosed) return;
-        _watchFeed(userHex);
+        final currentState = state;
+        if (currentState is FeedLoaded && currentState.activeListId == null) {
+          _watchFeed(userHex);
+        }
         await _syncService.syncFeed(userHex);
         if (isClosed) return;
         await _syncService.startRealtimeSubscriptions(userHex);
@@ -242,6 +247,22 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
       if (currentState.hashtag != null) {
         _syncHashtagInBackground(currentState.hashtag!, null);
+      } else if (currentState.activeListId != null) {
+        final service = _getFollowSetService();
+        final listPubkeys =
+            service?.pubkeysForList(currentState.activeListId!);
+        if (listPubkeys != null && listPubkeys.isNotEmpty) {
+          _watchListFeed(listPubkeys);
+          Future.microtask(() async {
+            if (isClosed) return;
+            try {
+              await _syncService.syncListFeed(listPubkeys, force: true);
+            } catch (_) {}
+            if (!isClosed && state is FeedLoaded) {
+              add(feed_event.FeedSyncCompleted());
+            }
+          });
+        }
       } else {
         Future.microtask(() async {
           if (isClosed) return;
@@ -277,6 +298,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
       if (currentState.hashtag != null) {
         _watchHashtagFeed(currentState.hashtag!, limit: _currentLimit);
+      } else if (currentState.activeListId != null) {
+        final service = _getFollowSetService();
+        final listPubkeys = service?.pubkeysForList(currentState.activeListId!);
+        if (listPubkeys != null && listPubkeys.isNotEmpty) {
+          _watchListFeed(listPubkeys, limit: _currentLimit);
+        }
       } else if (_currentUserHex != null) {
         _watchFeed(_currentUserHex!, limit: _currentLimit);
       }
@@ -459,6 +486,83 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
       return bTime.compareTo(aTime);
     });
+  }
+
+  void _watchListFeed(List<String> pubkeys, {int? limit}) {
+    _feedSubscription?.cancel();
+    _feedSubscription = _feedRepository
+        .watchListFeed(pubkeys, limit: limit ?? _currentLimit)
+        .listen(
+      (notes) {
+        if (isClosed) return;
+        add(feed_event.FeedNotesUpdated(notes));
+      },
+      onError: (_) {
+        if (isClosed) return;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!isClosed) _watchListFeed(pubkeys, limit: limit);
+        });
+      },
+      onDone: () {
+        if (isClosed) return;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!isClosed) _watchListFeed(pubkeys, limit: limit);
+        });
+      },
+    );
+  }
+
+  Future<void> _onFeedListChanged(
+    feed_event.FeedListChanged event,
+    Emitter<FeedState> emit,
+  ) async {
+    if (state is! FeedLoaded) return;
+    final currentState = state as FeedLoaded;
+
+    _feedSubscription?.cancel();
+    _currentLimit = _pageSize;
+    _bufferedNotes = [];
+    _acceptNextUpdate = true;
+
+    if (event.pubkeys == null || event.pubkeys!.isEmpty) {
+      emit(currentState.copyWith(
+        notes: const [],
+        isSyncing: true,
+        pendingNotesCount: 0,
+        clearActiveList: true,
+      ));
+      if (_currentUserHex != null) {
+        _watchFeed(_currentUserHex!);
+        _syncInBackground(_currentUserHex!, null);
+      }
+    } else {
+      emit(currentState.copyWith(
+        notes: const [],
+        isSyncing: true,
+        pendingNotesCount: 0,
+        activeListId: event.listId,
+        activeListTitle: event.listTitle,
+      ));
+      _watchListFeed(event.pubkeys!);
+
+      Future.microtask(() async {
+        if (isClosed) return;
+        try {
+          await _syncService.syncListFeed(event.pubkeys!);
+        } catch (_) {}
+        if (!isClosed && state is FeedLoaded) {
+          add(feed_event.FeedSyncCompleted());
+        }
+      });
+    }
+  }
+
+  FollowSetService? _getFollowSetService() {
+    try {
+      return FollowSetService.instance;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _onFeedSyncCompleted(

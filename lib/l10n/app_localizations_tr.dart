@@ -1446,4 +1446,76 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get bookmarkRemoved => 'Yer iminden kaldırıldı';
+
+  @override
+  String get listsTitle => 'Listeler';
+
+  @override
+  String get listsSubtitle =>
+      'Takip ettiğiniz kişileri kategorilere ayırarak düzenleyin.';
+
+  @override
+  String get noLists => 'Liste yok';
+
+  @override
+  String get noListsDescription =>
+      'Takip ettiğiniz kişileri düzenlemek için bir liste oluşturun.';
+
+  @override
+  String get errorLoadingLists => 'Listeler yüklenirken hata';
+
+  @override
+  String get createList => 'Liste Oluştur';
+
+  @override
+  String get listNameHint => 'Liste adı';
+
+  @override
+  String get listDescriptionHint => 'Açıklama (isteğe bağlı)';
+
+  @override
+  String get create => 'Oluştur';
+
+  @override
+  String memberCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count üye',
+      one: '1 üye',
+      zero: 'Üye yok',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMembersInList => 'Üye yok';
+
+  @override
+  String get noMembersInListDescription =>
+      'Profillerinden bu listeye kişi ekleyin.';
+
+  @override
+  String get removeFromList => 'Kaldır';
+
+  @override
+  String get addToList => 'Listeye ekle';
+
+  @override
+  String get deleteList => 'Listeyi sil';
+
+  @override
+  String get listsFromFollows => 'Takip ettiklerinizden';
+
+  @override
+  String get all => 'Takip edilen';
+
+  @override
+  String get addToFeed => 'Akışa ekle';
+
+  @override
+  String get removeFromFeed => 'Akıştan kaldır';
+
+  @override
+  String get addAnotherFeed => '+ Akış ekle';
 }

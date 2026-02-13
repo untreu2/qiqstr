@@ -687,5 +687,33 @@
   "removeBookmark": "Remove bookmark",
   "addBookmark": "Bookmark",
   "bookmarkAdded": "Bookmark added",
-  "bookmarkRemoved": "Bookmark removed"
+  "bookmarkRemoved": "Bookmark removed",
+
+  "listsTitle": "Lists",
+  "listsSubtitle": "Organize people you follow into categorized groups.",
+  "noLists": "No lists",
+  "noListsDescription": "Create a list to organize people you follow.",
+  "errorLoadingLists": "Error loading lists",
+  "createList": "Create List",
+  "listNameHint": "List name",
+  "listDescriptionHint": "Description (optional)",
+  "create": "Create",
+  "memberCount": "{count, plural, =0{No members} =1{1 member} other{{count} members}}",
+  "@memberCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noMembersInList": "No members",
+  "noMembersInListDescription": "Add people to this list from their profile.",
+  "removeFromList": "Remove",
+  "addToList": "Add to list",
+  "deleteList": "Delete list",
+  "listsFromFollows": "From people you follow",
+  "all": "Following",
+  "addToFeed": "Add to feed",
+  "removeFromFeed": "Remove from feed",
+  "addAnotherFeed": "+ Add feed"
 }

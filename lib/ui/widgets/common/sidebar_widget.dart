@@ -374,6 +374,20 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
+              icon: CarbonIcons.list_boxes,
+              label: l10n.listsTitle,
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push('/follow-sets');
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildModernSidebarItem(
+              context: context,
+              colors: colors,
               icon: CarbonIcons.bookmark,
               label: l10n.bookmarks,
               onTap: () {

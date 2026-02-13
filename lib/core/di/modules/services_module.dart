@@ -10,6 +10,8 @@ import '../../../data/services/relay_service.dart';
 import '../../../domain/mappers/event_mapper.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/sync/publishers/event_publisher.dart';
+import '../../../data/services/favorite_lists_service.dart';
+import '../../../data/services/follow_set_service.dart';
 
 class ServicesModule extends DIModule {
   @override
@@ -34,6 +36,7 @@ class ServicesModule extends DIModule {
           publisher: AppDI.get<EventPublisher>(),
         ));
     await AuthService.instance.refreshCache();
+    await FavoriteListsService.instance.load();
 
     await _initRelayService();
   }
@@ -74,6 +77,7 @@ class ServicesModule extends DIModule {
         if (gossipEnabled) {
           _discoverOutboxRelays(userPubkeyHex);
         }
+        _loadFollowSets(userPubkeyHex);
       }
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -134,6 +138,26 @@ class ServicesModule extends DIModule {
         print('[ServicesModule] Error during account switch reinit: $e');
       }
     }
+  }
+
+  void _loadFollowSets(String userPubkeyHex) {
+    Future.microtask(() async {
+      try {
+        final service = FollowSetService.instance;
+        if (!service.isInitialized) {
+          await service.loadFromDatabase(userPubkeyHex: userPubkeyHex);
+          final db = RustDatabaseService.instance;
+          final follows = await db.getFollowingList(userPubkeyHex);
+          if (follows != null && follows.isNotEmpty) {
+            await service.loadFollowedUsersSets(followedPubkeys: follows);
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('[ServicesModule] Error loading follow sets: $e');
+        }
+      }
+    });
   }
 
   void _discoverOutboxRelays(String userPubkeyHex) {

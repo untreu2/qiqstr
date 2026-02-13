@@ -64,8 +64,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     slivers: [
                       SliverToBoxAdapter(
                         child: SizedBox(
-                            height:
-                                MediaQuery.of(context).padding.top + 60),
+                            height: MediaQuery.of(context).padding.top + 60),
                       ),
                       SliverToBoxAdapter(
                         child: _buildHeader(context, l10n),
@@ -120,7 +119,8 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildLanguageButton(BuildContext context, AppLocalizations l10n, LocaleState localeState) {
+  Widget _buildLanguageButton(
+      BuildContext context, AppLocalizations l10n, LocaleState localeState) {
     return Positioned(
       top: MediaQuery.of(context).padding.top + 14,
       right: 16,

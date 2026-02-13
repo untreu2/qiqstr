@@ -22,6 +22,7 @@ import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/note_content/note_content_bloc.dart';
 import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
+import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/validation_service.dart';
@@ -180,6 +181,13 @@ class BlocsModule extends DIModule {
           profileRepository: AppDI.get<ProfileRepository>(),
           followingRepository: AppDI.get<FollowingRepository>(),
           syncService: AppDI.get<SyncService>(),
+        ));
+
+    AppDI.registerFactory<FollowSetBloc>(() => FollowSetBloc(
+          profileRepository: AppDI.get<ProfileRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
         ));
   }
 }

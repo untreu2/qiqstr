@@ -5,6 +5,7 @@ import 'base_repository.dart';
 
 abstract class FeedRepository {
   Stream<List<FeedNote>> watchFeed(String userPubkey, {int limit = 100});
+  Stream<List<FeedNote>> watchListFeed(List<String> pubkeys, {int limit = 100});
   Future<List<FeedNote>> getFeed(String userPubkey, {int limit = 100});
   Stream<List<FeedNote>> watchProfileNotes(String pubkey, {int limit = 50});
   Future<List<FeedNote>> getProfileNotes(String pubkey, {int limit = 50});
@@ -54,6 +55,26 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
 
     yield* db
         .watchFeedNotes(activeFollows, limit: limit)
+        .asyncMap((events) async {
+      return await _hydrateNotes(events);
+    });
+  }
+
+  @override
+  Stream<List<FeedNote>> watchListFeed(List<String> pubkeys,
+      {int limit = 100}) async* {
+    if (pubkeys.isEmpty) {
+      yield [];
+      return;
+    }
+
+    final initial = await db.getCachedFeedNotes(pubkeys, limit: limit);
+    if (initial.isNotEmpty) {
+      yield await _hydrateNotes(initial);
+    }
+
+    yield* db
+        .watchFeedNotes(pubkeys, limit: limit)
         .asyncMap((events) async {
       return await _hydrateNotes(events);
     });

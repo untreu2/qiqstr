@@ -620,5 +620,33 @@
   "removeBookmark": "Lesezeichen entfernen",
   "addBookmark": "Lesezeichen",
   "bookmarkAdded": "Lesezeichen hinzugefügt",
-  "bookmarkRemoved": "Lesezeichen entfernt"
+  "bookmarkRemoved": "Lesezeichen entfernt",
+
+  "listsTitle": "Listen",
+  "listsSubtitle": "Organisieren Sie Personen, denen Sie folgen, in Gruppen.",
+  "noLists": "Keine Listen",
+  "noListsDescription": "Erstellen Sie eine Liste, um Personen zu organisieren.",
+  "errorLoadingLists": "Fehler beim Laden der Listen",
+  "createList": "Liste erstellen",
+  "listNameHint": "Listenname",
+  "listDescriptionHint": "Beschreibung (optional)",
+  "create": "Erstellen",
+  "memberCount": "{count, plural, =0{Keine Mitglieder} =1{1 Mitglied} other{{count} Mitglieder}}",
+  "@memberCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noMembersInList": "Keine Mitglieder",
+  "noMembersInListDescription": "Fügen Sie Personen aus ihrem Profil zu dieser Liste hinzu.",
+  "removeFromList": "Entfernen",
+  "addToList": "Zur Liste hinzufügen",
+  "deleteList": "Liste löschen",
+  "listsFromFollows": "Von Personen, denen Sie folgen",
+  "all": "Folge ich",
+  "addToFeed": "Zum Feed hinzufügen",
+  "removeFromFeed": "Aus dem Feed entfernen",
+  "addAnotherFeed": "+ Feed hinzufügen"
 }

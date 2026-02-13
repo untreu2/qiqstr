@@ -19,6 +19,7 @@ import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/follow_set_service.dart';
 import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../l10n/app_localizations.dart';
@@ -408,6 +409,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _buildAddToListButton(context, state),
+                const SizedBox(width: 8),
                 if (state.isMuted != null) ...[
                   _buildMuteButton(context, state),
                   const SizedBox(width: 8),
@@ -525,6 +528,150 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAddToListButton(BuildContext context, ProfileInfoLoaded state) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          final pubkeyHex = state.user['pubkeyHex'] as String? ?? '';
+          if (pubkeyHex.isNotEmpty) {
+            _showAddToListSheet(context, pubkeyHex);
+          }
+        },
+        borderRadius: BorderRadius.circular(40),
+        child: Ink(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Icon(
+            CarbonIcons.list_boxes,
+            size: 20,
+            color: context.colors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAddToListSheet(BuildContext context, String pubkeyHex) {
+    final l10n = AppLocalizations.of(context)!;
+    final service = FollowSetService.instance;
+    final syncService = AppDI.get<SyncService>();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final currentSets = service.followSets;
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.addToList,
+                      style: TextStyle(
+                        color: context.colors.textPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    if (currentSets.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            l10n.noListsDescription,
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      ...currentSets.map((followSet) {
+                        final isInList = followSet.pubkeys.contains(pubkeyHex);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: GestureDetector(
+                            onTap: () {
+                              if (isInList) {
+                                service.removePubkeyFromSet(followSet.dTag, pubkeyHex);
+                              } else {
+                                service.addPubkeyToSet(followSet.dTag, pubkeyHex);
+                              }
+                              final updatedSet = service.getByDTag(followSet.dTag);
+                              if (updatedSet != null) {
+                                syncService.publishFollowSet(
+                                  dTag: updatedSet.dTag,
+                                  title: updatedSet.title,
+                                  description: updatedSet.description,
+                                  image: updatedSet.image,
+                                  pubkeys: updatedSet.pubkeys,
+                                );
+                              }
+                              setSheetState(() {});
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: context.colors.overlayLight,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    CarbonIcons.list_boxes,
+                                    size: 20,
+                                    color: context.colors.textPrimary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      followSet.title.isNotEmpty ? followSet.title : followSet.dTag,
+                                      style: TextStyle(
+                                        color: context.colors.textPrimary,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    isInList ? CarbonIcons.checkmark_filled : CarbonIcons.add,
+                                    size: 20,
+                                    color: isInList
+                                        ? context.colors.accent
+                                        : context.colors.textSecondary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

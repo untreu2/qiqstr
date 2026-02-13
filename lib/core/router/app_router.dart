@@ -28,6 +28,8 @@ import '../../ui/screens/wallet/wallet_page.dart';
 import '../../ui/screens/notification/notification_page.dart';
 import '../../ui/screens/explore/explore_page.dart';
 import '../../ui/screens/article/article_detail_page.dart';
+import '../../ui/screens/follow_set/follow_sets_page.dart';
+import '../../ui/screens/follow_set/follow_set_detail_page.dart';
 import '../../core/di/app_di.dart';
 import '../../data/services/auth_service.dart';
 
@@ -506,6 +508,20 @@ class AppRouter {
         path: '/bookmarks',
         name: 'bookmarks',
         builder: (context, state) => const BookmarkPage(),
+      ),
+      GoRoute(
+        path: '/follow-sets',
+        name: 'follow-sets',
+        builder: (context, state) => const FollowSetsPage(),
+      ),
+      GoRoute(
+        path: '/follow-set-detail',
+        name: 'follow-set-detail',
+        builder: (context, state) {
+          final dTag = state.uri.queryParameters['dTag'] ?? '';
+          final pubkey = state.uri.queryParameters['pubkey'];
+          return FollowSetDetailPage(dTag: dTag, ownerPubkey: pubkey);
+        },
       ),
       GoRoute(
         path: '/event-manager',

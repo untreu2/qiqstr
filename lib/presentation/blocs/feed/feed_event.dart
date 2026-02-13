@@ -101,6 +101,17 @@ class FeedNewNotesAccepted extends FeedEvent {
   const FeedNewNotesAccepted();
 }
 
+class FeedListChanged extends FeedEvent {
+  final List<String>? pubkeys;
+  final String? listId;
+  final String? listTitle;
+
+  const FeedListChanged({this.pubkeys, this.listId, this.listTitle});
+
+  @override
+  List<Object?> get props => [pubkeys, listId, listTitle];
+}
+
 class FeedSyncCompleted extends FeedEvent {
   const FeedSyncCompleted();
 }

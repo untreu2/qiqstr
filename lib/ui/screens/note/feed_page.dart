@@ -32,6 +32,8 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
+import '../../../data/services/favorite_lists_service.dart';
+import '../../../data/services/follow_set_service.dart';
 
 class FeedPage extends StatefulWidget {
   final String userHex;
@@ -62,6 +64,11 @@ class FeedPageState extends State<FeedPage> {
   UserSearchBloc? _searchBloc;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Map<String, dynamic>? _loggedInUserProfile;
+  List<_FavoriteListInfo> _favoriteLists = [];
+  String? _activeListId;
+  Offset? _swipeStartPosition;
+  final ScrollController _listSelectorController = ScrollController();
+  final Map<String, GlobalKey> _tabKeys = {};
 
   @override
   void initState() {
@@ -73,6 +80,7 @@ class FeedPageState extends State<FeedPage> {
     _relayCountTimer =
         Timer.periodic(const Duration(seconds: 1), (_) => _updateRelayCount());
     _loadLoggedInUserProfile();
+    _loadFavoriteLists();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
@@ -88,6 +96,107 @@ class FeedPageState extends State<FeedPage> {
       setState(() {
         _loggedInUserProfile = profile.toMap();
       });
+    }
+  }
+
+  void _loadFavoriteLists() {
+    _refreshFavoriteLists();
+    setState(() {});
+  }
+
+  void _refreshFavoriteLists() {
+    final favService = FavoriteListsService.instance;
+    final setService = FollowSetService.instance;
+    final ids = favService.favoriteIds;
+    final lists = <_FavoriteListInfo>[];
+    for (final id in ids) {
+      final followSet = setService.getByListId(id);
+      if (followSet != null) {
+        lists.add(_FavoriteListInfo(
+          listId: id,
+          title: followSet.title.isNotEmpty ? followSet.title : followSet.dTag,
+          pubkeys: followSet.pubkeys,
+        ));
+      }
+    }
+    _favoriteLists = lists;
+  }
+
+  void _onListSelected(String? listId, List<String>? pubkeys, String? title) {
+    final feedBloc = AppDI.get<FeedBloc>();
+    if (listId == null) {
+      feedBloc.add(const FeedListChanged());
+      setState(() => _activeListId = null);
+    } else {
+      feedBloc.add(FeedListChanged(
+        pubkeys: pubkeys,
+        listId: listId,
+        listTitle: title,
+      ));
+      setState(() => _activeListId = listId);
+    }
+    _scrollToActiveTab(listId ?? '_all');
+  }
+
+  void _scrollToActiveTab(String tabId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _tabKeys[tabId];
+      if (key == null || key.currentContext == null) return;
+      if (!_listSelectorController.hasClients) return;
+
+      final renderBox = key.currentContext!.findRenderObject() as RenderBox?;
+      if (renderBox == null) return;
+
+      final scrollRenderBox = _listSelectorController
+          .position.context.storageContext
+          .findRenderObject() as RenderBox?;
+      if (scrollRenderBox == null) return;
+
+      final tabOffset =
+          renderBox.localToGlobal(Offset.zero, ancestor: scrollRenderBox);
+      final tabWidth = renderBox.size.width;
+      final viewportWidth = _listSelectorController.position.viewportDimension;
+      final currentScroll = _listSelectorController.offset;
+
+      final tabLeft = tabOffset.dx + currentScroll;
+      final tabCenter = tabLeft + tabWidth / 2;
+      final targetScroll = (tabCenter - viewportWidth / 2).clamp(
+        _listSelectorController.position.minScrollExtent,
+        _listSelectorController.position.maxScrollExtent,
+      );
+
+      _listSelectorController.animateTo(
+        targetScroll,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _handleSwipe(Offset delta) {
+    if (_favoriteLists.isEmpty) return;
+
+    final dx = delta.dx;
+    final dy = delta.dy;
+    if (dx.abs() < 80 || dx.abs() < dy.abs() * 1.5) return;
+
+    final totalPages = 1 + _favoriteLists.length;
+    final currentIndex = _activeListId == null
+        ? 0
+        : _favoriteLists.indexWhere((l) => l.listId == _activeListId) + 1;
+
+    if (dx < 0 && currentIndex < totalPages - 1) {
+      final next = currentIndex + 1;
+      final list = _favoriteLists[next - 1];
+      _onListSelected(list.listId, list.pubkeys, list.title);
+    } else if (dx > 0 && currentIndex > 0) {
+      final prev = currentIndex - 1;
+      if (prev == 0) {
+        _onListSelected(null, null, null);
+      } else {
+        final list = _favoriteLists[prev - 1];
+        _onListSelected(list.listId, list.pubkeys, list.title);
+      }
     }
   }
 
@@ -143,6 +252,7 @@ class FeedPageState extends State<FeedPage> {
     _searchDebounceTimer?.cancel();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
+    _listSelectorController.dispose();
     _notesNotifier.dispose();
     _connectedRelaysCount.dispose();
     _searchController.dispose();
@@ -299,142 +409,197 @@ class FeedPageState extends State<FeedPage> {
         child: Container(
           width: double.infinity,
           color: colors.background.withValues(alpha: 0.8),
-          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 0),
+          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 0, 0),
           child: Column(
             children: [
-              SizedBox(
-                height: 40,
-                child: !isHashtagMode
-                    ? Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              _scaffoldKey.currentState?.openDrawer();
-                            },
-                            child: user != null
-                                ? Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: colors.avatarPlaceholder,
-                                      image: userProfileImage.isNotEmpty
-                                          ? DecorationImage(
-                                              image: CachedNetworkImageProvider(
-                                                  userProfileImage),
-                                              fit: BoxFit.cover,
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: SizedBox(
+                  height: 40,
+                  child: !isHashtagMode
+                      ? Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                _scaffoldKey.currentState?.openDrawer();
+                              },
+                              child: user != null
+                                  ? Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colors.avatarPlaceholder,
+                                        image: userProfileImage.isNotEmpty
+                                            ? DecorationImage(
+                                                image:
+                                                    CachedNetworkImageProvider(
+                                                        userProfileImage),
+                                                fit: BoxFit.cover,
+                                              )
+                                            : null,
+                                      ),
+                                      child: userProfileImage.isEmpty
+                                          ? Icon(
+                                              Icons.person,
+                                              size: 20,
+                                              color: colors.textSecondary,
                                             )
                                           : null,
-                                    ),
-                                    child: userProfileImage.isEmpty
-                                        ? Icon(
-                                            Icons.person,
-                                            size: 20,
-                                            color: colors.textSecondary,
-                                          )
-                                        : null,
-                                  )
-                                : Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: colors.avatarPlaceholder,
-                                    ),
-                                    child: CircularProgressIndicator(
-                                      color: colors.accent,
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: _enterSearchMode,
-                              child: Container(
-                                height: 36,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                                decoration: BoxDecoration(
-                                  color: colors.overlayLight,
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      CarbonIcons.search,
-                                      size: 18,
-                                      color: colors.textPrimary,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      l10n.searchDotDotDot,
-                                      style: TextStyle(
-                                        color: colors.textPrimary,
-                                        fontSize: 15,
+                                    )
+                                  : Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colors.avatarPlaceholder,
+                                      ),
+                                      child: CircularProgressIndicator(
+                                        color: colors.accent,
+                                        strokeWidth: 2,
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          GestureDetector(
-                            onTap: () {
-                              context.push('/relays');
-                            },
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  CarbonIcons.network_3,
-                                  size: 15,
-                                  color: colors.textSecondary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '$_connectedRelays/$_totalRelays',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: colors.textSecondary,
-                                    fontWeight: FontWeight.w500,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: _enterSearchMode,
+                                child: Container(
+                                  height: 36,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  decoration: BoxDecoration(
+                                    color: colors.overlayLight,
+                                    borderRadius: BorderRadius.circular(25),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        CarbonIcons.search,
+                                        size: 18,
+                                        color: colors.textPrimary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        l10n.searchDotDotDot,
+                                        style: TextStyle(
+                                          color: colors.textPrimary,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    : Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: BackButtonWidget.floating(),
-                          ),
-                          Center(
-                            child: GestureDetector(
-                              onTap: () {
-                                _scrollController.animateTo(
-                                  0,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOut,
-                                );
-                              },
-                              child: SvgPicture.asset(
-                                'assets/main_icon_white.svg',
-                                width: 30,
-                                height: 30,
-                                colorFilter: ColorFilter.mode(
-                                    colors.textPrimary, BlendMode.srcIn),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: () {
+                                context.push('/relays');
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    CarbonIcons.network_3,
+                                    size: 15,
+                                    color: colors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '$_connectedRelays/$_totalRelays',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: colors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: BackButtonWidget.floating(),
+                            ),
+                            Center(
+                              child: GestureDetector(
+                                onTap: () {
+                                  _scrollController.animateTo(
+                                    0,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut,
+                                  );
+                                },
+                                child: SvgPicture.asset(
+                                  'assets/main_icon_white.svg',
+                                  width: 30,
+                                  height: 30,
+                                  colorFilter: ColorFilter.mode(
+                                      colors.textPrimary, BlendMode.srcIn),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+              if (!_isSearchMode && !isHashtagMode && _favoriteLists.isNotEmpty)
+                _buildListSelector(colors),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  GlobalKey _getTabKey(String id) {
+    return _tabKeys.putIfAbsent(id, () => GlobalKey());
+  }
+
+  Widget _buildListSelector(AppThemeColors colors) {
+    final tabs = <Widget>[
+      _buildListTab(
+        key: _getTabKey('_all'),
+        colors: colors,
+        label: AppLocalizations.of(context)!.all,
+        isSelected: _activeListId == null,
+        onTap: () => _onListSelected(null, null, null),
+      ),
+      ..._favoriteLists.map((list) => _buildListTab(
+            key: _getTabKey(list.listId),
+            colors: colors,
+            label: list.title,
+            isSelected: _activeListId == list.listId,
+            onTap: () => _onListSelected(list.listId, list.pubkeys, list.title),
+          )),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Center(
+        child: SingleChildScrollView(
+          controller: _listSelectorController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(right: 16),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...tabs.expand((tab) => [tab, const SizedBox(width: 24)]).toList()
+                ..removeLast(),
+              const SizedBox(width: 24),
+              _buildListTab(
+                colors: colors,
+                label: AppLocalizations.of(context)!.addAnotherFeed,
+                isSelected: false,
+                onTap: () => context.push('/follow-sets'),
               ),
             ],
           ),
@@ -443,17 +608,63 @@ class FeedPageState extends State<FeedPage> {
     );
   }
 
+  Widget _buildListTab({
+    GlobalKey? key,
+    required AppThemeColors colors,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final displayLabel =
+        label.length > 20 ? '${label.substring(0, 20)}...' : label;
+    return GestureDetector(
+      key: key,
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              displayLabel,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isSelected ? colors.textPrimary : colors.textSecondary,
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            const SizedBox(height: 6),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              height: isSelected ? 2 : 0,
+              decoration: BoxDecoration(
+                color: colors.textPrimary,
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight =
-        _isSearchMode ? topPadding + 72 : topPadding + 55;
+    _refreshFavoriteLists();
+    final bool hasListSelector =
+        !_isSearchMode && widget.hashtag == null && _favoriteLists.isNotEmpty;
+    final double headerHeight = _isSearchMode
+        ? topPadding + 72
+        : topPadding + 55 + (hasListSelector ? 36 : 0);
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
 
     final feedBloc = AppDI.get<FeedBloc>();
-    feedBloc.add(FeedInitialized(
-        userHex: widget.userHex, hashtag: widget.hashtag));
+    feedBloc
+        .add(FeedInitialized(userHex: widget.userHex, hashtag: widget.hashtag));
 
     return MultiBlocProvider(
       providers: [
@@ -475,55 +686,54 @@ class FeedPageState extends State<FeedPage> {
             backgroundColor: colors.background,
             drawer: const SidebarWidget(),
             body: Stack(
-                children: [
-                  _buildFeedContent(context, feedState, topPadding,
-                      headerHeight, isHashtagMode, colors),
-                  if (isHashtagMode) ...[
-                    BackButtonWidget.floating(),
-                    Positioned(
-                      top: topPadding + 10,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: GestureDetector(
-                          onTap: () {
-                            _scrollController.animateTo(
-                              0,
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeOut,
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: colors.textPrimary,
-                              borderRadius: BorderRadius.circular(40),
-                            ),
-                            child: Text(
-                              '#${widget.hashtag}',
-                              style: TextStyle(
-                                color: colors.background,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+              children: [
+                _buildFeedContent(context, feedState, topPadding, headerHeight,
+                    isHashtagMode, colors),
+                if (isHashtagMode) ...[
+                  BackButtonWidget.floating(),
+                  Positioned(
+                    top: topPadding + 10,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          _scrollController.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: colors.textPrimary,
+                            borderRadius: BorderRadius.circular(40),
+                          ),
+                          child: Text(
+                            '#${widget.hashtag}',
+                            style: TextStyle(
+                              color: colors.background,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ],
-                  if (feedState is FeedLoaded &&
-                      feedState.pendingNotesCount > 0 &&
-                      !_isSearchMode)
-                    _buildNewNotesButton(
-                      context,
-                      feedState.pendingNotesCount,
-                      headerHeight,
-                      colors,
-                    ),
+                  ),
                 ],
-              ),
+                if (feedState is FeedLoaded &&
+                    feedState.pendingNotesCount > 0 &&
+                    !_isSearchMode)
+                  _buildNewNotesButton(
+                    context,
+                    feedState.pendingNotesCount,
+                    colors,
+                  ),
+              ],
+            ),
           );
         },
       ),
@@ -574,81 +784,93 @@ class FeedPageState extends State<FeedPage> {
 
             final user = _loggedInUserProfile ?? profiles[currentUserHex];
 
-            return RefreshIndicator(
-              onRefresh: () async {
-                context.read<FeedBloc>().add(const FeedRefreshed());
+            return Listener(
+              onPointerDown: (event) {
+                _swipeStartPosition = event.position;
               },
-              child: CustomScrollView(
-                key: const PageStorageKey<String>('feed_scroll'),
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics()),
-                cacheExtent: 600,
-                slivers: [
-                  if (!isHashtagMode)
-                    SliverPersistentHeader(
-                      floating: true,
-                      delegate: _PinnedHeaderDelegate(
-                        height: headerHeight,
-                        child: AnimatedOpacity(
-                          opacity: _showAppBar ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: _buildHeader(context, topPadding, user),
+              onPointerUp: (event) {
+                if (_swipeStartPosition != null) {
+                  final delta = event.position - _swipeStartPosition!;
+                  _swipeStartPosition = null;
+                  _handleSwipe(delta);
+                }
+              },
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  context.read<FeedBloc>().add(const FeedRefreshed());
+                },
+                child: CustomScrollView(
+                  key: const PageStorageKey<String>('feed_scroll'),
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics()),
+                  cacheExtent: 600,
+                  slivers: [
+                    if (!isHashtagMode)
+                      SliverPersistentHeader(
+                        floating: true,
+                        delegate: _PinnedHeaderDelegate(
+                          height: headerHeight,
+                          child: AnimatedOpacity(
+                            opacity: _showAppBar ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 300),
+                            child: _buildHeader(context, topPadding, user),
+                          ),
                         ),
                       ),
+                    SliverToBoxAdapter(
+                      child:
+                          SizedBox(height: isHashtagMode ? topPadding + 70 : 4),
                     ),
-                  SliverToBoxAdapter(
-                    child:
-                        SizedBox(height: isHashtagMode ? topPadding + 70 : 4),
-                  ),
-                  if (_isSearchMode)
-                    _buildUserSearchResults(context)
-                  else if (notes.isEmpty && isSyncing)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: colors.textSecondary,
+                    if (_isSearchMode)
+                      _buildUserSearchResults(context)
+                    else if (notes.isEmpty && isSyncing)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colors.textSecondary,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Loading your feed...',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: colors.textSecondary,
+                              const SizedBox(height: 16),
+                              Text(
+                                'Loading your feed...',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: colors.textSecondary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                      )
+                    else
+                      widgets.NoteListWidget(
+                        notes: notes,
+                        currentUserHex: currentUserHex,
+                        notesNotifier: _notesNotifier,
+                        profiles: profiles,
+                        isLoading: isLoadingMore,
+                        canLoadMore: canLoadMore,
+                        onLoadMore: () {
+                          context
+                              .read<FeedBloc>()
+                              .add(const FeedLoadMoreRequested());
+                        },
+                        onEmptyRefresh: () {
+                          context.read<FeedBloc>().add(const FeedRefreshed());
+                        },
+                        scrollController: _scrollController,
                       ),
-                    )
-                  else
-                    widgets.NoteListWidget(
-                      notes: notes,
-                      currentUserHex: currentUserHex,
-                      notesNotifier: _notesNotifier,
-                      profiles: profiles,
-                      isLoading: isLoadingMore,
-                      canLoadMore: canLoadMore,
-                      onLoadMore: () {
-                        context
-                            .read<FeedBloc>()
-                            .add(const FeedLoadMoreRequested());
-                      },
-                      onEmptyRefresh: () {
-                        context.read<FeedBloc>().add(const FeedRefreshed());
-                      },
-                      scrollController: _scrollController,
-                    ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -693,16 +915,13 @@ class FeedPageState extends State<FeedPage> {
   Widget _buildNewNotesButton(
     BuildContext context,
     int count,
-    double headerHeight,
     AppThemeColors colors,
   ) {
     final l10n = AppLocalizations.of(context)!;
-    final double topPadding = MediaQuery.of(context).padding.top;
-    final double top = _showAppBar ? headerHeight + 8 : topPadding + 8;
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      top: top,
+    final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final double bottom = bottomPadding + 16;
+    return Positioned(
+      bottom: bottom,
       left: 0,
       right: 0,
       child: Center(
@@ -716,14 +935,14 @@ class FeedPageState extends State<FeedPage> {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
               child: Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
                   color: colors.textPrimary.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(25),
                 ),
                 child: Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
                   decoration: BoxDecoration(
                     color: colors.background,
                     borderRadius: BorderRadius.circular(20),
@@ -814,11 +1033,11 @@ class FeedPageState extends State<FeedPage> {
                             label: l10n.retryText,
                             onPressed: () {
                               context.read<UserSearchBloc>().add(
-                              UserSearchQueryChanged(
-                                  _searchController.text.trim()));
-                        },
-                        backgroundColor: context.colors.accent,
-                        foregroundColor: context.colors.background,
+                                  UserSearchQueryChanged(
+                                      _searchController.text.trim()));
+                            },
+                            backgroundColor: context.colors.accent,
+                            foregroundColor: context.colors.background,
                           );
                         },
                       ),
@@ -909,7 +1128,6 @@ class FeedPageState extends State<FeedPage> {
     final colors = context.colors;
     final items = <_SearchResultItem>[];
 
-    
     if (users.isNotEmpty) {
       items.add(_SearchResultItem(
           type: _SearchResultType.header, data: {'title': l10n.users}));
@@ -918,7 +1136,6 @@ class FeedPageState extends State<FeedPage> {
       }
     }
 
-    
     if (notes.isNotEmpty) {
       items.add(_SearchResultItem(
           type: _SearchResultType.header, data: {'title': l10n.notes}));
@@ -1362,6 +1579,18 @@ class _FeedUserSeparator extends StatelessWidget {
   }
 }
 
+class _FavoriteListInfo {
+  final String listId;
+  final String title;
+  final List<String> pubkeys;
+
+  const _FavoriteListInfo({
+    required this.listId,
+    required this.title,
+    required this.pubkeys,
+  });
+}
+
 class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   final double height;
@@ -1383,4 +1612,3 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) =>
       height != oldDelegate.height || child != oldDelegate.child;
 }
-

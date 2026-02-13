@@ -1439,4 +1439,76 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookmarkRemoved => 'Bookmark removed';
+
+  @override
+  String get listsTitle => 'Lists';
+
+  @override
+  String get listsSubtitle =>
+      'Organize people you follow into categorized groups.';
+
+  @override
+  String get noLists => 'No lists';
+
+  @override
+  String get noListsDescription =>
+      'Create a list to organize people you follow.';
+
+  @override
+  String get errorLoadingLists => 'Error loading lists';
+
+  @override
+  String get createList => 'Create List';
+
+  @override
+  String get listNameHint => 'List name';
+
+  @override
+  String get listDescriptionHint => 'Description (optional)';
+
+  @override
+  String get create => 'Create';
+
+  @override
+  String memberCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count members',
+      one: '1 member',
+      zero: 'No members',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMembersInList => 'No members';
+
+  @override
+  String get noMembersInListDescription =>
+      'Add people to this list from their profile.';
+
+  @override
+  String get removeFromList => 'Remove';
+
+  @override
+  String get addToList => 'Add to list';
+
+  @override
+  String get deleteList => 'Delete list';
+
+  @override
+  String get listsFromFollows => 'From people you follow';
+
+  @override
+  String get all => 'Following';
+
+  @override
+  String get addToFeed => 'Add to feed';
+
+  @override
+  String get removeFromFeed => 'Remove from feed';
+
+  @override
+  String get addAnotherFeed => '+ Add feed';
 }

@@ -14,6 +14,7 @@ class TopActionBarWidget extends StatelessWidget {
   final double? topOffset;
   final bool showBackButton;
   final bool showShareButton;
+  final Widget? customRightWidget;
 
   const TopActionBarWidget({
     super.key,
@@ -26,6 +27,7 @@ class TopActionBarWidget extends StatelessWidget {
     this.topOffset,
     this.showBackButton = true,
     this.showShareButton = true,
+    this.customRightWidget,
   });
 
   @override
@@ -76,7 +78,12 @@ class TopActionBarWidget extends StatelessWidget {
                 child: _buildCenterBubble(colors),
               ),
             ),
-          if (showShareButton)
+          if (customRightWidget != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: customRightWidget!,
+            )
+          else if (showShareButton)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Container(

@@ -620,5 +620,33 @@
   "removeBookmark": "Yer imini kaldır",
   "addBookmark": "Yer İmle",
   "bookmarkAdded": "Yer imine eklendi",
-  "bookmarkRemoved": "Yer iminden kaldırıldı"
+  "bookmarkRemoved": "Yer iminden kaldırıldı",
+
+  "listsTitle": "Listeler",
+  "listsSubtitle": "Takip ettiğiniz kişileri kategorilere ayırarak düzenleyin.",
+  "noLists": "Liste yok",
+  "noListsDescription": "Takip ettiğiniz kişileri düzenlemek için bir liste oluşturun.",
+  "errorLoadingLists": "Listeler yüklenirken hata",
+  "createList": "Liste Oluştur",
+  "listNameHint": "Liste adı",
+  "listDescriptionHint": "Açıklama (isteğe bağlı)",
+  "create": "Oluştur",
+  "memberCount": "{count, plural, =0{Üye yok} =1{1 üye} other{{count} üye}}",
+  "@memberCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noMembersInList": "Üye yok",
+  "noMembersInListDescription": "Profillerinden bu listeye kişi ekleyin.",
+  "removeFromList": "Kaldır",
+  "addToList": "Listeye ekle",
+  "deleteList": "Listeyi sil",
+  "listsFromFollows": "Takip ettiklerinizden",
+  "all": "Takip edilen",
+  "addToFeed": "Akışa ekle",
+  "removeFromFeed": "Akıştan kaldır",
+  "addAnotherFeed": "+ Akış ekle"
 }

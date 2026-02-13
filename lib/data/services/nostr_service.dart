@@ -258,6 +258,18 @@ class NostrService {
     return filter;
   }
 
+  static Map<String, dynamic> createFollowSetsFilter({
+    required List<String> authors,
+    int? limit,
+  }) {
+    final filter = <String, dynamic>{
+      'kinds': [30000],
+    };
+    if (authors.isNotEmpty) filter['authors'] = authors;
+    if (limit != null) filter['limit'] = limit;
+    return filter;
+  }
+
   static Map<String, dynamic> createNotificationFilter({
     required List<String> pubkeys,
     List<int>? kinds,

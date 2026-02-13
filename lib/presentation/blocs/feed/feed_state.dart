@@ -28,6 +28,8 @@ class FeedLoaded extends FeedState {
   final bool isLoadingMore;
   final bool isSyncing;
   final int pendingNotesCount;
+  final String? activeListId;
+  final String? activeListTitle;
 
   const FeedLoaded({
     required this.notes,
@@ -40,6 +42,8 @@ class FeedLoaded extends FeedState {
     this.isLoadingMore = false,
     this.isSyncing = false,
     this.pendingNotesCount = 0,
+    this.activeListId,
+    this.activeListTitle,
   });
 
   @override
@@ -54,6 +58,8 @@ class FeedLoaded extends FeedState {
         isLoadingMore,
         isSyncing,
         pendingNotesCount,
+        activeListId,
+        activeListTitle,
       ];
 
   FeedLoaded copyWith({
@@ -67,6 +73,9 @@ class FeedLoaded extends FeedState {
     bool? isLoadingMore,
     bool? isSyncing,
     int? pendingNotesCount,
+    String? activeListId,
+    String? activeListTitle,
+    bool clearActiveList = false,
   }) {
     return FeedLoaded(
       notes: notes ?? this.notes,
@@ -79,6 +88,8 @@ class FeedLoaded extends FeedState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isSyncing: isSyncing ?? this.isSyncing,
       pendingNotesCount: pendingNotesCount ?? this.pendingNotesCount,
+      activeListId: clearActiveList ? null : (activeListId ?? this.activeListId),
+      activeListTitle: clearActiveList ? null : (activeListTitle ?? this.activeListTitle),
     );
   }
 }

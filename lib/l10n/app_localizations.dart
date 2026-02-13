@@ -2787,6 +2787,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bookmark removed'**
   String get bookmarkRemoved;
+
+  /// No description provided for @listsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lists'**
+  String get listsTitle;
+
+  /// No description provided for @listsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize people you follow into categorized groups.'**
+  String get listsSubtitle;
+
+  /// No description provided for @noLists.
+  ///
+  /// In en, this message translates to:
+  /// **'No lists'**
+  String get noLists;
+
+  /// No description provided for @noListsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a list to organize people you follow.'**
+  String get noListsDescription;
+
+  /// No description provided for @errorLoadingLists.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading lists'**
+  String get errorLoadingLists;
+
+  /// No description provided for @createList.
+  ///
+  /// In en, this message translates to:
+  /// **'Create List'**
+  String get createList;
+
+  /// No description provided for @listNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'List name'**
+  String get listNameHint;
+
+  /// No description provided for @listDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Description (optional)'**
+  String get listDescriptionHint;
+
+  /// No description provided for @create.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get create;
+
+  /// No description provided for @memberCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No members} =1{1 member} other{{count} members}}'**
+  String memberCount(int count);
+
+  /// No description provided for @noMembersInList.
+  ///
+  /// In en, this message translates to:
+  /// **'No members'**
+  String get noMembersInList;
+
+  /// No description provided for @noMembersInListDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Add people to this list from their profile.'**
+  String get noMembersInListDescription;
+
+  /// No description provided for @removeFromList.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get removeFromList;
+
+  /// No description provided for @addToList.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to list'**
+  String get addToList;
+
+  /// No description provided for @deleteList.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete list'**
+  String get deleteList;
+
+  /// No description provided for @listsFromFollows.
+  ///
+  /// In en, this message translates to:
+  /// **'From people you follow'**
+  String get listsFromFollows;
+
+  /// No description provided for @all.
+  ///
+  /// In en, this message translates to:
+  /// **'Following'**
+  String get all;
+
+  /// No description provided for @addToFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to feed'**
+  String get addToFeed;
+
+  /// No description provided for @removeFromFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from feed'**
+  String get removeFromFeed;
+
+  /// No description provided for @addAnotherFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'+ Add feed'**
+  String get addAnotherFeed;
 }
 
 class _AppLocalizationsDelegate
