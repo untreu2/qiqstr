@@ -245,6 +245,19 @@ class NostrService {
     return filter;
   }
 
+  static Map<String, dynamic> createBookmarkFilter({
+    required List<String> authors,
+    int? limit,
+  }) {
+    final filter = <String, dynamic>{
+      'kinds': [30001],
+      '#d': ['bookmark'],
+    };
+    if (authors.isNotEmpty) filter['authors'] = authors;
+    if (limit != null) filter['limit'] = limit;
+    return filter;
+  }
+
   static Map<String, dynamic> createNotificationFilter({
     required List<String> pubkeys,
     List<int>? kinds,

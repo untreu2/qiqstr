@@ -2697,6 +2697,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 new note} other{{count} new notes}}'**
   String newNotesAvailable(int count);
+
+  /// No description provided for @readsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-form articles from people you follow.'**
+  String get readsSubtitle;
+
+  /// No description provided for @loadingArticles.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading articles...'**
+  String get loadingArticles;
+
+  /// No description provided for @somethingWentWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong'**
+  String get somethingWentWrong;
+
+  /// No description provided for @noArticlesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No articles yet'**
+  String get noArticlesYet;
+
+  /// No description provided for @longFormContentDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-form content from people you follow will appear here.'**
+  String get longFormContentDescription;
+
+  /// No description provided for @bookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmarks'**
+  String get bookmarks;
+
+  /// No description provided for @bookmarksTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmarks'**
+  String get bookmarksTitle;
+
+  /// No description provided for @bookmarksSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your bookmarked notes are encrypted and only visible to you.'**
+  String get bookmarksSubtitle;
+
+  /// No description provided for @noBookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'No bookmarks'**
+  String get noBookmarks;
+
+  /// No description provided for @youHaventBookmarkedAnyNotesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t bookmarked any notes yet.'**
+  String get youHaventBookmarkedAnyNotesYet;
+
+  /// No description provided for @errorLoadingBookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading bookmarks'**
+  String get errorLoadingBookmarks;
+
+  /// No description provided for @removeBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove bookmark'**
+  String get removeBookmark;
+
+  /// No description provided for @addBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark'**
+  String get addBookmark;
+
+  /// No description provided for @bookmarkAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark added'**
+  String get bookmarkAdded;
+
+  /// No description provided for @bookmarkRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark removed'**
+  String get bookmarkRemoved;
 }
 
 class _AppLocalizationsDelegate

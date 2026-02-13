@@ -19,6 +19,7 @@ import '../../ui/screens/settings/database_page.dart';
 import '../../ui/screens/settings/display_page.dart';
 import '../../ui/screens/settings/payments_page.dart';
 import '../../ui/screens/settings/muted_page.dart';
+import '../../ui/screens/bookmark/bookmark_page.dart';
 import '../../ui/screens/settings/event_manager_page.dart';
 import '../../ui/screens/webview/webview_page.dart';
 import '../../ui/screens/dm/dm_conversations_page.dart';
@@ -500,6 +501,11 @@ class AppRouter {
         path: '/muted',
         name: 'muted',
         builder: (context, state) => const MutedPage(),
+      ),
+      GoRoute(
+        path: '/bookmarks',
+        name: 'bookmarks',
+        builder: (context, state) => const BookmarkPage(),
       ),
       GoRoute(
         path: '/event-manager',

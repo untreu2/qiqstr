@@ -603,5 +603,22 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "readsSubtitle": "Langform-Artikel von Personen, denen Sie folgen.",
+  "loadingArticles": "Artikel werden geladen...",
+  "somethingWentWrong": "Etwas ist schiefgelaufen",
+  "noArticlesYet": "Noch keine Artikel",
+  "longFormContentDescription": "Langform-Inhalte von Personen, denen Sie folgen, werden hier angezeigt.",
+
+  "bookmarks": "Lesezeichen",
+  "bookmarksTitle": "Lesezeichen",
+  "bookmarksSubtitle": "Ihre Lesezeichen sind verschlüsselt und nur für Sie sichtbar.",
+  "noBookmarks": "Keine Lesezeichen",
+  "youHaventBookmarkedAnyNotesYet": "Sie haben noch keine Notizen als Lesezeichen gespeichert.",
+  "errorLoadingBookmarks": "Fehler beim Laden der Lesezeichen",
+  "removeBookmark": "Lesezeichen entfernen",
+  "addBookmark": "Lesezeichen",
+  "bookmarkAdded": "Lesezeichen hinzugefügt",
+  "bookmarkRemoved": "Lesezeichen entfernt"
 }

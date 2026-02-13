@@ -20,6 +20,7 @@ import '../dialogs/zap_dialog.dart';
 import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../data/services/encrypted_bookmark_service.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -43,10 +44,13 @@ class _InteractionBarState extends State<InteractionBar> {
   final GlobalKey _repostButtonKey = GlobalKey();
   final GlobalKey _moreButtonKey = GlobalKey();
   late final InteractionBloc _interactionBloc;
+  bool _isBookmarked = false;
 
   @override
   void initState() {
     super.initState();
+    _isBookmarked =
+        EncryptedBookmarkService.instance.isBookmarked(widget.noteId);
     _interactionBloc = InteractionBloc(
       syncService: AppDI.get<SyncService>(),
       feedRepository: AppDI.get<FeedRepository>(),
@@ -362,6 +366,40 @@ class _InteractionBarState extends State<InteractionBar> {
     }
   }
 
+  void _handleBookmarkTap() {
+    final l10n = AppLocalizations.of(context)!;
+    HapticFeedback.lightImpact();
+    if (!mounted) return;
+
+    final bookmarkService = EncryptedBookmarkService.instance;
+
+    if (_isBookmarked) {
+      bookmarkService.removeBookmark(widget.noteId);
+      setState(() => _isBookmarked = false);
+      _publishBookmarkUpdate();
+      if (mounted) {
+        AppSnackbar.success(context, l10n.bookmarkRemoved);
+      }
+    } else {
+      bookmarkService.addBookmark(widget.noteId);
+      setState(() => _isBookmarked = true);
+      _publishBookmarkUpdate();
+      if (mounted) {
+        AppSnackbar.success(context, l10n.bookmarkAdded);
+      }
+    }
+  }
+
+  Future<void> _publishBookmarkUpdate() async {
+    try {
+      final syncService = AppDI.get<SyncService>();
+      final bookmarkService = EncryptedBookmarkService.instance;
+      await syncService.publishBookmark(
+        bookmarkedEventIds: bookmarkService.bookmarkedEventIds,
+      );
+    } catch (_) {}
+  }
+
   void _handleDeleteTap() {
     HapticFeedback.lightImpact();
     if (widget.note == null || !mounted) return;
@@ -453,6 +491,17 @@ class _InteractionBarState extends State<InteractionBar> {
                     activeCarbonIcon: CarbonIcons.flash_filled,
                     isBigSize: widget.isBigSize,
                     buttonType: _ButtonType.zap,
+                  ),
+                  _InteractionButton(
+                    carbonIcon: CarbonIcons.bookmark,
+                    activeCarbonIcon: CarbonIcons.bookmark_filled,
+                    count: 0,
+                    isActive: _isBookmarked,
+                    activeColor: colors.textPrimary,
+                    inactiveColor: colors.secondary,
+                    onTap: _handleBookmarkTap,
+                    isBigSize: widget.isBigSize,
+                    buttonType: _ButtonType.bookmark,
                   ),
                   _buildPopupMenu(colors, interactionState),
                 ],
@@ -590,7 +639,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 }
 
-enum _ButtonType { reply, repost, reaction, zap }
+enum _ButtonType { reply, repost, reaction, zap, bookmark }
 
 class _InteractionButton extends StatelessWidget {
   final String? iconPath;
@@ -665,6 +714,16 @@ class _InteractionButton extends StatelessWidget {
   }
 
   Widget _buildIcon(double iconSize, Color effectiveColor) {
+    if (buttonType == _ButtonType.bookmark) {
+      return Icon(
+        isActive
+            ? (activeCarbonIcon ?? CarbonIcons.bookmark_filled)
+            : (carbonIcon ?? CarbonIcons.bookmark),
+        size: iconSize + 2.0,
+        color: effectiveColor,
+      );
+    }
+
     if (buttonType == _ButtonType.repost && carbonIcon != null) {
       return Icon(carbonIcon, size: iconSize + 2.0, color: effectiveColor);
     }

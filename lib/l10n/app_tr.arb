@@ -603,5 +603,22 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "readsSubtitle": "Takip ettiğiniz kişilerin uzun içerikleri.",
+  "loadingArticles": "Makaleler yükleniyor...",
+  "somethingWentWrong": "Bir şeyler ters gitti",
+  "noArticlesYet": "Henüz makale yok",
+  "longFormContentDescription": "Takip ettiğiniz kişilerin uzun içerikleri burada görünecek.",
+
+  "bookmarks": "Yer İmleri",
+  "bookmarksTitle": "Yer İmleri",
+  "bookmarksSubtitle": "Yer imleriniz şifrelenmiştir ve yalnızca siz görebilirsiniz.",
+  "noBookmarks": "Yer imi yok",
+  "youHaventBookmarkedAnyNotesYet": "Henüz hiçbir notu yer imlerine eklemediniz.",
+  "errorLoadingBookmarks": "Yer imleri yüklenirken hata",
+  "removeBookmark": "Yer imini kaldır",
+  "addBookmark": "Yer İmle",
+  "bookmarkAdded": "Yer imine eklendi",
+  "bookmarkRemoved": "Yer iminden kaldırıldı"
 }

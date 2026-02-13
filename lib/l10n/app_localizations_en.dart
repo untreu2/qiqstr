@@ -1391,4 +1391,52 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get readsSubtitle => 'Long-form articles from people you follow.';
+
+  @override
+  String get loadingArticles => 'Loading articles...';
+
+  @override
+  String get somethingWentWrong => 'Something went wrong';
+
+  @override
+  String get noArticlesYet => 'No articles yet';
+
+  @override
+  String get longFormContentDescription =>
+      'Long-form content from people you follow will appear here.';
+
+  @override
+  String get bookmarks => 'Bookmarks';
+
+  @override
+  String get bookmarksTitle => 'Bookmarks';
+
+  @override
+  String get bookmarksSubtitle =>
+      'Your bookmarked notes are encrypted and only visible to you.';
+
+  @override
+  String get noBookmarks => 'No bookmarks';
+
+  @override
+  String get youHaventBookmarkedAnyNotesYet =>
+      'You haven\'t bookmarked any notes yet.';
+
+  @override
+  String get errorLoadingBookmarks => 'Error loading bookmarks';
+
+  @override
+  String get removeBookmark => 'Remove bookmark';
+
+  @override
+  String get addBookmark => 'Bookmark';
+
+  @override
+  String get bookmarkAdded => 'Bookmark added';
+
+  @override
+  String get bookmarkRemoved => 'Bookmark removed';
 }

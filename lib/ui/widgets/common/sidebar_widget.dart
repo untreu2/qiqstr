@@ -360,12 +360,25 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              svgAsset: 'assets/newspaper.svg',
-              iconSize: 18,
+              icon: CarbonIcons.document,
               label: l10n.reads,
               onTap: () {
                 Navigator.of(context).pop();
                 context.push('/home/feed/explore');
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildModernSidebarItem(
+              context: context,
+              colors: colors,
+              icon: CarbonIcons.bookmark,
+              label: l10n.bookmarks,
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push('/bookmarks');
               },
             ),
           ),

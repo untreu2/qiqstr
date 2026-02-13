@@ -2,14 +2,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/article/article_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
+import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/common_buttons.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../presentation/blocs/article/article_event.dart';
 import '../../../presentation/blocs/article/article_state.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../l10n/app_localizations.dart';
 
 class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key});
@@ -20,13 +24,14 @@ class ExplorePage extends StatefulWidget {
 
 class _ExplorePageState extends State<ExplorePage> {
   late ScrollController _scrollController;
+  final ValueNotifier<bool> _showTitleBubble = ValueNotifier(false);
   Timer? _scrollDebounceTimer;
   String? _currentUserHex;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
+    _scrollController = ScrollController()..addListener(_scrollListener);
     _loadCurrentUserHex();
   }
 
@@ -40,26 +45,27 @@ class _ExplorePageState extends State<ExplorePage> {
     }
   }
 
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final shouldShow = _scrollController.offset > 100;
+      if (_showTitleBubble.value != shouldShow) {
+        _showTitleBubble.value = shouldShow;
+      }
+    }
+  }
+
   @override
   void dispose() {
     _scrollDebounceTimer?.cancel();
     _scrollController.dispose();
+    _showTitleBubble.dispose();
     super.dispose();
-  }
-
-  void scrollToTop() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final l10n = AppLocalizations.of(context)!;
 
     if (_currentUserHex == null) {
       return Scaffold(
@@ -82,21 +88,52 @@ class _ExplorePageState extends State<ExplorePage> {
             backgroundColor: colors.background,
             body: Stack(
               children: [
-                _buildArticleContent(context, articleState, colors),
+                CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics()),
+                  cacheExtent: 600,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                          height: MediaQuery.of(context).padding.top + 60),
+                    ),
+                    SliverToBoxAdapter(
+                      child: TitleWidget(
+                        title: l10n.reads,
+                        fontSize: 32,
+                        subtitle: l10n.readsSubtitle,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 16),
+                    ),
+                    _buildContent(context, articleState, colors, l10n),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 150),
+                    ),
+                  ],
+                ),
                 TopActionBarWidget(
                   onBackPressed: () => context.pop(),
+                  showShareButton: false,
                   centerBubble: Text(
-                    'Reads',
+                    l10n.reads,
                     style: TextStyle(
                       color: colors.background,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  centerBubbleVisibility: _showTitleBubble,
                   onCenterBubbleTap: () {
-                    scrollToTop();
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
                   },
-                  showShareButton: false,
                 ),
               ],
             ),
@@ -106,35 +143,39 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  Widget _buildArticleContent(
+  Widget _buildContent(
     BuildContext context,
     ArticleState articleState,
     AppThemeColors colors,
+    AppLocalizations l10n,
   ) {
-    final topPadding = MediaQuery.of(context).padding.top;
-
     return switch (articleState) {
-      ArticleInitial() || ArticleLoading() => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: colors.textSecondary,
-                  strokeWidth: 2,
-                ),
+      ArticleInitial() || ArticleLoading() => SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: colors.textSecondary,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.loadingArticles,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Loading articles...',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colors.textSecondary,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ArticleLoaded(
@@ -144,140 +185,103 @@ class _ExplorePageState extends State<ExplorePage> {
         :final isLoadingMore,
         :final canLoadMore
       ) =>
-        RefreshIndicator(
-          onRefresh: () async {
+        ArticleListWidget(
+          articles: filteredArticles,
+          currentUserHex: currentUserHex,
+          profiles: profiles,
+          isLoading: isLoadingMore,
+          canLoadMore: canLoadMore,
+          onLoadMore: () {
+            context
+                .read<ArticleBloc>()
+                .add(const ArticleLoadMoreRequested());
+          },
+          onEmptyRefresh: () {
             context.read<ArticleBloc>().add(const ArticleRefreshed());
           },
-          color: colors.textPrimary,
-          child: CustomScrollView(
-            key: const PageStorageKey<String>('explore_scroll'),
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics()),
-            cacheExtent: 600,
-            slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(height: topPadding + 72),
-              ),
-              ArticleListWidget(
-                articles: filteredArticles,
-                currentUserHex: currentUserHex,
-                profiles: profiles,
-                isLoading: isLoadingMore,
-                canLoadMore: canLoadMore,
-                onLoadMore: () {
-                  context
-                      .read<ArticleBloc>()
-                      .add(const ArticleLoadMoreRequested());
-                },
-                onEmptyRefresh: () {
-                  context.read<ArticleBloc>().add(const ArticleRefreshed());
-                },
-                scrollController: _scrollController,
-              ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 80),
-              ),
-            ],
-          ),
+          scrollController: _scrollController,
         ),
-      ArticleError(:final message) => Center(
+      ArticleError(:final message) => SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: colors.textSecondary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Something went wrong',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    CarbonIcons.warning,
+                    size: 48,
+                    color: colors.error,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: colors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                GestureDetector(
-                  onTap: () {
-                    context
-                        .read<ArticleBloc>()
-                        .add(const ArticleRefreshed());
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.somethingWentWrong,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
                       color: colors.textPrimary,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Retry',
-                      style: TextStyle(
-                        color: colors.background,
-                        fontWeight: FontWeight.w600,
-                      ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  PrimaryButton(
+                    label: l10n.retryText,
+                    onPressed: () {
+                      context
+                          .read<ArticleBloc>()
+                          .add(const ArticleRefreshed());
+                    },
+                    backgroundColor: colors.accent,
+                    foregroundColor: colors.background,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ArticleEmpty() => Center(
+      ArticleEmpty() => SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.article_outlined,
-                  size: 48,
-                  color: colors.textSecondary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No articles yet',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Long-form content from people you follow will appear here.',
-                  style: TextStyle(
-                    fontSize: 14,
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CarbonIcons.document,
+                    size: 48,
                     color: colors.textSecondary,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.noArticlesYet,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.longFormContentDescription,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      _ => Center(
-          child: CircularProgressIndicator(
-            color: colors.accent,
-            strokeWidth: 2,
-          ),
-        ),
+      _ => const SliverToBoxAdapter(child: SizedBox()),
     };
   }
 }

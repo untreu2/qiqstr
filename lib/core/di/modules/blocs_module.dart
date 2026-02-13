@@ -13,6 +13,7 @@ import '../../../presentation/blocs/edit_profile/edit_profile_bloc.dart';
 import '../../../presentation/blocs/following/following_bloc.dart';
 import '../../../presentation/blocs/suggested_follows/suggested_follows_bloc.dart';
 import '../../../presentation/blocs/muted/muted_bloc.dart';
+import '../../../presentation/blocs/bookmark/bookmark_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
 import '../../../presentation/blocs/note_statistics/note_statistics_bloc.dart';
 import '../../../presentation/blocs/edit_new_account_profile/edit_new_account_profile_bloc.dart';
@@ -117,6 +118,13 @@ class BlocsModule extends DIModule {
 
     AppDI.registerFactory<MutedBloc>(() => MutedBloc(
           followingRepository: AppDI.get<FollowingRepository>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
+          authService: AppDI.get<AuthService>(),
+        ));
+
+    AppDI.registerFactory<BookmarkBloc>(() => BookmarkBloc(
+          feedRepository: AppDI.get<FeedRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
           syncService: AppDI.get<SyncService>(),
           authService: AppDI.get<AuthService>(),

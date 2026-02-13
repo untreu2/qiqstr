@@ -670,5 +670,22 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "readsSubtitle": "Long-form articles from people you follow.",
+  "loadingArticles": "Loading articles...",
+  "somethingWentWrong": "Something went wrong",
+  "noArticlesYet": "No articles yet",
+  "longFormContentDescription": "Long-form content from people you follow will appear here.",
+
+  "bookmarks": "Bookmarks",
+  "bookmarksTitle": "Bookmarks",
+  "bookmarksSubtitle": "Your bookmarked notes are encrypted and only visible to you.",
+  "noBookmarks": "No bookmarks",
+  "youHaventBookmarkedAnyNotesYet": "You haven't bookmarked any notes yet.",
+  "errorLoadingBookmarks": "Error loading bookmarks",
+  "removeBookmark": "Remove bookmark",
+  "addBookmark": "Bookmark",
+  "bookmarkAdded": "Bookmark added",
+  "bookmarkRemoved": "Bookmark removed"
 }

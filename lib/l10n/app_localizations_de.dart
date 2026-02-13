@@ -1427,4 +1427,53 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get readsSubtitle =>
+      'Langform-Artikel von Personen, denen Sie folgen.';
+
+  @override
+  String get loadingArticles => 'Artikel werden geladen...';
+
+  @override
+  String get somethingWentWrong => 'Etwas ist schiefgelaufen';
+
+  @override
+  String get noArticlesYet => 'Noch keine Artikel';
+
+  @override
+  String get longFormContentDescription =>
+      'Langform-Inhalte von Personen, denen Sie folgen, werden hier angezeigt.';
+
+  @override
+  String get bookmarks => 'Lesezeichen';
+
+  @override
+  String get bookmarksTitle => 'Lesezeichen';
+
+  @override
+  String get bookmarksSubtitle =>
+      'Ihre Lesezeichen sind verschlüsselt und nur für Sie sichtbar.';
+
+  @override
+  String get noBookmarks => 'Keine Lesezeichen';
+
+  @override
+  String get youHaventBookmarkedAnyNotesYet =>
+      'Sie haben noch keine Notizen als Lesezeichen gespeichert.';
+
+  @override
+  String get errorLoadingBookmarks => 'Fehler beim Laden der Lesezeichen';
+
+  @override
+  String get removeBookmark => 'Lesezeichen entfernen';
+
+  @override
+  String get addBookmark => 'Lesezeichen';
+
+  @override
+  String get bookmarkAdded => 'Lesezeichen hinzugefügt';
+
+  @override
+  String get bookmarkRemoved => 'Lesezeichen entfernt';
 }

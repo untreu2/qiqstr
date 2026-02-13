@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'base_repository.dart';
 import '../services/encrypted_mute_service.dart';
+import '../services/encrypted_bookmark_service.dart';
 
 abstract class FollowingRepository {
   Future<List<String>?> getFollowingList(String userPubkey);
@@ -93,6 +94,7 @@ class FollowingRepositoryImpl extends BaseRepository
   @override
   Future<void> deleteMuteList(String userPubkey) async {
     EncryptedMuteService.instance.clear();
+    EncryptedBookmarkService.instance.clear();
     await db.deleteMuteList(userPubkey);
   }
 

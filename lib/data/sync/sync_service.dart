@@ -5,6 +5,7 @@ import '../services/relay_service.dart';
 import '../services/nostr_service.dart';
 import '../services/auth_service.dart';
 import '../services/encrypted_mute_service.dart';
+import '../services/encrypted_bookmark_service.dart';
 import 'publishers/event_publisher.dart';
 
 final _relayService = RustRelayService.instance;
@@ -192,6 +193,37 @@ class SyncService {
         );
       }
     });
+  }
+
+  Future<void> syncBookmarkList(String userPubkey) async {
+    await _sync('bookmark', () async {
+      final filter =
+          NostrService.createBookmarkFilter(authors: [userPubkey], limit: 1);
+      final events = await _queryRelays(filter);
+      await _saveEvents(events);
+
+      final authService = AuthService.instance;
+      final pkResult = await authService.getCurrentUserPrivateKey();
+      final pubResult = await authService.getCurrentUserPublicKeyHex();
+      if (!pkResult.isError &&
+          pkResult.data != null &&
+          !pubResult.isError &&
+          pubResult.data != null) {
+        await EncryptedBookmarkService.instance.loadFromDatabase(
+          userPubkeyHex: pubResult.data!,
+          privateKeyHex: pkResult.data!,
+        );
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>> publishBookmark({
+    required List<String> bookmarkedEventIds,
+  }) async {
+    final event = await _publish(() => _publisher.createBookmark(
+          bookmarkedEventIds: bookmarkedEventIds,
+        ));
+    return event;
   }
 
   Future<void> syncArticles({List<String>? authors, int limit = 50, bool force = false}) async {

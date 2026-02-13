@@ -1398,4 +1398,52 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get readsSubtitle => 'Takip ettiğiniz kişilerin uzun içerikleri.';
+
+  @override
+  String get loadingArticles => 'Makaleler yükleniyor...';
+
+  @override
+  String get somethingWentWrong => 'Bir şeyler ters gitti';
+
+  @override
+  String get noArticlesYet => 'Henüz makale yok';
+
+  @override
+  String get longFormContentDescription =>
+      'Takip ettiğiniz kişilerin uzun içerikleri burada görünecek.';
+
+  @override
+  String get bookmarks => 'Yer İmleri';
+
+  @override
+  String get bookmarksTitle => 'Yer İmleri';
+
+  @override
+  String get bookmarksSubtitle =>
+      'Yer imleriniz şifrelenmiştir ve yalnızca siz görebilirsiniz.';
+
+  @override
+  String get noBookmarks => 'Yer imi yok';
+
+  @override
+  String get youHaventBookmarkedAnyNotesYet =>
+      'Henüz hiçbir notu yer imlerine eklemediniz.';
+
+  @override
+  String get errorLoadingBookmarks => 'Yer imleri yüklenirken hata';
+
+  @override
+  String get removeBookmark => 'Yer imini kaldır';
+
+  @override
+  String get addBookmark => 'Yer İmle';
+
+  @override
+  String get bookmarkAdded => 'Yer imine eklendi';
+
+  @override
+  String get bookmarkRemoved => 'Yer iminden kaldırıldı';
 }
