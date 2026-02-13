@@ -67,6 +67,7 @@ class FeedPageState extends State<FeedPage> {
   final FocusNode _searchFocusNode = FocusNode();
   UserSearchBloc? _searchBloc;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  Map<String, dynamic>? _loggedInUserProfile;
 
   @override
   void initState() {
@@ -78,9 +79,23 @@ class FeedPageState extends State<FeedPage> {
     _updateRelayCount();
     _relayCountTimer =
         Timer.periodic(const Duration(seconds: 1), (_) => _updateRelayCount());
+    _loadLoggedInUserProfile();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
+  }
+
+  Future<void> _loadLoggedInUserProfile() async {
+    final authService = AppDI.get<AuthService>();
+    final hex = authService.currentUserPubkeyHex;
+    if (hex == null || hex.isEmpty) return;
+    final profileRepo = AppDI.get<ProfileRepository>();
+    final profile = await profileRepo.getProfile(hex);
+    if (profile != null && mounted) {
+      setState(() {
+        _loggedInUserProfile = profile.toMap();
+      });
+    }
   }
 
   void _updateRelayCount() async {
@@ -581,7 +596,7 @@ class FeedPageState extends State<FeedPage> {
               }
             });
 
-            final user = profiles[currentUserHex];
+            final user = _loggedInUserProfile ?? profiles[currentUserHex];
 
             return RefreshIndicator(
               onRefresh: () async {
@@ -829,8 +844,8 @@ class FeedPageState extends State<FeedPage> {
     double headerHeight,
     AppThemeColors colors,
   ) {
-    Map<String, dynamic>? user;
-    if (feedState is FeedLoaded) {
+    Map<String, dynamic>? user = _loggedInUserProfile;
+    if (user == null && feedState is FeedLoaded) {
       user = feedState.profiles[feedState.currentUserHex];
     }
 
