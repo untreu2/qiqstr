@@ -28,6 +28,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
   String? _invoice;
   String? _error;
   Timer? _debounce;
+  bool _addressCopied = false;
 
   @override
   void initState() {
@@ -86,7 +87,8 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
               _invoice = invoiceResult['hash'] as String?;
             },
             (errorResult) {
-              _error = 'Failed to create invoice: $errorResult';
+              _error = AppLocalizations.of(context)!
+                  .failedToCreateInvoice(errorResult.toString());
               _invoice = null;
             },
           );
@@ -96,7 +98,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
       if (mounted) {
         setState(() {
           _isUpdating = false;
-          _error = 'Error: $e';
+          _error = '${AppLocalizations.of(context)!.error}: $e';
           _invoice = null;
         });
       }
@@ -115,10 +117,8 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
     return '';
   }
 
-  bool _showLightningAddress() {
-    return widget.lud16 != null &&
-        widget.lud16!.isNotEmpty &&
-        _amountController.text.trim().isEmpty;
+  bool _hasLightningAddress() {
+    return widget.lud16 != null && widget.lud16!.isNotEmpty;
   }
 
   @override
@@ -126,7 +126,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
     final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
     final qrData = _getQrData();
-    final showLightningAddress = _showLightningAddress();
+    final hasLightningAddress = _hasLightningAddress();
 
     return Padding(
       padding: EdgeInsets.only(
@@ -195,15 +195,48 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                   ),
                 ),
               ),
-            if (showLightningAddress) ...[
-              Text(
-                widget.lud16!,
-                style: TextStyle(
-                  color: colors.textSecondary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+            if (hasLightningAddress) ...[
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: widget.lud16!));
+                  setState(() => _addressCopied = true);
+                  Future.delayed(const Duration(seconds: 2), () {
+                    if (mounted) setState(() => _addressCopied = false);
+                  });
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: colors.overlayLight,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: _addressCopied
+                      ? Text(
+                          l10n.copiedToClipboard,
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.lud16!,
+                              style: TextStyle(
+                                color: colors.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(Icons.copy,
+                                size: 14, color: colors.textSecondary),
+                          ],
+                        ),
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
             const SizedBox(height: 32),

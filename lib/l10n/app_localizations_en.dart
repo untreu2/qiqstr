@@ -1306,4 +1306,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get switchAccount => 'Switch account';
+
+  @override
+  String get connectYourWallet => 'Connect Your Wallet';
+
+  @override
+  String get connectWalletDescription =>
+      'Sign in with your Nostr identity\nto start using Coinos';
+
+  @override
+  String get connectWallet => 'Connect Wallet';
+
+  @override
+  String get noTransactionsYet => 'No transactions yet';
+
+  @override
+  String get recentTransactions => 'Recent';
+
+  @override
+  String get received => 'Received';
+
+  @override
+  String get sent => 'Sent';
+
+  @override
+  String get pasteInvoiceHere => 'Paste invoice here...';
+
+  @override
+  String get paymentSent => 'Payment sent!';
+
+  @override
+  String failedToCreateInvoice(String message) {
+    return 'Failed to create invoice: $message';
+  }
 }

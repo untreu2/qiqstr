@@ -85,6 +85,7 @@ dependencies:
     flutter_rust_bridge: 2.11.1
     rust_lib_qiqstr:
         path: rust_builder
+    mobile_scanner: ^7.1.4
 
 dev_dependencies:
     flutter_test:

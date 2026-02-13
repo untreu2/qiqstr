@@ -2559,6 +2559,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch account'**
   String get switchAccount;
+
+  /// No description provided for @connectYourWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Your Wallet'**
+  String get connectYourWallet;
+
+  /// No description provided for @connectWalletDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with your Nostr identity\nto start using Coinos'**
+  String get connectWalletDescription;
+
+  /// No description provided for @connectWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Wallet'**
+  String get connectWallet;
+
+  /// No description provided for @noTransactionsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No transactions yet'**
+  String get noTransactionsYet;
+
+  /// No description provided for @recentTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get recentTransactions;
+
+  /// No description provided for @received.
+  ///
+  /// In en, this message translates to:
+  /// **'Received'**
+  String get received;
+
+  /// No description provided for @sent.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent'**
+  String get sent;
+
+  /// No description provided for @pasteInvoiceHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste invoice here...'**
+  String get pasteInvoiceHere;
+
+  /// No description provided for @paymentSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment sent!'**
+  String get paymentSent;
+
+  /// No description provided for @failedToCreateInvoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create invoice: {message}'**
+  String failedToCreateInvoice(String message);
 }
 
 class _AppLocalizationsDelegate

@@ -1311,4 +1311,37 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get switchAccount => 'Hesap değiştir';
+
+  @override
+  String get connectYourWallet => 'Cüzdanınızı Bağlayın';
+
+  @override
+  String get connectWalletDescription =>
+      'Coinos\'u kullanmaya başlamak için\nNostr kimliğinizle giriş yapın';
+
+  @override
+  String get connectWallet => 'Cüzdanı Bağla';
+
+  @override
+  String get noTransactionsYet => 'Henüz işlem yok';
+
+  @override
+  String get recentTransactions => 'Son İşlemler';
+
+  @override
+  String get received => 'Alındı';
+
+  @override
+  String get sent => 'Gönderildi';
+
+  @override
+  String get pasteInvoiceHere => 'Faturayı buraya yapıştırın...';
+
+  @override
+  String get paymentSent => 'Ödeme gönderildi!';
+
+  @override
+  String failedToCreateInvoice(String message) {
+    return 'Fatura oluşturulamadı: $message';
+  }
 }

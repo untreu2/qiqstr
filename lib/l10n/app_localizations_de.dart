@@ -1340,4 +1340,37 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get switchAccount => 'Konto wechseln';
+
+  @override
+  String get connectYourWallet => 'Wallet verbinden';
+
+  @override
+  String get connectWalletDescription =>
+      'Melden Sie sich mit Ihrer Nostr-Identität an,\num Coinos zu nutzen';
+
+  @override
+  String get connectWallet => 'Wallet verbinden';
+
+  @override
+  String get noTransactionsYet => 'Noch keine Transaktionen';
+
+  @override
+  String get recentTransactions => 'Kürzlich';
+
+  @override
+  String get received => 'Empfangen';
+
+  @override
+  String get sent => 'Gesendet';
+
+  @override
+  String get pasteInvoiceHere => 'Rechnung hier einfügen...';
+
+  @override
+  String get paymentSent => 'Zahlung gesendet!';
+
+  @override
+  String failedToCreateInvoice(String message) {
+    return 'Rechnung konnte nicht erstellt werden: $message';
+  }
 }

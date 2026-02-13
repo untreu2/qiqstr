@@ -622,5 +622,23 @@
   "eventsDeleted": "events deleted",
   "cleanup": "Cleanup",
   "addAccount": "Add account",
-  "switchAccount": "Switch account"
+  "switchAccount": "Switch account",
+
+  "connectYourWallet": "Connect Your Wallet",
+  "connectWalletDescription": "Sign in with your Nostr identity\nto start using Coinos",
+  "connectWallet": "Connect Wallet",
+  "noTransactionsYet": "No transactions yet",
+  "recentTransactions": "Recent",
+  "received": "Received",
+  "sent": "Sent",
+  "pasteInvoiceHere": "Paste invoice here...",
+  "paymentSent": "Payment sent!",
+  "failedToCreateInvoice": "Failed to create invoice: {message}",
+  "@failedToCreateInvoice": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  }
 }

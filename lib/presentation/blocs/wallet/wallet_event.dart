@@ -31,9 +31,32 @@ class WalletTransactionsLoaded extends WalletEvent {
 }
 
 class WalletAutoConnectRequested extends WalletEvent {
-  const WalletAutoConnectRequested();
+  final String? recaptchaToken;
+
+  const WalletAutoConnectRequested({this.recaptchaToken});
+
+  @override
+  List<Object?> get props => [recaptchaToken];
 }
 
 class WalletConnectWithNostrRequested extends WalletEvent {
-  const WalletConnectWithNostrRequested();
+  final String? recaptchaToken;
+
+  const WalletConnectWithNostrRequested({this.recaptchaToken});
+
+  @override
+  List<Object?> get props => [recaptchaToken];
+}
+
+class WalletPriceRequested extends WalletEvent {
+  const WalletPriceRequested();
+}
+
+class WalletApiKeySet extends WalletEvent {
+  final String apiKey;
+
+  const WalletApiKeySet(this.apiKey);
+
+  @override
+  List<Object?> get props => [apiKey];
 }

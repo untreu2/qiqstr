@@ -555,5 +555,23 @@
   "eventsDeleted": "olay silindi",
   "cleanup": "Temizle",
   "addAccount": "Hesap ekle",
-  "switchAccount": "Hesap değiştir"
+  "switchAccount": "Hesap değiştir",
+
+  "connectYourWallet": "Cüzdanınızı Bağlayın",
+  "connectWalletDescription": "Coinos'u kullanmaya başlamak için\nNostr kimliğinizle giriş yapın",
+  "connectWallet": "Cüzdanı Bağla",
+  "noTransactionsYet": "Henüz işlem yok",
+  "recentTransactions": "Son İşlemler",
+  "received": "Alındı",
+  "sent": "Gönderildi",
+  "pasteInvoiceHere": "Faturayı buraya yapıştırın...",
+  "paymentSent": "Ödeme gönderildi!",
+  "failedToCreateInvoice": "Fatura oluşturulamadı: {message}",
+  "@failedToCreateInvoice": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  }
 }

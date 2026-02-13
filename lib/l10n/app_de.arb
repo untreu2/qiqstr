@@ -555,5 +555,23 @@
   "eventsDeleted": "Ereignisse gelöscht",
   "cleanup": "Bereinigen",
   "addAccount": "Konto hinzufügen",
-  "switchAccount": "Konto wechseln"
+  "switchAccount": "Konto wechseln",
+
+  "connectYourWallet": "Wallet verbinden",
+  "connectWalletDescription": "Melden Sie sich mit Ihrer Nostr-Identität an,\num Coinos zu nutzen",
+  "connectWallet": "Wallet verbinden",
+  "noTransactionsYet": "Noch keine Transaktionen",
+  "recentTransactions": "Kürzlich",
+  "received": "Empfangen",
+  "sent": "Gesendet",
+  "pasteInvoiceHere": "Rechnung hier einfügen...",
+  "paymentSent": "Zahlung gesendet!",
+  "failedToCreateInvoice": "Rechnung konnte nicht erstellt werden: {message}",
+  "@failedToCreateInvoice": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  }
 }

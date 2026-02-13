@@ -14,14 +14,60 @@ class CoinosService {
   static const String _userKey = 'coinos_user';
   static const String _usernameKey = 'coinos_username';
   static const String _passwordKey = 'coinos_password';
+  static const String _apiKeyKey = 'coinos_api_key';
+  static const String _userAgent = 'qiqstr';
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final http.Client _httpClient = http.Client();
 
   String? _cachedToken;
   Map<String, dynamic>? _cachedUser;
+  String? _cachedApiKey;
 
-  Future<Result<Map<String, dynamic>>> authenticateWithNostr() async {
+  Future<Map<String, String>> _buildHeaders({
+    String contentType = 'application/json',
+    String? authToken,
+  }) async {
+    _cachedApiKey ??= await _secureStorage.read(key: _apiKeyKey);
+
+    final headers = <String, String>{
+      'Content-Type': contentType,
+      'User-Agent': _userAgent,
+    };
+
+    if (_cachedApiKey != null && _cachedApiKey!.isNotEmpty) {
+      headers['x-api-key'] = _cachedApiKey!;
+    }
+
+    if (authToken != null) {
+      headers['Authorization'] = 'Bearer $authToken';
+    }
+
+    return headers;
+  }
+
+  Future<Result<void>> setApiKey(String apiKey) async {
+    try {
+      await _secureStorage.write(key: _apiKeyKey, value: apiKey);
+      _cachedApiKey = apiKey;
+      return const Result.success(null);
+    } catch (e) {
+      return Result.error('Failed to store API key: $e');
+    }
+  }
+
+  Future<Result<String?>> getApiKey() async {
+    try {
+      _cachedApiKey ??= await _secureStorage.read(key: _apiKeyKey);
+      return Result.success(_cachedApiKey);
+    } catch (e) {
+      return Result.error('Failed to read API key: $e');
+    }
+  }
+
+  Future<Result<Map<String, dynamic>>> authenticateWithNostr({
+    String? recaptchaToken,
+  }) async {
     try {
       debugPrint('[CoinosService] Starting Nostr authentication with Coinos');
 
@@ -30,9 +76,11 @@ class CoinosService {
         return const Result.error('No Nostr private key found');
       }
 
+      final headers = await _buildHeaders();
+
       final challengeResponse = await _httpClient.get(
         Uri.parse('$_baseUrl/challenge'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
       );
 
       if (challengeResponse.statusCode != 200) {
@@ -57,10 +105,11 @@ class CoinosService {
       final authEvent = jsonDecode(authEventJson) as Map<String, dynamic>;
       final authResponse = await _httpClient.post(
         Uri.parse('$_baseUrl/nostrAuth'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'event': authEvent,
           'challenge': challenge,
+          if (recaptchaToken != null) 'recaptcha': recaptchaToken,
         }),
       );
 
@@ -103,7 +152,9 @@ class CoinosService {
     }
   }
 
-  Future<Result<Map<String, dynamic>>> autoLogin() async {
+  Future<Result<Map<String, dynamic>>> autoLogin({
+    String? recaptchaToken,
+  }) async {
     try {
       final tokenResult = await getStoredToken();
       if (tokenResult.isSuccess && tokenResult.data != null) {
@@ -117,7 +168,7 @@ class CoinosService {
         }
       }
       debugPrint('[CoinosService] Attempting Nostr auto-login');
-      return await authenticateWithNostr();
+      return await authenticateWithNostr(recaptchaToken: recaptchaToken);
     } catch (e) {
       debugPrint('[CoinosService] Auto-login error: $e');
       return Result.error('Auto-login failed: $e');
@@ -163,10 +214,8 @@ class CoinosService {
       return const Result.error('No authentication token available');
     }
 
-    return Result.success({
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ${tokenResult.data}',
-    });
+    final headers = await _buildHeaders(authToken: tokenResult.data!);
+    return Result.success(headers);
   }
 
   Future<Result<T>> _makeAuthenticatedRequest<T>(
@@ -481,6 +530,29 @@ class CoinosService {
       return const Result.success(null);
     } catch (e) {
       return Result.error('Failed to clear auth data: $e');
+    }
+  }
+
+  Future<Result<double>> fetchBtcPrice() async {
+    try {
+      final response = await _httpClient.get(
+        Uri.parse(
+            'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final bitcoin = data['bitcoin'] as Map<String, dynamic>?;
+        final usd = (bitcoin?['usd'] as num?)?.toDouble();
+        if (usd != null) {
+          return Result.success(usd);
+        }
+        return const Result.error('Invalid price data');
+      }
+      return Result.error('Price fetch failed: ${response.statusCode}');
+    } catch (e) {
+      return Result.error('Price fetch failed: $e');
     }
   }
 

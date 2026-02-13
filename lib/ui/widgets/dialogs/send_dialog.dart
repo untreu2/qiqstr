@@ -5,6 +5,7 @@ import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
 import '../../../l10n/app_localizations.dart';
+import '../qr_scanner_widget.dart';
 
 class SendDialog extends StatefulWidget {
   final VoidCallback onPaymentSuccess;
@@ -40,14 +41,28 @@ class _SendDialogState extends State<SendDialog> {
   }
 
   Future<void> _scanQrCode() async {
-    await _pasteFromClipboard();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QrScannerWidget(
+          onScanComplete: (scannedText) {
+            if (mounted) {
+              setState(() {
+                _invoiceController.text = scannedText;
+              });
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _payInvoice() async {
+    final l10n = AppLocalizations.of(context)!;
     final invoice = _invoiceController.text.trim();
     if (invoice.isEmpty) {
       setState(() {
-        _error = 'Please enter an invoice';
+        _error = l10n.pleaseEnterInvoice;
       });
       return;
     }
@@ -66,12 +81,11 @@ class _SendDialogState extends State<SendDialog> {
           _isLoading = false;
           result.fold(
             (paymentResult) {
-              final preimage = paymentResult['preimage'] as String?;
-              _successMessage = 'Payment sent! Preimage: ${preimage ?? 'N/A'}';
+              _successMessage = l10n.paymentSent;
               widget.onPaymentSuccess();
             },
             (errorResult) {
-              _error = 'Payment failed: $errorResult';
+              _error = '${l10n.paymentFailed}: $errorResult';
             },
           );
         });
@@ -80,7 +94,7 @@ class _SendDialogState extends State<SendDialog> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Error: $e';
+          _error = '${l10n.error}: $e';
         });
       }
     }
@@ -88,6 +102,7 @@ class _SendDialogState extends State<SendDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
     if (_successMessage != null) {
       return Padding(
@@ -126,7 +141,7 @@ class _SendDialogState extends State<SendDialog> {
           CustomInputField(
             controller: _invoiceController,
             enabled: !_isLoading,
-            hintText: 'Paste invoice here...',
+            hintText: l10n.pasteInvoiceHere,
             suffixIcon: Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Row(
@@ -179,16 +194,11 @@ class _SendDialogState extends State<SendDialog> {
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            child: Builder(
-              builder: (context) {
-                final l10n = AppLocalizations.of(context)!;
-                return SecondaryButton(
-                  label: l10n.payInvoice,
-                  onPressed: _isLoading ? null : _payInvoice,
-                  isLoading: _isLoading,
-                  size: ButtonSize.large,
-                );
-              },
+            child: SecondaryButton(
+              label: l10n.payInvoice,
+              onPressed: _isLoading ? null : _payInvoice,
+              isLoading: _isLoading,
+              size: ButtonSize.large,
             ),
           ),
         ],
