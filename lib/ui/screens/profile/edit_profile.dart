@@ -88,11 +88,12 @@ class _EditProfileContentState extends State<_EditProfileContent> {
   }
 
   Future<void> _pickAndUploadMedia({
-    required TextEditingController controller,
-    required String label,
     required bool isPicture,
   }) async {
     final bloc = context.read<EditProfileBloc>();
+    final previousValue = isPicture
+        ? _pictureController.text
+        : _bannerController.text;
 
     setState(() {
       if (isPicture) {
@@ -115,8 +116,23 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         } else {
           bloc.add(EditProfileBannerUploaded(filePath));
         }
+      } else {
+        setState(() {
+          if (isPicture) {
+            _pictureController.text = previousValue;
+          } else {
+            _bannerController.text = previousValue;
+          }
+        });
       }
     } catch (e) {
+      setState(() {
+        if (isPicture) {
+          _pictureController.text = previousValue;
+        } else {
+          _bannerController.text = previousValue;
+        }
+      });
       if (mounted) {
         AppSnackbar.error(context, 'Upload failed: $e');
       }
@@ -162,8 +178,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
       onTap: _isUploadingBanner
           ? null
           : () => _pickAndUploadMedia(
-                controller: _bannerController,
-                label: 'Banner',
                 isPicture: false,
               ),
       child: Stack(
@@ -253,8 +267,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
           onTap: isUploading
               ? null
               : () => _pickAndUploadMedia(
-                    controller: _pictureController,
-                    label: 'Profile image',
                     isPicture: true,
                   ),
           child: Container(
@@ -319,8 +331,26 @@ class _EditProfileContentState extends State<_EditProfileContent> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<EditProfileBloc, EditProfileState>(
-      builder: (context, state) {
+    return BlocListener<EditProfileBloc, EditProfileState>(
+      listenWhen: (previous, current) {
+        if (previous is EditProfileLoaded && current is EditProfileLoaded) {
+          return previous.picture != current.picture ||
+              previous.banner != current.banner;
+        }
+        return false;
+      },
+      listener: (context, state) {
+        if (state is EditProfileLoaded) {
+          if (state.picture != _pictureController.text) {
+            _pictureController.text = state.picture;
+          }
+          if (state.banner != _bannerController.text) {
+            _bannerController.text = state.banner;
+          }
+        }
+      },
+      child: BlocBuilder<EditProfileBloc, EditProfileState>(
+        builder: (context, state) {
         if (state is EditProfileLoading) {
           return Scaffold(
             backgroundColor: context.colors.background,
@@ -521,7 +551,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
             ],
           ),
         );
-      },
+        },
+      ),
     );
   }
 }
