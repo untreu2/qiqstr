@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/note/focused_note_widget.dart';
 import '../../widgets/common/common_buttons.dart';
+import '../../widgets/common/list_separator_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
@@ -529,7 +530,7 @@ class _ThreadPageState extends State<ThreadPage> {
                   threadStructure,
                   0,
                 ),
-                if (showSeparator) _buildNoteSeparator(context),
+                if (showSeparator) const ListSeparatorWidget(),
               ],
             );
           } else if (index == visibleReplies.length && hasMoreReplies) {
@@ -858,19 +859,6 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  Widget _buildNoteSeparator(BuildContext context) {
-    return SizedBox(
-      height: 16,
-      child: Center(
-        child: Container(
-          height: 0.5,
-          decoration: BoxDecoration(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
-          ),
-        ),
-      ),
-    );
-  }
 
   Future<void> _handleShare(BuildContext context, ThreadState state) async {
     final rootNote = state is ThreadLoaded ? state.rootNote : null;

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../theme/theme_manager.dart';
+import '../../widgets/common/list_separator_widget.dart';
 import '../../widgets/note/quote_widget.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../presentation/blocs/notification/notification_bloc.dart';
@@ -84,10 +85,8 @@ class _NotificationPageState extends State<NotificationPage> {
                     notification: notifications[index],
                   );
                 },
-                separatorBuilder: (_, __) => Divider(
-                  height: 1,
-                  color: context.colors.divider.withValues(alpha: 0.3),
-                ),
+                separatorBuilder: (_, __) =>
+                    const ListSeparatorWidget(),
               ),
             ),
           ],

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
+import '../common/list_separator_widget.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/interaction_service.dart';
 import '../../../core/di/app_di.dart';
@@ -334,7 +335,7 @@ class _NoteItemWidgetState extends State<_NoteItemWidget>
           notesListProvider: widget.notesListProvider,
           isVisible: true,
         ),
-        if (widget.showSeparator) const _NoteSeparator(),
+        if (widget.showSeparator) const ListSeparatorWidget(),
       ],
     );
   }
@@ -356,24 +357,6 @@ class _LoadingState extends StatelessWidget {
   }
 }
 
-class _NoteSeparator extends StatelessWidget {
-  const _NoteSeparator();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 16,
-      child: Center(
-        child: Container(
-          height: 0.5,
-          decoration: BoxDecoration(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _ErrorState extends StatelessWidget {
   final String errorMessage;
