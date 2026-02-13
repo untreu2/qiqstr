@@ -2961,6 +2961,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connected as {username}@coinos.io'**
   String onboardingCoinosConnected(String username);
+
+  /// No description provided for @welcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome!'**
+  String get welcomeTitle;
+
+  /// No description provided for @welcomeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A decentralized social network built on Nostr. Fully open source.'**
+  String get welcomeSubtitle;
+
+  /// No description provided for @welcomeFeatureDecentralized.
+  ///
+  /// In en, this message translates to:
+  /// **'No central servers, no CEOs. Nobody can ban you.'**
+  String get welcomeFeatureDecentralized;
+
+  /// No description provided for @welcomeFeatureKeys.
+  ///
+  /// In en, this message translates to:
+  /// **'Own your identity with your own keys.'**
+  String get welcomeFeatureKeys;
+
+  /// No description provided for @welcomeFeatureBitcoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Message securely with end-to-end encryption.'**
+  String get welcomeFeatureBitcoin;
+
+  /// No description provided for @welcomeAlreadyHaveAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'I already have an account'**
+  String get welcomeAlreadyHaveAccount;
+
+  /// No description provided for @loginSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your seed phrase or nsec key to sign in to your existing account.'**
+  String get loginSubtitle;
+
+  /// No description provided for @loginExampleSeed.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. istanbul relay key note zap feed post sign bolt send trust free'**
+  String get loginExampleSeed;
+
+  /// No description provided for @loginExampleNsec.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. nsec1234567abcde1234567abcde...'**
+  String get loginExampleNsec;
+
+  /// No description provided for @signupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A new Nostr identity will be generated for you. You will receive a seed phrase to back up your account.'**
+  String get signupSubtitle;
+
+  /// No description provided for @signupFeatureKeys.
+  ///
+  /// In en, this message translates to:
+  /// **'A unique cryptographic key pair will be created for you'**
+  String get signupFeatureKeys;
+
+  /// No description provided for @signupFeatureBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'You will get a seed phrase to securely back up your account'**
+  String get signupFeatureBackup;
+
+  /// No description provided for @signupFeatureProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up your profile and start connecting with others'**
+  String get signupFeatureProfile;
+
+  /// No description provided for @signupCreating.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating your account...'**
+  String get signupCreating;
 }
 
 class _AppLocalizationsDelegate

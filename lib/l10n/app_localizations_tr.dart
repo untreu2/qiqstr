@@ -1552,4 +1552,56 @@ class AppLocalizationsTr extends AppLocalizations {
   String onboardingCoinosConnected(String username) {
     return '$username@coinos.io olarak bağlandı';
   }
+
+  @override
+  String get welcomeTitle => 'Hoş Geldiniz!';
+
+  @override
+  String get welcomeSubtitle =>
+      'Nostr üzerine kurulu merkeziyetsiz bir sosyal ağ. Tamamen açık kaynaklı.';
+
+  @override
+  String get welcomeFeatureDecentralized =>
+      'Merkezi sunucular yok, CEO\'lar yok. Kimse sizi banlayamaz.';
+
+  @override
+  String get welcomeFeatureKeys =>
+      'Kendi anahtarlarınızla kendi kimliğinize sahip olursunuz.';
+
+  @override
+  String get welcomeFeatureBitcoin =>
+      'Uçtan uca şifreli ve güvenli şekilde mesajlaşın.';
+
+  @override
+  String get welcomeAlreadyHaveAccount => 'Zaten bir hesabım var';
+
+  @override
+  String get loginSubtitle =>
+      'Mevcut hesabınıza giriş yapmak için kurtarma kelimelerinizi veya nsec anahtarınızı girin.';
+
+  @override
+  String get loginExampleSeed =>
+      'ör. istanbul relay key note zap feed post sign bolt send trust free';
+
+  @override
+  String get loginExampleNsec => 'ör. nsec1234567abcde1234567abcde...';
+
+  @override
+  String get signupSubtitle =>
+      'Sizin için yeni bir Nostr kimliği oluşturulacak. Hesabınızı yedeklemek için kurtarma kelimeleri alacaksınız.';
+
+  @override
+  String get signupFeatureKeys =>
+      'Sizin için benzersiz bir kriptografik anahtar çifti oluşturulacak';
+
+  @override
+  String get signupFeatureBackup =>
+      'Hesabınızı güvenle yedeklemek için kurtarma kelimeleri alacaksınız';
+
+  @override
+  String get signupFeatureProfile =>
+      'Profilinizi ayarlayın ve başkalarıyla bağlantı kurmaya başlayın';
+
+  @override
+  String get signupCreating => 'Hesabınız oluşturuluyor...';
 }

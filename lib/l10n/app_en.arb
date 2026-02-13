@@ -731,5 +731,19 @@
         "type": "String"
       }
     }
-  }
+  },
+  "welcomeTitle": "Welcome!",
+  "welcomeSubtitle": "A decentralized social network built on Nostr. Fully open source.",
+  "welcomeFeatureDecentralized": "No central servers, no CEOs. Nobody can ban you.",
+  "welcomeFeatureKeys": "Own your identity with your own keys.",
+  "welcomeFeatureBitcoin": "Message securely with end-to-end encryption.",
+  "welcomeAlreadyHaveAccount": "I already have an account",
+  "loginSubtitle": "Enter your seed phrase or nsec key to sign in to your existing account.",
+  "loginExampleSeed": "e.g. istanbul relay key note zap feed post sign bolt send trust free",
+  "loginExampleNsec": "e.g. nsec1234567abcde1234567abcde...",
+  "signupSubtitle": "A new Nostr identity will be generated for you. You will receive a seed phrase to back up your account.",
+  "signupFeatureKeys": "A unique cryptographic key pair will be created for you",
+  "signupFeatureBackup": "You will get a seed phrase to securely back up your account",
+  "signupFeatureProfile": "Set up your profile and start connecting with others",
+  "signupCreating": "Creating your account..."
 }

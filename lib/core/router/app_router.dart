@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../data/services/rust_nostr_bridge.dart';
+import '../../ui/screens/auth/welcome_page.dart';
 import '../../ui/screens/auth/login_page.dart';
+import '../../ui/screens/auth/signup_page.dart';
 import '../../ui/screens/auth/edit_new_account_profile.dart';
 import '../../ui/screens/settings/keys_info_page.dart';
 import '../../ui/screens/home_navigator.dart';
@@ -48,18 +50,9 @@ class AppRouter {
   }
 
   static final GoRouter router = GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/welcome',
     redirect: _handleRedirect,
     routes: [
-      GoRoute(
-        path: '/login',
-        name: 'login',
-        builder: (context, state) {
-          final isAddAccount =
-              state.uri.queryParameters['addAccount'] == 'true';
-          return LoginPage(isAddAccount: isAddAccount);
-        },
-      ),
       GoRoute(
         path: '/keys-info',
         name: 'keys-info',
@@ -538,12 +531,27 @@ class AppRouter {
         builder: (context, state) => const EventManagerPage(),
       ),
       GoRoute(
-        path: '/webview',
-        name: 'webview',
+        path: '/welcome',
+        name: 'welcome',
         builder: (context, state) {
-          final url = state.uri.queryParameters['url'] ?? '';
-          return WebViewPage(url: url);
+          final isAddAccount =
+              state.uri.queryParameters['addAccount'] == 'true';
+          return WelcomePage(isAddAccount: isAddAccount);
         },
+      ),
+      GoRoute(
+        path: '/login',
+        name: 'login',
+        builder: (context, state) {
+          final isAddAccount =
+              state.uri.queryParameters['addAccount'] == 'true';
+          return LoginPage(isAddAccount: isAddAccount);
+        },
+      ),
+      GoRoute(
+        path: '/signup',
+        name: 'signup',
+        builder: (context, state) => const SignupPage(),
       ),
       GoRoute(
         path: '/article',
@@ -562,7 +570,9 @@ class AppRouter {
     final isAuthResult = await authService.isAuthenticated();
     final isAuthenticated = isAuthResult.isSuccess && isAuthResult.data == true;
 
+    final isWelcomeRoute = state.matchedLocation == '/welcome';
     final isLoginRoute = state.matchedLocation == '/login';
+    final isSignupRoute = state.matchedLocation == '/signup';
     final isKeysInfoRoute = state.matchedLocation == '/keys-info';
     final isProfileSetupRoute = state.matchedLocation == '/profile-setup';
     final isSuggestedFollowsRoute =
@@ -570,17 +580,19 @@ class AppRouter {
     final isOnboardingCoinosRoute =
         state.matchedLocation == '/onboarding-coinos';
 
-    final isAuthFlow = isLoginRoute ||
+    final isAuthFlow = isWelcomeRoute ||
+        isLoginRoute ||
+        isSignupRoute ||
         isKeysInfoRoute ||
         isProfileSetupRoute ||
         isSuggestedFollowsRoute ||
         isOnboardingCoinosRoute;
 
     if (!isAuthenticated && !isAuthFlow) {
-      return '/login';
+      return '/welcome';
     }
 
-    if (isAuthenticated && isLoginRoute) {
+    if (isAuthenticated && (isWelcomeRoute || isLoginRoute || isSignupRoute)) {
       final isAddAccount = state.uri.queryParameters['addAccount'] == 'true';
       if (!isAddAccount) {
         final npubResult = await authService.getCurrentUserNpub();

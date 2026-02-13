@@ -36,7 +36,7 @@ class Logout {
         await _cleanupEverything(authService);
 
         if (context.mounted) {
-          context.go('/login');
+          context.go('/welcome');
         }
       }
     } catch (e) {

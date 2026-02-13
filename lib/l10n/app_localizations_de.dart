@@ -1582,4 +1582,56 @@ class AppLocalizationsDe extends AppLocalizations {
   String onboardingCoinosConnected(String username) {
     return 'Verbunden als $username@coinos.io';
   }
+
+  @override
+  String get welcomeTitle => 'Willkommen!';
+
+  @override
+  String get welcomeSubtitle =>
+      'Ein dezentrales soziales Netzwerk auf Nostr. Vollständig open source.';
+
+  @override
+  String get welcomeFeatureDecentralized =>
+      'Keine zentralen Server, keine CEOs. Niemand kann Sie sperren.';
+
+  @override
+  String get welcomeFeatureKeys =>
+      'Besitzen Sie Ihre Identität mit Ihren eigenen Schlüsseln.';
+
+  @override
+  String get welcomeFeatureBitcoin =>
+      'Kommunizieren Sie sicher mit Ende-zu-Ende-Verschlüsselung.';
+
+  @override
+  String get welcomeAlreadyHaveAccount => 'Ich habe bereits ein Konto';
+
+  @override
+  String get loginSubtitle =>
+      'Geben Sie Ihre Seed-Phrase oder Ihren nsec-Schlüssel ein, um sich bei Ihrem bestehenden Konto anzumelden.';
+
+  @override
+  String get loginExampleSeed =>
+      'z.B. istanbul relay key note zap feed post sign bolt send trust free';
+
+  @override
+  String get loginExampleNsec => 'z.B. nsec1234567abcde1234567abcde...';
+
+  @override
+  String get signupSubtitle =>
+      'Eine neue Nostr-Identität wird für Sie erstellt. Sie erhalten eine Seed-Phrase zur Sicherung Ihres Kontos.';
+
+  @override
+  String get signupFeatureKeys =>
+      'Ein einzigartiges kryptografisches Schlüsselpaar wird für Sie erstellt';
+
+  @override
+  String get signupFeatureBackup =>
+      'Sie erhalten eine Seed-Phrase zur sicheren Sicherung Ihres Kontos';
+
+  @override
+  String get signupFeatureProfile =>
+      'Richten Sie Ihr Profil ein und beginnen Sie, sich mit anderen zu verbinden';
+
+  @override
+  String get signupCreating => 'Ihr Konto wird erstellt...';
 }

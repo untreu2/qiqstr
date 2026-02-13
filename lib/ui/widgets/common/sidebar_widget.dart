@@ -99,7 +99,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                               _handleAccountSwitch(context, npub),
                           onAddAccount: () {
                             Navigator.of(context).pop();
-                            context.push('/login?addAccount=true');
+                            context.push('/welcome?addAccount=true');
                           },
                         ),
                       ),
@@ -597,8 +597,9 @@ class _AccountSwitcherState extends State<_AccountSwitcher> {
               ),
             ),
           ),
-          crossFadeState:
-              _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          crossFadeState: _isExpanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
           duration: const Duration(milliseconds: 200),
         ),
       ],

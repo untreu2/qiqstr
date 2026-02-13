@@ -664,5 +664,19 @@
         "type": "String"
       }
     }
-  }
+  },
+  "welcomeTitle": "Hoş Geldiniz!",
+  "welcomeSubtitle": "Nostr üzerine kurulu merkeziyetsiz bir sosyal ağ. Tamamen açık kaynaklı.",
+  "welcomeFeatureDecentralized": "Merkezi sunucular yok, CEO'lar yok. Kimse sizi banlayamaz.",
+  "welcomeFeatureKeys": "Kendi anahtarlarınızla kendi kimliğinize sahip olursunuz.",
+  "welcomeFeatureBitcoin": "Uçtan uca şifreli ve güvenli şekilde mesajlaşın.",
+  "welcomeAlreadyHaveAccount": "Zaten bir hesabım var",
+  "loginSubtitle": "Mevcut hesabınıza giriş yapmak için kurtarma kelimelerinizi veya nsec anahtarınızı girin.",
+  "loginExampleSeed": "ör. istanbul relay key note zap feed post sign bolt send trust free",
+  "loginExampleNsec": "ör. nsec1234567abcde1234567abcde...",
+  "signupSubtitle": "Sizin için yeni bir Nostr kimliği oluşturulacak. Hesabınızı yedeklemek için kurtarma kelimeleri alacaksınız.",
+  "signupFeatureKeys": "Sizin için benzersiz bir kriptografik anahtar çifti oluşturulacak",
+  "signupFeatureBackup": "Hesabınızı güvenle yedeklemek için kurtarma kelimeleri alacaksınız",
+  "signupFeatureProfile": "Profilinizi ayarlayın ve başkalarıyla bağlantı kurmaya başlayın",
+  "signupCreating": "Hesabınız oluşturuluyor..."
 }
