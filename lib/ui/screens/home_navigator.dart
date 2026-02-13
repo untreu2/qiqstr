@@ -353,6 +353,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
         }
       }
     } else if (originalIndex == 3) {
+      final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
+      indicatorBloc.add(const NotificationIndicatorChecked());
       if (widget.navigationShell.currentIndex == pageViewIndex) {
         final npub = widget.npub;
         context.go('/home/notifications?npub=${Uri.encodeComponent(npub)}');
