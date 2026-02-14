@@ -49,14 +49,17 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final oldName = oldWidget.user['name'] as String? ?? '';
     final oldProfileImage = oldWidget.user['profileImage'] as String? ?? '';
     final oldAbout = oldWidget.user['about'] as String? ?? '';
+    final oldLocation = oldWidget.user['location'] as String? ?? '';
     final newPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
     final newName = widget.user['name'] as String? ?? '';
     final newProfileImage = widget.user['profileImage'] as String? ?? '';
     final newAbout = widget.user['about'] as String? ?? '';
+    final newLocation = widget.user['location'] as String? ?? '';
     if (oldPubkeyHex != newPubkeyHex ||
         oldName != newName ||
         oldProfileImage != newProfileImage ||
-        oldAbout != newAbout) {
+        oldAbout != newAbout ||
+        oldLocation != newLocation) {
       _bloc?.add(ProfileInfoUserUpdated(user: widget.user));
     }
   }
@@ -167,6 +170,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       website.startsWith("https://"))
               ? "https://$website"
               : website;
+          final location = user['location'] as String? ?? '';
 
           return Container(
             color: context.colors.background,
@@ -187,6 +191,29 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         const SizedBox(height: 2),
                         _buildBioContent(user),
                         const SizedBox(height: 4),
+                      ],
+                      if (location.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              CarbonIcons.location,
+                              size: 14,
+                              color: context.colors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                location,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: context.colors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                       if (website.isNotEmpty) ...[
                         const SizedBox(height: 4),

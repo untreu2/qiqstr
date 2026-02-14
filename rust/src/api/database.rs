@@ -121,6 +121,9 @@ fn extract_zap_comment(event: &Event) -> String {
 }
 
 fn metadata_to_flat_json(event: &Event, m: &Metadata) -> serde_json::Value {
+    let location = m.custom.get("location")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     serde_json::json!({
         "pubkey": event.pubkey.to_hex(),
         "pubkeyHex": event.pubkey.to_hex(),
@@ -133,6 +136,7 @@ fn metadata_to_flat_json(event: &Event, m: &Metadata) -> serde_json::Value {
         "nip05": m.nip05.as_deref().unwrap_or(""),
         "lud16": m.lud16.as_deref().unwrap_or(""),
         "website": m.website.as_deref().unwrap_or(""),
+        "location": location,
     })
 }
 

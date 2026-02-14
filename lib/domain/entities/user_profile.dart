@@ -8,6 +8,7 @@ class UserProfile {
   final String? nip05;
   final String? lud16;
   final String? website;
+  final String? location;
   final int? createdAt;
 
   const UserProfile({
@@ -20,6 +21,7 @@ class UserProfile {
     this.nip05,
     this.lud16,
     this.website,
+    this.location,
     this.createdAt,
   });
 
@@ -33,6 +35,7 @@ class UserProfile {
     String? nip05,
     String? lud16,
     String? website,
+    String? location,
     int? createdAt,
   }) {
     return UserProfile(
@@ -45,6 +48,7 @@ class UserProfile {
       nip05: nip05 ?? this.nip05,
       lud16: lud16 ?? this.lud16,
       website: website ?? this.website,
+      location: location ?? this.location,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -67,6 +71,7 @@ class UserProfile {
       if (nip05 != null) 'nip05': nip05!,
       if (lud16 != null) 'lud16': lud16!,
       if (website != null) 'website': website!,
+      if (location != null) 'location': location!,
     };
   }
 }

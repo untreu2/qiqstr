@@ -21,6 +21,7 @@ class EditProfileLoaded extends EditProfileState {
   final String banner;
   final String lud16;
   final String website;
+  final String location;
   final bool isSaving;
   final bool isUploadingPicture;
 
@@ -33,6 +34,7 @@ class EditProfileLoaded extends EditProfileState {
     required this.banner,
     required this.lud16,
     required this.website,
+    required this.location,
     this.isSaving = false,
     this.isUploadingPicture = false,
   });
@@ -46,6 +48,7 @@ class EditProfileLoaded extends EditProfileState {
     String? banner,
     String? lud16,
     String? website,
+    String? location,
     bool? isSaving,
     bool? isUploadingPicture,
   }) {
@@ -58,6 +61,7 @@ class EditProfileLoaded extends EditProfileState {
       banner: banner ?? this.banner,
       lud16: lud16 ?? this.lud16,
       website: website ?? this.website,
+      location: location ?? this.location,
       isSaving: isSaving ?? this.isSaving,
       isUploadingPicture: isUploadingPicture ?? this.isUploadingPicture,
     );
@@ -73,6 +77,7 @@ class EditProfileLoaded extends EditProfileState {
         banner,
         lud16,
         website,
+        location,
         isSaving,
         isUploadingPicture,
       ];

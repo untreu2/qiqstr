@@ -168,6 +168,7 @@ class EventMapper {
     String? nip05;
     String? lud16;
     String? website;
+    String? location;
     final pubkey = event['pubkey'] as String? ?? '';
     final createdAt = event['created_at'] as int? ?? 0;
 
@@ -182,6 +183,7 @@ class EventMapper {
       nip05 = content['nip05'] as String?;
       lud16 = content['lud16'] as String?;
       website = content['website'] as String?;
+      location = content['location'] as String?;
     } catch (_) {}
 
     return UserProfile(
@@ -194,6 +196,7 @@ class EventMapper {
       nip05: nip05,
       lud16: lud16,
       website: website,
+      location: location,
       createdAt: createdAt,
     );
   }

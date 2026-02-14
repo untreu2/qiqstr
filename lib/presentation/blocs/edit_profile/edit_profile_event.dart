@@ -80,6 +80,15 @@ class EditProfileWebsiteChanged extends EditProfileEvent {
   List<Object?> get props => [website];
 }
 
+class EditProfileLocationChanged extends EditProfileEvent {
+  final String location;
+
+  const EditProfileLocationChanged(this.location);
+
+  @override
+  List<Object?> get props => [location];
+}
+
 class EditProfileSaved extends EditProfileEvent {
   const EditProfileSaved();
 }

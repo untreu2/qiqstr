@@ -13,6 +13,7 @@ import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
+import '../../../l10n/app_localizations.dart';
 
 class EditOwnProfilePage extends StatelessWidget {
   const EditOwnProfilePage({super.key});
@@ -46,6 +47,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
   final _bannerController = TextEditingController();
   final _lud16Controller = TextEditingController();
   final _websiteController = TextEditingController();
+  final _locationController = TextEditingController();
 
   bool _isUploadingBanner = false;
   bool _hasLoadedUser = false;
@@ -84,6 +86,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     _bannerController.dispose();
     _lud16Controller.dispose();
     _websiteController.dispose();
+    _locationController.dispose();
     super.dispose();
   }
 
@@ -157,6 +160,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     bloc.add(EditProfileBannerChanged(_bannerController.text.trim()));
     bloc.add(EditProfileLud16Changed(_lud16Controller.text.trim()));
     bloc.add(EditProfileWebsiteChanged(_websiteController.text.trim()));
+    bloc.add(EditProfileLocationChanged(_locationController.text.trim()));
 
     bloc.add(const EditProfileSaved());
   }
@@ -394,6 +398,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
           _bannerController.text = loadedState.banner;
           _lud16Controller.text = loadedState.lud16;
           _websiteController.text = loadedState.website;
+          _locationController.text = loadedState.location;
           _hasLoadedUser = true;
         }
 
@@ -503,6 +508,24 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                                       website.contains(' ')) {
                                     return 'Please enter a valid website URL';
                                   }
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            CustomInputField(
+                              controller: _locationController,
+                              labelText: AppLocalizations.of(context)!.locationOptional,
+                              fillColor: context.colors.inputFill,
+                              onChanged: (value) {
+                                context
+                                    .read<EditProfileBloc>()
+                                    .add(EditProfileLocationChanged(value));
+                              },
+                              validator: (value) {
+                                if (value != null &&
+                                    value.trim().length > 100) {
+                                  return AppLocalizations.of(context)!.locationTooLong;
                                 }
                                 return null;
                               },

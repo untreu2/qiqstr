@@ -1437,6 +1437,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get websiteOptional => 'Web sitesi (isteğe bağlı)';
 
   @override
+  String get locationOptional => 'Konum (isteğe bağlı)';
+
+  @override
+  String get locationTooLong => 'Konum en fazla 100 karakter olmalıdır';
+
+  @override
   String newNotesAvailable(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

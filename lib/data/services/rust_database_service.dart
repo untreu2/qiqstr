@@ -658,6 +658,7 @@ class RustDatabaseService {
     addIfPresent('lud16', metadata['lud16']);
     addIfPresent('lud06', metadata['lud06']);
     addIfPresent('website', metadata['website']);
+    addIfPresent('location', metadata['location']);
 
     return result;
   }

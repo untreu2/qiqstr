@@ -27,6 +27,7 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
     on<EditProfileBannerChanged>(_onEditProfileBannerChanged);
     on<EditProfileLud16Changed>(_onEditProfileLud16Changed);
     on<EditProfileWebsiteChanged>(_onEditProfileWebsiteChanged);
+    on<EditProfileLocationChanged>(_onEditProfileLocationChanged);
     on<EditProfileSaved>(_onEditProfileSaved);
     on<EditProfilePictureUploaded>(_onEditProfilePictureUploaded);
     on<EditProfileBannerUploaded>(_onEditProfileBannerUploaded);
@@ -122,6 +123,11 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
         ? websiteValue
         : (websiteValue?.toString() ?? '');
 
+    final locationValue = user['location'];
+    final location = locationValue is String
+        ? locationValue
+        : (locationValue?.toString() ?? '');
+
     emit(EditProfileLoaded(
       user: user,
       name: name,
@@ -131,6 +137,7 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
       banner: banner,
       lud16: lud16,
       website: website,
+      location: location,
     ));
   }
 
@@ -204,6 +211,16 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
     }
   }
 
+  void _onEditProfileLocationChanged(
+    EditProfileLocationChanged event,
+    Emitter<EditProfileState> emit,
+  ) {
+    final currentState = state;
+    if (currentState is EditProfileLoaded) {
+      emit(currentState.copyWith(location: event.location));
+    }
+  }
+
   Future<void> _onEditProfileSaved(
     EditProfileSaved event,
     Emitter<EditProfileState> emit,
@@ -222,6 +239,7 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
         'banner': currentState.banner.trim(),
         'lud16': currentState.lud16.trim(),
         'website': currentState.website.trim(),
+        'location': currentState.location.trim(),
       };
 
       await _syncService.publishProfileUpdate(profileContent: profile);

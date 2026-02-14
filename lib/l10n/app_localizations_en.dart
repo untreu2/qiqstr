@@ -1430,6 +1430,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get websiteOptional => 'Website (optional)';
 
   @override
+  String get locationOptional => 'Location (optional)';
+
+  @override
+  String get locationTooLong => 'Location must be 100 characters or less';
+
+  @override
   String newNotesAvailable(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -1466,6 +1466,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get websiteOptional => 'Webseite (optional)';
 
   @override
+  String get locationOptional => 'Standort (optional)';
+
+  @override
+  String get locationTooLong => 'Standort darf maximal 100 Zeichen lang sein';
+
+  @override
   String newNotesAvailable(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

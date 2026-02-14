@@ -684,6 +684,8 @@
   "lightningAddressOptional": "Lightning address (optional)",
   "invalidLightningAddress": "Please enter a valid lightning address (e.g., user@domain.com)",
   "websiteOptional": "Website (optional)",
+  "locationOptional": "Location (optional)",
+  "locationTooLong": "Location must be 100 characters or less",
 
   "newNotesAvailable": "{count, plural, =1{1 new note} other{{count} new notes}}",
   "@newNotesAvailable": {

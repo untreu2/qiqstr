@@ -2782,6 +2782,18 @@ abstract class AppLocalizations {
   /// **'Website (optional)'**
   String get websiteOptional;
 
+  /// No description provided for @locationOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Location (optional)'**
+  String get locationOptional;
+
+  /// No description provided for @locationTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Location must be 100 characters or less'**
+  String get locationTooLong;
+
   /// No description provided for @newNotesAvailable.
   ///
   /// In en, this message translates to:

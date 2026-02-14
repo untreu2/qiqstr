@@ -40,6 +40,7 @@ class ProfileRepositoryImpl extends BaseRepository
         nip05: profileData['nip05'] as String?,
         lud16: profileData['lud16'] as String?,
         website: profileData['website'] as String?,
+        location: profileData['location'] as String?,
       );
     });
   }
@@ -59,6 +60,7 @@ class ProfileRepositoryImpl extends BaseRepository
       nip05: profileData['nip05'],
       lud16: profileData['lud16'],
       website: profileData['website'],
+      location: profileData['location'],
     );
   }
 
@@ -83,6 +85,7 @@ class ProfileRepositoryImpl extends BaseRepository
         nip05: data['nip05'],
         lud16: data['lud16'],
         website: data['website'],
+        location: data['location'],
       );
     }
 
@@ -105,6 +108,7 @@ class ProfileRepositoryImpl extends BaseRepository
         nip05: data['nip05'] as String?,
         lud16: data['lud16'] as String?,
         website: data['website'] as String?,
+        location: data['location'] as String?,
       );
     }).toList();
   }

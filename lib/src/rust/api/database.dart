@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `metadata_to_flat_json`
+// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `metadata_to_flat_json`
 
 Future<String?> dbGetProfile({required String pubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbGetProfile(pubkeyHex: pubkeyHex);

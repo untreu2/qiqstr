@@ -617,6 +617,8 @@
   "lightningAddressOptional": "Lightning-Adresse (optional)",
   "invalidLightningAddress": "Bitte geben Sie eine gültige Lightning-Adresse ein (z.B. user@domain.com)",
   "websiteOptional": "Webseite (optional)",
+  "locationOptional": "Standort (optional)",
+  "locationTooLong": "Standort darf maximal 100 Zeichen lang sein",
 
   "newNotesAvailable": "{count, plural, =1{1 neue Notiz} other{{count} neue Notizen}}",
   "@newNotesAvailable": {
