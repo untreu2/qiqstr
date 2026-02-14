@@ -5,7 +5,65 @@ use nostr_sdk::prelude::*;
 
 use super::relay::get_client_pub;
 
+fn extract_bolt11_amount_sats(bolt11: &str) -> Option<u64> {
+    let lower = bolt11.to_lowercase();
+    let sep_pos = lower.rfind('1')?;
+    let hr_part = &lower[..sep_pos];
+
+    let after_prefix = if hr_part.starts_with("lnbcrt") {
+        &hr_part[6..]
+    } else if hr_part.starts_with("lnbc") {
+        &hr_part[4..]
+    } else if hr_part.starts_with("lntbs") {
+        &hr_part[5..]
+    } else if hr_part.starts_with("lntb") {
+        &hr_part[4..]
+    } else {
+        return None;
+    };
+
+    if after_prefix.is_empty() {
+        return None;
+    }
+
+    let chars: Vec<char> = after_prefix.chars().collect();
+    let mut i = 0;
+    while i < chars.len() && chars[i].is_ascii_digit() {
+        i += 1;
+    }
+
+    if i == 0 {
+        return None;
+    }
+
+    let amount: u64 = after_prefix[..i].parse().ok()?;
+
+    let msats = if i < chars.len() {
+        match chars[i] {
+            'm' => amount.checked_mul(100_000_000)?,
+            'u' => amount.checked_mul(100_000)?,
+            'n' => amount.checked_mul(100)?,
+            'p' => amount / 10,
+            _ => return None,
+        }
+    } else {
+        amount.checked_mul(100_000_000_000)?
+    };
+
+    Some(msats / 1000)
+}
+
 fn extract_zap_amount_sats(event: &Event) -> u64 {
+    for tag in event.tags.iter() {
+        if tag.kind() == TagKind::Bolt11 {
+            if let Some(bolt11) = tag.content() {
+                if let Some(sats) = extract_bolt11_amount_sats(bolt11) {
+                    return sats;
+                }
+            }
+        }
+    }
+
     for tag in event.tags.iter() {
         if tag.kind() == TagKind::Description {
             if let Some(desc_str) = tag.content() {
@@ -433,12 +491,17 @@ pub async fn db_get_batch_interaction_counts(note_ids: Vec<String>) -> Result<St
             0
         };
 
+        let mut counted_for: std::collections::HashSet<String> = std::collections::HashSet::new();
         for tag in event.tags.iter() {
             let tag_kind = tag.kind();
             if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
                 if let Some(ref_id) = tag.content() {
                     let ref_hex = ref_id.to_string();
+                    if counted_for.contains(&ref_hex) {
+                        continue;
+                    }
                     if let Some(c) = counts.get_mut(&ref_hex) {
+                        counted_for.insert(ref_hex);
                         match kind {
                             k if k == Kind::Reaction => c[0] += 1,
                             k if k == Kind::Repost => c[1] += 1,
@@ -520,29 +583,34 @@ pub async fn db_get_batch_interaction_data(
             false
         };
 
+        let mut counted_for: std::collections::HashSet<String> = std::collections::HashSet::new();
         for tag in event.tags.iter() {
             let tag_kind = tag.kind();
             if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
                 if let Some(ref_id) = tag.content() {
                     let ref_hex = ref_id.to_string();
+                    if counted_for.contains(&ref_hex) {
+                        continue;
+                    }
                     if let Some(c) = counts.get_mut(&ref_hex) {
+                        counted_for.insert(ref_hex.clone());
                         match kind {
                             k if k == Kind::Reaction => {
                                 c[0] += 1;
                                 if is_user {
-                                    user_reacted.insert(ref_hex.clone(), true);
+                                    user_reacted.insert(ref_hex, true);
                                 }
                             }
                             k if k == Kind::Repost => {
                                 c[1] += 1;
                                 if is_user {
-                                    user_reposted.insert(ref_hex.clone(), true);
+                                    user_reposted.insert(ref_hex, true);
                                 }
                             }
                             k if k == Kind::ZapReceipt => {
                                 c[2] += zap_sats;
                                 if is_zap_sender {
-                                    user_zapped.insert(ref_hex.clone(), true);
+                                    user_zapped.insert(ref_hex, true);
                                 }
                             }
                             k if k == Kind::TextNote => c[3] += 1,

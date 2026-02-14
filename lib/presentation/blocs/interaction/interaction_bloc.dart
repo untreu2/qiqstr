@@ -115,8 +115,14 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     final currentState =
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
     if (currentState == null || currentState.hasReacted) return;
+    if (_interactionService.hasReacted(noteId)) return;
 
     _interactionService.markReacted(noteId);
+
+    emit(currentState.copyWith(
+      hasReacted: true,
+      reactionCount: currentState.reactionCount + 1,
+    ));
 
     try {
       final noteAuthor =
@@ -136,8 +142,14 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     final currentState =
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
     if (currentState == null || currentState.hasReposted) return;
+    if (_interactionService.hasReposted(noteId)) return;
 
     _interactionService.markReposted(noteId);
+
+    emit(currentState.copyWith(
+      hasReposted: true,
+      repostCount: currentState.repostCount + 1,
+    ));
 
     try {
       final noteAuthor =
