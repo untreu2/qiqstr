@@ -273,7 +273,9 @@ class _WelcomePageState extends State<WelcomePage> {
             child: PrimaryButton(
               label: l10n.createNewAccount,
               onPressed: _acceptedTerms
-                  ? () => context.go('/signup')
+                  ? () => context.go(widget.isAddAccount
+                      ? '/signup?addAccount=true'
+                      : '/signup')
                   : () => _showTermsRequired(l10n),
               size: ButtonSize.large,
             ),
@@ -281,7 +283,8 @@ class _WelcomePageState extends State<WelcomePage> {
           const SizedBox(height: 12),
           GestureDetector(
             onTap: _acceptedTerms
-                ? () => context.go('/login')
+                ? () => context.go(
+                    widget.isAddAccount ? '/login?addAccount=true' : '/login')
                 : () => _showTermsRequired(l10n),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),

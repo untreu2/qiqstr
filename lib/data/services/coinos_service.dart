@@ -10,19 +10,90 @@ import '../../src/rust/api/events.dart' as rust_events;
 
 class CoinosService {
   static const String _baseUrl = 'https://coinos.io/api';
-  static const String _tokenKey = 'coinos_token';
-  static const String _userKey = 'coinos_user';
-  static const String _usernameKey = 'coinos_username';
-  static const String _passwordKey = 'coinos_password';
-  static const String _apiKeyKey = 'coinos_api_key';
+  static const String _baseTokenKey = 'coinos_token';
+  static const String _baseUserKey = 'coinos_user';
+  static const String _baseUsernameKey = 'coinos_username';
+  static const String _basePasswordKey = 'coinos_password';
+  static const String _baseApiKeyKey = 'coinos_api_key';
   static const String _userAgent = 'qiqstr';
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final http.Client _httpClient = http.Client();
 
+  String? _activeAccountId;
   String? _cachedToken;
   Map<String, dynamic>? _cachedUser;
   String? _cachedApiKey;
+
+  String get _tokenKey => _prefixedKey(_baseTokenKey);
+  String get _userKey => _prefixedKey(_baseUserKey);
+  String get _usernameKey => _prefixedKey(_baseUsernameKey);
+  String get _passwordKey => _prefixedKey(_basePasswordKey);
+  String get _apiKeyKey => _prefixedKey(_baseApiKeyKey);
+
+  String _prefixedKey(String base) {
+    if (_activeAccountId != null && _activeAccountId!.isNotEmpty) {
+      return '${_activeAccountId}_$base';
+    }
+    return base;
+  }
+
+  void setActiveAccount(String npub) {
+    if (_activeAccountId == npub) return;
+    _activeAccountId = npub;
+    _cachedToken = null;
+    _cachedUser = null;
+    _cachedApiKey = null;
+    _migrateGlobalKeys(npub);
+  }
+
+  Future<void> _migrateGlobalKeys(String npub) async {
+    try {
+      final prefixedToken = '${npub}_$_baseTokenKey';
+      final existing = await _secureStorage.read(key: prefixedToken);
+      if (existing != null) return;
+
+      final globalToken = await _secureStorage.read(key: _baseTokenKey);
+      if (globalToken == null || globalToken.isEmpty) return;
+
+      final globalUser = await _secureStorage.read(key: _baseUserKey);
+      final globalUsername = await _secureStorage.read(key: _baseUsernameKey);
+      final globalPassword = await _secureStorage.read(key: _basePasswordKey);
+      final globalApiKey = await _secureStorage.read(key: _baseApiKeyKey);
+
+      await Future.wait([
+        _secureStorage.write(key: prefixedToken, value: globalToken),
+        if (globalUser != null)
+          _secureStorage.write(key: '${npub}_$_baseUserKey', value: globalUser),
+        if (globalUsername != null)
+          _secureStorage.write(
+              key: '${npub}_$_baseUsernameKey', value: globalUsername),
+        if (globalPassword != null)
+          _secureStorage.write(
+              key: '${npub}_$_basePasswordKey', value: globalPassword),
+        if (globalApiKey != null)
+          _secureStorage.write(
+              key: '${npub}_$_baseApiKeyKey', value: globalApiKey),
+      ]);
+
+      await Future.wait([
+        _secureStorage.delete(key: _baseTokenKey),
+        _secureStorage.delete(key: _baseUserKey),
+        _secureStorage.delete(key: _baseUsernameKey),
+        _secureStorage.delete(key: _basePasswordKey),
+        _secureStorage.delete(key: _baseApiKeyKey),
+      ]);
+    } catch (e) {
+      debugPrint('[CoinosService] Migration error: $e');
+    }
+  }
+
+  void clearActiveAccount() {
+    _activeAccountId = null;
+    _cachedToken = null;
+    _cachedUser = null;
+    _cachedApiKey = null;
+  }
 
   Future<Map<String, String>> _buildHeaders({
     String contentType = 'application/json',
@@ -117,8 +188,9 @@ class CoinosService {
         final data = jsonDecode(authResponse.body) as Map<String, dynamic>;
 
         final userData = data['user'] as Map<String, dynamic>? ?? data;
+        final rawUsername = userData['username'] as String? ?? '';
         final user = <String, dynamic>{
-          'username': userData['username'] as String? ?? '',
+          'username': rawUsername.replaceAll(' ', ''),
           'id': userData['id'] as String? ?? '',
         };
         final token = data['token'] as String? ?? '';
@@ -521,10 +593,12 @@ class CoinosService {
         _secureStorage.delete(key: _userKey),
         _secureStorage.delete(key: _usernameKey),
         _secureStorage.delete(key: _passwordKey),
+        _secureStorage.delete(key: _apiKeyKey),
       ]);
 
       _cachedToken = null;
       _cachedUser = null;
+      _cachedApiKey = null;
 
       debugPrint('[CoinosService] Auth data cleared');
       return const Result.success(null);

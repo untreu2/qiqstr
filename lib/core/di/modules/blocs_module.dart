@@ -76,7 +76,9 @@ class BlocsModule extends DIModule {
           authService: AppDI.get<AuthService>(),
         ));
 
-    AppDI.registerLazySingleton<WalletBloc>(() => WalletBloc());
+    AppDI.registerLazySingleton<WalletBloc>(() => WalletBloc(
+          coinosService: AppDI.get<CoinosService>(),
+        ));
 
     AppDI.registerFactory<ThreadBloc>(() => ThreadBloc(
           feedRepository: AppDI.get<FeedRepository>(),

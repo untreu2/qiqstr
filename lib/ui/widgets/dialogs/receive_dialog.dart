@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../../core/di/app_di.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
@@ -22,7 +23,7 @@ class ReceiveDialog extends StatefulWidget {
 
 class _ReceiveDialogState extends State<ReceiveDialog> {
   final TextEditingController _amountController = TextEditingController();
-  final CoinosService _coinosService = CoinosService();
+  final CoinosService _coinosService = AppDI.get<CoinosService>();
 
   bool _isUpdating = false;
   String? _invoice;

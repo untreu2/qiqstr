@@ -24,7 +24,7 @@ Future<bool> _payZapWithWallet(
   int sats,
   String comment,
 ) async {
-  final coinosService = CoinosService();
+  final coinosService = AppDI.get<CoinosService>();
   const secureStorage = FlutterSecureStorage();
 
   try {

@@ -36,6 +36,12 @@ class ServicesModule extends DIModule {
           publisher: AppDI.get<EventPublisher>(),
         ));
     await AuthService.instance.refreshCache();
+
+    final currentNpub = AuthService.instance.currentUserNpub;
+    if (currentNpub != null) {
+      AppDI.get<CoinosService>().setActiveAccount(currentNpub);
+    }
+
     await FavoriteListsService.instance.load();
 
     await _initRelayService();

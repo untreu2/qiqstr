@@ -12,8 +12,8 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   final List<StreamSubscription> _subscriptions = [];
 
   WalletBloc({
-    CoinosService? coinosService,
-  })  : _coinosService = coinosService ?? CoinosService(),
+    required CoinosService coinosService,
+  })  : _coinosService = coinosService,
         super(const WalletInitial()) {
     on<WalletAutoConnectRequested>(_onWalletAutoConnectRequested);
     on<WalletConnectWithNostrRequested>(_onWalletConnectWithNostrRequested);

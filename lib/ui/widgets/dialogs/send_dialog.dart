@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/di/app_di.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
@@ -21,7 +22,7 @@ class SendDialog extends StatefulWidget {
 
 class _SendDialogState extends State<SendDialog> {
   final TextEditingController _invoiceController = TextEditingController();
-  final CoinosService _coinosService = CoinosService();
+  final CoinosService _coinosService = AppDI.get<CoinosService>();
 
   bool _isLoading = false;
   String? _error;

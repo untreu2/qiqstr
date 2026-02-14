@@ -47,7 +47,7 @@ class OnboardingCoinosBloc
 
       final data = authResult.data!;
       final user = data['user'] as Map<String, dynamic>?;
-      final username = user?['username'] as String? ?? '';
+      final username = (user?['username'] as String? ?? '').replaceAll(' ', '');
 
       if (username.isEmpty) {
         emit(const OnboardingCoinosError('Failed to get Coinos username'));
@@ -72,10 +72,16 @@ class OnboardingCoinosBloc
     if (pubkeyResult.isError || pubkeyResult.data == null) return;
 
     final pubkeyHex = pubkeyResult.data!;
-    final existingProfile = await _profileRepository.getProfile(pubkeyHex);
+    var existingProfile = await _profileRepository.getProfile(pubkeyHex);
+
+    if (existingProfile == null) {
+      await _syncService.syncProfile(pubkeyHex);
+      existingProfile = await _profileRepository.getProfile(pubkeyHex);
+    }
 
     final profile = <String, dynamic>{
       'name': existingProfile?.name ?? '',
+      'display_name': existingProfile?.displayName ?? '',
       'about': existingProfile?.about ?? '',
       'picture': existingProfile?.picture ?? '',
       'banner': existingProfile?.banner ?? '',
