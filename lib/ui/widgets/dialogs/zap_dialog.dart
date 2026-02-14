@@ -16,6 +16,7 @@ import '../../../src/rust/api/events.dart' as rust_events;
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
+import '../../../l10n/app_localizations.dart';
 
 Future<bool> _payZapWithWallet(
   BuildContext context,
@@ -311,6 +312,36 @@ Future<Map<String, dynamic>> showZapDialog({
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      AppLocalizations.of(modalContext)?.zap ?? 'Zap',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(modalContext),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colors.overlayLight,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.close,
+                        size: 20,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               CustomInputField(
                 controller: amountController,
                 keyboardType: TextInputType.number,

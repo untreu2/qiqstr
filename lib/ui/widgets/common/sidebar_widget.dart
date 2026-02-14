@@ -10,6 +10,7 @@ import '../../../presentation/blocs/sidebar/sidebar_bloc.dart';
 import '../../../presentation/blocs/sidebar/sidebar_event.dart';
 import '../../../presentation/blocs/sidebar/sidebar_state.dart';
 import '../../../l10n/app_localizations.dart';
+import '../dialogs/switch_account_dialog.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -47,9 +48,9 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       final newNpub = AuthService.instance.currentUserNpub ?? npub;
 
       if (context.mounted) {
-        GoRouter.of(context).go(
-          '/home/feed?npub=${Uri.encodeComponent(newNpub)}',
-        );
+        GoRouter.of(
+          context,
+        ).go('/home/feed?npub=${Uri.encodeComponent(newNpub)}');
       }
     } catch (_) {
       if (mounted) setState(() => _isSwitching = false);
@@ -88,20 +89,22 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                       _SidebarContent(
                         user: state.currentUser,
                         colors: colors,
-                        accountSwitcher: _AccountSwitcher(
-                          currentNpub:
-                              state.currentUser['npub'] as String? ?? '',
-                          accounts: state.storedAccounts,
-                          accountProfileImages: state.accountProfileImages,
-                          colors: colors,
-                          isSwitching: _isSwitching,
-                          onSwitchAccount: (npub) =>
-                              _handleAccountSwitch(context, npub),
-                          onAddAccount: () {
-                            Navigator.of(context).pop();
-                            context.push('/welcome?addAccount=true');
-                          },
-                        ),
+                        onSwitchAccountTap: () {
+                          showSwitchAccountDialog(
+                            context: context,
+                            currentNpub:
+                                state.currentUser['npub'] as String? ?? '',
+                            accounts: state.storedAccounts,
+                            accountProfileImages: state.accountProfileImages,
+                            isSwitching: _isSwitching,
+                            onSwitchAccount: (npub) =>
+                                _handleAccountSwitch(context, npub),
+                            onAddAccount: () {
+                              Navigator.of(context).pop();
+                              context.push('/welcome?addAccount=true');
+                            },
+                          );
+                        },
                       ),
                     ],
                   )
@@ -209,11 +212,7 @@ class _UserProfileHeader extends StatelessWidget {
                           return nip05.isNotEmpty && nip05Verified;
                         }()) ...[
                           const SizedBox(width: 6),
-                          Icon(
-                            Icons.verified,
-                            size: 20,
-                            color: colors.accent,
-                          ),
+                          Icon(Icons.verified, size: 20, color: colors.accent),
                         ],
                       ],
                     ),
@@ -278,17 +277,11 @@ class _UserProfileHeader extends StatelessWidget {
         ),
         Text(
           ' ${l10n.followers}',
-          style: TextStyle(
-            fontSize: 14,
-            color: colors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 14, color: colors.textSecondary),
         ),
         Text(
           ' • ',
-          style: TextStyle(
-            fontSize: 14,
-            color: colors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 14, color: colors.textSecondary),
         ),
         Text(
           '$followingCount',
@@ -300,10 +293,7 @@ class _UserProfileHeader extends StatelessWidget {
         ),
         Text(
           ' ${l10n.followingCount}',
-          style: TextStyle(
-            fontSize: 14,
-            color: colors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 14, color: colors.textSecondary),
         ),
       ],
     );
@@ -313,12 +303,12 @@ class _UserProfileHeader extends StatelessWidget {
 class _SidebarContent extends StatelessWidget {
   final Map<String, dynamic> user;
   final AppThemeColors colors;
-  final Widget accountSwitcher;
+  final VoidCallback onSwitchAccountTap;
 
   const _SidebarContent({
     required this.user,
     required this.colors,
-    required this.accountSwitcher,
+    required this.onSwitchAccountTap,
   });
 
   @override
@@ -339,17 +329,21 @@ class _SidebarContent extends StatelessWidget {
               onTap: () {
                 final userNpub = user['npub'] as String? ?? '';
                 final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-                final currentLocation =
-                    GoRouterState.of(context).matchedLocation;
+                final currentLocation = GoRouterState.of(
+                  context,
+                ).matchedLocation;
                 if (currentLocation.startsWith('/home/feed')) {
                   context.push(
-                      '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                    '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}',
+                  );
                 } else if (currentLocation.startsWith('/home/notifications')) {
                   context.push(
-                      '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                    '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}',
+                  );
                 } else {
                   context.push(
-                      '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                    '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}',
+                  );
                 }
               },
             ),
@@ -399,7 +393,13 @@ class _SidebarContent extends StatelessWidget {
           const Spacer(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: accountSwitcher,
+            child: _buildModernSidebarItem(
+              context: context,
+              colors: colors,
+              icon: CarbonIcons.user_multiple,
+              label: l10n.switchAccount,
+              onTap: onSwitchAccountTap,
+            ),
           ),
           const SizedBox(height: 8),
           Padding(
@@ -414,195 +414,6 @@ class _SidebarContent extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _AccountSwitcher extends StatefulWidget {
-  final String currentNpub;
-  final List<StoredAccount> accounts;
-  final Map<String, String> accountProfileImages;
-  final AppThemeColors colors;
-  final bool isSwitching;
-  final ValueChanged<String> onSwitchAccount;
-  final VoidCallback onAddAccount;
-
-  const _AccountSwitcher({
-    required this.currentNpub,
-    required this.accounts,
-    required this.accountProfileImages,
-    required this.colors,
-    required this.isSwitching,
-    required this.onSwitchAccount,
-    required this.onAddAccount,
-  });
-
-  @override
-  State<_AccountSwitcher> createState() => _AccountSwitcherState();
-}
-
-class _AccountSwitcherState extends State<_AccountSwitcher> {
-  bool _isExpanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final colors = widget.colors;
-    final otherAccounts =
-        widget.accounts.where((a) => a.npub != widget.currentNpub).toList();
-
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () => setState(() => _isExpanded = !_isExpanded),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: BoxDecoration(
-              color: colors.overlayLight,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Row(
-              children: [
-                if (widget.isSwitching)
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.textPrimary,
-                    ),
-                  )
-                else
-                  Icon(
-                    CarbonIcons.user_multiple,
-                    size: 20,
-                    color: colors.textPrimary,
-                  ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l10n.switchAccount,
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                AnimatedRotation(
-                  turns: _isExpanded ? 0.5 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 20,
-                    color: colors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        AnimatedCrossFade(
-          firstChild: const SizedBox.shrink(),
-          secondChild: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Container(
-              decoration: BoxDecoration(
-                color: colors.overlayLight,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                children: [
-                  ...otherAccounts.map((account) {
-                    final profileImage =
-                        widget.accountProfileImages[account.npub];
-                    final displayNpub = account.npub.length > 16
-                        ? '${account.npub.substring(0, 10)}...${account.npub.substring(account.npub.length - 6)}'
-                        : account.npub;
-                    return GestureDetector(
-                      onTap: () => widget.onSwitchAccount(account.npub),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: colors.avatarPlaceholder,
-                                image: profileImage != null &&
-                                        profileImage.isNotEmpty
-                                    ? DecorationImage(
-                                        image: NetworkImage(profileImage),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child:
-                                  profileImage == null || profileImage.isEmpty
-                                      ? Center(
-                                          child: Icon(
-                                            Icons.person,
-                                            size: 14,
-                                            color: colors.textPrimary,
-                                          ),
-                                        )
-                                      : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                displayNpub,
-                                style: TextStyle(
-                                  color: colors.textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                  GestureDetector(
-                    onTap: widget.onAddAccount,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      child: Row(
-                        children: [
-                          Icon(
-                            CarbonIcons.add,
-                            size: 20,
-                            color: colors.textPrimary,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            l10n.addAccount,
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          crossFadeState: _isExpanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          duration: const Duration(milliseconds: 200),
-        ),
-      ],
     );
   }
 }

@@ -11,7 +11,7 @@ Future<void> showLanguageDialog({
 }) async {
   final colors = context.colors;
   final l10n = AppLocalizations.of(context)!;
-  
+
   return showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -30,13 +30,34 @@ Future<void> showLanguageDialog({
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            l10n.language,
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.language,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.pop(modalContext),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colors.overlayLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 20,
+                    color: colors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           _buildLanguageOption(
@@ -96,9 +117,7 @@ Widget _buildLanguageOption({
             ? colors.primary.withValues(alpha: 0.1)
             : colors.overlayLight,
         borderRadius: BorderRadius.circular(16),
-        border: isSelected
-            ? Border.all(color: colors.primary, width: 2)
-            : null,
+        border: isSelected ? Border.all(color: colors.primary, width: 2) : null,
       ),
       child: Row(
         children: [
