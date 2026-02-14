@@ -379,22 +379,84 @@ class SyncService {
 
   Future<void> syncNote(String noteId) async {
     await _sync('note', () async {
-      final filter = NostrService.createEventByIdFilter(eventIds: [noteId]);
-      final events = await _queryRelays(filter);
+      final allEvents = <Map<String, dynamic>>[];
+      final processedIds = <String>{};
+      var pendingIds = <String>[noteId];
 
-      final parentIds = _extractParentIds(events);
-      final referencedIds = _extractReferencedEventIds(events);
-      final allRelatedIds = <String>{...parentIds, ...referencedIds};
+      for (var depth = 0; depth < 10 && pendingIds.isNotEmpty; depth++) {
+        final idsToFetch =
+            pendingIds.where((id) => !processedIds.contains(id)).toList();
+        if (idsToFetch.isEmpty) break;
 
-      if (allRelatedIds.isNotEmpty) {
-        final relatedFilter = NostrService.createEventByIdFilter(
-            eventIds: allRelatedIds.toList());
-        final relatedEvents = await _queryRelays(relatedFilter);
-        await _saveEventsAndProfiles([...events, ...relatedEvents]);
-      } else {
-        await _saveEventsAndProfiles(events);
+        final filter =
+            NostrService.createEventByIdFilter(eventIds: idsToFetch);
+        final events = await _queryRelays(filter);
+        allEvents.addAll(events);
+        for (final id in idsToFetch) {
+          processedIds.add(id);
+        }
+
+        final parentIds = _extractParentIds(events);
+        final referencedIds = _extractReferencedEventIds(events);
+        pendingIds = <String>{...parentIds, ...referencedIds}
+            .where((id) => !processedIds.contains(id))
+            .toList();
       }
+
+      await _saveEventsAndProfiles(allEvents);
     });
+  }
+
+  Future<String> resolveThreadRoot(String noteId) async {
+    var currentId = noteId;
+    final visited = <String>{};
+
+    for (var depth = 0; depth < 15; depth++) {
+      if (visited.contains(currentId)) break;
+      visited.add(currentId);
+
+      var event = await _db.getEventModel(currentId);
+      if (event == null) {
+        await syncNote(currentId);
+        event = await _db.getEventModel(currentId);
+        if (event == null) break;
+      }
+
+      final tags = event['tags'] as List<dynamic>? ?? [];
+      String? rootId;
+      String? parentId;
+
+      for (final tag in tags) {
+        if (tag is List && tag.length > 1 && tag[0] == 'e') {
+          final marker = tag.length >= 4 ? tag[3] as String? : null;
+          if (marker == 'root') {
+            rootId = tag[1] as String;
+            break;
+          } else if (marker == 'reply') {
+            parentId = tag[1] as String;
+          } else if (marker == null && parentId == null) {
+            parentId = tag[1] as String;
+          }
+        }
+      }
+
+      if (rootId != null && rootId.isNotEmpty) {
+        var rootEvent = await _db.getEventModel(rootId);
+        if (rootEvent == null) {
+          await syncNote(rootId);
+        }
+        return rootId;
+      }
+
+      if (parentId != null && parentId.isNotEmpty && parentId != currentId) {
+        currentId = parentId;
+        continue;
+      }
+
+      break;
+    }
+
+    return currentId;
   }
 
   Future<Map<String, dynamic>> publishNote(

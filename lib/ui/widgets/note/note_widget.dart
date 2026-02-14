@@ -528,12 +528,19 @@ class _NoteWidgetState extends State<NoteWidget> {
       String rootId;
       String focusedId;
 
-      final noteRootId = widget.note['rootId'] as String?;
+      var noteRootId = widget.note['rootId'] as String?;
+      if ((noteRootId == null || noteRootId.isEmpty) && _isReply) {
+        noteRootId = _resolveRootFromTags(widget.note);
+      }
+
       if (_isRepost && noteRootId != null && noteRootId.isNotEmpty) {
         rootId = noteRootId;
         focusedId = noteRootId;
       } else if (_isReply && noteRootId != null && noteRootId.isNotEmpty) {
         rootId = noteRootId;
+        focusedId = _noteId;
+      } else if (_isReply) {
+        rootId = _noteId;
         focusedId = _noteId;
       } else {
         rootId = _noteId;
@@ -558,6 +565,19 @@ class _NoteWidgetState extends State<NoteWidget> {
     } catch (e) {
       debugPrint('[NoteWidget] Navigate to thread error: $e');
     }
+  }
+
+  String? _resolveRootFromTags(Map<String, dynamic> note) {
+    final tags = note['tags'] as List<dynamic>? ?? [];
+    String? firstE;
+    for (final tag in tags) {
+      if (tag is List && tag.length > 1 && tag[0] == 'e') {
+        final marker = tag.length >= 4 ? tag[3] as String? : null;
+        if (marker == 'root') return tag[1] as String;
+        firstE ??= tag[1] as String;
+      }
+    }
+    return firstE;
   }
 
   String _getInteractionNoteId() {
