@@ -373,7 +373,24 @@
   "block": "Block",
   "unblock": "Unblock",
   "report": "Report",
-  "reportUser": "Report user",
+  "reportUser": "Report {user}",
+  "@reportUser": {
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "reportUserDescription": "Select a reason for reporting this user. Your report will be published to relays.",
+  "reportReasonSpam": "Spam",
+  "reportReasonNudity": "Nudity",
+  "reportReasonProfanity": "Profanity",
+  "reportReasonIllegal": "Illegal",
+  "reportReasonImpersonation": "Impersonation",
+  "reportReasonOther": "Other",
+  "reportSubmitted": "Report submitted",
+  "reportFailed": "Failed to submit report",
+  "selectReportReason": "Select a reason",
   
   "today": "Today",
   "justNow": "Just now",

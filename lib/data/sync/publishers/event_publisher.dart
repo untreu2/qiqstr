@@ -184,6 +184,20 @@ class EventPublisher {
     );
   }
 
+  Future<Map<String, dynamic>> createReport({
+    required String reportedPubkey,
+    required String reportType,
+    String content = '',
+  }) async {
+    final privateKey = await _getPrivateKey();
+    return NostrService.createReportEvent(
+      reportedPubkey: reportedPubkey,
+      reportType: reportType,
+      privateKey: privateKey,
+      content: content,
+    );
+  }
+
   Future<Map<String, dynamic>> createProfileUpdate({
     required Map<String, dynamic> profileContent,
   }) async {

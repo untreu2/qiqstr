@@ -902,7 +902,40 @@ class AppLocalizationsDe extends AppLocalizations {
   String get report => 'Melden';
 
   @override
-  String get reportUser => 'Benutzer melden';
+  String reportUser(String user) {
+    return '$user melden?';
+  }
+
+  @override
+  String get reportUserDescription =>
+      'Wählen Sie einen Grund für die Meldung dieses Benutzers. Ihre Meldung wird an Relays veröffentlicht.';
+
+  @override
+  String get reportReasonSpam => 'Spam';
+
+  @override
+  String get reportReasonNudity => 'Nacktheit';
+
+  @override
+  String get reportReasonProfanity => 'Beleidigungen';
+
+  @override
+  String get reportReasonIllegal => 'Illegal';
+
+  @override
+  String get reportReasonImpersonation => 'Identitätsbetrug';
+
+  @override
+  String get reportReasonOther => 'Sonstiges';
+
+  @override
+  String get reportSubmitted => 'Meldung gesendet';
+
+  @override
+  String get reportFailed => 'Meldung konnte nicht gesendet werden';
+
+  @override
+  String get selectReportReason => 'Grund auswählen';
 
   @override
   String get today => 'Heute';

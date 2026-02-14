@@ -331,7 +331,24 @@
   "block": "Engelle",
   "unblock": "Engeli Kaldır",
   "report": "Bildir",
-  "reportUser": "Kullanıcıyı bildir",
+  "reportUser": "{user} bildirilsin mi?",
+  "@reportUser": {
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "reportUserDescription": "Bu kullanıcıyı bildirmek için bir neden seçin. Bildiriminiz rölelere yayınlanacaktır.",
+  "reportReasonSpam": "Spam",
+  "reportReasonNudity": "Müstehcenlik",
+  "reportReasonProfanity": "Hakaret",
+  "reportReasonIllegal": "Yasadışı",
+  "reportReasonImpersonation": "Kimliğe bürünme",
+  "reportReasonOther": "Diğer",
+  "reportSubmitted": "Bildirim gönderildi",
+  "reportFailed": "Bildirim gönderilemedi",
+  "selectReportReason": "Bir neden seçin",
   
   "today": "Bugün",
   "justNow": "Şimdi",

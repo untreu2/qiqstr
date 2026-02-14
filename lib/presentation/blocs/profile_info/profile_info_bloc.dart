@@ -45,6 +45,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     on<ProfileInfoUserUpdated>(_onProfileInfoUserUpdated);
     on<ProfileInfoFollowToggled>(_onProfileInfoFollowToggled);
     on<ProfileInfoMuteToggled>(_onProfileInfoMuteToggled);
+    on<ProfileInfoReportSubmitted>(_onProfileInfoReportSubmitted);
     on<_InternalStateUpdate>(_onInternalStateUpdate);
   }
 
@@ -104,8 +105,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
         return;
       }
       try {
-        final follows =
-            await _followingRepository.getFollowingList(pubkeyHex);
+        final follows = await _followingRepository.getFollowingList(pubkeyHex);
         if (follows != null && follows.isNotEmpty) {
           timer.cancel();
           if (!isClosed && state is ProfileInfoLoaded) {
@@ -193,8 +193,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       try {
         await _syncService.syncFollowingList(pubkeyHex);
         if (isClosed) return;
-        final follows =
-            await _followingRepository.getFollowingList(pubkeyHex);
+        final follows = await _followingRepository.getFollowingList(pubkeyHex);
         if (!isClosed && state is ProfileInfoLoaded) {
           add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
             followingCount: follows?.length ?? 0,
@@ -331,6 +330,24 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       await _syncService.publishMute(
         mutedPubkeys: muteService.mutedPubkeys,
         mutedWords: muteService.mutedWords,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _onProfileInfoReportSubmitted(
+    ProfileInfoReportSubmitted event,
+    Emitter<ProfileInfoState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! ProfileInfoLoaded) return;
+
+    try {
+      final targetHex = _authService.npubToHex(userPubkeyHex) ?? userPubkeyHex;
+
+      await _syncService.publishReport(
+        reportedPubkey: targetHex,
+        reportType: event.reportType,
+        content: event.content,
       );
     } catch (_) {}
   }

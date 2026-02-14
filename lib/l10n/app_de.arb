@@ -331,7 +331,24 @@
   "block": "Blockieren",
   "unblock": "Entsperren",
   "report": "Melden",
-  "reportUser": "Benutzer melden",
+  "reportUser": "{user} melden?",
+  "@reportUser": {
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "reportUserDescription": "Wählen Sie einen Grund für die Meldung dieses Benutzers. Ihre Meldung wird an Relays veröffentlicht.",
+  "reportReasonSpam": "Spam",
+  "reportReasonNudity": "Nacktheit",
+  "reportReasonProfanity": "Beleidigungen",
+  "reportReasonIllegal": "Illegal",
+  "reportReasonImpersonation": "Identitätsbetrug",
+  "reportReasonOther": "Sonstiges",
+  "reportSubmitted": "Meldung gesendet",
+  "reportFailed": "Meldung konnte nicht gesendet werden",
+  "selectReportReason": "Grund auswählen",
   
   "today": "Heute",
   "justNow": "Gerade eben",

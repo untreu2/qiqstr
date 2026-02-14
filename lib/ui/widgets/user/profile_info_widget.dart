@@ -12,6 +12,7 @@ import '../note/note_content_widget.dart';
 import '../common/snackbar_widget.dart';
 import '../dialogs/unfollow_user_dialog.dart';
 import '../dialogs/mute_user_dialog.dart';
+import '../dialogs/report_user_dialog.dart';
 import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
 import '../../../presentation/blocs/profile_info/profile_info_event.dart';
 import '../../../presentation/blocs/profile_info/profile_info_state.dart';
@@ -411,6 +412,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               children: [
                 _buildAddToListButton(context, state),
                 const SizedBox(width: 8),
+                _buildReportButton(context, state),
+                const SizedBox(width: 8),
                 if (state.isMuted != null) ...[
                   _buildMuteButton(context, state),
                   const SizedBox(width: 8),
@@ -559,6 +562,54 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
+  Widget _buildReportButton(BuildContext context, ProfileInfoLoaded state) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          _showReportDialog(context, state);
+        },
+        borderRadius: BorderRadius.circular(40),
+        child: Ink(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Icon(
+            CarbonIcons.flag,
+            size: 20,
+            color: context.colors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReportDialog(BuildContext context, ProfileInfoLoaded state) {
+    final userName = () {
+      final name = state.user['name'] as String? ?? '';
+      if (name.isNotEmpty) return name;
+      final nip05 = state.user['nip05'] as String? ?? '';
+      return nip05.isNotEmpty ? nip05.split('@').first : 'this user';
+    }();
+
+    final bloc = context.read<ProfileInfoBloc>();
+
+    showReportUserDialog(
+      context: context,
+      userName: userName,
+      onConfirm: (reportType) {
+        bloc.add(ProfileInfoReportSubmitted(reportType: reportType));
+        final l10n = AppLocalizations.of(context);
+        if (context.mounted && l10n != null) {
+          AppSnackbar.info(context, l10n.reportSubmitted);
+        }
+      },
+    );
+  }
+
   void _showAddToListSheet(BuildContext context, String pubkeyHex) {
     final l10n = AppLocalizations.of(context)!;
     final service = FollowSetService.instance;
@@ -576,7 +627,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             final currentSets = service.followSets;
             return SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -611,11 +663,14 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                           child: GestureDetector(
                             onTap: () {
                               if (isInList) {
-                                service.removePubkeyFromSet(followSet.dTag, pubkeyHex);
+                                service.removePubkeyFromSet(
+                                    followSet.dTag, pubkeyHex);
                               } else {
-                                service.addPubkeyToSet(followSet.dTag, pubkeyHex);
+                                service.addPubkeyToSet(
+                                    followSet.dTag, pubkeyHex);
                               }
-                              final updatedSet = service.getByDTag(followSet.dTag);
+                              final updatedSet =
+                                  service.getByDTag(followSet.dTag);
                               if (updatedSet != null) {
                                 syncService.publishFollowSet(
                                   dTag: updatedSet.dTag,
@@ -628,7 +683,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                               setSheetState(() {});
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 14),
                               decoration: BoxDecoration(
                                 color: context.colors.overlayLight,
                                 borderRadius: BorderRadius.circular(20),
@@ -643,7 +699,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      followSet.title.isNotEmpty ? followSet.title : followSet.dTag,
+                                      followSet.title.isNotEmpty
+                                          ? followSet.title
+                                          : followSet.dTag,
                                       style: TextStyle(
                                         color: context.colors.textPrimary,
                                         fontSize: 16,
@@ -652,7 +710,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                                     ),
                                   ),
                                   Icon(
-                                    isInList ? CarbonIcons.checkmark_filled : CarbonIcons.add,
+                                    isInList
+                                        ? CarbonIcons.checkmark_filled
+                                        : CarbonIcons.add,
                                     size: 20,
                                     color: isInList
                                         ? context.colors.accent

@@ -171,7 +171,7 @@ class SyncService {
       final filter =
           NostrService.createFollowingFilter(authors: [userPubkey], limit: 1);
       final events = await _queryRelays(filter);
-      
+
       if (events.isNotEmpty) {
         final event = events.first;
         final tags = event['tags'] as List<dynamic>? ?? [];
@@ -179,11 +179,11 @@ class SyncService {
             .where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'p')
             .map((tag) => (tag as List)[1] as String)
             .toList();
-        
+
         final listWithUser = followList.toSet()..add(userPubkey);
         await _db.saveFollowingList(userPubkey, listWithUser.toList());
       }
-      
+
       await _saveEvents(events);
       _markSynced(key);
     });
@@ -247,8 +247,8 @@ class SyncService {
       final follows = await _db.getFollowingList(userPubkey);
       final allAuthors = [userPubkey, ...?follows];
 
-      final filter = NostrService.createFollowSetsFilter(
-          authors: allAuthors, limit: 500);
+      final filter =
+          NostrService.createFollowSetsFilter(authors: allAuthors, limit: 500);
       final events = await _queryRelays(filter);
       await _saveEvents(events);
 
@@ -279,7 +279,8 @@ class SyncService {
     return event;
   }
 
-  Future<void> syncArticles({List<String>? authors, int limit = 50, bool force = false}) async {
+  Future<void> syncArticles(
+      {List<String>? authors, int limit = 50, bool force = false}) async {
     final key = 'articles_${authors?.join('_') ?? 'global'}';
     if (!force && !_shouldSync(key)) return;
 
@@ -372,9 +373,8 @@ class SyncService {
       final allRelatedIds = <String>{...parentIds, ...referencedIds};
 
       if (allRelatedIds.isNotEmpty) {
-        final relatedFilter =
-            NostrService.createEventByIdFilter(
-                eventIds: allRelatedIds.toList());
+        final relatedFilter = NostrService.createEventByIdFilter(
+            eventIds: allRelatedIds.toList());
         final relatedEvents = await _queryRelays(relatedFilter);
         await _saveEventsAndProfiles([...events, ...relatedEvents]);
       } else {
@@ -444,10 +444,10 @@ class SyncService {
     final event = await _publish(
         () => _publisher.createFollow(followingPubkeys: followingPubkeys));
     final pubkey = event['pubkey'] as String? ?? '';
-    
+
     final listWithUser = followingPubkeys.toSet()..add(pubkey);
     await _db.saveFollowingList(pubkey, listWithUser.toList());
-    
+
     return event;
   }
 
@@ -462,6 +462,17 @@ class SyncService {
         ));
     return event;
   }
+
+  Future<Map<String, dynamic>> publishReport({
+    required String reportedPubkey,
+    required String reportType,
+    String content = '',
+  }) =>
+      _publish(() => _publisher.createReport(
+            reportedPubkey: reportedPubkey,
+            reportType: reportType,
+            content: content,
+          ));
 
   Future<Map<String, dynamic>> publishProfileUpdate(
       {required Map<String, dynamic> profileContent}) async {
@@ -587,14 +598,14 @@ class SyncService {
   Future<Map<String, dynamic>> _publish(
       Future<Map<String, dynamic>> Function() createEvent) async {
     final event = await createEvent();
-    
+
     await _db.saveEvents([event]);
-    
+
     final eventJson = jsonEncode(event);
     try {
       await _relayService.sendEvent(eventJson);
     } catch (_) {}
-    
+
     return event;
   }
 
@@ -663,8 +674,10 @@ class SyncService {
 
   Set<String> _extractReferencedEventIds(List<Map<String, dynamic>> events) {
     final refIds = <String>{};
-    final ownIds =
-        events.map((e) => e['id'] as String? ?? '').where((id) => id.isNotEmpty).toSet();
+    final ownIds = events
+        .map((e) => e['id'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
 
     for (final event in events) {
       final tags = event['tags'] as List<dynamic>? ?? [];
@@ -672,13 +685,13 @@ class SyncService {
         if (tag is List && tag.length > 1) {
           final tagType = tag[0] as String?;
           final refId = tag[1] as String?;
-          if (refId == null || refId.isEmpty || ownIds.contains(refId)) continue;
+          if (refId == null || refId.isEmpty || ownIds.contains(refId))
+            continue;
 
           if (tagType == 'q') {
             refIds.add(refId);
           } else if (tagType == 'e') {
-            final marker =
-                tag.length >= 4 ? tag[3] as String? : null;
+            final marker = tag.length >= 4 ? tag[3] as String? : null;
             if (marker == 'mention' || marker == null) {
               refIds.add(refId);
             }
@@ -702,8 +715,7 @@ class SyncService {
         }
         if (missingIds.isEmpty) return;
 
-        final filter =
-            NostrService.createEventByIdFilter(eventIds: missingIds);
+        final filter = NostrService.createEventByIdFilter(eventIds: missingIds);
         final fetchedEvents = await _queryRelays(filter);
         if (fetchedEvents.isNotEmpty) {
           final pubkeys = _extractAllPubkeys(fetchedEvents);
@@ -729,5 +741,4 @@ class SyncService {
     }
     return parentIds.toList();
   }
-
 }

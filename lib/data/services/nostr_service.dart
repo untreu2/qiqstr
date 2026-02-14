@@ -128,6 +128,24 @@ class NostrService {
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
+  static Map<String, dynamic> createReportEvent({
+    required String reportedPubkey,
+    required String reportType,
+    required String privateKey,
+    String content = '',
+  }) {
+    final tags = <List<String>>[
+      ['p', reportedPubkey, reportType],
+    ];
+    final json = rust_events.createSignedEvent(
+      kind: 1984,
+      content: content,
+      tags: tags,
+      privateKeyHex: privateKey,
+    );
+    return jsonDecode(json) as Map<String, dynamic>;
+  }
+
   static Map<String, dynamic> createZapRequestEvent({
     required List<List<String>> tags,
     required String content,

@@ -1777,8 +1777,68 @@ abstract class AppLocalizations {
   /// No description provided for @reportUser.
   ///
   /// In en, this message translates to:
-  /// **'Report user'**
-  String get reportUser;
+  /// **'Report {user}'**
+  String reportUser(String user);
+
+  /// No description provided for @reportUserDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a reason for reporting this user. Your report will be published to relays.'**
+  String get reportUserDescription;
+
+  /// No description provided for @reportReasonSpam.
+  ///
+  /// In en, this message translates to:
+  /// **'Spam'**
+  String get reportReasonSpam;
+
+  /// No description provided for @reportReasonNudity.
+  ///
+  /// In en, this message translates to:
+  /// **'Nudity'**
+  String get reportReasonNudity;
+
+  /// No description provided for @reportReasonProfanity.
+  ///
+  /// In en, this message translates to:
+  /// **'Profanity'**
+  String get reportReasonProfanity;
+
+  /// No description provided for @reportReasonIllegal.
+  ///
+  /// In en, this message translates to:
+  /// **'Illegal'**
+  String get reportReasonIllegal;
+
+  /// No description provided for @reportReasonImpersonation.
+  ///
+  /// In en, this message translates to:
+  /// **'Impersonation'**
+  String get reportReasonImpersonation;
+
+  /// No description provided for @reportReasonOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get reportReasonOther;
+
+  /// No description provided for @reportSubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'Report submitted'**
+  String get reportSubmitted;
+
+  /// No description provided for @reportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to submit report'**
+  String get reportFailed;
+
+  /// No description provided for @selectReportReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a reason'**
+  String get selectReportReason;
 
   /// No description provided for @today.
   ///

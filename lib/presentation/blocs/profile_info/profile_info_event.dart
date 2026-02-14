@@ -30,3 +30,16 @@ class ProfileInfoFollowToggled extends ProfileInfoEvent {
 class ProfileInfoMuteToggled extends ProfileInfoEvent {
   const ProfileInfoMuteToggled();
 }
+
+class ProfileInfoReportSubmitted extends ProfileInfoEvent {
+  final String reportType;
+  final String content;
+
+  const ProfileInfoReportSubmitted({
+    required this.reportType,
+    this.content = '',
+  });
+
+  @override
+  List<Object?> get props => [reportType, content];
+}

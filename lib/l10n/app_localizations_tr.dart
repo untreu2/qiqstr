@@ -885,7 +885,40 @@ class AppLocalizationsTr extends AppLocalizations {
   String get report => 'Bildir';
 
   @override
-  String get reportUser => 'Kullanıcıyı bildir';
+  String reportUser(String user) {
+    return '$user bildirilsin mi?';
+  }
+
+  @override
+  String get reportUserDescription =>
+      'Bu kullanıcıyı bildirmek için bir neden seçin. Bildiriminiz rölelere yayınlanacaktır.';
+
+  @override
+  String get reportReasonSpam => 'Spam';
+
+  @override
+  String get reportReasonNudity => 'Müstehcenlik';
+
+  @override
+  String get reportReasonProfanity => 'Hakaret';
+
+  @override
+  String get reportReasonIllegal => 'Yasadışı';
+
+  @override
+  String get reportReasonImpersonation => 'Kimliğe bürünme';
+
+  @override
+  String get reportReasonOther => 'Diğer';
+
+  @override
+  String get reportSubmitted => 'Bildirim gönderildi';
+
+  @override
+  String get reportFailed => 'Bildirim gönderilemedi';
+
+  @override
+  String get selectReportReason => 'Bir neden seçin';
 
   @override
   String get today => 'Bugün';

@@ -878,7 +878,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get report => 'Report';
 
   @override
-  String get reportUser => 'Report user';
+  String reportUser(String user) {
+    return 'Report $user';
+  }
+
+  @override
+  String get reportUserDescription =>
+      'Select a reason for reporting this user. Your report will be published to relays.';
+
+  @override
+  String get reportReasonSpam => 'Spam';
+
+  @override
+  String get reportReasonNudity => 'Nudity';
+
+  @override
+  String get reportReasonProfanity => 'Profanity';
+
+  @override
+  String get reportReasonIllegal => 'Illegal';
+
+  @override
+  String get reportReasonImpersonation => 'Impersonation';
+
+  @override
+  String get reportReasonOther => 'Other';
+
+  @override
+  String get reportSubmitted => 'Report submitted';
+
+  @override
+  String get reportFailed => 'Failed to submit report';
+
+  @override
+  String get selectReportReason => 'Select a reason';
 
   @override
   String get today => 'Today';

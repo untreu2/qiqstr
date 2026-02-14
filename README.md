@@ -20,6 +20,7 @@ Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
 | [NIP-27](https://github.com/nostr-protocol/nips/blob/master/27.md) | Text Note References |
 | [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md) | Encrypted Payloads (Versioned) |
 | [NIP-51](https://github.com/nostr-protocol/nips/blob/master/51.md) | Lists |
+| [NIP-56](https://github.com/nostr-protocol/nips/blob/master/56.md) | Reporting |
 | [NIP-57](https://github.com/nostr-protocol/nips/blob/master/57.md) | Lightning Zaps |
 | [NIP-59](https://github.com/nostr-protocol/nips/blob/master/59.md) | Gift Wrap |
 | [NIP-62](https://github.com/nostr-protocol/nips/blob/master/62.md) | Request to Vanish |
@@ -39,6 +40,7 @@ Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
 | 14 | Direct Message (rumor) |
 | 15 | File Message (rumor) |
 | 62 | Request to Vanish |
+| 1984 | Reporting |
 | 1059 | Gift Wrap |
 | 9734 | Zap Request |
 | 9735 | Zap Receipt |
