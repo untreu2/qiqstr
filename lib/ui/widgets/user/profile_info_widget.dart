@@ -208,7 +208,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 10),
                       _buildFollowerInfo(context, loadedState),
                     ],
                   ),

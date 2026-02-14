@@ -446,6 +446,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noArticlesFound => 'Keine Artikel gefunden';
 
   @override
+  String get noRelaysFound => 'Keine Relays gefunden';
+
+  @override
   String get refresh => 'Aktualisieren';
 
   @override
@@ -741,6 +744,18 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get startNewConversation => 'Neues Gespräch beginnen';
+
+  @override
+  String get media => 'Medien';
+
+  @override
+  String get photos => 'Fotos';
+
+  @override
+  String get videos => 'Videos';
+
+  @override
+  String get likes => 'Gefällt mir';
 
   @override
   String get replies => 'Antworten';

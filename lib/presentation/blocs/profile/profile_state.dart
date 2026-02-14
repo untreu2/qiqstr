@@ -18,8 +18,17 @@ class ProfileLoaded extends ProfileState {
   final bool isCurrentUser;
   final Map<String, Map<String, dynamic>> profiles;
   final List<Map<String, dynamic>> notes;
+  final List<Map<String, dynamic>> replies;
+  final List<Map<String, dynamic>> articles;
+  final List<Map<String, dynamic>> likedNotes;
   final bool canLoadMore;
   final bool isLoadingMore;
+  final bool canLoadMoreReplies;
+  final bool isLoadingMoreReplies;
+  final bool canLoadMoreArticles;
+  final bool isLoadingMoreArticles;
+  final bool canLoadMoreLikes;
+  final bool isLoadingMoreLikes;
   final bool isSyncing;
   final String currentProfileHex;
   final String currentUserHex;
@@ -30,10 +39,19 @@ class ProfileLoaded extends ProfileState {
     required this.isCurrentUser,
     required this.profiles,
     required this.notes,
+    this.replies = const [],
+    this.articles = const [],
+    this.likedNotes = const [],
     required this.currentProfileHex,
     required this.currentUserHex,
     this.canLoadMore = true,
     this.isLoadingMore = false,
+    this.canLoadMoreReplies = true,
+    this.isLoadingMoreReplies = false,
+    this.canLoadMoreArticles = true,
+    this.isLoadingMoreArticles = false,
+    this.canLoadMoreLikes = true,
+    this.isLoadingMoreLikes = false,
     this.isSyncing = false,
   });
 
@@ -44,8 +62,17 @@ class ProfileLoaded extends ProfileState {
         isCurrentUser,
         profiles,
         notes,
+        replies,
+        articles,
+        likedNotes,
         canLoadMore,
         isLoadingMore,
+        canLoadMoreReplies,
+        isLoadingMoreReplies,
+        canLoadMoreArticles,
+        isLoadingMoreArticles,
+        canLoadMoreLikes,
+        isLoadingMoreLikes,
         isSyncing,
         currentProfileHex,
         currentUserHex,
@@ -57,8 +84,17 @@ class ProfileLoaded extends ProfileState {
     bool? isCurrentUser,
     Map<String, Map<String, dynamic>>? profiles,
     List<Map<String, dynamic>>? notes,
+    List<Map<String, dynamic>>? replies,
+    List<Map<String, dynamic>>? articles,
+    List<Map<String, dynamic>>? likedNotes,
     bool? canLoadMore,
     bool? isLoadingMore,
+    bool? canLoadMoreReplies,
+    bool? isLoadingMoreReplies,
+    bool? canLoadMoreArticles,
+    bool? isLoadingMoreArticles,
+    bool? canLoadMoreLikes,
+    bool? isLoadingMoreLikes,
     bool? isSyncing,
     String? currentProfileHex,
     String? currentUserHex,
@@ -69,8 +105,18 @@ class ProfileLoaded extends ProfileState {
       isCurrentUser: isCurrentUser ?? this.isCurrentUser,
       profiles: profiles ?? this.profiles,
       notes: notes ?? this.notes,
+      replies: replies ?? this.replies,
+      articles: articles ?? this.articles,
+      likedNotes: likedNotes ?? this.likedNotes,
       canLoadMore: canLoadMore ?? this.canLoadMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      canLoadMoreReplies: canLoadMoreReplies ?? this.canLoadMoreReplies,
+      isLoadingMoreReplies: isLoadingMoreReplies ?? this.isLoadingMoreReplies,
+      canLoadMoreArticles: canLoadMoreArticles ?? this.canLoadMoreArticles,
+      isLoadingMoreArticles:
+          isLoadingMoreArticles ?? this.isLoadingMoreArticles,
+      canLoadMoreLikes: canLoadMoreLikes ?? this.canLoadMoreLikes,
+      isLoadingMoreLikes: isLoadingMoreLikes ?? this.isLoadingMoreLikes,
       isSyncing: isSyncing ?? this.isSyncing,
       currentProfileHex: currentProfileHex ?? this.currentProfileHex,
       currentUserHex: currentUserHex ?? this.currentUserHex,

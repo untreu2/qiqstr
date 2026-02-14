@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/repositories/article_repository.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/following_repository.dart';
@@ -15,26 +16,36 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final FeedRepository _feedRepository;
   final ProfileRepository _profileRepository;
   final FollowingRepository _followingRepository;
+  final ArticleRepository _articleRepository;
   final SyncService _syncService;
   final AuthService _authService;
   final RustDatabaseService _db;
 
   static const int _pageSize = 30;
   bool _isLoadingMore = false;
+  bool _isLoadingMoreReplies = false;
+  bool _isLoadingMoreLikes = false;
+  bool _isLoadingMoreArticles = false;
+  int _likesReactionsLimit = 0;
+  int _articlesOffset = 0;
   String? _currentProfileHex;
   StreamSubscription? _profileSubscription;
   StreamSubscription<List<FeedNote>>? _notesSubscription;
+  StreamSubscription<List<FeedNote>>? _repliesSubscription;
+  StreamSubscription<List<FeedNote>>? _likesSubscription;
 
   ProfileBloc({
     required FeedRepository feedRepository,
     required ProfileRepository profileRepository,
     required FollowingRepository followingRepository,
+    required ArticleRepository articleRepository,
     required SyncService syncService,
     required AuthService authService,
     RustDatabaseService? db,
   })  : _feedRepository = feedRepository,
         _profileRepository = profileRepository,
         _followingRepository = followingRepository,
+        _articleRepository = articleRepository,
         _syncService = syncService,
         _authService = authService,
         _db = db ?? RustDatabaseService.instance,
@@ -52,6 +63,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<ProfileProfilesLoaded>(_onProfileProfilesLoaded);
     on<_ProfileNotesUpdated>(_onProfileNotesUpdatedInternal);
     on<ProfileSyncCompleted>(_onProfileSyncCompleted);
+    on<ProfileRepliesLoaded>(_onProfileRepliesLoaded);
+    on<ProfileLoadMoreRepliesRequested>(_onProfileLoadMoreRepliesRequested);
+    on<_ProfileRepliesUpdated>(_onProfileRepliesUpdatedInternal);
+    on<ProfileArticlesRequested>(_onProfileArticlesRequested);
+    on<ProfileLikesRequested>(_onProfileLikesRequested);
+    on<_ProfileLikesUpdated>(_onProfileLikesUpdatedInternal);
+    on<ProfileLoadMoreLikesRequested>(_onProfileLoadMoreLikesRequested);
+    on<ProfileLoadMoreArticlesRequested>(_onProfileLoadMoreArticlesRequested);
   }
 
   void _onProfileProfilesLoaded(
@@ -187,16 +206,29 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     try {
       await _syncService.syncProfile(targetHex);
 
-      final notes =
-          await _feedRepository.getProfileNotes(targetHex, limit: _pageSize);
-      final noteMaps = _feedNotesToMaps(notes);
+      final notesFuture =
+          _feedRepository.getProfileNotes(targetHex, limit: _pageSize);
+      final repliesFuture =
+          _feedRepository.getProfileReplies(targetHex, limit: _pageSize);
+      final likesFuture =
+          _feedRepository.getProfileLikes(targetHex, limit: _pageSize);
+
+      final results =
+          await Future.wait([notesFuture, repliesFuture, likesFuture]);
+      final noteMaps = _feedNotesToMaps(results[0]);
+      final replyMaps = _feedNotesToMaps(results[1]);
+      final likeMaps = _feedNotesToMaps(results[2]);
 
       if (state is ProfileLoaded) {
-        emit((state as ProfileLoaded).copyWith(notes: noteMaps));
-        if (noteMaps.isNotEmpty) {
-          _loadProfilesForNotes(noteMaps, emit);
+        emit((state as ProfileLoaded).copyWith(
+            notes: noteMaps, replies: replyMaps, likedNotes: likeMaps));
+        final allNotes = [...noteMaps, ...replyMaps, ...likeMaps];
+        if (allNotes.isNotEmpty) {
+          _loadProfilesForNotes(allNotes, emit);
         }
       }
+
+      _syncProfileReactionsInBackground(targetHex);
     } catch (_) {}
   }
 
@@ -307,7 +339,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     _currentProfileHex = event.pubkeyHex;
 
     _watchProfileNotes(event.pubkeyHex);
+    _watchProfileReplies(event.pubkeyHex);
     _syncProfileNotesInBackground(event.pubkeyHex);
+
+    add(ProfileArticlesRequested(event.pubkeyHex));
+    add(ProfileLikesRequested(event.pubkeyHex));
   }
 
   void _syncProfileNotesInBackground(String pubkeyHex) {
@@ -519,8 +555,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           await _syncService.syncProfiles(missingPubkeys);
           if (isClosed) return;
 
-          final synced =
-              await _profileRepository.getProfiles(missingPubkeys);
+          final synced = await _profileRepository.getProfiles(missingPubkeys);
           if (isClosed) return;
 
           final syncedProfiles = <String, Map<String, dynamic>>{};
@@ -607,12 +642,343 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     }
   }
 
+  Future<void> _onProfileRepliesLoaded(
+    ProfileRepliesLoaded event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) return;
+
+    if (event.pubkeyHex.isEmpty) return;
+
+    _watchProfileReplies(event.pubkeyHex);
+  }
+
+  void _watchProfileReplies(String pubkeyHex) {
+    _repliesSubscription?.cancel();
+    _repliesSubscription =
+        _feedRepository.watchProfileReplies(pubkeyHex).listen((replies) {
+      if (isClosed) return;
+      add(_ProfileRepliesUpdated(replies));
+    });
+  }
+
+  void _onProfileRepliesUpdatedInternal(
+    _ProfileRepliesUpdated event,
+    Emitter<ProfileState> emit,
+  ) {
+    if (state is! ProfileLoaded) return;
+    final currentState = state as ProfileLoaded;
+
+    final newReplyMaps = _feedNotesToMaps(event.replies);
+    final currentReplies = currentState.replies;
+
+    if (currentReplies.isEmpty) {
+      emit(currentState.copyWith(replies: newReplyMaps));
+    } else {
+      final currentIds = currentReplies
+          .map((n) => n['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final trulyNewReplies = newReplyMaps.where((n) {
+        final noteId = n['id'] as String? ?? '';
+        return noteId.isNotEmpty && !currentIds.contains(noteId);
+      }).toList();
+
+      final updatedReplies = <Map<String, dynamic>>[];
+      final newReplyMap = <String, Map<String, dynamic>>{};
+      for (final reply in newReplyMaps) {
+        final id = reply['id'] as String? ?? '';
+        if (id.isNotEmpty) newReplyMap[id] = reply;
+      }
+
+      for (final reply in currentReplies) {
+        final id = reply['id'] as String? ?? '';
+        if (newReplyMap.containsKey(id)) {
+          updatedReplies.add(newReplyMap[id]!);
+        } else {
+          updatedReplies.add(reply);
+        }
+      }
+
+      if (trulyNewReplies.isNotEmpty) {
+        updatedReplies.addAll(trulyNewReplies);
+        updatedReplies.sort((a, b) {
+          final aTime =
+              a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
+          final bTime =
+              b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
+          return bTime.compareTo(aTime);
+        });
+      }
+
+      emit(currentState.copyWith(replies: updatedReplies));
+    }
+
+    if (newReplyMaps.isNotEmpty) {
+      _loadProfilesForNotes(newReplyMaps, emit);
+    }
+  }
+
+  Future<void> _onProfileLoadMoreRepliesRequested(
+    ProfileLoadMoreRepliesRequested event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) return;
+
+    final currentState = state as ProfileLoaded;
+    if (_isLoadingMoreReplies || !currentState.canLoadMoreReplies) return;
+
+    final currentReplies = currentState.replies;
+    if (currentReplies.isEmpty) return;
+
+    _isLoadingMoreReplies = true;
+    emit(currentState.copyWith(isLoadingMoreReplies: true));
+
+    try {
+      final targetHex = currentState.currentProfileHex;
+
+      final moreReplies = await _feedRepository.getProfileReplies(
+        targetHex,
+        limit: _pageSize + currentReplies.length,
+      );
+      final moreReplyMaps = _feedNotesToMaps(moreReplies);
+
+      if (moreReplyMaps.length > currentReplies.length) {
+        final currentIds = currentReplies
+            .map((n) => n['id'] as String? ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        final uniqueNewReplies = moreReplyMaps.where((n) {
+          final noteId = n['id'] as String? ?? '';
+          return noteId.isNotEmpty && !currentIds.contains(noteId);
+        }).toList();
+
+        if (uniqueNewReplies.isNotEmpty) {
+          final allReplies = [...currentReplies, ...uniqueNewReplies];
+          emit(currentState.copyWith(
+              replies: allReplies, isLoadingMoreReplies: false));
+          _loadProfilesForNotes(uniqueNewReplies, emit);
+        } else {
+          emit(currentState.copyWith(isLoadingMoreReplies: false));
+        }
+      } else {
+        emit(currentState.copyWith(isLoadingMoreReplies: false));
+      }
+    } catch (e) {
+      emit(currentState.copyWith(isLoadingMoreReplies: false));
+    }
+
+    _isLoadingMoreReplies = false;
+  }
+
+  Future<void> _onProfileArticlesRequested(
+    ProfileArticlesRequested event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) return;
+
+    _articlesOffset = _pageSize;
+
+    try {
+      final articles = await _articleRepository.getArticlesByAuthor(
+        event.pubkeyHex,
+        limit: _pageSize,
+      );
+      if (isClosed || state is! ProfileLoaded) return;
+
+      final articleMaps = articles.map((a) => a.toMap()).toList();
+      emit((state as ProfileLoaded).copyWith(
+        articles: articleMaps,
+        canLoadMoreArticles: articleMaps.length >= _pageSize,
+      ));
+    } catch (_) {}
+  }
+
+  Future<void> _onProfileLikesRequested(
+    ProfileLikesRequested event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) return;
+    if (event.pubkeyHex.isEmpty) return;
+
+    _likesReactionsLimit = _pageSize * 3;
+    _watchProfileLikes(event.pubkeyHex);
+    _syncProfileReactionsInBackground(event.pubkeyHex);
+  }
+
+  void _watchProfileLikes(String pubkeyHex) {
+    _likesSubscription?.cancel();
+    _likesSubscription = _feedRepository
+        .watchProfileLikes(pubkeyHex, limit: _likesReactionsLimit)
+        .listen((likes) {
+      if (isClosed) return;
+      add(_ProfileLikesUpdated(likes));
+    });
+  }
+
+  void _syncProfileReactionsInBackground(String pubkeyHex) {
+    Future.microtask(() async {
+      try {
+        await _syncService.syncProfileReactions(pubkeyHex);
+      } catch (_) {}
+    });
+  }
+
+  void _onProfileLikesUpdatedInternal(
+    _ProfileLikesUpdated event,
+    Emitter<ProfileState> emit,
+  ) {
+    if (state is! ProfileLoaded) return;
+    final currentState = state as ProfileLoaded;
+
+    final newLikeMaps = _feedNotesToMaps(event.likes);
+
+    emit(currentState.copyWith(
+      likedNotes: newLikeMaps,
+      canLoadMoreLikes: newLikeMaps.length >= _pageSize,
+    ));
+
+    if (newLikeMaps.isNotEmpty) {
+      _loadProfilesForNotes(newLikeMaps, emit);
+    }
+  }
+
+  Future<void> _onProfileLoadMoreLikesRequested(
+    ProfileLoadMoreLikesRequested event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) return;
+    final currentState = state as ProfileLoaded;
+    if (_isLoadingMoreLikes || !currentState.canLoadMoreLikes) return;
+
+    _isLoadingMoreLikes = true;
+    emit(currentState.copyWith(isLoadingMoreLikes: true));
+
+    try {
+      final targetHex = currentState.currentProfileHex;
+      _likesReactionsLimit += _pageSize * 3;
+
+      final moreLikes = await _feedRepository.getProfileLikes(
+        targetHex,
+        limit: _likesReactionsLimit,
+      );
+      final moreLikeMaps = _feedNotesToMaps(moreLikes);
+
+      final currentIds = currentState.likedNotes
+          .map((n) => n['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final uniqueNew = moreLikeMaps.where((n) {
+        final noteId = n['id'] as String? ?? '';
+        return noteId.isNotEmpty && !currentIds.contains(noteId);
+      }).toList();
+
+      if (isClosed || state is! ProfileLoaded) return;
+
+      if (uniqueNew.isNotEmpty) {
+        final allLikes = [
+          ...(state as ProfileLoaded).likedNotes,
+          ...uniqueNew,
+        ];
+        emit((state as ProfileLoaded).copyWith(
+          likedNotes: allLikes,
+          isLoadingMoreLikes: false,
+          canLoadMoreLikes: true,
+        ));
+        _loadProfilesForNotes(uniqueNew, emit);
+      } else {
+        emit((state as ProfileLoaded).copyWith(
+          isLoadingMoreLikes: false,
+          canLoadMoreLikes: false,
+        ));
+      }
+    } catch (_) {
+      if (state is ProfileLoaded) {
+        emit((state as ProfileLoaded).copyWith(isLoadingMoreLikes: false));
+      }
+    }
+
+    _isLoadingMoreLikes = false;
+  }
+
+  Future<void> _onProfileLoadMoreArticlesRequested(
+    ProfileLoadMoreArticlesRequested event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) return;
+    final currentState = state as ProfileLoaded;
+    if (_isLoadingMoreArticles || !currentState.canLoadMoreArticles) return;
+
+    _isLoadingMoreArticles = true;
+    emit(currentState.copyWith(isLoadingMoreArticles: true));
+
+    try {
+      final targetHex = currentState.currentProfileHex;
+      final newLimit = _articlesOffset + _pageSize;
+
+      final articles = await _articleRepository.getArticlesByAuthor(
+        targetHex,
+        limit: newLimit,
+      );
+      if (isClosed || state is! ProfileLoaded) return;
+
+      final articleMaps = articles.map((a) => a.toMap()).toList();
+      final currentIds = currentState.articles
+          .map((a) => a['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final newArticles = articleMaps.where((a) {
+        final id = a['id'] as String? ?? '';
+        return id.isNotEmpty && !currentIds.contains(id);
+      }).toList();
+
+      _articlesOffset = newLimit;
+      final hasMore = articleMaps.length >= newLimit;
+
+      if (newArticles.isNotEmpty) {
+        final allArticles = [
+          ...(state as ProfileLoaded).articles,
+          ...newArticles,
+        ];
+        emit((state as ProfileLoaded).copyWith(
+          articles: allArticles,
+          isLoadingMoreArticles: false,
+          canLoadMoreArticles: hasMore,
+        ));
+      } else {
+        emit((state as ProfileLoaded).copyWith(
+          isLoadingMoreArticles: false,
+          canLoadMoreArticles: hasMore,
+        ));
+      }
+    } catch (_) {
+      if (state is ProfileLoaded) {
+        emit((state as ProfileLoaded).copyWith(isLoadingMoreArticles: false));
+      }
+    }
+
+    _isLoadingMoreArticles = false;
+  }
+
   @override
   Future<void> close() {
     _profileSubscription?.cancel();
     _notesSubscription?.cancel();
+    _repliesSubscription?.cancel();
+    _likesSubscription?.cancel();
     return super.close();
   }
+}
+
+class _ProfileLikesUpdated extends ProfileEvent {
+  final List<FeedNote> likes;
+  const _ProfileLikesUpdated(this.likes);
+
+  @override
+  List<Object?> get props => [likes];
 }
 
 class _ProfileNotesUpdated extends ProfileEvent {
@@ -621,4 +987,12 @@ class _ProfileNotesUpdated extends ProfileEvent {
 
   @override
   List<Object?> get props => [notes];
+}
+
+class _ProfileRepliesUpdated extends ProfileEvent {
+  final List<FeedNote> replies;
+  const _ProfileRepliesUpdated(this.replies);
+
+  @override
+  List<Object?> get props => [replies];
 }

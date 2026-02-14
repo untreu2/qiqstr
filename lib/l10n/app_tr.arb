@@ -171,6 +171,7 @@
   
   "untitled": "Başlıksız",
   "noArticlesFound": "Makale bulunamadı",
+  "noRelaysFound": "Röle bulunamadı",
   "refresh": "Yenile",
   
   "displayTitle": "Görünüm",
@@ -269,6 +270,10 @@
   "noConversationsYet": "Henüz konuşma yok",
   "startNewConversation": "Yeni konuşma başlat",
   
+  "media": "Medya",
+  "photos": "Fotoğraflar",
+  "videos": "Videolar",
+  "likes": "Beğeniler",
   "replies": "Yanıtlar",
   "reply": "Yanıtla",
   "replyingTo": "Yanıtlanıyor",

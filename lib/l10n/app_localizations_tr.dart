@@ -434,6 +434,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noArticlesFound => 'Makale bulunamadı';
 
   @override
+  String get noRelaysFound => 'Röle bulunamadı';
+
+  @override
   String get refresh => 'Yenile';
 
   @override
@@ -725,6 +728,18 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get startNewConversation => 'Yeni konuşma başlat';
+
+  @override
+  String get media => 'Medya';
+
+  @override
+  String get photos => 'Fotoğraflar';
+
+  @override
+  String get videos => 'Videolar';
+
+  @override
+  String get likes => 'Beğeniler';
 
   @override
   String get replies => 'Yanıtlar';

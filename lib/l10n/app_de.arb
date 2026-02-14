@@ -171,6 +171,7 @@
   
   "untitled": "Unbenannt",
   "noArticlesFound": "Keine Artikel gefunden",
+  "noRelaysFound": "Keine Relays gefunden",
   "refresh": "Aktualisieren",
   
   "displayTitle": "Anzeige",
@@ -269,6 +270,10 @@
   "noConversationsYet": "Noch keine Gespräche",
   "startNewConversation": "Neues Gespräch beginnen",
   
+  "media": "Medien",
+  "photos": "Fotos",
+  "videos": "Videos",
+  "likes": "Gefällt mir",
   "replies": "Antworten",
   "reply": "Antworten",
   "replyingTo": "Antwort an",

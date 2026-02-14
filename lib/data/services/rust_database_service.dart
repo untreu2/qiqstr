@@ -90,8 +90,7 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> searchUserProfiles(String query,
       {int limit = 50}) async {
     try {
-      final json =
-          await rust_db.dbSearchProfiles(query: query, limit: limit);
+      final json = await rust_db.dbSearchProfiles(query: query, limit: limit);
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -125,8 +124,7 @@ class RustDatabaseService {
 
   Future<List<String>?> getFollowingList(String userPubkeyHex) async {
     try {
-      final list =
-          await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex);
+      final list = await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex);
       if (list.isEmpty) return null;
       return list;
     } catch (e) {
@@ -183,8 +181,7 @@ class RustDatabaseService {
     }
   }
 
-  Future<Map<String, dynamic>?> getRawMuteEvent(
-      String userPubkeyHex) async {
+  Future<Map<String, dynamic>?> getRawMuteEvent(String userPubkeyHex) async {
     try {
       final filterJson = jsonEncode({
         'kinds': [10000],
@@ -201,8 +198,7 @@ class RustDatabaseService {
     }
   }
 
-  Future<void> saveMuteList(
-      String userPubkeyHex, List<String> muteList) async {
+  Future<void> saveMuteList(String userPubkeyHex, List<String> muteList) async {
     try {
       await rust_db.dbSaveMuteList(
           pubkeyHex: userPubkeyHex, mutedHex: muteList);
@@ -231,8 +227,8 @@ class RustDatabaseService {
       List<String> authorPubkeys,
       {int limit = 100}) async {
     try {
-      final json = await rust_db.dbGetFeedNotes(
-          authorsHex: authorPubkeys, limit: limit);
+      final json =
+          await rust_db.dbGetFeedNotes(authorsHex: authorPubkeys, limit: limit);
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -251,8 +247,7 @@ class RustDatabaseService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getCachedProfileNotes(
-      String authorPubkey,
+  Future<List<Map<String, dynamic>>> getCachedProfileNotes(String authorPubkey,
       {int limit = 50}) async {
     try {
       final json = await rust_db.dbGetProfileNotes(
@@ -265,8 +260,7 @@ class RustDatabaseService {
     }
   }
 
-  Stream<List<Map<String, dynamic>>> watchFeedNotes(
-      List<String> authors,
+  Stream<List<Map<String, dynamic>>> watchFeedNotes(List<String> authors,
       {int limit = 100}) {
     List<Map<String, dynamic>>? lastResult;
     return _changeController.stream
@@ -276,7 +270,8 @@ class RustDatabaseService {
       final result = await getCachedFeedNotes(authors, limit: limit);
       if (lastResult != null && result.length == lastResult!.length) {
         final newFirst = result.isNotEmpty ? result.first['id'] : null;
-        final oldFirst = lastResult!.isNotEmpty ? lastResult!.first['id'] : null;
+        final oldFirst =
+            lastResult!.isNotEmpty ? lastResult!.first['id'] : null;
         if (newFirst == oldFirst) return lastResult!;
       }
       lastResult = result;
@@ -345,8 +340,7 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> getReplies(String noteId,
       {int limit = 500}) async {
     try {
-      final json =
-          await rust_db.dbGetReplies(noteId: noteId, limit: limit);
+      final json = await rust_db.dbGetReplies(noteId: noteId, limit: limit);
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -363,8 +357,7 @@ class RustDatabaseService {
         .asyncMap((_) => getReplies(noteId, limit: limit));
   }
 
-  Future<List<Map<String, dynamic>>> getCachedNotifications(
-      String userPubkey,
+  Future<List<Map<String, dynamic>>> getCachedNotifications(String userPubkey,
       {int limit = 100}) async {
     try {
       final json = await rust_db.dbGetNotifications(
@@ -398,8 +391,7 @@ class RustDatabaseService {
 
   Future<Map<String, int>> getInteractionCounts(String noteId) async {
     try {
-      final json =
-          await rust_db.dbGetInteractionCounts(noteId: noteId);
+      final json = await rust_db.dbGetInteractionCounts(noteId: noteId);
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       return decoded.map((k, v) => MapEntry(k, v as int));
     } catch (e) {
@@ -411,8 +403,7 @@ class RustDatabaseService {
   Future<Map<String, Map<String, int>>> getCachedInteractionCounts(
       List<String> noteIds) async {
     try {
-      final json =
-          await rust_db.dbGetBatchInteractionCounts(noteIds: noteIds);
+      final json = await rust_db.dbGetBatchInteractionCounts(noteIds: noteIds);
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       final result = <String, Map<String, int>>{};
       for (final entry in decoded.entries) {
@@ -446,8 +437,7 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> getDetailedInteractions(
       String noteId) async {
     try {
-      final json =
-          await rust_db.dbGetDetailedInteractions(noteId: noteId);
+      final json = await rust_db.dbGetDetailedInteractions(noteId: noteId);
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -523,14 +513,51 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> searchNotes(String query,
       {int limit = 50}) async {
     try {
-      final json =
-          await rust_db.dbSearchNotes(query: query, limit: limit);
+      final json = await rust_db.dbSearchNotes(query: query, limit: limit);
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
       if (kDebugMode) print('[RustDB] searchNotes error: $e');
       return [];
     }
+  }
+
+  Future<List<Map<String, dynamic>>> queryEvents(String filterJson,
+      {int limit = 50}) async {
+    try {
+      final eventsJson =
+          await rust_db.dbQueryEvents(filterJson: filterJson, limit: limit);
+      final events = jsonDecode(eventsJson) as List<dynamic>;
+      return events.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] queryEvents error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getProfileReactions(String authorPubkey,
+      {int limit = 50}) async {
+    try {
+      final filterJson = jsonEncode({
+        'kinds': [7],
+        'authors': [authorPubkey],
+      });
+      final eventsJson =
+          await rust_db.dbQueryEvents(filterJson: filterJson, limit: limit);
+      final decoded = jsonDecode(eventsJson) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getProfileReactions error: $e');
+      return [];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchProfileReactions(String pubkey,
+      {int limit = 50}) {
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) => getProfileReactions(pubkey, limit: limit));
   }
 
   Future<void> wipe() async {
@@ -568,26 +595,28 @@ class RustDatabaseService {
       final sizeMb = await getDatabaseSizeMB();
       final stats = await getDatabaseStats();
       final totalEvents = stats['totalEvents'] as int? ?? 0;
-      
+
       if (kDebugMode) {
         print('[LMDB] Database size: ${sizeMb}MB | Total events: $totalEvents');
       }
-      
+
       if (sizeMb > 1024) {
         if (kDebugMode) {
-          print('[LMDB] Database size exceeded 1GB threshold, starting cleanup...');
+          print(
+              '[LMDB] Database size exceeded 1GB threshold, starting cleanup...');
         }
-        
+
         final deletedCount = await cleanupOldEvents(daysToKeep: 30);
         final newSize = await getDatabaseSizeMB();
         final newStats = await getDatabaseStats();
         final newTotalEvents = newStats['totalEvents'] as int? ?? 0;
-        
+
         if (kDebugMode) {
           print('[LMDB] Cleanup completed:');
           print('[LMDB]   - Deleted events: $deletedCount');
           print('[LMDB]   - Old size: ${sizeMb}MB → New size: ${newSize}MB');
-          print('[LMDB]   - Old events: $totalEvents → New events: $newTotalEvents');
+          print(
+              '[LMDB]   - Old events: $totalEvents → New events: $newTotalEvents');
         }
       } else {
         if (kDebugMode) {

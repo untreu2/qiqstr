@@ -140,6 +140,20 @@ class SyncService {
     });
   }
 
+  Future<void> syncProfileReactions(String pubkey,
+      {int limit = 500, bool force = false}) async {
+    final key = 'profile_reactions_$pubkey';
+    if (!force && !_shouldSync(key)) return;
+
+    await _sync('profile_reactions', () async {
+      final filter = NostrService.createNotesFilter(
+          authors: [pubkey], kinds: [7], limit: limit);
+      final events = await _queryRelays(filter);
+      await _saveEvents(events);
+      _markSynced(key);
+    });
+  }
+
   Future<void> syncProfiles(List<String> pubkeys) async {
     if (pubkeys.isEmpty) return;
     await _sync('profiles', () async {
@@ -685,8 +699,9 @@ class SyncService {
         if (tag is List && tag.length > 1) {
           final tagType = tag[0] as String?;
           final refId = tag[1] as String?;
-          if (refId == null || refId.isEmpty || ownIds.contains(refId))
+          if (refId == null || refId.isEmpty || ownIds.contains(refId)) {
             continue;
+          }
 
           if (tagType == 'q') {
             refIds.add(refId);

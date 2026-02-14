@@ -9,6 +9,10 @@ abstract class FeedRepository {
   Future<List<FeedNote>> getFeed(String userPubkey, {int limit = 100});
   Stream<List<FeedNote>> watchProfileNotes(String pubkey, {int limit = 50});
   Future<List<FeedNote>> getProfileNotes(String pubkey, {int limit = 50});
+  Stream<List<FeedNote>> watchProfileReplies(String pubkey, {int limit = 50});
+  Future<List<FeedNote>> getProfileReplies(String pubkey, {int limit = 50});
+  Stream<List<FeedNote>> watchProfileLikes(String pubkey, {int limit = 50});
+  Future<List<FeedNote>> getProfileLikes(String pubkey, {int limit = 50});
   Stream<List<FeedNote>> watchHashtagFeed(String hashtag, {int limit = 100});
   Future<FeedNote?> getNote(String noteId);
   Future<Map<String, dynamic>?> getNoteRaw(String noteId);
@@ -73,9 +77,7 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
       yield await _hydrateNotes(initial);
     }
 
-    yield* db
-        .watchFeedNotes(pubkeys, limit: limit)
-        .asyncMap((events) async {
+    yield* db.watchFeedNotes(pubkeys, limit: limit).asyncMap((events) async {
       return await _hydrateNotes(events);
     });
   }
@@ -112,10 +114,89 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
   }
 
   @override
-  Stream<List<FeedNote>> watchHashtagFeed(String hashtag, {int limit = 100}) {
-    return db
-        .watchHashtagNotes(hashtag, limit: limit)
+  Stream<List<FeedNote>> watchProfileReplies(String pubkey,
+      {int limit = 50}) async* {
+    final initial = await db.getCachedProfileNotes(pubkey, limit: limit);
+    if (initial.isNotEmpty) {
+      final all = await _hydrateNotes(initial, filterReplies: false);
+      yield all.where((n) => n.isReply && !n.isRepost).toList();
+    }
+
+    yield* db.watchProfileNotes(pubkey, limit: limit).asyncMap((events) async {
+      final all = await _hydrateNotes(events, filterReplies: false);
+      return all.where((n) => n.isReply && !n.isRepost).toList();
+    });
+  }
+
+  @override
+  Future<List<FeedNote>> getProfileReplies(String pubkey,
+      {int limit = 50}) async {
+    final events = await db.getCachedProfileNotes(pubkey, limit: limit);
+    final all = await _hydrateNotes(events, filterReplies: false);
+    return all.where((n) => n.isReply && !n.isRepost).toList();
+  }
+
+  @override
+  Stream<List<FeedNote>> watchProfileLikes(String pubkey,
+      {int limit = 50}) async* {
+    final initial = await db.getProfileReactions(pubkey, limit: limit);
+    if (initial.isNotEmpty) {
+      yield await _resolveReactionNotes(initial);
+    }
+
+    yield* db
+        .watchProfileReactions(pubkey, limit: limit)
         .asyncMap((events) async {
+      return await _resolveReactionNotes(events);
+    });
+  }
+
+  @override
+  Future<List<FeedNote>> getProfileLikes(String pubkey,
+      {int limit = 50}) async {
+    final events = await db.getProfileReactions(pubkey, limit: limit);
+    return await _resolveReactionNotes(events);
+  }
+
+  Future<List<FeedNote>> _resolveReactionNotes(
+      List<Map<String, dynamic>> reactionEvents) async {
+    if (reactionEvents.isEmpty) return [];
+
+    final noteIds = <String>[];
+    for (final event in reactionEvents) {
+      final tags = event['tags'] as List<dynamic>? ?? [];
+      for (final tag in tags) {
+        if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1) {
+          final noteId = tag[1] as String;
+          if (noteId.isNotEmpty) noteIds.add(noteId);
+          break;
+        }
+      }
+    }
+
+    final seen = <String>{};
+    final uniqueIds = <String>[];
+    for (final id in noteIds) {
+      if (seen.add(id)) uniqueIds.add(id);
+    }
+
+    final notes = <FeedNote>[];
+    for (final noteId in uniqueIds) {
+      final raw = await db.getEventModel(noteId);
+      if (raw != null) {
+        final hydrated = await _hydrateNotes([raw], filterReplies: false);
+        if (hydrated.isNotEmpty) {
+          notes.add(hydrated.first);
+        }
+      }
+    }
+
+    return notes;
+  }
+
+  @override
+  Stream<List<FeedNote>> watchHashtagFeed(String hashtag, {int limit = 100}) {
+    return db.watchHashtagNotes(hashtag, limit: limit).asyncMap((events) async {
       return await _hydrateNotes(events);
     });
   }
@@ -215,14 +296,13 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
     return await db.getFollowingList(userPubkey);
   }
 
-  Future<List<FeedNote>> _hydrateNotes(
-      List<Map<String, dynamic>> events, {bool filterReplies = true}) async {
+  Future<List<FeedNote>> _hydrateNotes(List<Map<String, dynamic>> events,
+      {bool filterReplies = true}) async {
     if (events.isEmpty) return [];
 
     final muteService = EncryptedMuteService.instance;
-    final filteredEvents = events
-        .where((event) => !muteService.shouldFilterEvent(event))
-        .toList();
+    final filteredEvents =
+        events.where((event) => !muteService.shouldFilterEvent(event)).toList();
 
     if (filteredEvents.isEmpty) return [];
 

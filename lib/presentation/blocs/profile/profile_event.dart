@@ -76,3 +76,42 @@ class ProfileProfilesLoaded extends ProfileEvent {
 class ProfileSyncCompleted extends ProfileEvent {
   const ProfileSyncCompleted();
 }
+
+class ProfileRepliesLoaded extends ProfileEvent {
+  final String pubkeyHex;
+
+  const ProfileRepliesLoaded(this.pubkeyHex);
+
+  @override
+  List<Object?> get props => [pubkeyHex];
+}
+
+class ProfileLoadMoreRepliesRequested extends ProfileEvent {
+  const ProfileLoadMoreRepliesRequested();
+}
+
+class ProfileArticlesRequested extends ProfileEvent {
+  final String pubkeyHex;
+
+  const ProfileArticlesRequested(this.pubkeyHex);
+
+  @override
+  List<Object?> get props => [pubkeyHex];
+}
+
+class ProfileLikesRequested extends ProfileEvent {
+  final String pubkeyHex;
+
+  const ProfileLikesRequested(this.pubkeyHex);
+
+  @override
+  List<Object?> get props => [pubkeyHex];
+}
+
+class ProfileLoadMoreLikesRequested extends ProfileEvent {
+  const ProfileLoadMoreLikesRequested();
+}
+
+class ProfileLoadMoreArticlesRequested extends ProfileEvent {
+  const ProfileLoadMoreArticlesRequested();
+}

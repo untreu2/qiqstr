@@ -24,7 +24,6 @@ import '../../ui/screens/settings/payments_page.dart';
 import '../../ui/screens/settings/muted_page.dart';
 import '../../ui/screens/bookmark/bookmark_page.dart';
 import '../../ui/screens/settings/event_manager_page.dart';
-import '../../ui/screens/webview/webview_page.dart';
 import '../../ui/screens/dm/dm_conversations_page.dart';
 import '../../ui/screens/dm/dm_chat_page.dart';
 import '../../ui/screens/wallet/wallet_page.dart';

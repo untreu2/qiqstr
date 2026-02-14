@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:gallery_saver_plus/gallery_saver.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
@@ -203,13 +202,21 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                     _controller != null &&
                     _controller!.value.aspectRatio > 0
                 ? AspectRatio(
-                    aspectRatio: _controller!.value.aspectRatio,
+                    aspectRatio: 1,
                     child: Stack(
                       children: [
                         Positioned.fill(
                           child: GestureDetector(
                             onTap: _togglePlayPause,
-                            child: VideoPlayer(_controller!),
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              clipBehavior: Clip.hardEdge,
+                              child: SizedBox(
+                                width: _controller!.value.size.width,
+                                height: _controller!.value.size.height,
+                                child: VideoPlayer(_controller!),
+                              ),
+                            ),
                           ),
                         ),
                         Positioned(
@@ -347,40 +354,18 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                   )
                 : AspectRatio(
                     aspectRatio: 1,
-                    child: Stack(
-                      children: [
-                        if (widget.authorProfileImageUrl != null &&
-                            widget.authorProfileImageUrl!.isNotEmpty)
-                          Positioned.fill(
-                            child: CachedNetworkImage(
-                              imageUrl: widget.authorProfileImageUrl!,
-                              fit: BoxFit.cover,
-                              fadeInDuration: Duration.zero,
-                              fadeOutDuration: Duration.zero,
-                              maxHeightDiskCache: 400,
-                              maxWidthDiskCache: 400,
-                              memCacheWidth: 400,
-                              errorWidget: (context, url, error) {
-                                return Container(color: Colors.grey.shade800);
-                              },
-                              placeholder: (context, url) {
-                                return Container(color: Colors.grey.shade800);
-                              },
-                            ),
-                          )
-                        else
-                          Container(color: Colors.grey.shade800),
-                        const Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
+                    child: Container(
+                      color: Colors.grey.shade800,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
           );

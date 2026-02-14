@@ -55,6 +55,7 @@ class BlocsModule extends DIModule {
           feedRepository: AppDI.get<FeedRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
           followingRepository: AppDI.get<FollowingRepository>(),
+          articleRepository: AppDI.get<ArticleRepository>(),
           syncService: AppDI.get<SyncService>(),
           authService: AppDI.get<AuthService>(),
         ));

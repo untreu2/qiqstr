@@ -6,6 +6,7 @@ import 'base_repository.dart';
 abstract class ArticleRepository {
   Stream<List<Article>> watchArticles({int limit = 50});
   Future<List<Article>> getArticles({int limit = 50});
+  Future<List<Article>> getArticlesByAuthor(String pubkey, {int limit = 50});
   Future<Article?> getArticle(String articleId);
   Future<void> saveArticles(List<Map<String, dynamic>> articles);
 }
@@ -27,6 +28,13 @@ class ArticleRepositoryImpl extends BaseRepository
   @override
   Future<List<Article>> getArticles({int limit = 50}) async {
     final events = await db.getCachedArticles(limit: limit);
+    return await _hydrateArticles(events);
+  }
+
+  @override
+  Future<List<Article>> getArticlesByAuthor(String pubkey,
+      {int limit = 50}) async {
+    final events = await db.getCachedArticles(limit: limit, authors: [pubkey]);
     return await _hydrateArticles(events);
   }
 
@@ -55,9 +63,8 @@ class ArticleRepositoryImpl extends BaseRepository
     if (events.isEmpty) return [];
 
     final muteService = EncryptedMuteService.instance;
-    final filteredEvents = events
-        .where((event) => !muteService.shouldFilterEvent(event))
-        .toList();
+    final filteredEvents =
+        events.where((event) => !muteService.shouldFilterEvent(event)).toList();
 
     if (filteredEvents.isEmpty) return [];
 

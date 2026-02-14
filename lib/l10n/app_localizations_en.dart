@@ -430,6 +430,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noArticlesFound => 'No articles found';
 
   @override
+  String get noRelaysFound => 'No relays found';
+
+  @override
   String get refresh => 'Refresh';
 
   @override
@@ -718,6 +721,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startNewConversation => 'Start a new conversation';
+
+  @override
+  String get media => 'Media';
+
+  @override
+  String get photos => 'Photos';
+
+  @override
+  String get videos => 'Videos';
+
+  @override
+  String get likes => 'Likes';
 
   @override
   String get replies => 'Replies';

@@ -171,6 +171,7 @@
   
   "untitled": "Untitled",
   "noArticlesFound": "No articles found",
+  "noRelaysFound": "No relays found",
   "refresh": "Refresh",
   
   "displayTitle": "Display",
@@ -304,6 +305,10 @@
   "noConversationsYet": "No conversations yet",
   "startNewConversation": "Start a new conversation",
   
+  "media": "Media",
+  "photos": "Photos",
+  "videos": "Videos",
+  "likes": "Likes",
   "replies": "Replies",
   "reply": "Reply",
   "replyingTo": "Replying to",

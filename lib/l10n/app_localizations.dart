@@ -934,6 +934,12 @@ abstract class AppLocalizations {
   /// **'No articles found'**
   String get noArticlesFound;
 
+  /// No description provided for @noRelaysFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No relays found'**
+  String get noRelaysFound;
+
   /// No description provided for @refresh.
   ///
   /// In en, this message translates to:
@@ -1461,6 +1467,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start a new conversation'**
   String get startNewConversation;
+
+  /// No description provided for @media.
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get media;
+
+  /// No description provided for @photos.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos'**
+  String get photos;
+
+  /// No description provided for @videos.
+  ///
+  /// In en, this message translates to:
+  /// **'Videos'**
+  String get videos;
+
+  /// No description provided for @likes.
+  ///
+  /// In en, this message translates to:
+  /// **'Likes'**
+  String get likes;
 
   /// No description provided for @replies.
   ///
