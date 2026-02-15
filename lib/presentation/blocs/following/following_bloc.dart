@@ -33,8 +33,14 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
     FollowingLoadRequested event,
     Emitter<FollowingState> emit,
   ) async {
-    final userHex = _authService.npubToHex(event.userNpub);
-    if (userHex == null) {
+    String? userHex;
+    if (event.userNpub.startsWith('npub1')) {
+      userHex = _authService.npubToHex(event.userNpub);
+    } else if (event.userNpub.isNotEmpty) {
+      userHex = event.userNpub;
+    }
+
+    if (userHex == null || userHex.isEmpty) {
       emit(const FollowingError('Invalid user npub'));
       return;
     }
@@ -59,6 +65,7 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
     Emitter<FollowingState> emit,
   ) async {
     if (state is! FollowingLoaded) return;
+    final currentState = state as FollowingLoaded;
 
     if (event.pubkeys.isEmpty) {
       emit(const FollowingLoaded(followingUsers: [], loadedUsers: {}));
@@ -68,9 +75,30 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
     final profiles = await _profileRepository.getProfiles(event.pubkeys);
     final result = _buildFollowingResult(event.pubkeys, profiles);
 
+    final existingKeys = <String>{};
+    for (final user in currentState.followingUsers) {
+      existingKeys.add(user['pubkey'] as String? ?? '');
+    }
+
+    final merged = List<Map<String, dynamic>>.from(currentState.followingUsers);
+    final mergedLoaded =
+        Map<String, Map<String, dynamic>>.from(currentState.loadedUsers);
+
+    for (final user in result.users) {
+      final pk = user['pubkey'] as String? ?? '';
+      if (!existingKeys.contains(pk)) {
+        merged.add(user);
+        existingKeys.add(pk);
+      }
+      final npub = user['npub'] as String? ?? '';
+      if (npub.isNotEmpty) {
+        mergedLoaded[npub] = user;
+      }
+    }
+
     emit(FollowingLoaded(
-      followingUsers: result.users,
-      loadedUsers: result.loadedUsers,
+      followingUsers: merged,
+      loadedUsers: mergedLoaded,
     ));
   }
 
@@ -99,33 +127,24 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
       final profile = profiles[pubkey];
       final npub = _authService.hexToNpub(pubkey) ?? pubkey;
 
-      if (profile != null) {
-        final userWithNpub = <String, dynamic>{
-          'pubkey': pubkey,
-          'npub': npub,
-          'name': profile.name ?? profile.displayName,
-          'display_name': profile.displayName,
-          'about': profile.about ?? '',
-          'picture': profile.picture ?? '',
-          'banner': profile.banner ?? '',
-          'nip05': profile.nip05 ?? '',
-          'lud16': profile.lud16 ?? '',
-          'website': profile.website ?? '',
-        };
-        followingUsers.add(userWithNpub);
-        loadedUsers[npub] = userWithNpub;
-      } else {
-        final shortName = npub.length > 8 ? npub.substring(0, 8) : npub;
-        final fallbackUser = {
-          'pubkey': pubkey,
-          'npub': npub,
-          'name': shortName,
-          'about': '',
-          'picture': '',
-        };
-        followingUsers.add(fallbackUser);
-        loadedUsers[npub] = fallbackUser;
-      }
+      if (profile == null) continue;
+
+      final userWithNpub = <String, dynamic>{
+        'pubkey': pubkey,
+        'pubkeyHex': pubkey,
+        'npub': npub,
+        'name': profile.name ?? profile.displayName,
+        'display_name': profile.displayName,
+        'about': profile.about ?? '',
+        'picture': profile.picture ?? '',
+        'profileImage': profile.picture ?? '',
+        'banner': profile.banner ?? '',
+        'nip05': profile.nip05 ?? '',
+        'lud16': profile.lud16 ?? '',
+        'website': profile.website ?? '',
+      };
+      followingUsers.add(userWithNpub);
+      loadedUsers[npub] = userWithNpub;
     }
 
     return (users: followingUsers, loadedUsers: loadedUsers);

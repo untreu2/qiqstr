@@ -22,6 +22,8 @@ class ProfileInfoLoaded extends ProfileInfoState {
   final bool isLoadingCounts;
   final bool isLoadingProfile;
   final String? currentUserHex;
+  final int? followScoreCount;
+  final List<String> followScoreAvatars;
 
   const ProfileInfoLoaded({
     required this.user,
@@ -33,6 +35,8 @@ class ProfileInfoLoaded extends ProfileInfoState {
     this.isLoadingCounts = true,
     this.isLoadingProfile = false,
     this.currentUserHex,
+    this.followScoreCount,
+    this.followScoreAvatars = const [],
   });
 
   ProfileInfoLoaded copyWith({
@@ -45,6 +49,8 @@ class ProfileInfoLoaded extends ProfileInfoState {
     bool? isLoadingCounts,
     bool? isLoadingProfile,
     String? currentUserHex,
+    int? followScoreCount,
+    List<String>? followScoreAvatars,
   }) {
     return ProfileInfoLoaded(
       user: user ?? this.user,
@@ -56,6 +62,8 @@ class ProfileInfoLoaded extends ProfileInfoState {
       isLoadingCounts: isLoadingCounts ?? this.isLoadingCounts,
       isLoadingProfile: isLoadingProfile ?? this.isLoadingProfile,
       currentUserHex: currentUserHex ?? this.currentUserHex,
+      followScoreCount: followScoreCount ?? this.followScoreCount,
+      followScoreAvatars: followScoreAvatars ?? this.followScoreAvatars,
     );
   }
 
@@ -70,6 +78,8 @@ class ProfileInfoLoaded extends ProfileInfoState {
         isLoadingCounts,
         isLoadingProfile,
         currentUserHex,
+        followScoreCount,
+        followScoreAvatars,
       ];
 }
 

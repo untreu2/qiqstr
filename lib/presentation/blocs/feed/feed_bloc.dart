@@ -222,6 +222,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       if (!isClosed && state is FeedLoaded) {
         add(feed_event.FeedSyncCompleted());
       }
+      Future.microtask(() async {
+        try {
+          await _syncService.syncFollowsOfFollows(userHex);
+        } catch (_) {}
+      });
     });
   }
 

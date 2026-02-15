@@ -196,6 +196,10 @@ class AppRouter {
                           state.uri.queryParameters['pubkeyHex'] ?? '';
                       String pubkeyHex =
                           pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                      if (pubkeyHex.isEmpty && state.extra is Map<String, dynamic>) {
+                        final extra = state.extra as Map<String, dynamic>;
+                        pubkeyHex = extra['pubkeyHex'] as String? ?? '';
+                      }
                       if (pubkeyHex.startsWith('npub1')) {
                         try {
                           pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
@@ -361,6 +365,10 @@ class AppRouter {
                           state.uri.queryParameters['pubkeyHex'] ?? '';
                       String pubkeyHex =
                           pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+                      if (pubkeyHex.isEmpty && state.extra is Map<String, dynamic>) {
+                        final extra = state.extra as Map<String, dynamic>;
+                        pubkeyHex = extra['pubkeyHex'] as String? ?? '';
+                      }
                       if (pubkeyHex.startsWith('npub1')) {
                         try {
                           pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
@@ -453,6 +461,10 @@ class AppRouter {
           final npub = state.uri.queryParameters['npub'] ?? '';
           final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
           String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
+          if (pubkeyHex.isEmpty && state.extra is Map<String, dynamic>) {
+            final extra = state.extra as Map<String, dynamic>;
+            pubkeyHex = extra['pubkeyHex'] as String? ?? '';
+          }
           if (pubkeyHex.startsWith('npub1')) {
             try {
               pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');

@@ -769,5 +769,14 @@
   "signupFeatureKeys": "A unique cryptographic key pair will be created for you",
   "signupFeatureBackup": "You will get a seed phrase to securely back up your account",
   "signupFeatureProfile": "Set up your profile and start connecting with others",
-  "signupCreating": "Creating your account..."
+  "signupCreating": "Creating your account...",
+
+  "followedByCount": "Followed by {count, plural, =1{1 person} other{{count} people}} you follow",
+  "@followedByCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

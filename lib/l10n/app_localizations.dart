@@ -3147,6 +3147,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Creating your account...'**
   String get signupCreating;
+
+  /// No description provided for @followedByCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Followed by {count, plural, =1{1 person} other{{count} people}} you follow'**
+  String followedByCount(int count);
 }
 
 class _AppLocalizationsDelegate

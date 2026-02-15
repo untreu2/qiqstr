@@ -702,5 +702,14 @@
   "signupFeatureKeys": "Sizin için benzersiz bir kriptografik anahtar çifti oluşturulacak",
   "signupFeatureBackup": "Hesabınızı güvenle yedeklemek için kurtarma kelimeleri alacaksınız",
   "signupFeatureProfile": "Profilinizi ayarlayın ve başkalarıyla bağlantı kurmaya başlayın",
-  "signupCreating": "Hesabınız oluşturuluyor..."
+  "signupCreating": "Hesabınız oluşturuluyor...",
+
+  "followedByCount": "Takip ettiklerinden {count} kişi takip ediyor",
+  "@followedByCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -826,6 +826,85 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return count.toString();
   }
 
+  Widget _buildFollowScoreRow(
+      BuildContext context, ProfileInfoLoaded state) {
+    final l10n = AppLocalizations.of(context)!;
+    final avatars = state.followScoreAvatars;
+    final count = state.followScoreCount!;
+    final displayCount = avatars.length > 5 ? 5 : avatars.length;
+    const double avatarSize = 24;
+    const double overlap = 6.0;
+    final double stackWidth = displayCount > 0
+        ? avatarSize + (displayCount - 1) * (avatarSize - overlap)
+        : 0;
+
+    return Row(
+      children: [
+        if (displayCount > 0) ...[
+          SizedBox(
+            width: stackWidth,
+            height: avatarSize,
+            child: Stack(
+              children: List.generate(displayCount, (index) {
+                final url = avatars[index];
+                return Positioned(
+                  left: index * (avatarSize - overlap),
+                  child: Container(
+                    width: avatarSize,
+                    height: avatarSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: context.colors.background,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: url,
+                        width: avatarSize,
+                        height: avatarSize,
+                        fit: BoxFit.cover,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholder: (context, url) => Container(
+                          color: context.colors.surfaceTransparent,
+                          child: Icon(
+                            Icons.person,
+                            size: 12,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: context.colors.surfaceTransparent,
+                          child: Icon(
+                            Icons.person,
+                            size: 12,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Flexible(
+          child: Text(
+            l10n.followedByCount(count),
+            style: TextStyle(
+              fontSize: 13,
+              color: context.colors.textSecondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFollowerInfo(BuildContext context, ProfileInfoLoaded? state) {
     final l10n = AppLocalizations.of(context)!;
     if (state == null || state.isLoadingCounts) {
@@ -841,83 +920,97 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final isOwnProfile = currentUserHex != null &&
         currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () {
-            final currentLocation = GoRouterState.of(context).matchedLocation;
-            if (currentLocation.startsWith('/home/feed')) {
-              context.push('/home/feed/following', extra: state.user);
-            } else if (currentLocation.startsWith('/home/notifications')) {
-              context.push('/home/notifications/following', extra: state.user);
-            } else {
-              context.push('/following', extra: state.user);
-            }
-          },
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                final currentLocation =
+                    GoRouterState.of(context).matchedLocation;
+                if (currentLocation.startsWith('/home/feed')) {
+                  context.push('/home/feed/following', extra: state.user);
+                } else if (currentLocation
+                    .startsWith('/home/notifications')) {
+                  context.push('/home/notifications/following',
+                      extra: state.user);
+                } else {
+                  context.push('/following', extra: state.user);
+                }
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _formatCount(state.followingCount),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    ' ${l10n.followingCount}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              ' • ',
+              style: TextStyle(
+                fontSize: 14,
+                color: context.colors.textSecondary,
+              ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _formatCount(state.followerCount),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
+                Text(
+                  ' ${l10n.followers}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            if (state.doesUserFollowMe == true && !isOwnProfile) ...[
               Text(
-                _formatCount(state.followingCount),
+                ' • ',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.textPrimary,
+                  color: context.colors.textSecondary,
                 ),
               ),
               Text(
-                ' ${l10n.followingCount}',
+                l10n.followingYou,
                 style: TextStyle(
                   fontSize: 14,
                   color: context.colors.textSecondary,
                 ),
               ),
             ],
-          ),
-        ),
-        Text(
-          ' • ',
-          style: TextStyle(
-            fontSize: 14,
-            color: context.colors.textSecondary,
-          ),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _formatCount(state.followerCount),
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
-              ),
-            ),
-            Text(
-              ' ${l10n.followers}',
-              style: TextStyle(
-                fontSize: 14,
-                color: context.colors.textSecondary,
-              ),
-            ),
           ],
         ),
-        if (state.doesUserFollowMe == true && !isOwnProfile) ...[
-          Text(
-            ' • ',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
-            ),
-          ),
-          Text(
-            l10n.followingYou,
-            style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
-            ),
-          ),
+        if (state.followScoreCount != null &&
+            state.followScoreCount! > 0 &&
+            !isOwnProfile) ...[
+          const SizedBox(height: 8),
+          _buildFollowScoreRow(context, state),
         ],
       ],
     );

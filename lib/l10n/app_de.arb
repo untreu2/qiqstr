@@ -702,5 +702,14 @@
   "signupFeatureKeys": "Ein einzigartiges kryptografisches Schlüsselpaar wird für Sie erstellt",
   "signupFeatureBackup": "Sie erhalten eine Seed-Phrase zur sicheren Sicherung Ihres Kontos",
   "signupFeatureProfile": "Richten Sie Ihr Profil ein und beginnen Sie, sich mit anderen zu verbinden",
-  "signupCreating": "Ihr Konto wird erstellt..."
+  "signupCreating": "Ihr Konto wird erstellt...",
+
+  "followedByCount": "{count, plural, =1{Von 1 Person} other{Von {count} Personen}} gefolgt, denen du folgst",
+  "@followedByCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

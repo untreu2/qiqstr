@@ -1658,4 +1658,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get signupCreating => 'Hesabınız oluşturuluyor...';
+
+  @override
+  String followedByCount(int count) {
+    return 'Takip ettiklerinden $count kişi takip ediyor';
+  }
 }

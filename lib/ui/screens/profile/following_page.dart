@@ -193,8 +193,6 @@ class _FollowingPageState extends State<FollowingPage> {
             : 'Unknown User');
 
     final profileImage = loadedUser['profileImage'] as String? ?? '';
-    final nip05 = loadedUser['nip05'] as String? ?? '';
-    final nip05Verified = loadedUser['nip05Verified'] as bool? ?? false;
     final pubkeyHex = loadedUser['pubkeyHex'] as String? ?? '';
 
     return Column(
@@ -238,14 +236,6 @@ class _FollowingPageState extends State<FollowingPage> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (nip05.isNotEmpty && nip05Verified) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.verified,
-                                size: 16,
-                                color: context.colors.accent,
-                              ),
-                            ],
                           ],
                         ),
                       ),

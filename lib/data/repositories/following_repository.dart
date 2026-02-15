@@ -19,6 +19,8 @@ abstract class FollowingRepository {
   Future<void> unfollow(String userPubkey, String targetPubkey);
   Future<void> mute(String userPubkey, String targetPubkey);
   Future<void> unmute(String userPubkey, String targetPubkey);
+  Future<({int count, List<String> avatarUrls})?> calculateFollowScore(
+      String currentUserPubkey, String targetPubkey);
 }
 
 class FollowingRepositoryImpl extends BaseRepository
@@ -146,5 +148,38 @@ class FollowingRepositoryImpl extends BaseRepository
   @override
   Future<void> unmute(String userPubkey, String targetPubkey) async {
     EncryptedMuteService.instance.removeMutedPubkey(targetPubkey);
+  }
+
+  @override
+  Future<({int count, List<String> avatarUrls})?> calculateFollowScore(
+      String currentUserPubkey, String targetPubkey) async {
+    final myFollows = await getFollowingList(currentUserPubkey);
+    if (myFollows == null || myFollows.isEmpty) return null;
+
+    final relevantFollows = myFollows
+        .where((p) => p != currentUserPubkey && p != targetPubkey)
+        .toList();
+    if (relevantFollows.isEmpty) return null;
+
+    final matchingPubkeys = <String>[];
+    for (final followPubkey in relevantFollows) {
+      final theirFollows = await db.getFollowingList(followPubkey);
+      if (theirFollows != null && theirFollows.contains(targetPubkey)) {
+        matchingPubkeys.add(followPubkey);
+      }
+    }
+
+    if (matchingPubkeys.isEmpty) return null;
+
+    final avatarUrls = <String>[];
+    for (final pk in matchingPubkeys) {
+      final profile = await db.getUserProfile(pk);
+      final picture = profile?['picture'] ?? '';
+      if (picture.isNotEmpty) {
+        avatarUrls.add(picture);
+      }
+    }
+
+    return (count: matchingPubkeys.length, avatarUrls: avatarUrls);
   }
 }

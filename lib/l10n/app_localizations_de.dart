@@ -1688,4 +1688,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get signupCreating => 'Ihr Konto wird erstellt...';
+
+  @override
+  String followedByCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Von $count Personen',
+      one: 'Von 1 Person',
+    );
+    return '$_temp0 gefolgt, denen du folgst';
+  }
 }

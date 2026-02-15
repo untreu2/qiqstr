@@ -203,6 +203,46 @@ class SyncService {
     });
   }
 
+  Future<void> syncFollowsOfFollows(String userPubkey) async {
+    final key = 'fof_$userPubkey';
+    if (!_shouldSync(key)) return;
+
+    await _sync('follows_of_follows', () async {
+      final follows = await _db.getFollowingList(userPubkey);
+      if (follows == null || follows.isEmpty) return;
+
+      final pubkeysToSync = follows.where((p) => p != userPubkey).toList();
+      if (pubkeysToSync.isEmpty) return;
+
+      const batchSize = 20;
+      for (var i = 0; i < pubkeysToSync.length; i += batchSize) {
+        final end = (i + batchSize).clamp(0, pubkeysToSync.length);
+        final batch = pubkeysToSync.sublist(i, end);
+        final filter = NostrService.createFollowingFilter(
+            authors: batch, limit: batch.length);
+        final events = await _queryRelays(filter);
+
+        for (final event in events) {
+          final authorPubkey = event['pubkey'] as String? ?? '';
+          if (authorPubkey.isEmpty) continue;
+
+          final tags = event['tags'] as List<dynamic>? ?? [];
+          final followList = tags
+              .where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'p')
+              .map((tag) => (tag as List)[1] as String)
+              .toList();
+
+          final listWithUser = followList.toSet()..add(authorPubkey);
+          await _db.saveFollowingList(authorPubkey, listWithUser.toList());
+        }
+
+        await _saveEvents(events);
+      }
+
+      _markSynced(key);
+    });
+  }
+
   Future<void> syncMuteList(String userPubkey) async {
     await _sync('mute', () async {
       final filter =

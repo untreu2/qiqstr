@@ -201,6 +201,28 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
         }
       } catch (_) {}
     });
+
+    _calculateFollowScoreInBackground(pubkeyHex, currentState.currentUserHex);
+  }
+
+  void _calculateFollowScoreInBackground(
+      String targetHex, String? currentUserHex) {
+    if (currentUserHex == null || currentUserHex.isEmpty) return;
+    if (currentUserHex.toLowerCase() == targetHex.toLowerCase()) return;
+
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final result = await _followingRepository.calculateFollowScore(
+            currentUserHex, targetHex);
+        if (result != null && !isClosed && state is ProfileInfoLoaded) {
+          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            followScoreCount: result.count,
+            followScoreAvatars: result.avatarUrls,
+          )));
+        }
+      } catch (_) {}
+    });
   }
 
   void _refreshDoesUserFollowMeInBackground(
