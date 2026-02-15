@@ -12,7 +12,6 @@ import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
-import '../../../src/rust/api/events.dart' as rust_events;
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
@@ -198,35 +197,13 @@ Future<void> _publishZapEventsAsync(
     if (kDebugMode) {
       print(
           '[ZapDialog] Zap request event (kind 9734) published for note: $noteId');
-    }
-
-    final zapEventJsonStr = rust_events.createSignedEvent(
-      kind: 9735,
-      content: comment,
-      tags: [
-        ['bolt11', invoice],
-        ['description', jsonEncode(zapRequest)],
-        ['p', recipientPubkeyHex],
-        ['e', noteId],
-      ],
-      privateKeyHex: privateKey,
-    );
-    final zapEvent = jsonDecode(zapEventJsonStr) as Map<String, dynamic>;
-
-    await RustRelayService.instance.broadcastEvent(zapEvent);
-
-    if (kDebugMode) {
-      print('[ZapDialog] Zap event (kind 9735) published for note: $noteId');
-    }
-
-    if (kDebugMode) {
       final paymentData = paymentResult.data as Map<String, dynamic>?;
       final preimage = paymentData?['preimage'] as String?;
       print('[ZapDialog] Zap amount: $sats sats, preimage: $preimage');
     }
   } catch (e) {
     if (kDebugMode) {
-      print('[ZapDialog] Error creating/publishing zap event: $e');
+      print('[ZapDialog] Error publishing zap request: $e');
     }
   }
 }
