@@ -156,7 +156,9 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final sortedNotes = _feedNotesToMaps(event.notes);
     _sortNotes(sortedNotes, currentState.sortMode);
 
-    if (currentState.notes.isEmpty || _acceptNextUpdate) {
+    if (currentState.notes.isEmpty ||
+        _acceptNextUpdate ||
+        currentState.isSyncing) {
       _acceptNextUpdate = false;
       _bufferedNotes = [];
       emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
@@ -271,6 +273,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           });
         }
       } else {
+        _watchFeed(_currentUserHex!);
         Future.microtask(() async {
           if (isClosed) return;
           try {
