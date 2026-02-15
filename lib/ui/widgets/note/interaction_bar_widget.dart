@@ -359,7 +359,18 @@ class _InteractionBarState extends State<InteractionBar> {
     try {
       final verifier = EventVerifier.instance;
 
-      final noteValid = await verifier.verifyNote(note);
+      final isRepost = note['isRepost'] as bool? ?? false;
+      final repostEventId = note['repostEventId'] as String?;
+
+      bool noteValid;
+      if (isRepost && repostEventId != null && repostEventId.isNotEmpty) {
+        noteValid = await verifier.verifyNote({'id': repostEventId});
+        if (!noteValid) {
+          noteValid = await verifier.verifyNote(note);
+        }
+      } else {
+        noteValid = await verifier.verifyNote(note);
+      }
       if (!mounted) return;
 
       final authorHex =

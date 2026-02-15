@@ -1,6 +1,4 @@
-import 'dart:convert';
-import 'rust_database_service.dart';
-import 'rust_nostr_bridge.dart';
+import '../../src/rust/api/crypto.dart' as rust_crypto;
 
 class EventVerifier {
   static final EventVerifier _instance = EventVerifier._internal();
@@ -14,14 +12,7 @@ class EventVerifier {
     if (noteId.isEmpty) return false;
 
     try {
-      final eventData =
-          await RustDatabaseService.instance.getEventModel(noteId);
-      if (eventData == null) return false;
-
-      final rawEvent = jsonEncode(eventData);
-      if (rawEvent.isEmpty) return false;
-
-      return EventVerifierBridge.verify(rawEvent);
+      return await rust_crypto.verifyNoteById(eventIdHex: noteId);
     } catch (_) {
       return false;
     }
@@ -31,27 +22,7 @@ class EventVerifier {
     if (pubkeyHex.isEmpty) return false;
 
     try {
-      final profile =
-          await RustDatabaseService.instance.getUserProfile(pubkeyHex);
-      if (profile == null) return false;
-
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> verifyEventJson(Map<String, dynamic> eventJson) async {
-    try {
-      return EventVerifierBridge.verify(jsonEncode(eventJson));
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> verifyEventString(String eventJsonString) async {
-    try {
-      return EventVerifierBridge.verify(eventJsonString);
+      return await rust_crypto.verifyProfileByPubkey(pubkeyHex: pubkeyHex);
     } catch (_) {
       return false;
     }

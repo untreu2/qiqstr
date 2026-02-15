@@ -73,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1943922708;
+  int get rustContentHash => 1711796936;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -468,6 +468,10 @@ abstract class RustLibApi extends BaseApi {
   bool crateApiCryptoValidateMnemonic({required String mnemonic});
 
   bool crateApiCryptoVerifyEvent({required String eventJson});
+
+  Future<bool> crateApiCryptoVerifyNoteById({required String eventIdHex});
+
+  Future<bool> crateApiCryptoVerifyProfileByPubkey({required String pubkeyHex});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -3535,6 +3539,57 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiCryptoVerifyEventConstMeta => const TaskConstMeta(
         debugName: "verify_event",
         argNames: ["eventJson"],
+      );
+
+  @override
+  Future<bool> crateApiCryptoVerifyNoteById({required String eventIdHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(eventIdHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 111, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiCryptoVerifyNoteByIdConstMeta,
+      argValues: [eventIdHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiCryptoVerifyNoteByIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "verify_note_by_id",
+        argNames: ["eventIdHex"],
+      );
+
+  @override
+  Future<bool> crateApiCryptoVerifyProfileByPubkey(
+      {required String pubkeyHex}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(pubkeyHex, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 112, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiCryptoVerifyProfileByPubkeyConstMeta,
+      argValues: [pubkeyHex],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiCryptoVerifyProfileByPubkeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "verify_profile_by_pubkey",
+        argNames: ["pubkeyHex"],
       );
 
   @protected

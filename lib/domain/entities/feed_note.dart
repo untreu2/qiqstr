@@ -5,6 +5,7 @@ class FeedNote {
   final int createdAt;
   final List<List<String>> tags;
   final bool isRepost;
+  final String? repostEventId;
   final String? repostedBy;
   final int? repostCreatedAt;
   final bool isReply;
@@ -25,6 +26,7 @@ class FeedNote {
     required this.createdAt,
     required this.tags,
     this.isRepost = false,
+    this.repostEventId,
     this.repostedBy,
     this.repostCreatedAt,
     this.isReply = false,
@@ -53,6 +55,7 @@ class FeedNote {
       createdAt: map['created_at'] as int? ?? 0,
       tags: tags,
       isRepost: map['isRepost'] as bool? ?? false,
+      repostEventId: map['repostEventId'] as String?,
       repostedBy: map['repostedBy'] as String?,
       repostCreatedAt: map['repostCreatedAt'] as int?,
       isReply: map['isReply'] as bool? ?? false,
@@ -75,6 +78,7 @@ class FeedNote {
     int? createdAt,
     List<List<String>>? tags,
     bool? isRepost,
+    String? repostEventId,
     String? repostedBy,
     int? repostCreatedAt,
     bool? isReply,
@@ -95,6 +99,7 @@ class FeedNote {
       createdAt: createdAt ?? this.createdAt,
       tags: tags ?? this.tags,
       isRepost: isRepost ?? this.isRepost,
+      repostEventId: repostEventId ?? this.repostEventId,
       repostedBy: repostedBy ?? this.repostedBy,
       repostCreatedAt: repostCreatedAt ?? this.repostCreatedAt,
       isReply: isReply ?? this.isReply,
@@ -143,6 +148,7 @@ class FeedNote {
       'timestamp': createdAtDateTime,
       'tags': tags,
       'isRepost': isRepost,
+      'repostEventId': repostEventId,
       'repostedBy': repostedBy,
       'repostCreatedAt': repostCreatedAt,
       'isReply': isReply,

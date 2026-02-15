@@ -58,9 +58,3 @@ class Bip39Bridge {
     return rust_crypto.mnemonicToPrivateKey(mnemonic: mnemonic);
   }
 }
-
-class EventVerifierBridge {
-  static bool verify(String eventJson) {
-    return rust_crypto.verifyEvent(eventJson: eventJson);
-  }
-}

@@ -20,6 +20,13 @@ String signEventId(
 bool verifyEvent({required String eventJson}) =>
     RustLib.instance.api.crateApiCryptoVerifyEvent(eventJson: eventJson);
 
+Future<bool> verifyNoteById({required String eventIdHex}) =>
+    RustLib.instance.api.crateApiCryptoVerifyNoteById(eventIdHex: eventIdHex);
+
+Future<bool> verifyProfileByPubkey({required String pubkeyHex}) =>
+    RustLib.instance.api
+        .crateApiCryptoVerifyProfileByPubkey(pubkeyHex: pubkeyHex);
+
 String generateMnemonic() =>
     RustLib.instance.api.crateApiCryptoGenerateMnemonic();
 

@@ -978,6 +978,7 @@ async fn hydrate_notes(
         let mut created_at = event.created_at.as_secs();
         let mut reposted_by: Option<String> = None;
         let mut repost_created_at: Option<u64> = None;
+        let mut repost_event_id: Option<String> = None;
 
         let tags: Vec<Vec<String>> = event.tags.iter()
             .map(|tag| tag.clone().to_vec())
@@ -1024,6 +1025,7 @@ async fn hydrate_notes(
         let mut is_reply = (root_id.is_some() || parent_id.is_some()) && !is_quote;
 
         if is_repost {
+            repost_event_id = Some(id.clone());
             reposted_by = Some(pubkey.clone());
             repost_created_at = Some(created_at);
 
@@ -1117,6 +1119,7 @@ async fn hydrate_notes(
             "created_at": created_at,
             "tags": json_tags,
             "isRepost": is_repost,
+            "repostEventId": repost_event_id,
             "repostedBy": reposted_by,
             "repostCreatedAt": repost_created_at,
             "isReply": is_reply,
