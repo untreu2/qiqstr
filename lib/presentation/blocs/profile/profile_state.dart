@@ -21,6 +21,8 @@ class ProfileLoaded extends ProfileState {
   final List<Map<String, dynamic>> replies;
   final List<Map<String, dynamic>> articles;
   final List<Map<String, dynamic>> likedNotes;
+  final List<Map<String, dynamic>> pinnedNotes;
+  final List<String> pinnedNoteIds;
   final bool canLoadMore;
   final bool isLoadingMore;
   final bool canLoadMoreReplies;
@@ -42,6 +44,8 @@ class ProfileLoaded extends ProfileState {
     this.replies = const [],
     this.articles = const [],
     this.likedNotes = const [],
+    this.pinnedNotes = const [],
+    this.pinnedNoteIds = const [],
     required this.currentProfileHex,
     required this.currentUserHex,
     this.canLoadMore = true,
@@ -65,6 +69,8 @@ class ProfileLoaded extends ProfileState {
         replies,
         articles,
         likedNotes,
+        pinnedNotes,
+        pinnedNoteIds,
         canLoadMore,
         isLoadingMore,
         canLoadMoreReplies,
@@ -87,6 +93,8 @@ class ProfileLoaded extends ProfileState {
     List<Map<String, dynamic>>? replies,
     List<Map<String, dynamic>>? articles,
     List<Map<String, dynamic>>? likedNotes,
+    List<Map<String, dynamic>>? pinnedNotes,
+    List<String>? pinnedNoteIds,
     bool? canLoadMore,
     bool? isLoadingMore,
     bool? canLoadMoreReplies,
@@ -108,6 +116,8 @@ class ProfileLoaded extends ProfileState {
       replies: replies ?? this.replies,
       articles: articles ?? this.articles,
       likedNotes: likedNotes ?? this.likedNotes,
+      pinnedNotes: pinnedNotes ?? this.pinnedNotes,
+      pinnedNoteIds: pinnedNoteIds ?? this.pinnedNoteIds,
       canLoadMore: canLoadMore ?? this.canLoadMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       canLoadMoreReplies: canLoadMoreReplies ?? this.canLoadMoreReplies,

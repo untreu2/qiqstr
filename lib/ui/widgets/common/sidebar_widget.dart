@@ -324,7 +324,7 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              svgAsset: 'assets/profile_button.svg',
+              icon: CarbonIcons.user,
               label: l10n.profile,
               onTap: () {
                 final userNpub = user['npub'] as String? ?? '';

@@ -778,5 +778,11 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "pinNote": "Pin note",
+  "unpinNote": "Unpin note",
+  "notePinned": "Note pinned to profile",
+  "noteUnpinned": "Note unpinned from profile",
+  "pinnedNotes": "Pinned"
 }

@@ -711,5 +711,11 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "pinNote": "Notu sabitle",
+  "unpinNote": "Sabitlemeyi kaldır",
+  "notePinned": "Not profile sabitlendi",
+  "noteUnpinned": "Not sabitlemeden kaldırıldı",
+  "pinnedNotes": "Sabitlenmiş"
 }

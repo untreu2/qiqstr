@@ -3153,6 +3153,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Followed by {count, plural, =1{1 person} other{{count} people}} you follow'**
   String followedByCount(int count);
+
+  /// No description provided for @pinNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin note'**
+  String get pinNote;
+
+  /// No description provided for @unpinNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin note'**
+  String get unpinNote;
+
+  /// No description provided for @notePinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Note pinned to profile'**
+  String get notePinned;
+
+  /// No description provided for @noteUnpinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Note unpinned from profile'**
+  String get noteUnpinned;
+
+  /// No description provided for @pinnedNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get pinnedNotes;
 }
 
 class _AppLocalizationsDelegate

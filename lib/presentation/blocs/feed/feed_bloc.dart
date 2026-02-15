@@ -211,6 +211,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         if (isClosed) return;
         await _syncService.syncBookmarkList(userHex);
         if (isClosed) return;
+        await _syncService.syncPinnedNotes(userHex);
+        if (isClosed) return;
         final currentState = state;
         if (currentState is FeedLoaded && currentState.activeListId == null) {
           _watchFeed(userHex);

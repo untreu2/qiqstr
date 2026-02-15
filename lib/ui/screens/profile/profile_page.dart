@@ -422,6 +422,7 @@ class _ProfilePageState extends State<ProfilePage> {
         profiles: state.profiles,
         isLoading: state.isLoadingMore,
         canLoadMore: state.canLoadMore,
+        pinnedNotes: state.pinnedNotes,
         onLoadMore: () {
           context
               .read<ProfileBloc>()

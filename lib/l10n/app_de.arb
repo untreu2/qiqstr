@@ -711,5 +711,11 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "pinNote": "Notiz anheften",
+  "unpinNote": "Notiz loslösen",
+  "notePinned": "Notiz an Profil angeheftet",
+  "noteUnpinned": "Notiz vom Profil gelöst",
+  "pinnedNotes": "Angeheftet"
 }

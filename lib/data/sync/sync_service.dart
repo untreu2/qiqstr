@@ -6,6 +6,7 @@ import '../services/nostr_service.dart';
 import '../services/auth_service.dart';
 import '../services/encrypted_mute_service.dart';
 import '../services/encrypted_bookmark_service.dart';
+import '../services/pinned_notes_service.dart';
 import '../services/follow_set_service.dart';
 import 'publishers/event_publisher.dart';
 
@@ -292,6 +293,34 @@ class SyncService {
   }) async {
     final event = await _publish(() => _publisher.createBookmark(
           bookmarkedEventIds: bookmarkedEventIds,
+        ));
+    return event;
+  }
+
+  Future<void> syncPinnedNotes(String userPubkey) async {
+    await _sync('pinned_notes', () async {
+      final filter = NostrService.createPinnedNotesFilter(
+          authors: [userPubkey], limit: 1);
+      final events = await _queryRelays(filter);
+      await _saveEvents(events);
+
+      final authService = AuthService.instance;
+      final pubResult = await authService.getCurrentUserPublicKeyHex();
+      if (!pubResult.isError &&
+          pubResult.data != null &&
+          pubResult.data == userPubkey) {
+        await PinnedNotesService.instance.loadFromDatabase(
+          userPubkeyHex: userPubkey,
+        );
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>> publishPinnedNotes({
+    required List<String> pinnedNoteIds,
+  }) async {
+    final event = await _publish(() => _publisher.createPinnedNotes(
+          pinnedNoteIds: pinnedNoteIds,
         ));
     return event;
   }

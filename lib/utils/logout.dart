@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/services/auth_service.dart';
 import '../data/services/coinos_service.dart';
 import '../data/services/rust_database_service.dart';
+import '../data/services/pinned_notes_service.dart';
 import '../core/di/app_di.dart';
 import '../ui/widgets/common/snackbar_widget.dart';
 
@@ -56,6 +57,7 @@ class Logout {
     } catch (e) {
       if (kDebugMode) print('Error clearing Coinos data: $e');
     }
+    PinnedNotesService.instance.clear();
   }
 
   static Future<void> _cleanupEverything(AuthService authService) async {
@@ -65,6 +67,8 @@ class Logout {
     } catch (e) {
       if (kDebugMode) print('Error clearing Coinos data: $e');
     }
+
+    PinnedNotesService.instance.clear();
 
     try {
       final dbService = AppDI.get<RustDatabaseService>();

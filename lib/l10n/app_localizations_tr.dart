@@ -1663,4 +1663,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String followedByCount(int count) {
     return 'Takip ettiklerinden $count kişi takip ediyor';
   }
+
+  @override
+  String get pinNote => 'Notu sabitle';
+
+  @override
+  String get unpinNote => 'Sabitlemeyi kaldır';
+
+  @override
+  String get notePinned => 'Not profile sabitlendi';
+
+  @override
+  String get noteUnpinned => 'Not sabitlemeden kaldırıldı';
+
+  @override
+  String get pinnedNotes => 'Sabitlenmiş';
 }

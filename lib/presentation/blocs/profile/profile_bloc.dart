@@ -7,6 +7,7 @@ import '../../../data/repositories/following_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/interaction_service.dart';
+import '../../../data/services/pinned_notes_service.dart';
 import '../../../data/services/rust_database_service.dart';
 import '../../../domain/entities/feed_note.dart';
 import 'profile_event.dart';
@@ -33,6 +34,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   StreamSubscription<List<FeedNote>>? _notesSubscription;
   StreamSubscription<List<FeedNote>>? _repliesSubscription;
   StreamSubscription<List<FeedNote>>? _likesSubscription;
+  StreamSubscription<List<String>>? _pinnedNotesSubscription;
 
   ProfileBloc({
     required FeedRepository feedRepository,
@@ -71,6 +73,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<_ProfileLikesUpdated>(_onProfileLikesUpdatedInternal);
     on<ProfileLoadMoreLikesRequested>(_onProfileLoadMoreLikesRequested);
     on<ProfileLoadMoreArticlesRequested>(_onProfileLoadMoreArticlesRequested);
+    on<ProfilePinnedNotesRequested>(_onProfilePinnedNotesRequested);
+    on<ProfilePinnedNotesUpdated>(_onProfilePinnedNotesUpdated);
   }
 
   void _onProfileProfilesLoaded(
@@ -229,6 +233,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       }
 
       _syncProfileReactionsInBackground(targetHex);
+      _syncPinnedNotesInBackground(targetHex);
     } catch (_) {}
   }
 
@@ -344,6 +349,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     add(ProfileArticlesRequested(event.pubkeyHex));
     add(ProfileLikesRequested(event.pubkeyHex));
+    add(ProfilePinnedNotesRequested(event.pubkeyHex));
   }
 
   void _syncProfileNotesInBackground(String pubkeyHex) {
@@ -963,12 +969,142 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     _isLoadingMoreArticles = false;
   }
 
+  Future<void> _onProfilePinnedNotesRequested(
+    ProfilePinnedNotesRequested event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) return;
+    if (event.pubkeyHex.isEmpty) return;
+
+    final currentState = state as ProfileLoaded;
+    final isCurrentUser = currentState.isCurrentUser;
+
+    final cachedIds = await PinnedNotesService.instance
+        .fetchPinnedNoteIdsForUser(event.pubkeyHex);
+
+    if (cachedIds.isNotEmpty) {
+      final cachedNotes = await _fetchNotesByIds(cachedIds);
+      if (!isClosed && state is ProfileLoaded) {
+        emit((state as ProfileLoaded).copyWith(
+          pinnedNoteIds: cachedIds,
+          pinnedNotes: cachedNotes,
+        ));
+        if (cachedNotes.isNotEmpty) {
+          _loadProfilesForNotes(cachedNotes, emit);
+        }
+      }
+    }
+
+    if (isCurrentUser) {
+      _watchPinnedNotes();
+    }
+
+    _syncPinnedNotesInBackground(event.pubkeyHex);
+  }
+
+  void _watchPinnedNotes() {
+    _pinnedNotesSubscription?.cancel();
+    _pinnedNotesSubscription =
+        PinnedNotesService.instance.pinnedNoteIdsStream.listen((pinnedIds) {
+      if (isClosed) return;
+      _reloadPinnedNotesFromIds(pinnedIds);
+    });
+  }
+
+  void _reloadPinnedNotesFromIds(List<String> pinnedIds) {
+    Future.microtask(() async {
+      if (isClosed || state is! ProfileLoaded) return;
+      final notes = await _fetchNotesByIds(pinnedIds);
+      if (!isClosed) {
+        add(ProfilePinnedNotesUpdated(
+          pinnedNoteIds: pinnedIds,
+          pinnedNotes: notes,
+        ));
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchNotesByIds(
+      List<String> noteIds) async {
+    final notes = <Map<String, dynamic>>[];
+    for (final noteId in noteIds) {
+      final event = await _db.getEventModel(noteId);
+      if (event != null) {
+        notes.add(event);
+      }
+    }
+    return notes;
+  }
+
+  void _syncPinnedNotesInBackground(String pubkeyHex) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        await _syncService.syncPinnedNotes(pubkeyHex);
+        if (isClosed || state is! ProfileLoaded) return;
+
+        final pinnedIds = await PinnedNotesService.instance
+            .fetchPinnedNoteIdsForUser(pubkeyHex);
+
+        final currentState = state as ProfileLoaded;
+        final currentIds = currentState.pinnedNoteIds;
+        if (_listEquals(pinnedIds, currentIds)) return;
+
+        final pinnedNotes = await _fetchNotesByIds(pinnedIds);
+
+        final missingIds = pinnedIds
+            .where((id) => !pinnedNotes.any((n) => n['id'] == id))
+            .toList();
+        if (missingIds.isNotEmpty) {
+          for (final id in missingIds) {
+            await _syncService.syncNote(id);
+            final event = await _db.getEventModel(id);
+            if (event != null) pinnedNotes.add(event);
+          }
+        }
+
+        if (!isClosed) {
+          add(ProfilePinnedNotesUpdated(
+            pinnedNoteIds: pinnedIds,
+            pinnedNotes: pinnedNotes,
+          ));
+        }
+      } catch (_) {}
+    });
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  void _onProfilePinnedNotesUpdated(
+    ProfilePinnedNotesUpdated event,
+    Emitter<ProfileState> emit,
+  ) {
+    if (state is! ProfileLoaded) return;
+    final currentState = state as ProfileLoaded;
+
+    emit(currentState.copyWith(
+      pinnedNoteIds: event.pinnedNoteIds,
+      pinnedNotes: event.pinnedNotes,
+    ));
+
+    if (event.pinnedNotes.isNotEmpty) {
+      _loadProfilesForNotes(event.pinnedNotes, emit);
+    }
+  }
+
   @override
   Future<void> close() {
     _profileSubscription?.cancel();
     _notesSubscription?.cancel();
     _repliesSubscription?.cancel();
     _likesSubscription?.cancel();
+    _pinnedNotesSubscription?.cancel();
     return super.close();
   }
 }

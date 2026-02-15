@@ -1661,4 +1661,19 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return 'Followed by $_temp0 you follow';
   }
+
+  @override
+  String get pinNote => 'Pin note';
+
+  @override
+  String get unpinNote => 'Unpin note';
+
+  @override
+  String get notePinned => 'Note pinned to profile';
+
+  @override
+  String get noteUnpinned => 'Note unpinned from profile';
+
+  @override
+  String get pinnedNotes => 'Pinned';
 }

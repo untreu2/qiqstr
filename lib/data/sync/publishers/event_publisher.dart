@@ -4,6 +4,7 @@ import '../../services/relay_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/encrypted_mute_service.dart';
 import '../../services/encrypted_bookmark_service.dart';
+import '../../services/pinned_notes_service.dart';
 import '../../services/follow_set_service.dart';
 
 class EventPublisher {
@@ -163,6 +164,16 @@ class EventPublisher {
       bookmarkedEventIds: bookmarkedEventIds,
       privateKeyHex: privateKey,
       publicKeyHex: publicKey,
+    );
+  }
+
+  Future<Map<String, dynamic>> createPinnedNotes({
+    required List<String> pinnedNoteIds,
+  }) async {
+    final privateKey = await _getPrivateKey();
+    return PinnedNotesService.instance.createPinnedNotesEvent(
+      pinnedNoteIds: pinnedNoteIds,
+      privateKeyHex: privateKey,
     );
   }
 

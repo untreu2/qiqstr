@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/list_separator_widget.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/interaction_service.dart';
 import '../../../core/di/app_di.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../theme/theme_manager.dart';
 
 class NoteListWidget extends StatefulWidget {
   final List<Map<String, dynamic>> notes;
@@ -21,6 +24,7 @@ class NoteListWidget extends StatefulWidget {
   final VoidCallback? onEmptyRefresh;
   final ScrollController? scrollController;
   final dynamic notesListProvider;
+  final List<Map<String, dynamic>> pinnedNotes;
 
   const NoteListWidget({
     super.key,
@@ -36,6 +40,7 @@ class NoteListWidget extends StatefulWidget {
     this.onEmptyRefresh,
     this.scrollController,
     this.notesListProvider,
+    this.pinnedNotes = const [],
   });
 
   @override
@@ -232,6 +237,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       notesListProvider: widget.notesListProvider,
       canLoadMore: widget.canLoadMore,
       isLoading: widget.isLoading,
+      pinnedNotes: widget.pinnedNotes,
     );
   }
 }
@@ -244,6 +250,7 @@ class _NoteListContent extends StatelessWidget {
   final dynamic notesListProvider;
   final bool canLoadMore;
   final bool isLoading;
+  final List<Map<String, dynamic>> pinnedNotes;
 
   const _NoteListContent({
     required this.notes,
@@ -253,35 +260,44 @@ class _NoteListContent extends StatelessWidget {
     this.notesListProvider,
     required this.canLoadMore,
     required this.isLoading,
+    this.pinnedNotes = const [],
   });
 
   @override
   Widget build(BuildContext context) {
+    final pinnedCount = pinnedNotes.length;
+    final allCount = pinnedCount + notes.length;
+
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (index >= notes.length) {
+          if (index >= allCount) {
             return SizedBox(
                 height: MediaQuery.of(context).padding.bottom + 120);
           }
 
-          final note = notes[index];
+          final isPinned = index < pinnedCount;
+          final note =
+              isPinned ? pinnedNotes[index] : notes[index - pinnedCount];
           final noteId = note['id'] as String? ?? '';
 
           return RepaintBoundary(
-            key: ValueKey('note_boundary_$noteId'),
+            key: ValueKey(
+                '${isPinned ? 'pinned' : 'note'}_boundary_$noteId'),
             child: _NoteItemWidget(
-              key: ValueKey('note_item_$noteId'),
+              key: ValueKey(
+                  '${isPinned ? 'pinned' : 'note'}_item_$noteId'),
               note: note,
               currentUserHex: currentUserHex,
               notesNotifier: notesNotifier,
               profiles: profiles,
               notesListProvider: notesListProvider,
-              showSeparator: index < notes.length - 1,
+              showSeparator: index < allCount - 1,
+              isPinned: isPinned,
             ),
           );
         },
-        childCount: notes.length + 1,
+        childCount: allCount + 1,
         addAutomaticKeepAlives: true,
         addRepaintBoundaries: false,
         addSemanticIndexes: false,
@@ -297,6 +313,7 @@ class _NoteItemWidget extends StatefulWidget {
   final Map<String, Map<String, dynamic>> profiles;
   final dynamic notesListProvider;
   final bool showSeparator;
+  final bool isPinned;
 
   const _NoteItemWidget({
     super.key,
@@ -306,6 +323,7 @@ class _NoteItemWidget extends StatefulWidget {
     required this.profiles,
     this.notesListProvider,
     required this.showSeparator,
+    this.isPinned = false,
   });
 
   @override
@@ -324,6 +342,7 @@ class _NoteItemWidgetState extends State<_NoteItemWidget>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (widget.isPinned) _PinnedBadge(),
         NoteWidget(
           note: widget.note,
           currentUserHex: widget.currentUserHex,
@@ -337,6 +356,32 @@ class _NoteItemWidgetState extends State<_NoteItemWidget>
         ),
         if (widget.showSeparator) const ListSeparatorWidget(),
       ],
+    );
+  }
+}
+
+class _PinnedBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 12),
+      child: Row(
+        children: [
+          Icon(CarbonIcons.pin, size: 16, color: colors.textSecondary),
+          const SizedBox(width: 6),
+          Text(
+            l10n.pinnedNotes,
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

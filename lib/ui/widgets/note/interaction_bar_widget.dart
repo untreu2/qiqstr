@@ -21,6 +21,7 @@ import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../data/services/encrypted_bookmark_service.dart';
+import '../../../data/services/pinned_notes_service.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -415,6 +416,40 @@ class _InteractionBarState extends State<InteractionBar> {
     _interactionBloc.add(const InteractionNoteDeleted());
   }
 
+  Future<void> _handlePinTap() async {
+    final l10n = AppLocalizations.of(context)!;
+    HapticFeedback.lightImpact();
+    if (!mounted) return;
+
+    final pinnedService = PinnedNotesService.instance;
+    final isPinned = pinnedService.isPinned(widget.noteId);
+
+    if (isPinned) {
+      pinnedService.unpinNote(widget.noteId);
+    } else {
+      pinnedService.pinNote(widget.noteId);
+    }
+
+    try {
+      final syncService = AppDI.get<SyncService>();
+      await syncService.publishPinnedNotes(
+        pinnedNoteIds: pinnedService.pinnedNoteIds,
+      );
+      if (mounted) {
+        AppSnackbar.success(
+          context,
+          isPinned ? l10n.noteUnpinned : l10n.notePinned,
+        );
+      }
+    } catch (_) {
+      if (isPinned) {
+        pinnedService.pinNote(widget.noteId);
+      } else {
+        pinnedService.unpinNote(widget.noteId);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -568,8 +603,36 @@ class _InteractionBarState extends State<InteractionBar> {
     ];
 
     final noteForActions = _interactionBloc.getNoteForActions();
-    final noteAuthor = noteForActions?['author'] as String?;
+    final noteAuthor = noteForActions?['pubkey'] as String? ??
+        noteForActions?['author'] as String?;
     if (noteAuthor == widget.currentUserHex) {
+      final isPinned = PinnedNotesService.instance.isPinned(widget.noteId);
+      items.add(
+        PopupMenuItem(
+          value: 'pin',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Icon(
+                  isPinned ? CarbonIcons.pin_filled : CarbonIcons.pin,
+                  size: 17,
+                  color: context.colors.background,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  isPinned ? l10n.unpinNote : l10n.pinNote,
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
       items.add(
         PopupMenuItem(
           value: 'delete',
@@ -613,6 +676,8 @@ class _InteractionBarState extends State<InteractionBar> {
         _handleVerifyTap();
       } else if (value == 'interactions') {
         _handleStatsTap();
+      } else if (value == 'pin') {
+        _handlePinTap();
       } else if (value == 'delete') {
         _handleDeleteTap();
       }

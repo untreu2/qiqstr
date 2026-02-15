@@ -45,6 +45,7 @@ Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
 | 9734 | Zap Request |
 | 9735 | Zap Receipt |
 | 10000 | Mute List |
+| 10001 | Pin List |
 | 10002 | Relay List Metadata |
 | 24242 | Blossom Auth |
 | 27235 | HTTP Auth |

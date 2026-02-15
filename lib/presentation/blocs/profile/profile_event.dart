@@ -115,3 +115,25 @@ class ProfileLoadMoreLikesRequested extends ProfileEvent {
 class ProfileLoadMoreArticlesRequested extends ProfileEvent {
   const ProfileLoadMoreArticlesRequested();
 }
+
+class ProfilePinnedNotesRequested extends ProfileEvent {
+  final String pubkeyHex;
+
+  const ProfilePinnedNotesRequested(this.pubkeyHex);
+
+  @override
+  List<Object?> get props => [pubkeyHex];
+}
+
+class ProfilePinnedNotesUpdated extends ProfileEvent {
+  final List<String> pinnedNoteIds;
+  final List<Map<String, dynamic>> pinnedNotes;
+
+  const ProfilePinnedNotesUpdated({
+    required this.pinnedNoteIds,
+    required this.pinnedNotes,
+  });
+
+  @override
+  List<Object?> get props => [pinnedNoteIds, pinnedNotes];
+}

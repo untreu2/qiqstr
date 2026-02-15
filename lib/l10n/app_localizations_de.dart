@@ -1699,4 +1699,19 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0 gefolgt, denen du folgst';
   }
+
+  @override
+  String get pinNote => 'Notiz anheften';
+
+  @override
+  String get unpinNote => 'Notiz loslösen';
+
+  @override
+  String get notePinned => 'Notiz an Profil angeheftet';
+
+  @override
+  String get noteUnpinned => 'Notiz vom Profil gelöst';
+
+  @override
+  String get pinnedNotes => 'Angeheftet';
 }
