@@ -43,7 +43,6 @@ class InteractionBar extends StatefulWidget {
 }
 
 class _InteractionBarState extends State<InteractionBar> {
-  final GlobalKey _repostButtonKey = GlobalKey();
   late final InteractionBloc _interactionBloc;
   bool _isBookmarked = false;
 
@@ -88,140 +87,45 @@ class _InteractionBarState extends State<InteractionBar> {
     );
   }
 
-  void _handleRepostTap(InteractionLoaded state) {
-    HapticFeedback.lightImpact();
-    _showRepostMenu(state);
-  }
-
-  void _showRepostMenu(InteractionLoaded state) {
+  List<AppPopupMenuItem> _buildRepostMenuItems(InteractionLoaded state) {
     final l10n = AppLocalizations.of(context)!;
-    final RenderBox? renderBox =
-        _repostButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+    final items = <AppPopupMenuItem>[];
 
-    final offset = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-    final hasReposted = state.hasReposted;
-
-    final items = <PopupMenuItem<String>>[];
-
-    if (hasReposted) {
-      items.add(
-        PopupMenuItem(
-          value: 'undo_repost',
-          enabled: widget.note != null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Icon(Icons.undo, size: 17, color: context.colors.background),
-                const SizedBox(width: 12),
-                Text(
-                  l10n.undoRepost,
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-      items.add(
-        PopupMenuItem(
-          value: 'repost',
-          enabled: widget.note != null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Icon(Icons.repeat, size: 17, color: context.colors.background),
-                const SizedBox(width: 12),
-                Text(
-                  l10n.repostAgain,
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+    if (state.hasReposted) {
+      items.add(AppPopupMenuItem(
+        value: 'undo_repost',
+        icon: Icons.undo,
+        label: l10n.undoRepost,
+      ));
+      items.add(AppPopupMenuItem(
+        value: 'repost',
+        icon: Icons.repeat,
+        label: l10n.repostAgain,
+      ));
     } else {
-      items.add(
-        PopupMenuItem(
-          value: 'repost',
-          enabled: widget.note != null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Icon(Icons.repeat, size: 17, color: context.colors.background),
-                const SizedBox(width: 12),
-                Text(
-                  l10n.repost,
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      items.add(AppPopupMenuItem(
+        value: 'repost',
+        icon: Icons.repeat,
+        label: l10n.repost,
+      ));
     }
 
-    items.add(
-      PopupMenuItem(
-        value: 'quote',
-        enabled: widget.note != null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Row(
-            children: [
-              Icon(Icons.format_quote,
-                  size: 17, color: context.colors.background),
-              const SizedBox(width: 12),
-              Text(
-                l10n.quote,
-                style: TextStyle(
-                  color: context.colors.background,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    items.add(AppPopupMenuItem(
+      value: 'quote',
+      icon: Icons.format_quote,
+      label: l10n.quote,
+    ));
 
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        offset.dx,
-        offset.dy + size.height,
-        offset.dx + size.width,
-        offset.dy + size.height + 200,
-      ),
-      color: context.colors.textPrimary,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-      items: items,
-    ).then((value) {
-      if (value == null) return;
-      HapticFeedback.lightImpact();
-      if (value == 'undo_repost') {
-        if (widget.note == null) return;
+    return items;
+  }
+
+  void _handleRepostMenuSelection(String value, bool hasReposted) {
+    if (widget.note == null) return;
+
+    switch (value) {
+      case 'undo_repost':
         _interactionBloc.add(const InteractionRepostDeleted());
-      } else if (value == 'repost') {
-        if (widget.note == null) return;
+      case 'repost':
         if (hasReposted) {
           _interactionBloc.add(const InteractionRepostDeleted());
           Future.delayed(const Duration(milliseconds: 100), () {
@@ -232,10 +136,9 @@ class _InteractionBarState extends State<InteractionBar> {
         } else {
           _interactionBloc.add(const InteractionRepostRequested());
         }
-      } else if (value == 'quote') {
+      case 'quote':
         _handleQuoteTap();
-      }
-    });
+    }
   }
 
   void _handleQuoteTap() {
@@ -517,17 +420,7 @@ class _InteractionBarState extends State<InteractionBar> {
                     onTap: _handleReplyTap,
                     isBigSize: widget.isBigSize,
                   ),
-                  _InteractionButton(
-                    key: _repostButtonKey,
-                    carbonIcon: CarbonIcons.renew,
-                    count: interactionState.repostCount,
-                    isActive: interactionState.hasReposted,
-                    activeColor: colors.repost,
-                    inactiveColor: colors.secondary,
-                    onTap: () => _handleRepostTap(interactionState),
-                    isBigSize: widget.isBigSize,
-                    buttonType: _ButtonType.repost,
-                  ),
+                  _buildRepostPopupMenu(colors, interactionState),
                   _InteractionButton(
                     iconPath: 'assets/reaction_button.svg',
                     count: interactionState.reactionCount,
@@ -621,6 +514,61 @@ class _InteractionBarState extends State<InteractionBar> {
     }
   }
 
+  Widget _buildRepostPopupMenu(dynamic colors, InteractionLoaded state) {
+    final effectiveColor =
+        state.hasReposted ? colors.repost as Color : colors.secondary as Color;
+    final iconSize = widget.isBigSize ? 16.5 : 16.5;
+    final fontSize = widget.isBigSize ? 15.0 : 14.0;
+    final spacing = widget.isBigSize ? 7.0 : 6.5;
+
+    return AppPopupMenuButton(
+      items: _buildRepostMenuItems(state),
+      onSelected: (value) =>
+          _handleRepostMenuSelection(value, state.hasReposted),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(CarbonIcons.renew, size: iconSize, color: effectiveColor),
+            if (state.repostCount > 0) ...[
+              SizedBox(width: spacing),
+              Transform.translate(
+                offset: Offset(0, widget.isBigSize ? -2.0 : -3.2),
+                child: Text(
+                  _formatCount(state.repostCount),
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    color: effectiveColor,
+                    fontWeight: state.hasReposted
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatCount(int count) {
+    if (count >= 1000000) {
+      final formatted = (count / 1000000).toStringAsFixed(1);
+      return formatted.endsWith('.0')
+          ? '${formatted.substring(0, formatted.length - 2)}M'
+          : '${formatted}M';
+    } else if (count >= 1000) {
+      final formatted = (count / 1000).toStringAsFixed(1);
+      return formatted.endsWith('.0')
+          ? '${formatted.substring(0, formatted.length - 2)}K'
+          : '${formatted}K';
+    }
+    return count.toString();
+  }
+
   Widget _buildPopupMenu(dynamic colors, InteractionLoaded state) {
     return AppPopupMenuButton(
       items: _buildMoreMenuItems(),
@@ -657,7 +605,6 @@ class _InteractionButton extends StatelessWidget {
   final _ButtonType buttonType;
 
   const _InteractionButton({
-    super.key,
     this.iconPath,
     this.carbonIcon,
     this.activeCarbonIcon,

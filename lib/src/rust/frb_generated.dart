@@ -8,6 +8,7 @@ import 'api/database.dart';
 import 'api/events.dart';
 import 'api/nip17.dart';
 import 'api/nip19.dart';
+import 'api/nwc.dart';
 import 'api/relay.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -73,7 +74,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 1711796936;
+  int get rustContentHash => 222144668;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -443,6 +444,21 @@ abstract class RustLibApi extends BaseApi {
       required String senderSkHex,
       required String receiverPkHex});
 
+  Future<String> crateApiNwcNwcGetBalance({required String nwcUri});
+
+  Future<String> crateApiNwcNwcListTransactions(
+      {required String nwcUri, BigInt? limit, BigInt? offset});
+
+  Future<String> crateApiNwcNwcMakeInvoice(
+      {required String nwcUri,
+      required BigInt amountMsats,
+      String? description});
+
+  Future<String> crateApiNwcNwcPayInvoice(
+      {required String nwcUri, required String invoice});
+
+  String crateApiNwcParseNwcUri({required String uri});
+
   Future<void> crateApiRelayRemoveRelay({required String url});
 
   Future<String> crateApiRelayRequestToVanish(
@@ -466,6 +482,8 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiRelayUpdateSigner({required String privateKeyHex});
 
   bool crateApiCryptoValidateMnemonic({required String mnemonic});
+
+  bool crateApiNwcValidateNwcUri({required String uri});
 
   bool crateApiCryptoVerifyEvent({required String eventJson});
 
@@ -3268,13 +3286,143 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String> crateApiNwcNwcGetBalance({required String nwcUri}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(nwcUri, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 100, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiNwcNwcGetBalanceConstMeta,
+      argValues: [nwcUri],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiNwcNwcGetBalanceConstMeta => const TaskConstMeta(
+        debugName: "nwc_get_balance",
+        argNames: ["nwcUri"],
+      );
+
+  @override
+  Future<String> crateApiNwcNwcListTransactions(
+      {required String nwcUri, BigInt? limit, BigInt? offset}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(nwcUri, serializer);
+        sse_encode_opt_box_autoadd_u_64(limit, serializer);
+        sse_encode_opt_box_autoadd_u_64(offset, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 101, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiNwcNwcListTransactionsConstMeta,
+      argValues: [nwcUri, limit, offset],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiNwcNwcListTransactionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "nwc_list_transactions",
+        argNames: ["nwcUri", "limit", "offset"],
+      );
+
+  @override
+  Future<String> crateApiNwcNwcMakeInvoice(
+      {required String nwcUri,
+      required BigInt amountMsats,
+      String? description}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(nwcUri, serializer);
+        sse_encode_u_64(amountMsats, serializer);
+        sse_encode_opt_String(description, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 102, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiNwcNwcMakeInvoiceConstMeta,
+      argValues: [nwcUri, amountMsats, description],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiNwcNwcMakeInvoiceConstMeta => const TaskConstMeta(
+        debugName: "nwc_make_invoice",
+        argNames: ["nwcUri", "amountMsats", "description"],
+      );
+
+  @override
+  Future<String> crateApiNwcNwcPayInvoice(
+      {required String nwcUri, required String invoice}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(nwcUri, serializer);
+        sse_encode_String(invoice, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 103, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiNwcNwcPayInvoiceConstMeta,
+      argValues: [nwcUri, invoice],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiNwcNwcPayInvoiceConstMeta => const TaskConstMeta(
+        debugName: "nwc_pay_invoice",
+        argNames: ["nwcUri", "invoice"],
+      );
+
+  @override
+  String crateApiNwcParseNwcUri({required String uri}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(uri, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 104)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiNwcParseNwcUriConstMeta,
+      argValues: [uri],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiNwcParseNwcUriConstMeta => const TaskConstMeta(
+        debugName: "parse_nwc_uri",
+        argNames: ["uri"],
+      );
+
+  @override
   Future<void> crateApiRelayRemoveRelay({required String url}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(url, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 100, port: port_);
+            funcId: 105, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -3300,7 +3448,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_list_String(relayUrls, serializer);
         sse_encode_String(reason, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 101, port: port_);
+            funcId: 106, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -3325,7 +3473,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventJson, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 102, port: port_);
+            funcId: 107, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -3351,7 +3499,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(eventJson, serializer);
         sse_encode_list_String(relayUrls, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 103, port: port_);
+            funcId: 108, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -3374,7 +3522,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_prim_u_8_loose(data, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 104)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 109)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -3399,7 +3547,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventIdHex, serializer);
         sse_encode_String(privateKeyHex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 105)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 110)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -3425,7 +3573,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(filterJson, serializer);
         sse_encode_StreamSink_String_Sse(sink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 106, port: port_);
+            funcId: 111, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -3452,7 +3600,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(receiverPrivateKeyHex, serializer);
         sse_encode_String(giftWrapJson, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 107)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 112)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -3477,7 +3625,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(privateKeyHex, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 108, port: port_);
+            funcId: 113, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -3500,7 +3648,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(mnemonic, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 109)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 114)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -3519,12 +3667,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  bool crateApiNwcValidateNwcUri({required String uri}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(uri, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 115)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiNwcValidateNwcUriConstMeta,
+      argValues: [uri],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiNwcValidateNwcUriConstMeta => const TaskConstMeta(
+        debugName: "validate_nwc_uri",
+        argNames: ["uri"],
+      );
+
+  @override
   bool crateApiCryptoVerifyEvent({required String eventJson}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventJson, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 110)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 116)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -3548,7 +3719,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(eventIdHex, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 111, port: port_);
+            funcId: 117, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -3574,7 +3745,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(pubkeyHex, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 112, port: port_);
+            funcId: 118, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,

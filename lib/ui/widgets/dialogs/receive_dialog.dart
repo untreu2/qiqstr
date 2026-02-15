@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/services/coinos_service.dart';
+import '../../../data/services/nwc_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
@@ -51,6 +52,8 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
     });
   }
 
+  bool get _isNwcMode => AppDI.get<NwcService>().isActive;
+
   Future<void> _updateQr() async {
     final amountText = _amountController.text.trim();
 
@@ -75,25 +78,46 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
     });
 
     try {
-      final result = await _coinosService.createInvoice(
-        amount: amountValue,
-        type: 'lightning',
-      );
+      if (_isNwcMode) {
+        final nwcService = AppDI.get<NwcService>();
+        final result = await nwcService.makeInvoice(amountSats: amountValue);
 
-      if (mounted) {
-        setState(() {
-          _isUpdating = false;
-          result.fold(
-            (invoiceResult) {
-              _invoice = invoiceResult['hash'] as String?;
-            },
-            (errorResult) {
-              _error = AppLocalizations.of(context)!
-                  .failedToCreateInvoice(errorResult.toString());
-              _invoice = null;
-            },
-          );
-        });
+        if (mounted) {
+          setState(() {
+            _isUpdating = false;
+            result.fold(
+              (invoice) {
+                _invoice = invoice;
+              },
+              (errorResult) {
+                _error = AppLocalizations.of(context)!
+                    .failedToCreateInvoice(errorResult.toString());
+                _invoice = null;
+              },
+            );
+          });
+        }
+      } else {
+        final result = await _coinosService.createInvoice(
+          amount: amountValue,
+          type: 'lightning',
+        );
+
+        if (mounted) {
+          setState(() {
+            _isUpdating = false;
+            result.fold(
+              (invoiceResult) {
+                _invoice = invoiceResult['hash'] as String?;
+              },
+              (errorResult) {
+                _error = AppLocalizations.of(context)!
+                    .failedToCreateInvoice(errorResult.toString());
+                _invoice = null;
+              },
+            );
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

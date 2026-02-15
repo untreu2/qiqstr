@@ -27,6 +27,7 @@ import '../../../presentation/blocs/onboarding_coinos/onboarding_coinos_bloc.dar
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../../data/services/dm_service.dart';
+import '../../../data/services/nwc_service.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -79,6 +80,7 @@ class BlocsModule extends DIModule {
 
     AppDI.registerLazySingleton<WalletBloc>(() => WalletBloc(
           coinosService: AppDI.get<CoinosService>(),
+          nwcService: AppDI.get<NwcService>(),
         ));
 
     AppDI.registerFactory<ThreadBloc>(() => ThreadBloc(

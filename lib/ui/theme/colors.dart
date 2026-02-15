@@ -26,6 +26,7 @@ class AppColors {
   static const Color reply = Color(0xFF74C0FC);
   static const Color repost = Color(0xFF51CF66);
   static const Color zap = Color(0xFFECB200);
+  static const Color switchActive = Color(0xFF66BB6A);
 }
 
 class AppColorsLight {
@@ -54,4 +55,5 @@ class AppColorsLight {
   static const Color reply = Color(0xFF74C0FC);
   static const Color repost = Color(0xFF51CF66);
   static const Color zap = Color(0xFFECB200);
+  static const Color switchActive = Color(0xFF43A047);
 }

@@ -22,6 +22,7 @@ class AppThemeColors {
   final Color reply;
   final Color repost;
   final Color zap;
+  final Color switchActive;
 
   AppThemeColors({
     required this.accent,
@@ -41,6 +42,7 @@ class AppThemeColors {
     required this.reply,
     required this.repost,
     required this.zap,
+    required this.switchActive,
   });
 
   Color get primary => textPrimary;
@@ -106,6 +108,7 @@ class AppThemeColors {
       reply: AppColors.reply,
       repost: AppColors.repost,
       zap: AppColors.zap,
+      switchActive: AppColors.switchActive,
     );
   }
 
@@ -128,6 +131,7 @@ class AppThemeColors {
       reply: AppColorsLight.reply,
       repost: AppColorsLight.repost,
       zap: AppColorsLight.zap,
+      switchActive: AppColorsLight.switchActive,
     );
   }
 }

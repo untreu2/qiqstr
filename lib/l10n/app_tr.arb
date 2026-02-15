@@ -206,6 +206,7 @@
   "paymentsTitle": "Ödemeler",
   "paymentsSubtitle": "Ödeme tercihlerinizi yönetin.",
   "oneTapZap": "Tek Dokunuşta Zap",
+  "oneTapZapDescription": "Zap diyaloğunu açmadan tek dokunuşla anında zap gönderin.",
   "defaultZapAmount": "Varsayılan Zap Miktarı",
   "amountSats": "Miktar (sats)",
   "amountSavedSuccessfully": "Miktar başarıyla kaydedildi",
@@ -733,5 +734,19 @@
   },
   "failedToZap": "Zap gönderilemedi",
   "userNoLightningAddress": "Kullanıcının yapılandırılmış bir lightning adresi yok.",
-  "commentOptional": "Yorum (İsteğe bağlı)"
+  "commentOptional": "Yorum (İsteğe bağlı)",
+
+  "nwcSectionTitle": "WALLET CONNECT",
+  "nwcTitle": "Nostr Wallet Connect",
+  "nwcDescription": "NWC protokolü ile harici cüzdan bağlayın. Bunu açmak yerleşik cüzdanı devre dışı bırakır.",
+  "nwcConnectionString": "nostr+walletconnect://...",
+  "nwcConnect": "Bağlan",
+  "nwcConnected": "NWC Cüzdan Bağlandı",
+  "nwcDisconnected": "NWC cüzdan bağlantısı kaldırıldı",
+  "nwcRemove": "Kaldır",
+  "nwcConnectionSaved": "NWC cüzdan başarıyla bağlandı",
+  "nwcInvalidConnectionString": "Geçersiz NWC bağlantı dizesi",
+  "nwcPleaseEnterConnectionString": "Lütfen bir bağlantı dizesi girin",
+  "nwcDisclaimer": "NWC, üçüncü taraf bir cüzdan sağlayıcısına bağlanır. Fonlarınızı tutmaz, kontrol etmez veya erişim sağlamayız. Tüm sorumluluk cüzdan sağlayıcınıza aittir.",
+  "nwcAccept": "Anladım ve kabul ediyorum"
 }

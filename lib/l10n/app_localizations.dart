@@ -1126,6 +1126,12 @@ abstract class AppLocalizations {
   /// **'One Tap Zap'**
   String get oneTapZap;
 
+  /// No description provided for @oneTapZapDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Send zaps instantly with a single tap instead of opening the zap dialog.'**
+  String get oneTapZapDescription;
+
   /// No description provided for @defaultZapAmount.
   ///
   /// In en, this message translates to:
@@ -3213,6 +3219,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Comment (Optional)'**
   String get commentOptional;
+
+  /// No description provided for @nwcSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'WALLET CONNECT'**
+  String get nwcSectionTitle;
+
+  /// No description provided for @nwcTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nostr Wallet Connect'**
+  String get nwcTitle;
+
+  /// No description provided for @nwcDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect an external wallet via NWC protocol. Enabling this will replace the built-in wallet.'**
+  String get nwcDescription;
+
+  /// No description provided for @nwcConnectionString.
+  ///
+  /// In en, this message translates to:
+  /// **'nostr+walletconnect://...'**
+  String get nwcConnectionString;
+
+  /// No description provided for @nwcConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get nwcConnect;
+
+  /// No description provided for @nwcConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'NWC Wallet Connected'**
+  String get nwcConnected;
+
+  /// No description provided for @nwcDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'NWC wallet disconnected'**
+  String get nwcDisconnected;
+
+  /// No description provided for @nwcRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get nwcRemove;
+
+  /// No description provided for @nwcConnectionSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'NWC wallet connected successfully'**
+  String get nwcConnectionSaved;
+
+  /// No description provided for @nwcInvalidConnectionString.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid NWC connection string'**
+  String get nwcInvalidConnectionString;
+
+  /// No description provided for @nwcPleaseEnterConnectionString.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a connection string'**
+  String get nwcPleaseEnterConnectionString;
+
+  /// No description provided for @nwcDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'NWC connects to a third-party wallet provider. We do not hold, control, or have access to your funds. All responsibility lies with your wallet provider.'**
+  String get nwcDisclaimer;
+
+  /// No description provided for @nwcAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand and agree'**
+  String get nwcAccept;
 }
 
 class _AppLocalizationsDelegate

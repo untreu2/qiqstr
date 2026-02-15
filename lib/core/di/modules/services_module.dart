@@ -4,6 +4,7 @@ import '../app_di.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/coinos_service.dart';
+import '../../../data/services/nwc_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/rust_database_service.dart';
 import '../../../data/services/relay_service.dart';
@@ -24,6 +25,7 @@ class ServicesModule extends DIModule {
     AppDI.registerLazySingleton<ValidationService>(
         () => ValidationService.instance);
     AppDI.registerLazySingleton<CoinosService>(() => CoinosService());
+    AppDI.registerLazySingleton<NwcService>(() => NwcService());
     AppDI.registerLazySingleton<DmService>(() => DmService(
           authService: AppDI.get<AuthService>(),
         ));
@@ -40,6 +42,8 @@ class ServicesModule extends DIModule {
     final currentNpub = AuthService.instance.currentUserNpub;
     if (currentNpub != null) {
       AppDI.get<CoinosService>().setActiveAccount(currentNpub);
+      AppDI.get<NwcService>().setActiveAccount(currentNpub);
+      await AppDI.get<NwcService>().warmCache();
     }
 
     await FavoriteListsService.instance.load();

@@ -213,6 +213,7 @@
   "paymentsTitle": "Payments",
   "paymentsSubtitle": "Manage your payment preferences.",
   "oneTapZap": "One Tap Zap",
+  "oneTapZapDescription": "Send zaps instantly with a single tap instead of opening the zap dialog.",
   "defaultZapAmount": "Default Zap Amount",
   "amountSats": "Amount (sats)",
   "amountSavedSuccessfully": "Amount saved successfully",
@@ -800,5 +801,19 @@
   },
   "failedToZap": "Failed to zap",
   "userNoLightningAddress": "User does not have a lightning address configured.",
-  "commentOptional": "Comment (Optional)"
+  "commentOptional": "Comment (Optional)",
+
+  "nwcSectionTitle": "WALLET CONNECT",
+  "nwcTitle": "Nostr Wallet Connect",
+  "nwcDescription": "Connect an external wallet via NWC protocol. Enabling this will replace the built-in wallet.",
+  "nwcConnectionString": "nostr+walletconnect://...",
+  "nwcConnect": "Connect",
+  "nwcConnected": "NWC Wallet Connected",
+  "nwcDisconnected": "NWC wallet disconnected",
+  "nwcRemove": "Remove",
+  "nwcConnectionSaved": "NWC wallet connected successfully",
+  "nwcInvalidConnectionString": "Invalid NWC connection string",
+  "nwcPleaseEnterConnectionString": "Please enter a connection string",
+  "nwcDisclaimer": "NWC connects to a third-party wallet provider. We do not hold, control, or have access to your funds. All responsibility lies with your wallet provider.",
+  "nwcAccept": "I understand and agree"
 }

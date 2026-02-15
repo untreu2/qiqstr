@@ -548,6 +548,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get oneTapZap => 'Ein-Tippen-Zap';
 
   @override
+  String get oneTapZapDescription =>
+      'Senden Sie Zaps sofort mit einem einzigen Tippen, ohne den Zap-Dialog zu öffnen.';
+
+  @override
   String get defaultZapAmount => 'Standard-Zap-Betrag';
 
   @override
@@ -1738,4 +1742,47 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get commentOptional => 'Kommentar (Optional)';
+
+  @override
+  String get nwcSectionTitle => 'WALLET CONNECT';
+
+  @override
+  String get nwcTitle => 'Nostr Wallet Connect';
+
+  @override
+  String get nwcDescription =>
+      'Verbinden Sie eine externe Wallet über das NWC-Protokoll. Dadurch wird die integrierte Wallet deaktiviert.';
+
+  @override
+  String get nwcConnectionString => 'nostr+walletconnect://...';
+
+  @override
+  String get nwcConnect => 'Verbinden';
+
+  @override
+  String get nwcConnected => 'NWC-Wallet verbunden';
+
+  @override
+  String get nwcDisconnected => 'NWC-Wallet getrennt';
+
+  @override
+  String get nwcRemove => 'Entfernen';
+
+  @override
+  String get nwcConnectionSaved => 'NWC-Wallet erfolgreich verbunden';
+
+  @override
+  String get nwcInvalidConnectionString =>
+      'Ungültige NWC-Verbindungszeichenfolge';
+
+  @override
+  String get nwcPleaseEnterConnectionString =>
+      'Bitte Verbindungszeichenfolge eingeben';
+
+  @override
+  String get nwcDisclaimer =>
+      'NWC verbindet sich mit einem Drittanbieter-Wallet. Wir verwahren, kontrollieren oder haben keinen Zugriff auf Ihre Gelder. Die gesamte Verantwortung liegt bei Ihrem Wallet-Anbieter.';
+
+  @override
+  String get nwcAccept => 'Ich verstehe und stimme zu';
 }

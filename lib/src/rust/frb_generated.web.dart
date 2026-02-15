@@ -11,6 +11,7 @@ import 'api/database.dart';
 import 'api/events.dart';
 import 'api/nip17.dart';
 import 'api/nip19.dart';
+import 'api/nwc.dart';
 import 'api/relay.dart';
 import 'dart:async';
 import 'dart:convert';

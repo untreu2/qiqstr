@@ -113,10 +113,10 @@ class _DisplayPageState extends State<DisplayPage> {
               onChanged: (value) => context
                   .read<ThemeBloc>()
                   .add(const ExpandedNoteModeToggled()),
-              activeThumbColor: context.colors.accent,
+              activeThumbColor: context.colors.switchActive,
               inactiveThumbColor: context.colors.textSecondary,
               inactiveTrackColor: context.colors.border,
-              activeTrackColor: context.colors.accent.withValues(alpha: 0.3),
+              activeTrackColor: context.colors.switchActive.withValues(alpha: 0.3),
             ),
           ],
         ),
@@ -156,10 +156,10 @@ class _DisplayPageState extends State<DisplayPage> {
               value: themeState.isDarkMode,
               onChanged: (value) =>
                   context.read<ThemeBloc>().add(const ThemeToggled()),
-              activeThumbColor: context.colors.accent,
+              activeThumbColor: context.colors.switchActive,
               inactiveThumbColor: context.colors.textSecondary,
               inactiveTrackColor: context.colors.border,
-              activeTrackColor: context.colors.accent.withValues(alpha: 0.3),
+              activeTrackColor: context.colors.switchActive.withValues(alpha: 0.3),
             ),
           ],
         ),

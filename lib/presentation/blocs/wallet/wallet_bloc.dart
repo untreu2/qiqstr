@@ -2,18 +2,22 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/services/coinos_service.dart';
+import '../../../data/services/nwc_service.dart';
 import 'wallet_event.dart';
 import 'wallet_state.dart';
 
 class WalletBloc extends Bloc<WalletEvent, WalletState> {
   final CoinosService _coinosService;
+  final NwcService _nwcService;
 
   Timer? _balanceTimer;
   final List<StreamSubscription> _subscriptions = [];
 
   WalletBloc({
     required CoinosService coinosService,
+    required NwcService nwcService,
   })  : _coinosService = coinosService,
+        _nwcService = nwcService,
         super(const WalletInitial()) {
     on<WalletAutoConnectRequested>(_onWalletAutoConnectRequested);
     on<WalletConnectWithNostrRequested>(_onWalletConnectWithNostrRequested);
@@ -33,6 +37,20 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     Emitter<WalletState> emit,
   ) async {
     emit(const WalletLoading());
+
+    final hasNwcConnection = await _nwcService.hasConnection();
+
+    if (hasNwcConnection) {
+      emit(const WalletLoaded(
+        user: {'username': 'NWC', 'id': 'nwc'},
+        isNwcMode: true,
+      ));
+      add(const WalletBalanceRequested());
+      add(const WalletTransactionsLoaded());
+      add(const WalletPriceRequested());
+      _startBalanceTimer(emit);
+      return;
+    }
 
     final isAuthResult = await _coinosService.isAuthenticated();
     if (isAuthResult.isSuccess && isAuthResult.data == true) {
@@ -96,8 +114,26 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletBalanceRequested event,
     Emitter<WalletState> emit,
   ) async {
-    final result = await _coinosService.getBalance();
+    if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
+      final result = await _nwcService.getBalance();
+      result.fold(
+        (balanceMsat) {
+          final balanceSats = balanceMsat ~/ 1000;
+          if (state is WalletLoaded) {
+            final currentState = state as WalletLoaded;
+            emit(currentState.copyWith(
+              balance: {'balance': balanceSats},
+            ));
+          }
+        },
+        (error) {
+          debugPrint('[WalletBloc] NWC balance error: $error');
+        },
+      );
+      return;
+    }
 
+    final result = await _coinosService.getBalance();
     result.fold(
       (data) {
         if (state is WalletLoaded) {
@@ -115,8 +151,18 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletPaymentRequested event,
     Emitter<WalletState> emit,
   ) async {
-    final result = await _coinosService.payInvoice(event.invoice);
+    if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
+      final result = await _nwcService.payInvoice(event.invoice);
+      result.fold(
+        (_) {
+          add(const WalletBalanceRequested());
+        },
+        (error) => emit(WalletError('Payment failed: $error')),
+      );
+      return;
+    }
 
+    final result = await _coinosService.payInvoice(event.invoice);
     result.fold(
       (_) {
         add(const WalletBalanceRequested());
@@ -156,6 +202,29 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     if (state is WalletLoaded) {
       final currentState = state as WalletLoaded;
       emit(currentState.copyWith(isLoadingTransactions: true));
+    }
+
+    if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
+      final result = await _nwcService.listTransactions(limit: 20);
+      result.fold(
+        (transactions) {
+          if (state is WalletLoaded) {
+            final currentState = state as WalletLoaded;
+            emit(currentState.copyWith(
+              transactions: transactions,
+              isLoadingTransactions: false,
+            ));
+          }
+        },
+        (error) {
+          debugPrint('[WalletBloc] NWC transactions error: $error');
+          if (state is WalletLoaded) {
+            final currentState = state as WalletLoaded;
+            emit(currentState.copyWith(isLoadingTransactions: false));
+          }
+        },
+      );
+      return;
     }
 
     final result = await _coinosService.getPaymentHistory();

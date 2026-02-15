@@ -127,4 +127,5 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       emit(state.copyWith(defaultZapAmount: event.amount));
     }
   }
+
 }

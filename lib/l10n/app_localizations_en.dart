@@ -530,6 +530,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get oneTapZap => 'One Tap Zap';
 
   @override
+  String get oneTapZapDescription =>
+      'Send zaps instantly with a single tap instead of opening the zap dialog.';
+
+  @override
   String get defaultZapAmount => 'Default Zap Amount';
 
   @override
@@ -1700,4 +1704,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commentOptional => 'Comment (Optional)';
+
+  @override
+  String get nwcSectionTitle => 'WALLET CONNECT';
+
+  @override
+  String get nwcTitle => 'Nostr Wallet Connect';
+
+  @override
+  String get nwcDescription =>
+      'Connect an external wallet via NWC protocol. Enabling this will replace the built-in wallet.';
+
+  @override
+  String get nwcConnectionString => 'nostr+walletconnect://...';
+
+  @override
+  String get nwcConnect => 'Connect';
+
+  @override
+  String get nwcConnected => 'NWC Wallet Connected';
+
+  @override
+  String get nwcDisconnected => 'NWC wallet disconnected';
+
+  @override
+  String get nwcRemove => 'Remove';
+
+  @override
+  String get nwcConnectionSaved => 'NWC wallet connected successfully';
+
+  @override
+  String get nwcInvalidConnectionString => 'Invalid NWC connection string';
+
+  @override
+  String get nwcPleaseEnterConnectionString =>
+      'Please enter a connection string';
+
+  @override
+  String get nwcDisclaimer =>
+      'NWC connects to a third-party wallet provider. We do not hold, control, or have access to your funds. All responsibility lies with your wallet provider.';
+
+  @override
+  String get nwcAccept => 'I understand and agree';
 }

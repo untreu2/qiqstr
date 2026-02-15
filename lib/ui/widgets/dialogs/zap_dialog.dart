@@ -4,11 +4,11 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/coinos_service.dart';
+import '../../../data/services/nwc_service.dart';
 import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
@@ -18,6 +18,180 @@ import '../common/custom_input_field.dart';
 import '../../../l10n/app_localizations.dart';
 
 Future<bool> _payZapWithWallet(
+  BuildContext context,
+  Map<String, dynamic> user,
+  Map<String, dynamic> note,
+  int sats,
+  String comment,
+) async {
+  final nwcService = AppDI.get<NwcService>();
+
+  if (nwcService.isActive) {
+    return _payZapWithNwc(context, user, note, sats, comment);
+  }
+
+  return _payZapWithCoinos(context, user, note, sats, comment);
+}
+
+Future<bool> _payZapWithNwc(
+  BuildContext context,
+  Map<String, dynamic> user,
+  Map<String, dynamic> note,
+  int sats,
+  String comment,
+) async {
+  final nwcService = AppDI.get<NwcService>();
+  const secureStorage = FlutterSecureStorage();
+
+  try {
+    final l10n = AppLocalizations.of(context);
+
+    final hasConnection = await nwcService.hasConnection();
+    if (!hasConnection) {
+      if (context.mounted) {
+        AppSnackbar.warning(
+            context, l10n?.pleaseConnectWalletFirst ?? 'Please connect your wallet first');
+      }
+      return false;
+    }
+
+    if (context.mounted) {
+      AppSnackbar.info(context, l10n?.processingPayment ?? 'Processing payment...',
+          duration: const Duration(seconds: 5));
+    }
+
+    final privateKey = await secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found.');
+    }
+
+    final lud16 = user['lud16'] as String? ?? '';
+    if (!lud16.contains('@')) {
+      throw Exception('Invalid lightning address format.');
+    }
+
+    final parts = lud16.split('@');
+    if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
+      throw Exception('Invalid lightning address format.');
+    }
+
+    final displayName = parts[0];
+    final domain = parts[1];
+
+    final uri = Uri.parse('https://$domain/.well-known/lnurlp/$displayName');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('LNURL fetch failed with status: ${response.statusCode}');
+    }
+
+    final lnurlJson = jsonDecode(response.body);
+    if (lnurlJson['allowsNostr'] != true || lnurlJson['nostrPubkey'] == null) {
+      throw Exception('Recipient does not support zaps.');
+    }
+
+    final callback = lnurlJson['callback'];
+    if (callback == null || callback.isEmpty) {
+      throw Exception('Zap callback is missing.');
+    }
+
+    final lnurlBech32 = lnurlJson['lnurl'] ?? '';
+    final amountMillisats = (sats * 1000).toString();
+    final relays = RustRelayService.instance.relayUrls;
+
+    if (relays.isEmpty) {
+      throw Exception('No relays available for zap.');
+    }
+
+    final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
+    String recipientPubkeyHex = userPubkeyHex;
+    if (userPubkeyHex.startsWith('npub1')) {
+      try {
+        final keyData = Nip19.decode(userPubkeyHex);
+        recipientPubkeyHex = keyData;
+      } catch (e) {
+        if (kDebugMode) {
+          print('[ZapDialog] Error converting npub to hex: $e');
+        }
+      }
+    }
+
+    final List<List<String>> tags = [
+      ['relays', ...relays.map((e) => e.toString())],
+      ['amount', amountMillisats],
+      ['p', recipientPubkeyHex],
+    ];
+
+    if (lnurlBech32.isNotEmpty) {
+      tags.add(['lnurl', lnurlBech32]);
+    }
+
+    final noteId = note['id'] as String? ?? '';
+    if (noteId.isNotEmpty) {
+      tags.add(['e', noteId]);
+    }
+
+    final zapRequest = NostrService.createZapRequestEvent(
+      tags: tags,
+      content: comment,
+      privateKey: privateKey,
+    );
+
+    final encodedZap =
+        Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
+    final zapUrl = Uri.parse(
+      '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
+    );
+
+    final invoiceResponse = await http.get(zapUrl);
+    if (invoiceResponse.statusCode != 200) {
+      throw Exception('Zap callback failed: ${invoiceResponse.body}');
+    }
+
+    final invoiceJson = jsonDecode(invoiceResponse.body);
+    final invoice = invoiceJson['pr'];
+    if (invoice == null || invoice.toString().isEmpty) {
+      throw Exception('Invoice not returned by zap server.');
+    }
+
+    debugPrint('[ZapDialog] Paying invoice via NWC: ${invoice.substring(0, 20)}...');
+    final paymentResult = await nwcService.payInvoice(invoice);
+
+    if (paymentResult.isError) {
+      throw Exception(paymentResult.error);
+    }
+
+    if (context.mounted) {
+      final userName = user['name'] as String? ?? (l10n?.user ?? 'User');
+      AppSnackbar.hide(context);
+      AppSnackbar.success(
+          context,
+          l10n?.zappedSatsToUser(sats, userName) ??
+              'Zapped $sats sats to $userName!',
+          duration: const Duration(seconds: 2));
+    }
+
+    unawaited(_publishZapEventsAsync(
+        NostrService.eventToJson(zapRequest),
+        invoice,
+        recipientPubkeyHex,
+        note,
+        comment,
+        privateKey,
+        sats,
+        paymentResult));
+
+    return true;
+  } catch (e) {
+    if (context.mounted) {
+      final l10n = AppLocalizations.of(context);
+      AppSnackbar.hide(context);
+      AppSnackbar.error(context, l10n?.failedToZap ?? 'Failed to zap');
+    }
+    return false;
+  }
+}
+
+Future<bool> _payZapWithCoinos(
   BuildContext context,
   Map<String, dynamic> user,
   Map<String, dynamic> note,

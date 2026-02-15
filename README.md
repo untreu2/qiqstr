@@ -25,6 +25,8 @@ Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
 | [NIP-59](https://github.com/nostr-protocol/nips/blob/master/59.md) | Gift Wrap |
 | [NIP-62](https://github.com/nostr-protocol/nips/blob/master/62.md) | Request to Vanish |
 | [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay List Metadata |
+| [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md) | Direct Messages (used by NWC) |
+| [NIP-47](https://github.com/nostr-protocol/nips/blob/master/47.md) | Nostr Wallet Connect |
 | [NIP-98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP Auth |
 
 ## Supported Event Kinds
@@ -44,6 +46,8 @@ Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
 | 1059 | Gift Wrap |
 | 9734 | Zap Request |
 | 9735 | Zap Receipt |
+| 23194 | NWC Request |
+| 23195 | NWC Response |
 | 10000 | Mute List |
 | 10001 | Pin List |
 | 10002 | Relay List Metadata |

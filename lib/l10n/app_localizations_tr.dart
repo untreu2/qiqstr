@@ -535,6 +535,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get oneTapZap => 'Tek Dokunuşta Zap';
 
   @override
+  String get oneTapZapDescription =>
+      'Zap diyaloğunu açmadan tek dokunuşla anında zap gönderin.';
+
+  @override
   String get defaultZapAmount => 'Varsayılan Zap Miktarı';
 
   @override
@@ -1696,4 +1700,46 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get commentOptional => 'Yorum (İsteğe bağlı)';
+
+  @override
+  String get nwcSectionTitle => 'WALLET CONNECT';
+
+  @override
+  String get nwcTitle => 'Nostr Wallet Connect';
+
+  @override
+  String get nwcDescription =>
+      'NWC protokolü ile harici cüzdan bağlayın. Bunu açmak yerleşik cüzdanı devre dışı bırakır.';
+
+  @override
+  String get nwcConnectionString => 'nostr+walletconnect://...';
+
+  @override
+  String get nwcConnect => 'Bağlan';
+
+  @override
+  String get nwcConnected => 'NWC Cüzdan Bağlandı';
+
+  @override
+  String get nwcDisconnected => 'NWC cüzdan bağlantısı kaldırıldı';
+
+  @override
+  String get nwcRemove => 'Kaldır';
+
+  @override
+  String get nwcConnectionSaved => 'NWC cüzdan başarıyla bağlandı';
+
+  @override
+  String get nwcInvalidConnectionString => 'Geçersiz NWC bağlantı dizesi';
+
+  @override
+  String get nwcPleaseEnterConnectionString =>
+      'Lütfen bir bağlantı dizesi girin';
+
+  @override
+  String get nwcDisclaimer =>
+      'NWC, üçüncü taraf bir cüzdan sağlayıcısına bağlanır. Fonlarınızı tutmaz, kontrol etmez veya erişim sağlamayız. Tüm sorumluluk cüzdan sağlayıcınıza aittir.';
+
+  @override
+  String get nwcAccept => 'Anladım ve kabul ediyorum';
 }

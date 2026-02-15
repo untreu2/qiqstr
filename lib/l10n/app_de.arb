@@ -206,6 +206,7 @@
   "paymentsTitle": "Zahlungen",
   "paymentsSubtitle": "Verwalten Sie Ihre Zahlungseinstellungen.",
   "oneTapZap": "Ein-Tippen-Zap",
+  "oneTapZapDescription": "Senden Sie Zaps sofort mit einem einzigen Tippen, ohne den Zap-Dialog zu öffnen.",
   "defaultZapAmount": "Standard-Zap-Betrag",
   "amountSats": "Betrag (Sats)",
   "amountSavedSuccessfully": "Betrag erfolgreich gespeichert",
@@ -733,5 +734,19 @@
   },
   "failedToZap": "Zap fehlgeschlagen",
   "userNoLightningAddress": "Der Benutzer hat keine Lightning-Adresse konfiguriert.",
-  "commentOptional": "Kommentar (Optional)"
+  "commentOptional": "Kommentar (Optional)",
+
+  "nwcSectionTitle": "WALLET CONNECT",
+  "nwcTitle": "Nostr Wallet Connect",
+  "nwcDescription": "Verbinden Sie eine externe Wallet über das NWC-Protokoll. Dadurch wird die integrierte Wallet deaktiviert.",
+  "nwcConnectionString": "nostr+walletconnect://...",
+  "nwcConnect": "Verbinden",
+  "nwcConnected": "NWC-Wallet verbunden",
+  "nwcDisconnected": "NWC-Wallet getrennt",
+  "nwcRemove": "Entfernen",
+  "nwcConnectionSaved": "NWC-Wallet erfolgreich verbunden",
+  "nwcInvalidConnectionString": "Ungültige NWC-Verbindungszeichenfolge",
+  "nwcPleaseEnterConnectionString": "Bitte Verbindungszeichenfolge eingeben",
+  "nwcDisclaimer": "NWC verbindet sich mit einem Drittanbieter-Wallet. Wir verwahren, kontrollieren oder haben keinen Zugriff auf Ihre Gelder. Die gesamte Verantwortung liegt bei Ihrem Wallet-Anbieter.",
+  "nwcAccept": "Ich verstehe und stimme zu"
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/services/coinos_service.dart';
+import '../../../data/services/nwc_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
@@ -58,6 +59,8 @@ class _SendDialogState extends State<SendDialog> {
     );
   }
 
+  bool get _isNwcMode => AppDI.get<NwcService>().isActive;
+
   Future<void> _payInvoice() async {
     final l10n = AppLocalizations.of(context)!;
     final invoice = _invoiceController.text.trim();
@@ -75,21 +78,41 @@ class _SendDialogState extends State<SendDialog> {
     });
 
     try {
-      final result = await _coinosService.payInvoice(invoice);
+      if (_isNwcMode) {
+        final nwcService = AppDI.get<NwcService>();
+        final result = await nwcService.payInvoice(invoice);
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          result.fold(
-            (paymentResult) {
-              _successMessage = l10n.paymentSent;
-              widget.onPaymentSuccess();
-            },
-            (errorResult) {
-              _error = '${l10n.paymentFailed}: $errorResult';
-            },
-          );
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            result.fold(
+              (paymentResult) {
+                _successMessage = l10n.paymentSent;
+                widget.onPaymentSuccess();
+              },
+              (errorResult) {
+                _error = '${l10n.paymentFailed}: $errorResult';
+              },
+            );
+          });
+        }
+      } else {
+        final result = await _coinosService.payInvoice(invoice);
+
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            result.fold(
+              (paymentResult) {
+                _successMessage = l10n.paymentSent;
+                widget.onPaymentSuccess();
+              },
+              (errorResult) {
+                _error = '${l10n.paymentFailed}: $errorResult';
+              },
+            );
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

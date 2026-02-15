@@ -734,7 +734,7 @@ class _RelayPageState extends State<RelayPage> {
                     ),
                   ),
                 ),
-                Switch.adaptive(
+                Switch(
                   value: _gossipModelEnabled,
                   onChanged: (value) async {
                     setState(() {
@@ -752,7 +752,10 @@ class _RelayPageState extends State<RelayPage> {
                       );
                     }
                   },
-                  activeTrackColor: context.colors.accent,
+                  activeThumbColor: context.colors.switchActive,
+                  inactiveThumbColor: context.colors.textSecondary,
+                  inactiveTrackColor: context.colors.border,
+                  activeTrackColor: context.colors.switchActive.withValues(alpha: 0.3),
                 ),
               ],
             ),

@@ -478,6 +478,9 @@ class _WalletPageState extends State<WalletPage>
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
+        if (state.isNwcMode) {
+          return const ReceiveDialog();
+        }
         final username =
             (state.user?['username'] as String? ?? '').replaceAll(' ', '');
         final lud16 = username.isNotEmpty ? '$username@coinos.io' : '';

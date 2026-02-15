@@ -64,3 +64,4 @@ class DefaultZapAmountSet extends ThemeEvent {
   @override
   List<Object?> get props => [amount];
 }
+
