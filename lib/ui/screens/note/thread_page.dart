@@ -415,6 +415,7 @@ class _ThreadPageState extends State<ThreadPage> {
     ShareNotePage.show(
       context,
       replyToNoteId: widget.rootNoteId,
+      parentAuthor: widget.initialNoteData?['pubkey'] as String?,
     );
   }
 

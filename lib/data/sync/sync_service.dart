@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import '../services/rust_database_service.dart';
 import '../services/relay_service.dart';
 import '../services/nostr_service.dart';
@@ -748,8 +749,16 @@ class SyncService {
 
     final eventJson = jsonEncode(event);
     try {
-      await _relayService.sendEvent(eventJson);
-    } catch (_) {}
+      final result = await _relayService.sendEvent(eventJson);
+      if (kDebugMode) {
+        print('[SyncService] Event dispatched: ${result['id']} '
+            'success=${result['success']} failed=${result['failed']}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[SyncService] Failed to dispatch event: $e');
+      }
+    }
 
     return event;
   }

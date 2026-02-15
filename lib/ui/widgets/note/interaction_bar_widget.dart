@@ -84,6 +84,7 @@ class _InteractionBarState extends State<InteractionBar> {
     ShareNotePage.show(
       context,
       replyToNoteId: widget.noteId,
+      parentAuthor: widget.note?['pubkey'] as String?,
     );
   }
 

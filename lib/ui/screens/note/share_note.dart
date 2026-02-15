@@ -22,18 +22,20 @@ import '../../../l10n/app_localizations.dart';
 class ShareNotePage extends StatefulWidget {
   final String? initialText;
   final String? replyToNoteId;
+  final String? parentAuthor;
 
   const ShareNotePage({
     super.key,
     this.initialText,
     this.replyToNoteId,
+    this.parentAuthor,
   });
 
   @override
   State<ShareNotePage> createState() => _ShareNotePageState();
 
   static Future<bool?> show(BuildContext context,
-      {String? initialText, String? replyToNoteId}) {
+      {String? initialText, String? replyToNoteId, String? parentAuthor}) {
     return showModalBottomSheet<bool>(
       context: context,
       useRootNavigator: true,
@@ -42,6 +44,7 @@ class ShareNotePage extends StatefulWidget {
       builder: (context) => ShareNotePage(
         initialText: initialText,
         replyToNoteId: replyToNoteId,
+        parentAuthor: parentAuthor,
       ),
     );
   }
@@ -101,10 +104,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
       authService: AppDI.get<AuthService>(),
     );
 
-    if (widget.replyToNoteId != null) {
+    if (widget.replyToNoteId != null && widget.parentAuthor != null) {
       _noteBloc.add(NoteReplySetup(
         rootId: widget.replyToNoteId!,
-        parentAuthor: 'unknown',
+        parentAuthor: widget.parentAuthor!,
       ));
     }
     bool isQuote = false;

@@ -486,21 +486,24 @@ class NostrService {
     String? replyId,
     required String rootAuthor,
     String? replyAuthor,
-    String? relayUrl,
+    List<String> relayUrls = const [],
   }) {
     List<List<String>> tags = [];
-    final relay = relayUrl ?? '';
 
     if (replyId != null && replyId != rootId) {
-      tags.add(['e', rootId, relay, 'root']);
-      tags.add(['e', replyId, relay, 'reply']);
+      tags.add(['e', rootId, '', 'root']);
+      tags.add(['e', replyId, '', 'reply']);
       tags.add(['p', rootAuthor]);
       if (replyAuthor != null && replyAuthor != rootAuthor) {
         tags.add(['p', replyAuthor]);
       }
     } else {
-      tags.add(['e', rootId, relay, 'root']);
+      tags.add(['e', rootId, '', 'root']);
       tags.add(['p', rootAuthor]);
+    }
+
+    for (final url in relayUrls) {
+      tags.add(['r', url]);
     }
 
     return tags;

@@ -44,63 +44,40 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
       return;
     }
 
-    emit(const NoteLoading());
-
-    try {
-      final currentUserHex = _authService.currentUserPubkeyHex;
-      if (currentUserHex == null) {
-        emit(const NoteError('Not authenticated. Please log in first.'));
-        await Future.delayed(const Duration(milliseconds: 100));
-        emit(currentState);
-        return;
-      }
-
-      if (currentState.isReply &&
-          currentState.rootId != null &&
-          currentState.parentAuthor != null) {
-        final replyEvent = await _syncService.publishReply(
-          content: event.content,
-          rootId: currentState.rootId!,
-          replyToId: currentState.replyId,
-          parentAuthor: currentState.parentAuthor!,
-        );
-        emit(NoteComposedSuccess({
-          'id': replyEvent['id'] ?? '',
-          'content': event.content,
-          'pubkey': replyEvent['pubkey'] ?? '',
-          'created_at': replyEvent['created_at'] ?? 0,
-        }));
-      } else if (currentState.isQuote && currentState.quoteEventId != null) {
-        final quotedContent =
-            _buildQuoteContent(event.content, currentState.quoteEventId!);
-        final quoteEvent = await _syncService.publishQuote(
-          content: quotedContent,
-          quotedNoteId: currentState.quoteEventId!,
-        );
-        emit(NoteComposedSuccess({
-          'id': quoteEvent['id'] ?? '',
-          'content': quotedContent,
-          'pubkey': quoteEvent['pubkey'] ?? '',
-          'created_at': quoteEvent['created_at'] ?? 0,
-        }));
-      } else {
-        final noteEvent = await _syncService.publishNote(
-          content: event.content,
-          tags: event.tags,
-        );
-        emit(NoteComposedSuccess({
-          'id': noteEvent['id'] ?? '',
-          'content': event.content,
-          'pubkey': noteEvent['pubkey'] ?? '',
-          'created_at': noteEvent['created_at'] ?? 0,
-        }));
-      }
-
-      add(const NoteContentCleared());
-    } catch (e) {
-      emit(NoteError(e.toString()));
+    final currentUserHex = _authService.currentUserPubkeyHex;
+    if (currentUserHex == null) {
+      emit(const NoteError('Not authenticated. Please log in first.'));
       await Future.delayed(const Duration(milliseconds: 100));
       emit(currentState);
+      return;
+    }
+
+    emit(NoteComposedSuccess({'content': event.content}));
+    add(const NoteContentCleared());
+
+    _publishInBackground(event, currentState);
+  }
+
+  void _publishInBackground(NoteComposed event, NoteComposeState currentState) {
+    if (currentState.isReply &&
+        currentState.rootId != null &&
+        currentState.parentAuthor != null) {
+      _syncService.publishReply(
+        content: event.content,
+        rootId: currentState.rootId!,
+        replyToId: currentState.replyId,
+        parentAuthor: currentState.parentAuthor!,
+      );
+    } else if (currentState.isQuote && currentState.quoteEventId != null) {
+      _syncService.publishQuote(
+        content: _buildQuoteContent(event.content, currentState.quoteEventId!),
+        quotedNoteId: currentState.quoteEventId!,
+      );
+    } else {
+      _syncService.publishNote(
+        content: event.content,
+        tags: event.tags,
+      );
     }
   }
 

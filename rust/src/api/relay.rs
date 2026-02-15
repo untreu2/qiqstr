@@ -436,31 +436,14 @@ pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Op
 pub async fn send_event(event_json: String) -> Result<String> {
     let client = get_client().await?;
     let event = Event::from_json(&event_json)?;
+    let event_id = event.id;
 
-    let ur = user_relays_state().read().await;
-    let urls: Vec<RelayUrl> = ur
-        .iter()
-        .filter_map(|u| RelayUrl::parse(u).ok())
-        .collect();
-    drop(ur);
-
-    let output = if urls.is_empty() {
-        client.send_event(&event).await?
-    } else {
-        client.send_event_to(urls, &event).await?
-    };
-
-    let success: Vec<String> = output.success.iter().map(|u| u.to_string()).collect();
-    let failed: HashMap<String, String> = output
-        .failed
-        .iter()
-        .map(|(u, e)| (u.to_string(), e.to_string()))
-        .collect();
+    tokio::spawn(async move {
+        let _ = client.send_event(&event).await;
+    });
 
     let result = serde_json::json!({
-        "id": output.id().to_hex(),
-        "success": success,
-        "failed": failed,
+        "id": event_id.to_hex(),
     });
 
     Ok(result.to_string())

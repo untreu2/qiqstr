@@ -42,14 +42,13 @@ class EventPublisher {
   }) async {
     final privateKey = await _getPrivateKey();
     final relays = await RustRelayService.instance.getRelayList();
-    final relayUrl = relays.isNotEmpty ? relays.first : null;
 
     final tags = NostrService.createReplyTags(
       rootId: rootId,
       replyId: replyToId,
       rootAuthor: rootAuthor,
       replyAuthor: replyAuthor,
-      relayUrl: relayUrl,
+      relayUrls: relays,
     );
 
     return NostrService.createReplyEvent(
