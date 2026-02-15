@@ -13,6 +13,7 @@ import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
+import '../../../data/repositories/feed_repository.dart';
 import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/feed/feed_event.dart';
 import '../../../l10n/app_localizations.dart';
@@ -46,6 +47,8 @@ class FeedPage extends StatefulWidget {
 
 class FeedPageState extends State<FeedPage> {
   late ScrollController _scrollController;
+  late final FeedBloc _feedBloc;
+  late final bool _isLocalBloc;
   bool _showAppBar = true;
   bool isFirstOpen = false;
   bool _isSearchMode = false;
@@ -76,6 +79,21 @@ class FeedPageState extends State<FeedPage> {
     _scrollController = ScrollController()..addListener(_scrollListener);
     _searchController
         .addListener(() => _onSearchChanged(_searchController.text));
+
+    if (widget.hashtag != null) {
+      _feedBloc = FeedBloc(
+        feedRepository: AppDI.get<FeedRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+      );
+      _isLocalBloc = true;
+    } else {
+      _feedBloc = AppDI.get<FeedBloc>();
+      _isLocalBloc = false;
+    }
+    _feedBloc.add(
+        FeedInitialized(userHex: widget.userHex, hashtag: widget.hashtag));
+
     _updateRelayCount();
     _relayCountTimer =
         Timer.periodic(const Duration(seconds: 1), (_) => _updateRelayCount());
@@ -257,6 +275,9 @@ class FeedPageState extends State<FeedPage> {
     _connectedRelaysCount.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    if (_isLocalBloc) {
+      _feedBloc.close();
+    }
     super.dispose();
   }
 
@@ -662,14 +683,10 @@ class FeedPageState extends State<FeedPage> {
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
 
-    final feedBloc = AppDI.get<FeedBloc>();
-    feedBloc
-        .add(FeedInitialized(userHex: widget.userHex, hashtag: widget.hashtag));
-
     return MultiBlocProvider(
       providers: [
         BlocProvider<FeedBloc>.value(
-          value: feedBloc,
+          value: _feedBloc,
         ),
         BlocProvider<UserSearchBloc>(
           create: (context) {
