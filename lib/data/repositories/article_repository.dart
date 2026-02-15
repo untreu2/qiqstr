@@ -19,64 +19,34 @@ class ArticleRepositoryImpl extends BaseRepository
 
   @override
   Stream<List<Article>> watchArticles({int limit = 50}) {
-    return db.watchArticles(limit: limit).asyncMap((events) async {
-      return await _hydrateArticles(events);
-    });
+    return db
+        .watchHydratedArticles(limit: limit)
+        .map((maps) => maps.map((m) => Article.fromMap(m)).toList());
   }
 
   @override
   Future<List<Article>> getArticles({int limit = 50}) async {
-    final events = await db.getCachedArticles(limit: limit);
-    return await _hydrateArticles(events);
+    final maps = await db.getHydratedArticles(limit: limit);
+    return maps.map((m) => Article.fromMap(m)).toList();
   }
 
   @override
   Future<List<Article>> getArticlesByAuthor(String pubkey,
       {int limit = 50}) async {
-    final events = await db.getCachedArticles(limit: limit, authors: [pubkey]);
-    return await _hydrateArticles(events);
+    final maps =
+        await db.getHydratedArticles(limit: limit, authors: [pubkey]);
+    return maps.map((m) => Article.fromMap(m)).toList();
   }
 
   @override
   Future<Article?> getArticle(String articleId) async {
-    final event = await db.getEventModel(articleId);
-    if (event == null) return null;
-
-    final pubkey = event['pubkey'] as String? ?? '';
-    final profile = await db.getUserProfile(pubkey);
-
-    return mapper.toArticle(
-      event,
-      authorName: profile?['name'] ?? profile?['display_name'],
-      authorImage: profile?['picture'],
-    );
+    final map = await db.getHydratedArticle(articleId);
+    if (map == null) return null;
+    return Article.fromMap(map);
   }
 
   @override
   Future<void> saveArticles(List<Map<String, dynamic>> articles) async {
     await db.saveArticles(articles);
-  }
-
-  Future<List<Article>> _hydrateArticles(
-      List<Map<String, dynamic>> events) async {
-    if (events.isEmpty) return [];
-
-    final pubkeys = events
-        .map((e) => e['pubkey'] as String? ?? '')
-        .where((p) => p.isNotEmpty)
-        .toSet()
-        .toList();
-    final profiles = await db.getUserProfiles(pubkeys);
-
-    return events.map((event) {
-      final pubkey = event['pubkey'] as String? ?? '';
-      final profile = profiles[pubkey];
-
-      return mapper.toArticle(
-        event,
-        authorName: profile?['name'] ?? profile?['display_name'],
-        authorImage: profile?['picture'],
-      );
-    }).toList();
   }
 }

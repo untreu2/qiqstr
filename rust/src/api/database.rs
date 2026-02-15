@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use nostr_sdk::prelude::*;
@@ -954,4 +954,715 @@ pub async fn db_get_database_stats() -> Result<String> {
     });
     
     Ok(stats.to_string())
+}
+
+async fn hydrate_notes(
+    client: &Client,
+    events: &[Event],
+    filter_replies: bool,
+) -> Result<String> {
+    if events.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let mut notes: Vec<serde_json::Value> = Vec::new();
+    let mut pubkeys_needed: HashSet<String> = HashSet::new();
+    let mut note_ids: Vec<String> = Vec::new();
+
+    for event in events {
+        let is_repost = event.kind == Kind::Repost;
+
+        let mut id = event.id.to_hex();
+        let mut pubkey = event.pubkey.to_hex();
+        let mut content = event.content.clone();
+        let mut created_at = event.created_at.as_secs();
+        let mut reposted_by: Option<String> = None;
+        let mut repost_created_at: Option<u64> = None;
+
+        let tags: Vec<Vec<String>> = event.tags.iter()
+            .map(|tag| tag.clone().to_vec())
+            .collect();
+
+        let mut root_id: Option<String> = None;
+        let mut parent_id: Option<String> = None;
+        let mut is_quote = false;
+        let mut e_tags: Vec<String> = Vec::new();
+
+        for tag in tags.iter() {
+            if tag.len() < 2 { continue; }
+            if tag[0] == "q" {
+                is_quote = true;
+                continue;
+            }
+            if tag[0] == "e" {
+                let ref_id = &tag[1];
+                if tag.len() >= 4 {
+                    match tag[3].as_str() {
+                        "root" => root_id = Some(ref_id.clone()),
+                        "reply" => parent_id = Some(ref_id.clone()),
+                        "mention" => continue,
+                        _ => e_tags.push(ref_id.clone()),
+                    }
+                } else {
+                    e_tags.push(ref_id.clone());
+                }
+            }
+        }
+
+        if root_id.is_none() && parent_id.is_none() && !e_tags.is_empty() && !is_quote {
+            if e_tags.len() == 1 {
+                root_id = Some(e_tags[0].clone());
+                parent_id = Some(e_tags[0].clone());
+            } else {
+                root_id = Some(e_tags.first().unwrap().clone());
+                parent_id = Some(e_tags.last().unwrap().clone());
+            }
+        } else if root_id.is_some() && parent_id.is_none() && !is_quote {
+            parent_id = root_id.clone();
+        }
+
+        let mut is_reply = (root_id.is_some() || parent_id.is_some()) && !is_quote;
+
+        if is_repost {
+            reposted_by = Some(pubkey.clone());
+            repost_created_at = Some(created_at);
+
+            for tag in tags.iter() {
+                if !tag.is_empty() && tag[0] == "e" && tag.len() > 1 {
+                    id = tag[1].clone();
+                    break;
+                }
+            }
+
+            for tag in tags.iter() {
+                if !tag.is_empty() && tag[0] == "p" && tag.len() > 1 {
+                    pubkey = tag[1].clone();
+                    break;
+                }
+            }
+
+            if !content.is_empty() {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(c) = parsed["content"].as_str() {
+                        content = c.to_string();
+                    }
+                    if let Some(p) = parsed["pubkey"].as_str() {
+                        pubkey = p.to_string();
+                    }
+                    if let Some(ca) = parsed["created_at"].as_u64() {
+                        created_at = ca;
+                    }
+
+                    if let Some(parsed_tags) = parsed["tags"].as_array() {
+                        root_id = None;
+                        parent_id = None;
+                        let mut repost_e_tags: Vec<String> = Vec::new();
+
+                        for tag in parsed_tags {
+                            if let Some(arr) = tag.as_array() {
+                                if arr.len() >= 2 && arr[0].as_str() == Some("e") {
+                                    if let Some(ref_id) = arr[1].as_str() {
+                                        repost_e_tags.push(ref_id.to_string());
+                                        if arr.len() >= 4 {
+                                            match arr[3].as_str() {
+                                                Some("root") => root_id = Some(ref_id.to_string()),
+                                                Some("reply") => parent_id = Some(ref_id.to_string()),
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root_id.is_none() && parent_id.is_none() && !repost_e_tags.is_empty() {
+                            if repost_e_tags.len() == 1 {
+                                root_id = Some(repost_e_tags[0].clone());
+                                parent_id = Some(repost_e_tags[0].clone());
+                            } else {
+                                root_id = Some(repost_e_tags.first().unwrap().clone());
+                                parent_id = Some(repost_e_tags.last().unwrap().clone());
+                            }
+                        } else if root_id.is_some() && parent_id.is_none() {
+                            parent_id = root_id.clone();
+                        }
+                        is_reply = root_id.is_some() || parent_id.is_some();
+                    }
+                }
+            }
+        }
+
+        if filter_replies && is_reply && !is_repost {
+            continue;
+        }
+
+        if !pubkey.is_empty() {
+            pubkeys_needed.insert(pubkey.clone());
+        }
+        if !id.is_empty() {
+            note_ids.push(id.clone());
+        }
+
+        let json_tags: Vec<serde_json::Value> = tags.iter()
+            .map(|t: &Vec<String>| serde_json::Value::Array(
+                t.iter().map(|s| serde_json::json!(s)).collect()
+            ))
+            .collect();
+
+        notes.push(serde_json::json!({
+            "id": id,
+            "pubkey": pubkey,
+            "author": pubkey,
+            "content": content,
+            "created_at": created_at,
+            "tags": json_tags,
+            "isRepost": is_repost,
+            "repostedBy": reposted_by,
+            "repostCreatedAt": repost_created_at,
+            "isReply": is_reply,
+            "rootId": root_id,
+            "parentId": parent_id,
+            "authorName": serde_json::Value::Null,
+            "authorImage": serde_json::Value::Null,
+            "authorNip05": serde_json::Value::Null,
+            "reactionCount": 0,
+            "repostCount": 0,
+            "replyCount": 0,
+            "zapCount": 0,
+        }));
+    }
+
+    if notes.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let authors: Vec<PublicKey> = pubkeys_needed.iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .collect();
+
+    if !authors.is_empty() {
+        let filter = Filter::new().authors(authors).kind(Kind::Metadata);
+        let profile_events = client.database().query(filter).await?;
+        let mut profiles: HashMap<String, (String, String, String)> = HashMap::new();
+
+        for pe in profile_events {
+            if let Ok(m) = Metadata::from_json(&pe.content) {
+                let name = m.name.clone()
+                    .or_else(|| m.display_name.clone())
+                    .unwrap_or_default();
+                let picture = m.picture.clone().unwrap_or_default();
+                let nip05 = m.nip05.clone().unwrap_or_default();
+                profiles.insert(pe.pubkey.to_hex(), (name, picture, nip05));
+            }
+        }
+
+        for note in notes.iter_mut() {
+            if let Some(pk) = note["pubkey"].as_str() {
+                if let Some((name, picture, nip05)) = profiles.get(pk) {
+                    note["authorName"] = serde_json::json!(name);
+                    note["authorImage"] = serde_json::json!(picture);
+                    note["authorNip05"] = serde_json::json!(nip05);
+                }
+            }
+        }
+    }
+
+    let ids: Vec<EventId> = note_ids.iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .collect();
+
+    if !ids.is_empty() {
+        let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
+        for nid in &note_ids {
+            counts.insert(nid.clone(), [0; 4]);
+        }
+
+        let count_filter = Filter::new()
+            .kinds([Kind::Reaction, Kind::Repost, Kind::ZapReceipt, Kind::TextNote])
+            .events(ids);
+        let count_events = client.database().query(count_filter).await?;
+
+        for ce in count_events.iter() {
+            let kind = ce.kind;
+            let zap_sats = if kind == Kind::ZapReceipt {
+                extract_zap_amount_sats(ce) as usize
+            } else { 0 };
+
+            let mut counted_for: HashSet<String> = HashSet::new();
+            for tag in ce.tags.iter() {
+                let tag_kind = tag.kind();
+                if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
+                    if let Some(ref_id) = tag.content() {
+                        let ref_hex = ref_id.to_string();
+                        if counted_for.contains(&ref_hex) { continue; }
+                        if let Some(c) = counts.get_mut(&ref_hex) {
+                            counted_for.insert(ref_hex);
+                            match kind {
+                                k if k == Kind::Reaction => c[0] += 1,
+                                k if k == Kind::Repost => c[1] += 1,
+                                k if k == Kind::ZapReceipt => c[2] += zap_sats,
+                                k if k == Kind::TextNote => c[3] += 1,
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for note in notes.iter_mut() {
+            if let Some(nid) = note["id"].as_str() {
+                if let Some(c) = counts.get(nid) {
+                    note["reactionCount"] = serde_json::json!(c[0]);
+                    note["repostCount"] = serde_json::json!(c[1]);
+                    note["zapCount"] = serde_json::json!(c[2]);
+                    note["replyCount"] = serde_json::json!(c[3]);
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::to_string(&notes)?)
+}
+
+pub async fn db_get_hydrated_feed_notes(
+    authors_hex: Vec<String>,
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+    filter_replies: bool,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+    let authors: Vec<PublicKey> = authors_hex.iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .collect();
+
+    let filter = Filter::new()
+        .authors(authors)
+        .kinds([Kind::TextNote, Kind::Repost])
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let filtered: Vec<Event> = events.into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+
+    hydrate_notes(&client, &filtered, filter_replies).await
+}
+
+pub async fn db_get_hydrated_profile_notes(
+    pubkey_hex: String,
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+    filter_replies: bool,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+    let pk = PublicKey::from_hex(&pubkey_hex)?;
+
+    let filter = Filter::new()
+        .author(pk)
+        .kinds([Kind::TextNote, Kind::Repost])
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let filtered: Vec<Event> = events.into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+
+    hydrate_notes(&client, &filtered, filter_replies).await
+}
+
+pub async fn db_get_hydrated_hashtag_notes(
+    hashtag: String,
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+
+    let filter = Filter::new()
+        .kind(Kind::TextNote)
+        .hashtag(hashtag)
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let filtered: Vec<Event> = events.into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+
+    hydrate_notes(&client, &filtered, true).await
+}
+
+pub async fn db_get_hydrated_replies(
+    note_id: String,
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+    let id = EventId::from_hex(&note_id)?;
+
+    let filter = Filter::new()
+        .kind(Kind::TextNote)
+        .event(id)
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let filtered: Vec<Event> = events.into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+
+    hydrate_notes(&client, &filtered, false).await
+}
+
+pub async fn db_get_hydrated_note(event_id: String) -> Result<Option<String>> {
+    let client = get_client_pub().await?;
+    let id = EventId::from_hex(&event_id)?;
+    let event = client.database().event_by_id(&id).await?;
+
+    match event {
+        Some(e) => {
+            let result = hydrate_notes(&client, &[e], false).await?;
+            let arr: Vec<serde_json::Value> = serde_json::from_str(&result)?;
+            if arr.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(arr[0].to_string()))
+            }
+        }
+        None => Ok(None),
+    }
+}
+
+async fn hydrate_notification_events(
+    client: &Client,
+    events: &[Event],
+    user_pubkey_hex: &str,
+) -> Result<String> {
+    if events.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let mut items: Vec<serde_json::Value> = Vec::new();
+    let mut pubkeys_needed: HashSet<String> = HashSet::new();
+
+    for event in events {
+        if event.pubkey.to_hex() == user_pubkey_hex {
+            continue;
+        }
+
+        let kind_num = event.kind.as_u16();
+        let event_id = event.id.to_hex();
+        let pubkey = event.pubkey.to_hex();
+        let content = event.content.clone();
+        let created_at = event.created_at.as_secs();
+
+        let tags: Vec<Vec<String>> = event.tags.iter()
+            .map(|tag| tag.clone().to_vec())
+            .collect();
+
+        let mut notification_type: &str;
+        let mut target_note_id: Option<String> = None;
+        let mut zap_amount: Option<u64> = None;
+        let mut from_pubkey = pubkey.clone();
+
+        match kind_num {
+            1 => {
+                let mut has_mention = false;
+                notification_type = "reply";
+                for tag in &tags {
+                    if tag.len() >= 2 && tag[0] == "e" {
+                        target_note_id = Some(tag[1].clone());
+                        if tag.len() >= 4 && (tag[3] == "reply" || tag[3] == "root") {
+                            notification_type = "reply";
+                            has_mention = false;
+                            break;
+                        }
+                        has_mention = true;
+                    }
+                }
+                if has_mention {
+                    notification_type = "mention";
+                }
+            }
+            6 => {
+                notification_type = "repost";
+                for tag in &tags {
+                    if tag.len() >= 2 && tag[0] == "e" {
+                        target_note_id = Some(tag[1].clone());
+                        break;
+                    }
+                }
+            }
+            7 => {
+                notification_type = "reaction";
+                for tag in &tags {
+                    if tag.len() >= 2 && tag[0] == "e" {
+                        target_note_id = Some(tag[1].clone());
+                        break;
+                    }
+                }
+            }
+            9735 => {
+                notification_type = "zap";
+                let sats = extract_zap_amount_sats(event);
+                if sats > 0 {
+                    zap_amount = Some(sats);
+                }
+                if let Some(sender) = extract_zap_sender(event) {
+                    from_pubkey = sender;
+                }
+                for tag in &tags {
+                    if tag.len() >= 2 && tag[0] == "e" {
+                        target_note_id = Some(tag[1].clone());
+                        break;
+                    }
+                }
+            }
+            _ => {
+                notification_type = "mention";
+            }
+        }
+
+        pubkeys_needed.insert(from_pubkey.clone());
+
+        items.push(serde_json::json!({
+            "id": event_id,
+            "type": notification_type,
+            "fromPubkey": from_pubkey,
+            "targetNoteId": target_note_id,
+            "content": content,
+            "createdAt": created_at,
+            "fromName": serde_json::Value::Null,
+            "fromImage": serde_json::Value::Null,
+            "zapAmount": zap_amount,
+        }));
+    }
+
+    if items.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let authors: Vec<PublicKey> = pubkeys_needed.iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .collect();
+
+    if !authors.is_empty() {
+        let filter = Filter::new().authors(authors).kind(Kind::Metadata);
+        let profile_events = client.database().query(filter).await?;
+        let mut profiles: HashMap<String, (String, String)> = HashMap::new();
+
+        for pe in profile_events {
+            if let Ok(m) = Metadata::from_json(&pe.content) {
+                let name = m.name.clone()
+                    .or_else(|| m.display_name.clone())
+                    .unwrap_or_default();
+                let picture = m.picture.clone().unwrap_or_default();
+                profiles.insert(pe.pubkey.to_hex(), (name, picture));
+            }
+        }
+
+        for item in items.iter_mut() {
+            if let Some(pk) = item["fromPubkey"].as_str() {
+                if let Some((name, picture)) = profiles.get(pk) {
+                    item["fromName"] = serde_json::json!(name);
+                    item["fromImage"] = serde_json::json!(picture);
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::to_string(&items)?)
+}
+
+pub async fn db_get_hydrated_notifications(
+    user_pubkey_hex: String,
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+    let pk = PublicKey::from_hex(&user_pubkey_hex)?;
+
+    let filter = Filter::new()
+        .pubkey(pk)
+        .kinds([Kind::TextNote, Kind::Repost, Kind::Reaction, Kind::ZapReceipt])
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let filtered: Vec<Event> = events.into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+
+    hydrate_notification_events(&client, &filtered, &user_pubkey_hex).await
+}
+
+async fn hydrate_article_events(
+    client: &Client,
+    events: &[Event],
+) -> Result<String> {
+    if events.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let mut articles: Vec<serde_json::Value> = Vec::new();
+    let mut pubkeys_needed: HashSet<String> = HashSet::new();
+
+    for event in events {
+        let event_id = event.id.to_hex();
+        let pubkey = event.pubkey.to_hex();
+        let content = event.content.clone();
+        let created_at = event.created_at.as_secs();
+
+        let tags: Vec<Vec<String>> = event.tags.iter()
+            .map(|tag| tag.clone().to_vec())
+            .collect();
+
+        let mut title = String::new();
+        let mut image: Option<String> = None;
+        let mut summary: Option<String> = None;
+        let mut d_tag = String::new();
+        let mut published_at: Option<u64> = None;
+        let mut hashtags: Vec<String> = Vec::new();
+
+        for tag in &tags {
+            if tag.is_empty() { continue; }
+            let tag_name = &tag[0];
+            let tag_value = if tag.len() > 1 { &tag[1] } else { &String::new() };
+
+            match tag_name.as_str() {
+                "d" => d_tag = tag_value.clone(),
+                "title" => title = tag_value.clone(),
+                "image" => image = Some(tag_value.clone()),
+                "summary" => summary = Some(tag_value.clone()),
+                "published_at" => published_at = tag_value.parse::<u64>().ok(),
+                "t" => {
+                    if !tag_value.is_empty() {
+                        hashtags.push(tag_value.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        pubkeys_needed.insert(pubkey.clone());
+
+        articles.push(serde_json::json!({
+            "id": event_id,
+            "pubkey": pubkey,
+            "title": title,
+            "content": content,
+            "image": image,
+            "summary": summary,
+            "dTag": d_tag,
+            "publishedAt": published_at.unwrap_or(created_at),
+            "created_at": created_at,
+            "hashtags": hashtags,
+            "authorName": serde_json::Value::Null,
+            "authorImage": serde_json::Value::Null,
+        }));
+    }
+
+    if articles.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let authors: Vec<PublicKey> = pubkeys_needed.iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .collect();
+
+    if !authors.is_empty() {
+        let filter = Filter::new().authors(authors).kind(Kind::Metadata);
+        let profile_events = client.database().query(filter).await?;
+        let mut profiles: HashMap<String, (String, String)> = HashMap::new();
+
+        for pe in profile_events {
+            if let Ok(m) = Metadata::from_json(&pe.content) {
+                let name = m.name.clone()
+                    .or_else(|| m.display_name.clone())
+                    .unwrap_or_default();
+                let picture = m.picture.clone().unwrap_or_default();
+                profiles.insert(pe.pubkey.to_hex(), (name, picture));
+            }
+        }
+
+        for article in articles.iter_mut() {
+            if let Some(pk) = article["pubkey"].as_str() {
+                if let Some((name, picture)) = profiles.get(pk) {
+                    article["authorName"] = serde_json::json!(name);
+                    article["authorImage"] = serde_json::json!(picture);
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::to_string(&articles)?)
+}
+
+pub async fn db_get_hydrated_articles(
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+    let filter = Filter::new()
+        .kind(Kind::LongFormTextNote)
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let mut filtered: Vec<Event> = events.into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+    filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    hydrate_article_events(&client, &filtered).await
+}
+
+pub async fn db_get_hydrated_articles_by_authors(
+    authors_hex: Vec<String>,
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+    let authors: Vec<PublicKey> = authors_hex.iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .collect();
+
+    if authors.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let filter = Filter::new()
+        .kind(Kind::LongFormTextNote)
+        .authors(authors)
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let mut filtered: Vec<Event> = events.into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+    filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    hydrate_article_events(&client, &filtered).await
+}
+
+pub async fn db_get_hydrated_article(event_id: String) -> Result<Option<String>> {
+    let client = get_client_pub().await?;
+    let id = EventId::from_hex(&event_id)?;
+    let event = client.database().event_by_id(&id).await?;
+
+    match event {
+        Some(e) => {
+            let result = hydrate_article_events(&client, &[e]).await?;
+            let arr: Vec<serde_json::Value> = serde_json::from_str(&result)?;
+            if arr.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(arr[0].to_string()))
+            }
+        }
+        None => Ok(None),
+    }
 }

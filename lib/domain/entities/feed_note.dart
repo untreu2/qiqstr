@@ -39,6 +39,35 @@ class FeedNote {
     this.zapCount = 0,
   });
 
+  factory FeedNote.fromMap(Map<String, dynamic> map) {
+    final rawTags = map['tags'] as List<dynamic>? ?? [];
+    final tags = rawTags.map((tag) {
+      if (tag is List) return tag.map((t) => t.toString()).toList();
+      return <String>[];
+    }).toList();
+
+    return FeedNote(
+      id: map['id'] as String? ?? '',
+      pubkey: map['pubkey'] as String? ?? '',
+      content: map['content'] as String? ?? '',
+      createdAt: map['created_at'] as int? ?? 0,
+      tags: tags,
+      isRepost: map['isRepost'] as bool? ?? false,
+      repostedBy: map['repostedBy'] as String?,
+      repostCreatedAt: map['repostCreatedAt'] as int?,
+      isReply: map['isReply'] as bool? ?? false,
+      rootId: map['rootId'] as String?,
+      parentId: map['parentId'] as String?,
+      authorName: map['authorName'] as String?,
+      authorImage: map['authorImage'] as String?,
+      authorNip05: map['authorNip05'] as String?,
+      reactionCount: map['reactionCount'] as int? ?? 0,
+      repostCount: map['repostCount'] as int? ?? 0,
+      replyCount: map['replyCount'] as int? ?? 0,
+      zapCount: map['zapCount'] as int? ?? 0,
+    );
+  }
+
   FeedNote copyWith({
     String? id,
     String? pubkey,

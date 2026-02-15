@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:collection';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
+import '../../src/rust/api/crypto.dart' as rust_crypto;
 import '../../src/rust/api/events.dart' as rust_events;
 
 class NostrService {
@@ -507,7 +507,7 @@ class NostrService {
   }
 
   static String calculateSha256Hash(List<int> fileBytes) {
-    return sha256.convert(fileBytes).toString();
+    return rust_crypto.sha256Hash(data: fileBytes);
   }
 
   static String detectMimeType(String filePath) {

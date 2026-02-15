@@ -22,45 +22,22 @@ class NotificationRepositoryImpl extends BaseRepository
   Stream<List<NotificationItem>> watchNotifications(String userPubkey,
       {int limit = 100}) {
     return db
-        .watchNotifications(userPubkey, limit: limit)
-        .asyncMap((events) async {
-      return await _hydrateNotifications(events);
-    });
+        .watchHydratedNotifications(userPubkey, limit: limit)
+        .map((maps) =>
+            maps.map((m) => NotificationItem.fromMap(m)).toList());
   }
 
   @override
   Future<List<NotificationItem>> getNotifications(String userPubkey,
       {int limit = 100}) async {
-    final events = await db.getCachedNotifications(userPubkey, limit: limit);
-    return await _hydrateNotifications(events);
+    final maps =
+        await db.getHydratedNotifications(userPubkey, limit: limit);
+    return maps.map((m) => NotificationItem.fromMap(m)).toList();
   }
 
   @override
   Future<void> saveNotifications(
       String userPubkey, List<Map<String, dynamic>> notifications) async {
     await db.saveNotifications(userPubkey, notifications);
-  }
-
-  Future<List<NotificationItem>> _hydrateNotifications(
-      List<Map<String, dynamic>> events) async {
-    if (events.isEmpty) return [];
-
-    final pubkeys = events
-        .map((e) => e['pubkey'] as String? ?? '')
-        .where((p) => p.isNotEmpty)
-        .toSet()
-        .toList();
-    final profiles = await db.getUserProfiles(pubkeys);
-
-    return events.map((event) {
-      final pubkey = event['pubkey'] as String? ?? '';
-      final profile = profiles[pubkey];
-
-      return mapper.toNotificationItem(
-        event,
-        fromName: profile?['name'] ?? profile?['display_name'],
-        fromImage: profile?['picture'],
-      );
-    }).toList();
   }
 }

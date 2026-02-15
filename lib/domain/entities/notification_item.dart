@@ -29,6 +29,29 @@ class NotificationItem {
     this.zapAmount,
   });
 
+  factory NotificationItem.fromMap(Map<String, dynamic> map) {
+    final typeStr = map['type'] as String? ?? 'mention';
+    final type = switch (typeStr) {
+      'reply' => NotificationType.reply,
+      'reaction' => NotificationType.reaction,
+      'repost' => NotificationType.repost,
+      'zap' => NotificationType.zap,
+      _ => NotificationType.mention,
+    };
+
+    return NotificationItem(
+      id: map['id'] as String? ?? '',
+      type: type,
+      fromPubkey: map['fromPubkey'] as String? ?? '',
+      targetNoteId: map['targetNoteId'] as String?,
+      content: map['content'] as String?,
+      createdAt: map['createdAt'] as int? ?? 0,
+      fromName: map['fromName'] as String?,
+      fromImage: map['fromImage'] as String?,
+      zapAmount: map['zapAmount'] as int?,
+    );
+  }
+
   NotificationItem copyWith({
     String? id,
     NotificationType? type,

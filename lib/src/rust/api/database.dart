@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `is_event_muted`, `metadata_to_flat_json`
+// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `metadata_to_flat_json`
 
 Future<String?> dbGetProfile({required String pubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbGetProfile(pubkeyHex: pubkeyHex);
@@ -199,3 +199,86 @@ Future<int> dbCleanupOldEvents({required int daysToKeep}) =>
 
 Future<String> dbGetDatabaseStats() =>
     RustLib.instance.api.crateApiDatabaseDbGetDatabaseStats();
+
+Future<String> dbGetHydratedFeedNotes(
+        {required List<String> authorsHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords,
+        required bool filterReplies}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedFeedNotes(
+        authorsHex: authorsHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords,
+        filterReplies: filterReplies);
+
+Future<String> dbGetHydratedProfileNotes(
+        {required String pubkeyHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords,
+        required bool filterReplies}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedProfileNotes(
+        pubkeyHex: pubkeyHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords,
+        filterReplies: filterReplies);
+
+Future<String> dbGetHydratedHashtagNotes(
+        {required String hashtag,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedHashtagNotes(
+        hashtag: hashtag,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
+
+Future<String> dbGetHydratedReplies(
+        {required String noteId,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedReplies(
+        noteId: noteId,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
+
+Future<String?> dbGetHydratedNote({required String eventId}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedNote(eventId: eventId);
+
+Future<String> dbGetHydratedNotifications(
+        {required String userPubkeyHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedNotifications(
+        userPubkeyHex: userPubkeyHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
+
+Future<String> dbGetHydratedArticles(
+        {required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedArticles(
+        limit: limit, mutedPubkeys: mutedPubkeys, mutedWords: mutedWords);
+
+Future<String> dbGetHydratedArticlesByAuthors(
+        {required List<String> authorsHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedArticlesByAuthors(
+        authorsHex: authorsHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
+
+Future<String?> dbGetHydratedArticle({required String eventId}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedArticle(eventId: eventId);

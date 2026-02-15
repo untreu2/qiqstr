@@ -243,6 +243,136 @@ class RustDatabaseService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getHydratedFeedNotes(
+      List<String> authorPubkeys,
+      {int limit = 100, bool filterReplies = true}) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      final json = await rust_db.dbGetHydratedFeedNotes(
+        authorsHex: authorPubkeys,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+        filterReplies: filterReplies,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedFeedNotes error: $e');
+      return [];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchHydratedFeedNotes(
+      List<String> authors,
+      {int limit = 100, bool filterReplies = true}) {
+    List<Map<String, dynamic>>? lastResult;
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) async {
+      final result = await getHydratedFeedNotes(authors,
+          limit: limit, filterReplies: filterReplies);
+      if (lastResult != null && result.length == lastResult!.length) {
+        final newFirst = result.isNotEmpty ? result.first['id'] : null;
+        final oldFirst =
+            lastResult!.isNotEmpty ? lastResult!.first['id'] : null;
+        if (newFirst == oldFirst) return lastResult!;
+      }
+      lastResult = result;
+      return result;
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getHydratedProfileNotes(
+      String authorPubkey,
+      {int limit = 50, bool filterReplies = true}) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      final json = await rust_db.dbGetHydratedProfileNotes(
+        pubkeyHex: authorPubkey,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+        filterReplies: filterReplies,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedProfileNotes error: $e');
+      return [];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchHydratedProfileNotes(
+      String pubkey,
+      {int limit = 50, bool filterReplies = true}) {
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) => getHydratedProfileNotes(pubkey,
+            limit: limit, filterReplies: filterReplies));
+  }
+
+  Stream<List<Map<String, dynamic>>> watchHydratedHashtagNotes(String hashtag,
+      {int limit = 100}) {
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) async {
+      try {
+        final mute = EncryptedMuteService.instance;
+        final json = await rust_db.dbGetHydratedHashtagNotes(
+          hashtag: hashtag,
+          limit: limit,
+          mutedPubkeys: mute.mutedPubkeys,
+          mutedWords: mute.mutedWords,
+        );
+        final decoded = jsonDecode(json) as List<dynamic>;
+        return decoded.cast<Map<String, dynamic>>();
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getHydratedReplies(String noteId,
+      {int limit = 500}) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      final json = await rust_db.dbGetHydratedReplies(
+        noteId: noteId,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedReplies error: $e');
+      return [];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchHydratedReplies(String noteId,
+      {int limit = 100}) {
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) => getHydratedReplies(noteId, limit: limit));
+  }
+
+  Future<Map<String, dynamic>?> getHydratedNote(String eventId) async {
+    try {
+      final json = await rust_db.dbGetHydratedNote(eventId: eventId);
+      if (json == null) return null;
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedNote error: $e');
+      return null;
+    }
+  }
+
   Future<void> saveFeedNotes(List<Map<String, dynamic>> notes) async {
     try {
       final json = jsonEncode(notes);
@@ -379,6 +509,35 @@ class RustDatabaseService {
         .asyncMap((_) => getReplies(noteId, limit: limit));
   }
 
+  Future<List<Map<String, dynamic>>> getHydratedNotifications(
+      String userPubkey,
+      {int limit = 100}) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      final json = await rust_db.dbGetHydratedNotifications(
+        userPubkeyHex: userPubkey,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedNotifications error: $e');
+      return [];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchHydratedNotifications(
+      String userPubkey,
+      {int limit = 100}) {
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) =>
+            getHydratedNotifications(userPubkey, limit: limit));
+  }
+
   Future<List<Map<String, dynamic>>> getCachedNotifications(String userPubkey,
       {int limit = 100}) async {
     try {
@@ -497,6 +656,53 @@ class RustDatabaseService {
       return await rust_db.dbFindUserRepostEventId(
           userPubkeyHex: userPubkey, noteId: noteId);
     } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHydratedArticles(
+      {int limit = 50, List<String>? authors}) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      final String json;
+      if (authors != null && authors.isNotEmpty) {
+        json = await rust_db.dbGetHydratedArticlesByAuthors(
+          authorsHex: authors,
+          limit: limit,
+          mutedPubkeys: mute.mutedPubkeys,
+          mutedWords: mute.mutedWords,
+        );
+      } else {
+        json = await rust_db.dbGetHydratedArticles(
+          limit: limit,
+          mutedPubkeys: mute.mutedPubkeys,
+          mutedWords: mute.mutedWords,
+        );
+      }
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedArticles error: $e');
+      return [];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchHydratedArticles(
+      {int limit = 50, List<String>? authors}) {
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 500))
+        .startWith(null)
+        .asyncMap((_) =>
+            getHydratedArticles(limit: limit, authors: authors));
+  }
+
+  Future<Map<String, dynamic>?> getHydratedArticle(String eventId) async {
+    try {
+      final json = await rust_db.dbGetHydratedArticle(eventId: eventId);
+      if (json == null) return null;
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedArticle error: $e');
       return null;
     }
   }

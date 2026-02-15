@@ -5,7 +5,7 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/rust_database_service.dart';
-import '../../../domain/mappers/event_mapper.dart' as mappers;
+import '../../../domain/entities/article.dart';
 import 'article_event.dart';
 import 'article_state.dart';
 
@@ -31,7 +31,6 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   final FollowingRepository _followingRepository;
   final SyncService _syncService;
   final RustDatabaseService _db;
-  final mappers.EventMapper _mapper;
 
   static const int _pageSize = 50;
   StreamSubscription<List<Map<String, dynamic>>>? _articlesSubscription;
@@ -45,13 +44,11 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     required FollowingRepository followingRepository,
     required SyncService syncService,
     RustDatabaseService? db,
-    mappers.EventMapper? mapper,
   })  : _articleRepository = articleRepository,
         _profileRepository = profileRepository,
         _followingRepository = followingRepository,
         _syncService = syncService,
         _db = db ?? RustDatabaseService.instance,
-        _mapper = mapper ?? mappers.EventMapper(),
         super(const ArticleInitial()) {
     on<ArticleInitialized>(_onArticleInitialized);
     on<ArticleRefreshed>(_onArticleRefreshed);
@@ -72,12 +69,12 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     _followingList =
         await _followingRepository.getFollowingList(_currentUserHex);
 
-    final cachedEvents = await _db.getCachedArticles(
+    final cachedMaps = await _db.getHydratedArticles(
       limit: _pageSize,
       authors: _followingList,
     );
-    if (!isClosed && cachedEvents.isNotEmpty) {
-      final articleMaps = _eventsToArticleMaps(cachedEvents);
+    if (!isClosed && cachedMaps.isNotEmpty) {
+      final articleMaps = _hydratedToArticleMaps(cachedMaps);
       articleMaps.sort((a, b) {
         final aTime = a['created_at'] as int? ?? 0;
         final bTime = b['created_at'] as int? ?? 0;
@@ -106,11 +103,11 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
       } catch (_) {}
       _initialSyncDone = true;
       if (!isClosed && state is ArticleLoading) {
-        final events = await _db.getCachedArticles(
+        final maps = await _db.getHydratedArticles(
           limit: _pageSize,
           authors: _followingList,
         );
-        final mapped = _eventsToArticleMaps(events);
+        final mapped = _hydratedToArticleMaps(maps);
         if (mapped.isEmpty) {
           add(_InternalArticlesUpdate(const []));
         }
@@ -121,11 +118,11 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   void _watchArticles() {
     _articlesSubscription?.cancel();
     _articlesSubscription = _db
-        .watchArticles(limit: _pageSize, authors: _followingList)
-        .listen((events) {
+        .watchHydratedArticles(limit: _pageSize, authors: _followingList)
+        .listen((maps) {
       if (isClosed) return;
 
-      final articleMaps = _eventsToArticleMaps(events);
+      final articleMaps = _hydratedToArticleMaps(maps);
 
       articleMaps.sort((a, b) {
         final aTime = a['created_at'] as int? ?? 0;
@@ -138,11 +135,10 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     });
   }
 
-  List<Map<String, dynamic>> _eventsToArticleMaps(
-      List<Map<String, dynamic>> events) {
-    return events.map<Map<String, dynamic>>((event) {
-      final article = _mapper.toArticle(event);
-      return article.toMap();
+  List<Map<String, dynamic>> _hydratedToArticleMaps(
+      List<Map<String, dynamic>> maps) {
+    return maps.map<Map<String, dynamic>>((m) {
+      return Article.fromMap(m).toMap();
     }).toList();
   }
 

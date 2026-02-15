@@ -27,6 +27,26 @@ class Article {
     this.authorImage,
   });
 
+  factory Article.fromMap(Map<String, dynamic> map) {
+    final rawHashtags = map['hashtags'] as List<dynamic>? ?? [];
+    final hashtags = rawHashtags.map((h) => h.toString()).toList();
+
+    return Article(
+      id: map['id'] as String? ?? '',
+      pubkey: map['pubkey'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      content: map['content'] as String? ?? '',
+      image: map['image'] as String?,
+      summary: map['summary'] as String?,
+      dTag: map['dTag'] as String? ?? '',
+      publishedAt: map['publishedAt'] as int? ?? 0,
+      createdAt: map['created_at'] as int? ?? 0,
+      hashtags: hashtags,
+      authorName: map['authorName'] as String?,
+      authorImage: map['authorImage'] as String?,
+    );
+  }
+
   Article copyWith({
     String? id,
     String? pubkey,
