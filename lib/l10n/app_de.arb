@@ -717,5 +717,21 @@
   "unpinNote": "Notiz loslösen",
   "notePinned": "Notiz an Profil angeheftet",
   "noteUnpinned": "Notiz vom Profil gelöst",
-  "pinnedNotes": "Angeheftet"
+  "pinnedNotes": "Angeheftet",
+
+  "processingPayment": "Zahlung wird verarbeitet...",
+  "zappedSatsToUser": "{sats} {sats, plural, =1{Sat} other{Sats}} an {user} gezappt!",
+  "@zappedSatsToUser": {
+    "placeholders": {
+      "sats": {
+        "type": "int"
+      },
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToZap": "Zap fehlgeschlagen",
+  "userNoLightningAddress": "Der Benutzer hat keine Lightning-Adresse konfiguriert.",
+  "commentOptional": "Kommentar (Optional)"
 }

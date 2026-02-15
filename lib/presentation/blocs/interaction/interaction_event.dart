@@ -49,6 +49,28 @@ class InteractionNoteDeleted extends InteractionEvent {
   const InteractionNoteDeleted();
 }
 
+class InteractionZapStarted extends InteractionEvent {
+  final int amount;
+
+  const InteractionZapStarted({required this.amount});
+
+  @override
+  List<Object?> get props => [amount];
+}
+
+class InteractionZapCompleted extends InteractionEvent {
+  final int amount;
+
+  const InteractionZapCompleted({required this.amount});
+
+  @override
+  List<Object?> get props => [amount];
+}
+
+class InteractionZapFailed extends InteractionEvent {
+  const InteractionZapFailed();
+}
+
 class InteractionCountsUpdated extends InteractionEvent {
   final InteractionCounts counts;
 

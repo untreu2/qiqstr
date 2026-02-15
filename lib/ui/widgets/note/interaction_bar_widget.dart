@@ -260,7 +260,12 @@ class _InteractionBarState extends State<InteractionBar> {
 
   void _handleZapTap(InteractionLoaded state) async {
     HapticFeedback.lightImpact();
-    if (widget.note == null || state.hasZapped || !mounted) return;
+    if (widget.note == null ||
+        state.hasZapped ||
+        state.zapProcessing ||
+        !mounted) {
+      return;
+    }
 
     final noteToZap = _interactionBloc.getNoteForActions();
     if (noteToZap == null) return;
@@ -268,36 +273,38 @@ class _InteractionBarState extends State<InteractionBar> {
     final themeState = context.read<ThemeBloc>().state;
 
     if (themeState.oneTapZap) {
-      await processZapDirectly(
-        context,
-        noteToZap,
-        themeState.defaultZapAmount,
-      );
+      final amount = themeState.defaultZapAmount;
+      _interactionBloc.add(InteractionZapStarted(amount: amount));
 
-      if (!mounted) return;
-      _interactionBloc.add(const InteractionStateRefreshed());
-    } else {
-      final zapResult = await showZapDialog(
-        context: context,
-        note: noteToZap,
-      );
-
+      final success = await processZapDirectly(context, noteToZap, amount);
       if (!mounted) return;
 
-      final zapSuccess = zapResult['success'] as bool;
-      if (!zapSuccess) {
-        _interactionBloc.add(const InteractionStateRefreshed());
+      if (success) {
+        _interactionBloc.add(InteractionZapCompleted(amount: amount));
+      } else {
+        _interactionBloc.add(const InteractionZapFailed());
       }
+    } else {
+      await _openZapDialog(noteToZap);
     }
   }
 
   void _handleZapLongPress(InteractionLoaded state) async {
     HapticFeedback.mediumImpact();
-    if (widget.note == null || state.hasZapped || !mounted) return;
+    if (widget.note == null ||
+        state.hasZapped ||
+        state.zapProcessing ||
+        !mounted) {
+      return;
+    }
 
     final noteToZap = _interactionBloc.getNoteForActions();
     if (noteToZap == null) return;
 
+    await _openZapDialog(noteToZap);
+  }
+
+  Future<void> _openZapDialog(Map<String, dynamic> noteToZap) async {
     final zapResult = await showZapDialog(
       context: context,
       note: noteToZap,
@@ -305,9 +312,22 @@ class _InteractionBarState extends State<InteractionBar> {
 
     if (!mounted) return;
 
-    final zapSuccess = zapResult['success'] as bool;
-    if (!zapSuccess) {
-      _interactionBloc.add(const InteractionStateRefreshed());
+    final confirmed = zapResult['confirmed'] as bool? ?? false;
+    final amount = zapResult['amount'] as int? ?? 0;
+    final comment = zapResult['comment'] as String? ?? '';
+
+    if (!confirmed || amount <= 0) return;
+
+    _interactionBloc.add(InteractionZapStarted(amount: amount));
+
+    final success =
+        await processZapWithComment(context, noteToZap, amount, comment);
+    if (!mounted) return;
+
+    if (success) {
+      _interactionBloc.add(InteractionZapCompleted(amount: amount));
+    } else {
+      _interactionBloc.add(const InteractionZapFailed());
     }
   }
 
@@ -512,6 +532,7 @@ class _InteractionBarState extends State<InteractionBar> {
                     iconPath: 'assets/zap_button.svg',
                     count: interactionState.zapAmount,
                     isActive: interactionState.hasZapped,
+                    isProcessing: interactionState.zapProcessing,
                     activeColor: colors.zap,
                     inactiveColor: colors.secondary,
                     onTap: () => _handleZapTap(interactionState),
@@ -722,6 +743,7 @@ class _InteractionButton extends StatelessWidget {
   final IconData? activeCarbonIcon;
   final int count;
   final bool isActive;
+  final bool isProcessing;
   final Color activeColor;
   final Color inactiveColor;
   final VoidCallback onTap;
@@ -736,6 +758,7 @@ class _InteractionButton extends StatelessWidget {
     this.activeCarbonIcon,
     required this.count,
     required this.isActive,
+    this.isProcessing = false,
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
@@ -755,8 +778,8 @@ class _InteractionButton extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
+          onTap: isProcessing ? null : onTap,
+          onLongPress: isProcessing ? null : onLongPress,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -764,7 +787,17 @@ class _InteractionButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _buildIcon(iconSize, effectiveColor),
+                if (isProcessing)
+                  SizedBox(
+                    width: iconSize,
+                    height: iconSize,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: activeColor,
+                    ),
+                  )
+                else
+                  _buildIcon(iconSize, effectiveColor),
                 if (count > 0) ...[
                   SizedBox(width: spacing),
                   Transform.translate(

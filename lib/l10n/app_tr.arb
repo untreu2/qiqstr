@@ -717,5 +717,21 @@
   "unpinNote": "Sabitlemeyi kaldır",
   "notePinned": "Not profile sabitlendi",
   "noteUnpinned": "Not sabitlemeden kaldırıldı",
-  "pinnedNotes": "Sabitlenmiş"
+  "pinnedNotes": "Sabitlenmiş",
+
+  "processingPayment": "Ödeme işleniyor...",
+  "zappedSatsToUser": "{user} kullanıcısına {sats} sat gönderildi!",
+  "@zappedSatsToUser": {
+    "placeholders": {
+      "sats": {
+        "type": "int"
+      },
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToZap": "Zap gönderilemedi",
+  "userNoLightningAddress": "Kullanıcının yapılandırılmış bir lightning adresi yok.",
+  "commentOptional": "Yorum (İsteğe bağlı)"
 }

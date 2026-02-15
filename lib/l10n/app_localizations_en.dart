@@ -1676,4 +1676,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pinnedNotes => 'Pinned';
+
+  @override
+  String get processingPayment => 'Processing payment...';
+
+  @override
+  String zappedSatsToUser(int sats, String user) {
+    String _temp0 = intl.Intl.pluralLogic(
+      sats,
+      locale: localeName,
+      other: 'sats',
+      one: 'sat',
+    );
+    return 'Zapped $sats $_temp0 to $user!';
+  }
+
+  @override
+  String get failedToZap => 'Failed to zap';
+
+  @override
+  String get userNoLightningAddress =>
+      'User does not have a lightning address configured.';
+
+  @override
+  String get commentOptional => 'Comment (Optional)';
 }

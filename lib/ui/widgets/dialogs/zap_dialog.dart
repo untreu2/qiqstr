@@ -28,16 +28,18 @@ Future<bool> _payZapWithWallet(
   const secureStorage = FlutterSecureStorage();
 
   try {
+    final l10n = AppLocalizations.of(context);
     final isAuthResult = await coinosService.isAuthenticated();
     if (!isAuthResult.isSuccess || isAuthResult.data != true) {
       if (context.mounted) {
-        AppSnackbar.warning(context, 'Please connect your wallet first');
+        AppSnackbar.warning(
+            context, l10n?.pleaseConnectWalletFirst ?? 'Please connect your wallet first');
       }
       return false;
     }
 
     if (context.mounted) {
-      AppSnackbar.info(context, 'Processing payment...',
+      AppSnackbar.info(context, l10n?.processingPayment ?? 'Processing payment...',
           duration: const Duration(seconds: 5));
     }
 
@@ -150,11 +152,13 @@ Future<bool> _payZapWithWallet(
 
     debugPrint('[ZapDialog] Payment successful, result: ${paymentResult.data}');
 
-    // Payment successful! Show success immediately
     if (context.mounted) {
-      final userName = user['name'] as String? ?? 'User';
+      final userName = user['name'] as String? ?? (l10n?.user ?? 'User');
       AppSnackbar.hide(context);
-      AppSnackbar.success(context, 'Zapped $sats sats to $userName!',
+      AppSnackbar.success(
+          context,
+          l10n?.zappedSatsToUser(sats, userName) ??
+              'Zapped $sats sats to $userName!',
           duration: const Duration(seconds: 2));
     }
 
@@ -172,8 +176,9 @@ Future<bool> _payZapWithWallet(
     return true;
   } catch (e) {
     if (context.mounted) {
+      final l10n = AppLocalizations.of(context);
       AppSnackbar.hide(context);
-      AppSnackbar.error(context, 'Failed to zap: $e');
+      AppSnackbar.error(context, l10n?.failedToZap ?? 'Failed to zap');
     }
     return false;
   }
@@ -208,7 +213,7 @@ Future<void> _publishZapEventsAsync(
   }
 }
 
-Future<void> _processZapPayment(
+Future<bool> _processZapPayment(
   BuildContext context,
   Map<String, dynamic> note,
   int sats,
@@ -221,20 +226,25 @@ Future<void> _processZapPayment(
 
     if (profile == null) {
       if (context.mounted) {
-        AppSnackbar.error(context, 'Error loading user profile',
+        final l10n = AppLocalizations.of(context);
+        AppSnackbar.error(
+            context, l10n?.errorLoadingUserProfile ?? 'Error loading user profile',
             duration: const Duration(seconds: 1));
       }
-      return;
+      return false;
     }
 
     final lud16 = profile.lud16 ?? '';
     if (lud16.isEmpty) {
       if (context.mounted) {
+        final l10n = AppLocalizations.of(context);
         AppSnackbar.error(
-            context, 'User does not have a lightning address configured.',
+            context,
+            l10n?.userNoLightningAddress ??
+                'User does not have a lightning address configured.',
             duration: const Duration(seconds: 1));
       }
-      return;
+      return false;
     }
 
     final user = {
@@ -244,22 +254,34 @@ Future<void> _processZapPayment(
     };
 
     if (context.mounted) {
-      await _payZapWithWallet(context, user, note, sats, comment);
+      return await _payZapWithWallet(context, user, note, sats, comment);
     }
+    return false;
   } catch (e) {
     if (context.mounted) {
-      AppSnackbar.error(context, 'Failed to process zap: $e',
+      final l10n = AppLocalizations.of(context);
+      AppSnackbar.error(context, l10n?.failedToZap ?? 'Failed to zap',
           duration: const Duration(seconds: 1));
     }
+    return false;
   }
 }
 
-Future<void> processZapDirectly(
+Future<bool> processZapDirectly(
   BuildContext context,
   Map<String, dynamic> note,
   int sats,
 ) async {
-  await _processZapPayment(context, note, sats, '');
+  return _processZapPayment(context, note, sats, '');
+}
+
+Future<bool> processZapWithComment(
+  BuildContext context,
+  Map<String, dynamic> note,
+  int sats,
+  String comment,
+) async {
+  return _processZapPayment(context, note, sats, comment);
 }
 
 Future<Map<String, dynamic>> showZapDialog({
@@ -280,6 +302,7 @@ Future<Map<String, dynamic>> showZapDialog({
     ),
     builder: (modalContext) => StatefulBuilder(
       builder: (context, setState) {
+        final l10n = AppLocalizations.of(modalContext);
         return Padding(
           padding: EdgeInsets.only(
               left: 16,
@@ -293,7 +316,7 @@ Future<Map<String, dynamic>> showZapDialog({
                 children: [
                   Expanded(
                     child: Text(
-                      AppLocalizations.of(modalContext)?.zap ?? 'Zap',
+                      l10n?.zap ?? 'Zap',
                       style: TextStyle(
                         color: colors.textPrimary,
                         fontSize: 20,
@@ -322,35 +345,35 @@ Future<Map<String, dynamic>> showZapDialog({
               CustomInputField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                labelText: 'Amount (sats)',
+                labelText: l10n?.amountSats ?? 'Amount (sats)',
                 fillColor: colors.inputFill,
               ),
               const SizedBox(height: 16),
               CustomInputField(
                 controller: noteController,
-                labelText: 'Comment (Optional)',
+                labelText: l10n?.commentOptional ?? 'Comment (Optional)',
                 fillColor: colors.inputFill,
               ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: SecondaryButton(
-                  label: 'Send',
+                  label: l10n?.send ?? 'Send',
                   onPressed: () {
                     final sats = int.tryParse(amountController.text.trim());
                     if (sats == null || sats <= 0) {
-                      AppSnackbar.error(modalContext, 'Enter a valid amount',
+                      AppSnackbar.error(
+                          modalContext,
+                          l10n?.enterValidAmount ?? 'Enter a valid amount',
                           duration: const Duration(seconds: 1));
                       return;
                     }
 
                     Navigator.pop(modalContext, {
-                      'success': true,
+                      'confirmed': true,
                       'amount': sats,
+                      'comment': noteController.text.trim(),
                     });
-
-                    unawaited(_processZapPayment(
-                        context, note, sats, noteController.text.trim()));
                   },
                   size: ButtonSize.large,
                 ),
@@ -362,5 +385,5 @@ Future<Map<String, dynamic>> showZapDialog({
     ),
   );
 
-  return result ?? {'success': false, 'amount': 0};
+  return result ?? {'confirmed': false, 'amount': 0, 'comment': ''};
 }

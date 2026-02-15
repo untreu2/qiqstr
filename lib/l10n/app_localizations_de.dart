@@ -1714,4 +1714,28 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get pinnedNotes => 'Angeheftet';
+
+  @override
+  String get processingPayment => 'Zahlung wird verarbeitet...';
+
+  @override
+  String zappedSatsToUser(int sats, String user) {
+    String _temp0 = intl.Intl.pluralLogic(
+      sats,
+      locale: localeName,
+      other: 'Sats',
+      one: 'Sat',
+    );
+    return '$sats $_temp0 an $user gezappt!';
+  }
+
+  @override
+  String get failedToZap => 'Zap fehlgeschlagen';
+
+  @override
+  String get userNoLightningAddress =>
+      'Der Benutzer hat keine Lightning-Adresse konfiguriert.';
+
+  @override
+  String get commentOptional => 'Kommentar (Optional)';
 }

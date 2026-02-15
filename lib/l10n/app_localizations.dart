@@ -3183,6 +3183,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pinned'**
   String get pinnedNotes;
+
+  /// No description provided for @processingPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing payment...'**
+  String get processingPayment;
+
+  /// No description provided for @zappedSatsToUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Zapped {sats} {sats, plural, =1{sat} other{sats}} to {user}!'**
+  String zappedSatsToUser(int sats, String user);
+
+  /// No description provided for @failedToZap.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to zap'**
+  String get failedToZap;
+
+  /// No description provided for @userNoLightningAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'User does not have a lightning address configured.'**
+  String get userNoLightningAddress;
+
+  /// No description provided for @commentOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Comment (Optional)'**
+  String get commentOptional;
 }
 
 class _AppLocalizationsDelegate

@@ -16,6 +16,7 @@ class InteractionLoaded extends InteractionState {
   final bool hasReacted;
   final bool hasReposted;
   final bool hasZapped;
+  final bool zapProcessing;
   final bool noteDeleted;
 
   const InteractionLoaded({
@@ -26,6 +27,7 @@ class InteractionLoaded extends InteractionState {
     this.hasReacted = false,
     this.hasReposted = false,
     this.hasZapped = false,
+    this.zapProcessing = false,
     this.noteDeleted = false,
   });
 
@@ -37,6 +39,7 @@ class InteractionLoaded extends InteractionState {
     bool? hasReacted,
     bool? hasReposted,
     bool? hasZapped,
+    bool? zapProcessing,
     bool? noteDeleted,
   }) {
     return InteractionLoaded(
@@ -47,6 +50,7 @@ class InteractionLoaded extends InteractionState {
       hasReacted: hasReacted ?? this.hasReacted,
       hasReposted: hasReposted ?? this.hasReposted,
       hasZapped: hasZapped ?? this.hasZapped,
+      zapProcessing: zapProcessing ?? this.zapProcessing,
       noteDeleted: noteDeleted ?? this.noteDeleted,
     );
   }
@@ -60,6 +64,7 @@ class InteractionLoaded extends InteractionState {
         hasReacted,
         hasReposted,
         hasZapped,
+        zapProcessing,
         noteDeleted,
       ];
 }

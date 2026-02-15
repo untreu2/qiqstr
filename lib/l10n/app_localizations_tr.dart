@@ -1678,4 +1678,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get pinnedNotes => 'Sabitlenmiş';
+
+  @override
+  String get processingPayment => 'Ödeme işleniyor...';
+
+  @override
+  String zappedSatsToUser(int sats, String user) {
+    return '$user kullanıcısına $sats sat gönderildi!';
+  }
+
+  @override
+  String get failedToZap => 'Zap gönderilemedi';
+
+  @override
+  String get userNoLightningAddress =>
+      'Kullanıcının yapılandırılmış bir lightning adresi yok.';
+
+  @override
+  String get commentOptional => 'Yorum (İsteğe bağlı)';
 }

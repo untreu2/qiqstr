@@ -784,5 +784,21 @@
   "unpinNote": "Unpin note",
   "notePinned": "Note pinned to profile",
   "noteUnpinned": "Note unpinned from profile",
-  "pinnedNotes": "Pinned"
+  "pinnedNotes": "Pinned",
+
+  "processingPayment": "Processing payment...",
+  "zappedSatsToUser": "Zapped {sats} {sats, plural, =1{sat} other{sats}} to {user}!",
+  "@zappedSatsToUser": {
+    "placeholders": {
+      "sats": {
+        "type": "int"
+      },
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToZap": "Failed to zap",
+  "userNoLightningAddress": "User does not have a lightning address configured.",
+  "commentOptional": "Comment (Optional)"
 }

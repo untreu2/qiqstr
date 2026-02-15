@@ -59,6 +59,7 @@ class InteractionService {
 
   final Set<String> _localReactions = {};
   final Set<String> _localReposts = {};
+  final Set<String> _localZaps = {};
 
   String? _currentUserHex;
   StreamSubscription<void>? _dbChangeSubscription;
@@ -145,7 +146,8 @@ class InteractionService {
             _localReactions.contains(noteId) || (d['hasReacted'] == true);
         final hasReposted =
             _localReposts.contains(noteId) || (d['hasReposted'] == true);
-        final hasZapped = d['hasZapped'] == true;
+        final hasZapped =
+            _localZaps.contains(noteId) || (d['hasZapped'] == true);
 
         if (hasReacted) _localReactions.add(noteId);
         if (hasReposted) _localReposts.add(noteId);
@@ -224,6 +226,7 @@ class InteractionService {
   }
 
   void markZapped(String noteId, int amount) {
+    _localZaps.add(noteId);
     _updateCache(
         noteId,
         (c) => c.copyWith(
@@ -296,5 +299,6 @@ class InteractionService {
     _cache.clear();
     _localReactions.clear();
     _localReposts.clear();
+    _localZaps.clear();
   }
 }

@@ -35,6 +35,9 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     on<InteractionRepostRequested>(_onRepost);
     on<InteractionRepostDeleted>(_onRepostDeleted);
     on<InteractionNoteDeleted>(_onNoteDeleted);
+    on<InteractionZapStarted>(_onZapStarted);
+    on<InteractionZapCompleted>(_onZapCompleted);
+    on<InteractionZapFailed>(_onZapFailed);
     on<InteractionCountsUpdated>(_onCountsUpdated);
   }
 
@@ -89,6 +92,20 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
   void _onCountsUpdated(
       InteractionCountsUpdated event, Emitter<InteractionState> emit) {
+    final currentState =
+        state is InteractionLoaded ? (state as InteractionLoaded) : null;
+
+    if (currentState != null && currentState.zapProcessing) {
+      emit(currentState.copyWith(
+        reactionCount: event.counts.reactions,
+        repostCount: event.counts.reposts,
+        replyCount: event.counts.replies,
+        hasReacted: event.counts.hasReacted,
+        hasReposted: event.counts.hasReposted,
+      ));
+      return;
+    }
+
     emit(InteractionLoaded(
       reactionCount: event.counts.reactions,
       repostCount: event.counts.reposts,
@@ -185,6 +202,47 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         await _syncService.publishDeletion(eventIds: [repostEventId]);
       }
     } catch (_) {}
+  }
+
+  void _onZapStarted(
+      InteractionZapStarted event, Emitter<InteractionState> emit) {
+    final currentState =
+        state is InteractionLoaded ? (state as InteractionLoaded) : null;
+    if (currentState == null) return;
+
+    emit(currentState.copyWith(
+      zapProcessing: true,
+      hasZapped: true,
+      zapAmount: currentState.zapAmount + event.amount,
+    ));
+  }
+
+  void _onZapCompleted(
+      InteractionZapCompleted event, Emitter<InteractionState> emit) {
+    final currentState =
+        state is InteractionLoaded ? (state as InteractionLoaded) : null;
+    if (currentState == null) return;
+
+    _interactionService.markZapped(noteId, event.amount);
+
+    emit(currentState.copyWith(
+      zapProcessing: false,
+      hasZapped: true,
+    ));
+  }
+
+  void _onZapFailed(
+      InteractionZapFailed event, Emitter<InteractionState> emit) {
+    final currentState =
+        state is InteractionLoaded ? (state as InteractionLoaded) : null;
+    if (currentState == null) return;
+
+    emit(currentState.copyWith(
+      zapProcessing: false,
+      hasZapped: false,
+    ));
+
+    _interactionService.refreshInteractions(noteId);
   }
 
   Future<void> _onNoteDeleted(
