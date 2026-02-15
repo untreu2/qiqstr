@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `metadata_to_flat_json`
+// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `is_event_muted`, `metadata_to_flat_json`
 
 Future<String?> dbGetProfile({required String pubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbGetProfile(pubkeyHex: pubkeyHex);
@@ -53,19 +53,37 @@ Future<void> dbDeleteMuteList({required String pubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbDeleteMuteList(pubkeyHex: pubkeyHex);
 
 Future<String> dbGetFeedNotes(
-        {required List<String> authorsHex, required int limit}) =>
-    RustLib.instance.api
-        .crateApiDatabaseDbGetFeedNotes(authorsHex: authorsHex, limit: limit);
+        {required List<String> authorsHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetFeedNotes(
+        authorsHex: authorsHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<String> dbGetProfileNotes(
-        {required String pubkeyHex, required int limit}) =>
-    RustLib.instance.api
-        .crateApiDatabaseDbGetProfileNotes(pubkeyHex: pubkeyHex, limit: limit);
+        {required String pubkeyHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetProfileNotes(
+        pubkeyHex: pubkeyHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<String> dbGetHashtagNotes(
-        {required String hashtag, required int limit}) =>
-    RustLib.instance.api
-        .crateApiDatabaseDbGetHashtagNotes(hashtag: hashtag, limit: limit);
+        {required String hashtag,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHashtagNotes(
+        hashtag: hashtag,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<String?> dbGetEvent({required String eventId}) =>
     RustLib.instance.api.crateApiDatabaseDbGetEvent(eventId: eventId);
@@ -84,14 +102,27 @@ Future<String> dbQueryEvents(
     RustLib.instance.api
         .crateApiDatabaseDbQueryEvents(filterJson: filterJson, limit: limit);
 
-Future<String> dbGetReplies({required String noteId, required int limit}) =>
-    RustLib.instance.api
-        .crateApiDatabaseDbGetReplies(noteId: noteId, limit: limit);
+Future<String> dbGetReplies(
+        {required String noteId,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetReplies(
+        noteId: noteId,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<String> dbGetNotifications(
-        {required String userPubkeyHex, required int limit}) =>
+        {required String userPubkeyHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
     RustLib.instance.api.crateApiDatabaseDbGetNotifications(
-        userPubkeyHex: userPubkeyHex, limit: limit);
+        userPubkeyHex: userPubkeyHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<String> dbGetInteractionCounts({required String noteId}) =>
     RustLib.instance.api.crateApiDatabaseDbGetInteractionCounts(noteId: noteId);
@@ -119,13 +150,23 @@ Future<String> dbGetDetailedInteractions({required String noteId}) =>
     RustLib.instance.api
         .crateApiDatabaseDbGetDetailedInteractions(noteId: noteId);
 
-Future<String> dbGetArticles({required int limit}) =>
-    RustLib.instance.api.crateApiDatabaseDbGetArticles(limit: limit);
+Future<String> dbGetArticles(
+        {required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetArticles(
+        limit: limit, mutedPubkeys: mutedPubkeys, mutedWords: mutedWords);
 
 Future<String> dbGetArticlesByAuthors(
-        {required List<String> authorsHex, required int limit}) =>
+        {required List<String> authorsHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
     RustLib.instance.api.crateApiDatabaseDbGetArticlesByAuthors(
-        authorsHex: authorsHex, limit: limit);
+        authorsHex: authorsHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<String?> dbFindUserRepostEventId(
         {required String userPubkeyHex, required String noteId}) =>

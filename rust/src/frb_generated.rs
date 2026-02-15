@@ -1270,11 +1270,18 @@ fn wire__crate__api__database__db_get_articles_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_limit = <u32>::sse_decode(&mut deserializer);
+            let api_muted_pubkeys = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_muted_words = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok = crate::api::database::db_get_articles(api_limit).await?;
+                        let output_ok = crate::api::database::db_get_articles(
+                            api_limit,
+                            api_muted_pubkeys,
+                            api_muted_words,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1307,6 +1314,8 @@ fn wire__crate__api__database__db_get_articles_by_authors_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_authors_hex = <Vec<String>>::sse_decode(&mut deserializer);
             let api_limit = <u32>::sse_decode(&mut deserializer);
+            let api_muted_pubkeys = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_muted_words = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
@@ -1314,6 +1323,8 @@ fn wire__crate__api__database__db_get_articles_by_authors_impl(
                         let output_ok = crate::api::database::db_get_articles_by_authors(
                             api_authors_hex,
                             api_limit,
+                            api_muted_pubkeys,
+                            api_muted_words,
                         )
                         .await?;
                         Ok(output_ok)
@@ -1535,13 +1546,19 @@ fn wire__crate__api__database__db_get_feed_notes_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_authors_hex = <Vec<String>>::sse_decode(&mut deserializer);
             let api_limit = <u32>::sse_decode(&mut deserializer);
+            let api_muted_pubkeys = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_muted_words = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok =
-                            crate::api::database::db_get_feed_notes(api_authors_hex, api_limit)
-                                .await?;
+                        let output_ok = crate::api::database::db_get_feed_notes(
+                            api_authors_hex,
+                            api_limit,
+                            api_muted_pubkeys,
+                            api_muted_words,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1611,13 +1628,19 @@ fn wire__crate__api__database__db_get_hashtag_notes_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_hashtag = <String>::sse_decode(&mut deserializer);
             let api_limit = <u32>::sse_decode(&mut deserializer);
+            let api_muted_pubkeys = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_muted_words = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok =
-                            crate::api::database::db_get_hashtag_notes(api_hashtag, api_limit)
-                                .await?;
+                        let output_ok = crate::api::database::db_get_hashtag_notes(
+                            api_hashtag,
+                            api_limit,
+                            api_muted_pubkeys,
+                            api_muted_words,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1724,6 +1747,8 @@ fn wire__crate__api__database__db_get_notifications_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_user_pubkey_hex = <String>::sse_decode(&mut deserializer);
             let api_limit = <u32>::sse_decode(&mut deserializer);
+            let api_muted_pubkeys = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_muted_words = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
@@ -1731,6 +1756,8 @@ fn wire__crate__api__database__db_get_notifications_impl(
                         let output_ok = crate::api::database::db_get_notifications(
                             api_user_pubkey_hex,
                             api_limit,
+                            api_muted_pubkeys,
+                            api_muted_words,
                         )
                         .await?;
                         Ok(output_ok)
@@ -1839,13 +1866,19 @@ fn wire__crate__api__database__db_get_profile_notes_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_pubkey_hex = <String>::sse_decode(&mut deserializer);
             let api_limit = <u32>::sse_decode(&mut deserializer);
+            let api_muted_pubkeys = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_muted_words = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok =
-                            crate::api::database::db_get_profile_notes(api_pubkey_hex, api_limit)
-                                .await?;
+                        let output_ok = crate::api::database::db_get_profile_notes(
+                            api_pubkey_hex,
+                            api_limit,
+                            api_muted_pubkeys,
+                            api_muted_words,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1952,12 +1985,19 @@ fn wire__crate__api__database__db_get_replies_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_note_id = <String>::sse_decode(&mut deserializer);
             let api_limit = <u32>::sse_decode(&mut deserializer);
+            let api_muted_pubkeys = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_muted_words = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok =
-                            crate::api::database::db_get_replies(api_note_id, api_limit).await?;
+                        let output_ok = crate::api::database::db_get_replies(
+                            api_note_id,
+                            api_limit,
+                            api_muted_pubkeys,
+                            api_muted_words,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,

@@ -223,10 +223,16 @@ abstract class RustLibApi extends BaseApi {
   Future<String?> crateApiDatabaseDbFindUserRepostEventId(
       {required String userPubkeyHex, required String noteId});
 
-  Future<String> crateApiDatabaseDbGetArticles({required int limit});
+  Future<String> crateApiDatabaseDbGetArticles(
+      {required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords});
 
   Future<String> crateApiDatabaseDbGetArticlesByAuthors(
-      {required List<String> authorsHex, required int limit});
+      {required List<String> authorsHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords});
 
   Future<String> crateApiDatabaseDbGetBatchInteractionCounts(
       {required List<String> noteIds});
@@ -242,13 +248,19 @@ abstract class RustLibApi extends BaseApi {
   Future<String?> crateApiDatabaseDbGetEvent({required String eventId});
 
   Future<String> crateApiDatabaseDbGetFeedNotes(
-      {required List<String> authorsHex, required int limit});
+      {required List<String> authorsHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords});
 
   Future<List<String>> crateApiDatabaseDbGetFollowingList(
       {required String pubkeyHex});
 
   Future<String> crateApiDatabaseDbGetHashtagNotes(
-      {required String hashtag, required int limit});
+      {required String hashtag,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords});
 
   Future<String> crateApiDatabaseDbGetInteractionCounts(
       {required String noteId});
@@ -257,14 +269,20 @@ abstract class RustLibApi extends BaseApi {
       {required String pubkeyHex});
 
   Future<String> crateApiDatabaseDbGetNotifications(
-      {required String userPubkeyHex, required int limit});
+      {required String userPubkeyHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords});
 
   Future<String> crateApiDatabaseDbGetOldestEvents({required int limit});
 
   Future<String?> crateApiDatabaseDbGetProfile({required String pubkeyHex});
 
   Future<String> crateApiDatabaseDbGetProfileNotes(
-      {required String pubkeyHex, required int limit});
+      {required String pubkeyHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords});
 
   Future<String> crateApiDatabaseDbGetProfiles(
       {required List<String> pubkeysHex});
@@ -272,7 +290,10 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiDatabaseDbGetRandomProfiles({required int limit});
 
   Future<String> crateApiDatabaseDbGetReplies(
-      {required String noteId, required int limit});
+      {required String noteId,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords});
 
   Future<bool> crateApiDatabaseDbHasFollowingList({required String pubkeyHex});
 
@@ -1374,11 +1395,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> crateApiDatabaseDbGetArticles({required int limit}) {
+  Future<String> crateApiDatabaseDbGetArticles(
+      {required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_u_32(limit, serializer);
+        sse_encode_list_String(mutedPubkeys, serializer);
+        sse_encode_list_String(mutedWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 32, port: port_);
       },
@@ -1387,7 +1413,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiDatabaseDbGetArticlesConstMeta,
-      argValues: [limit],
+      argValues: [limit, mutedPubkeys, mutedWords],
       apiImpl: this,
     ));
   }
@@ -1395,17 +1421,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiDatabaseDbGetArticlesConstMeta =>
       const TaskConstMeta(
         debugName: "db_get_articles",
-        argNames: ["limit"],
+        argNames: ["limit", "mutedPubkeys", "mutedWords"],
       );
 
   @override
   Future<String> crateApiDatabaseDbGetArticlesByAuthors(
-      {required List<String> authorsHex, required int limit}) {
+      {required List<String> authorsHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_String(authorsHex, serializer);
         sse_encode_u_32(limit, serializer);
+        sse_encode_list_String(mutedPubkeys, serializer);
+        sse_encode_list_String(mutedWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 33, port: port_);
       },
@@ -1414,7 +1445,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiDatabaseDbGetArticlesByAuthorsConstMeta,
-      argValues: [authorsHex, limit],
+      argValues: [authorsHex, limit, mutedPubkeys, mutedWords],
       apiImpl: this,
     ));
   }
@@ -1422,7 +1453,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiDatabaseDbGetArticlesByAuthorsConstMeta =>
       const TaskConstMeta(
         debugName: "db_get_articles_by_authors",
-        argNames: ["authorsHex", "limit"],
+        argNames: ["authorsHex", "limit", "mutedPubkeys", "mutedWords"],
       );
 
   @override
@@ -1554,12 +1585,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiDatabaseDbGetFeedNotes(
-      {required List<String> authorsHex, required int limit}) {
+      {required List<String> authorsHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_String(authorsHex, serializer);
         sse_encode_u_32(limit, serializer);
+        sse_encode_list_String(mutedPubkeys, serializer);
+        sse_encode_list_String(mutedWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 39, port: port_);
       },
@@ -1568,7 +1604,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiDatabaseDbGetFeedNotesConstMeta,
-      argValues: [authorsHex, limit],
+      argValues: [authorsHex, limit, mutedPubkeys, mutedWords],
       apiImpl: this,
     ));
   }
@@ -1576,7 +1612,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiDatabaseDbGetFeedNotesConstMeta =>
       const TaskConstMeta(
         debugName: "db_get_feed_notes",
-        argNames: ["authorsHex", "limit"],
+        argNames: ["authorsHex", "limit", "mutedPubkeys", "mutedWords"],
       );
 
   @override
@@ -1607,12 +1643,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiDatabaseDbGetHashtagNotes(
-      {required String hashtag, required int limit}) {
+      {required String hashtag,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(hashtag, serializer);
         sse_encode_u_32(limit, serializer);
+        sse_encode_list_String(mutedPubkeys, serializer);
+        sse_encode_list_String(mutedWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 41, port: port_);
       },
@@ -1621,7 +1662,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiDatabaseDbGetHashtagNotesConstMeta,
-      argValues: [hashtag, limit],
+      argValues: [hashtag, limit, mutedPubkeys, mutedWords],
       apiImpl: this,
     ));
   }
@@ -1629,7 +1670,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiDatabaseDbGetHashtagNotesConstMeta =>
       const TaskConstMeta(
         debugName: "db_get_hashtag_notes",
-        argNames: ["hashtag", "limit"],
+        argNames: ["hashtag", "limit", "mutedPubkeys", "mutedWords"],
       );
 
   @override
@@ -1686,12 +1727,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiDatabaseDbGetNotifications(
-      {required String userPubkeyHex, required int limit}) {
+      {required String userPubkeyHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(userPubkeyHex, serializer);
         sse_encode_u_32(limit, serializer);
+        sse_encode_list_String(mutedPubkeys, serializer);
+        sse_encode_list_String(mutedWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 44, port: port_);
       },
@@ -1700,7 +1746,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiDatabaseDbGetNotificationsConstMeta,
-      argValues: [userPubkeyHex, limit],
+      argValues: [userPubkeyHex, limit, mutedPubkeys, mutedWords],
       apiImpl: this,
     ));
   }
@@ -1708,7 +1754,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiDatabaseDbGetNotificationsConstMeta =>
       const TaskConstMeta(
         debugName: "db_get_notifications",
-        argNames: ["userPubkeyHex", "limit"],
+        argNames: ["userPubkeyHex", "limit", "mutedPubkeys", "mutedWords"],
       );
 
   @override
@@ -1763,12 +1809,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiDatabaseDbGetProfileNotes(
-      {required String pubkeyHex, required int limit}) {
+      {required String pubkeyHex,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(pubkeyHex, serializer);
         sse_encode_u_32(limit, serializer);
+        sse_encode_list_String(mutedPubkeys, serializer);
+        sse_encode_list_String(mutedWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 47, port: port_);
       },
@@ -1777,7 +1828,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiDatabaseDbGetProfileNotesConstMeta,
-      argValues: [pubkeyHex, limit],
+      argValues: [pubkeyHex, limit, mutedPubkeys, mutedWords],
       apiImpl: this,
     ));
   }
@@ -1785,7 +1836,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiDatabaseDbGetProfileNotesConstMeta =>
       const TaskConstMeta(
         debugName: "db_get_profile_notes",
-        argNames: ["pubkeyHex", "limit"],
+        argNames: ["pubkeyHex", "limit", "mutedPubkeys", "mutedWords"],
       );
 
   @override
@@ -1841,12 +1892,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiDatabaseDbGetReplies(
-      {required String noteId, required int limit}) {
+      {required String noteId,
+      required int limit,
+      required List<String> mutedPubkeys,
+      required List<String> mutedWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(noteId, serializer);
         sse_encode_u_32(limit, serializer);
+        sse_encode_list_String(mutedPubkeys, serializer);
+        sse_encode_list_String(mutedWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 50, port: port_);
       },
@@ -1855,7 +1911,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiDatabaseDbGetRepliesConstMeta,
-      argValues: [noteId, limit],
+      argValues: [noteId, limit, mutedPubkeys, mutedWords],
       apiImpl: this,
     ));
   }
@@ -1863,7 +1919,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiDatabaseDbGetRepliesConstMeta =>
       const TaskConstMeta(
         debugName: "db_get_replies",
-        argNames: ["noteId", "limit"],
+        argNames: ["noteId", "limit", "mutedPubkeys", "mutedWords"],
       );
 
   @override

@@ -5,6 +5,42 @@ use nostr_sdk::prelude::*;
 
 use super::relay::get_client_pub;
 
+fn is_event_muted(event: &Event, muted_pubkeys: &[String], muted_words: &[String]) -> bool {
+    if muted_pubkeys.is_empty() && muted_words.is_empty() {
+        return false;
+    }
+
+    let pubkey_hex = event.pubkey.to_hex();
+    if muted_pubkeys.iter().any(|p| p == &pubkey_hex) {
+        return true;
+    }
+
+    if !muted_words.is_empty() {
+        let content_lower = event.content.to_lowercase();
+        for word in muted_words {
+            if content_lower.contains(&word.to_lowercase()) {
+                return true;
+            }
+        }
+    }
+
+    if event.kind == Kind::Repost {
+        for tag in event.tags.iter() {
+            let tag_kind = tag.kind();
+            if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::P, .. })) {
+                if let Some(original_author) = tag.content() {
+                    let author_str = original_author.to_string();
+                    if muted_pubkeys.iter().any(|p| p == &author_str) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
 fn extract_bolt11_amount_sats(bolt11: &str) -> Option<u64> {
     let lower = bolt11.to_lowercase();
     let sep_pos = lower.rfind('1')?;
@@ -312,7 +348,7 @@ pub async fn db_delete_mute_list(pubkey_hex: String) -> Result<()> {
     Ok(())
 }
 
-pub async fn db_get_feed_notes(authors_hex: Vec<String>, limit: u32) -> Result<String> {
+pub async fn db_get_feed_notes(authors_hex: Vec<String>, limit: u32, muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
     let authors: Vec<PublicKey> = authors_hex
         .iter()
@@ -327,12 +363,13 @@ pub async fn db_get_feed_notes(authors_hex: Vec<String>, limit: u32) -> Result<S
 
     let json: Vec<serde_json::Value> = events
         .into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
 }
 
-pub async fn db_get_profile_notes(pubkey_hex: String, limit: u32) -> Result<String> {
+pub async fn db_get_profile_notes(pubkey_hex: String, limit: u32, muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
 
@@ -344,12 +381,13 @@ pub async fn db_get_profile_notes(pubkey_hex: String, limit: u32) -> Result<Stri
 
     let json: Vec<serde_json::Value> = events
         .into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
 }
 
-pub async fn db_get_hashtag_notes(hashtag: String, limit: u32) -> Result<String> {
+pub async fn db_get_hashtag_notes(hashtag: String, limit: u32, muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
 
     let filter = Filter::new()
@@ -360,6 +398,7 @@ pub async fn db_get_hashtag_notes(hashtag: String, limit: u32) -> Result<String>
 
     let json: Vec<serde_json::Value> = events
         .into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
@@ -421,7 +460,7 @@ pub async fn db_query_events(filter_json: String, limit: u32) -> Result<String> 
     Ok(serde_json::to_string(&json)?)
 }
 
-pub async fn db_get_replies(note_id: String, limit: u32) -> Result<String> {
+pub async fn db_get_replies(note_id: String, limit: u32, muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
     let id = EventId::from_hex(&note_id)?;
 
@@ -433,12 +472,13 @@ pub async fn db_get_replies(note_id: String, limit: u32) -> Result<String> {
 
     let json: Vec<serde_json::Value> = events
         .into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
 }
 
-pub async fn db_get_notifications(user_pubkey_hex: String, limit: u32) -> Result<String> {
+pub async fn db_get_notifications(user_pubkey_hex: String, limit: u32, muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&user_pubkey_hex)?;
 
@@ -451,6 +491,7 @@ pub async fn db_get_notifications(user_pubkey_hex: String, limit: u32) -> Result
     let json: Vec<serde_json::Value> = events
         .into_iter()
         .filter(|e| e.pubkey.to_hex() != user_pubkey_hex)
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
@@ -712,14 +753,17 @@ pub async fn db_get_detailed_interactions(note_id: String) -> Result<String> {
     Ok(serde_json::to_string(&results)?)
 }
 
-pub async fn db_get_articles(limit: u32) -> Result<String> {
+pub async fn db_get_articles(limit: u32, muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
     let filter = Filter::new()
         .kind(Kind::LongFormTextNote)
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
     
-    let mut events_vec: Vec<Event> = events.into_iter().collect();
+    let mut events_vec: Vec<Event> = events
+        .into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
     events_vec.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     let json: Vec<serde_json::Value> = events_vec
@@ -729,7 +773,7 @@ pub async fn db_get_articles(limit: u32) -> Result<String> {
     Ok(serde_json::to_string(&json)?)
 }
 
-pub async fn db_get_articles_by_authors(authors_hex: Vec<String>, limit: u32) -> Result<String> {
+pub async fn db_get_articles_by_authors(authors_hex: Vec<String>, limit: u32, muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
     
     let authors: Vec<PublicKey> = authors_hex
@@ -747,7 +791,10 @@ pub async fn db_get_articles_by_authors(authors_hex: Vec<String>, limit: u32) ->
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
     
-    let mut events_vec: Vec<Event> = events.into_iter().collect();
+    let mut events_vec: Vec<Event> = events
+        .into_iter()
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
     events_vec.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     let json: Vec<serde_json::Value> = events_vec

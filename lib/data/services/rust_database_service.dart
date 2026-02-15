@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import '../../src/rust/api/database.dart' as rust_db;
 import '../../src/rust/api/relay.dart' as rust_relay;
+import 'encrypted_mute_service.dart';
 
 class RustDatabaseService {
   static final RustDatabaseService _instance = RustDatabaseService._internal();
@@ -227,8 +228,13 @@ class RustDatabaseService {
       List<String> authorPubkeys,
       {int limit = 100}) async {
     try {
-      final json =
-          await rust_db.dbGetFeedNotes(authorsHex: authorPubkeys, limit: limit);
+      final mute = EncryptedMuteService.instance;
+      final json = await rust_db.dbGetFeedNotes(
+        authorsHex: authorPubkeys,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+      );
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -250,8 +256,13 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> getCachedProfileNotes(String authorPubkey,
       {int limit = 50}) async {
     try {
+      final mute = EncryptedMuteService.instance;
       final json = await rust_db.dbGetProfileNotes(
-          pubkeyHex: authorPubkey, limit: limit);
+        pubkeyHex: authorPubkey,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+      );
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -294,8 +305,13 @@ class RustDatabaseService {
         .startWith(null)
         .asyncMap((_) async {
       try {
-        final json =
-            await rust_db.dbGetHashtagNotes(hashtag: hashtag, limit: limit);
+        final mute = EncryptedMuteService.instance;
+        final json = await rust_db.dbGetHashtagNotes(
+          hashtag: hashtag,
+          limit: limit,
+          mutedPubkeys: mute.mutedPubkeys,
+          mutedWords: mute.mutedWords,
+        );
         final decoded = jsonDecode(json) as List<dynamic>;
         return decoded.cast<Map<String, dynamic>>();
       } catch (_) {
@@ -340,7 +356,13 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> getReplies(String noteId,
       {int limit = 500}) async {
     try {
-      final json = await rust_db.dbGetReplies(noteId: noteId, limit: limit);
+      final mute = EncryptedMuteService.instance;
+      final json = await rust_db.dbGetReplies(
+        noteId: noteId,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+      );
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -360,8 +382,13 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> getCachedNotifications(String userPubkey,
       {int limit = 100}) async {
     try {
+      final mute = EncryptedMuteService.instance;
       final json = await rust_db.dbGetNotifications(
-          userPubkeyHex: userPubkey, limit: limit);
+        userPubkeyHex: userPubkey,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+      );
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -477,12 +504,21 @@ class RustDatabaseService {
   Future<List<Map<String, dynamic>>> getCachedArticles(
       {int limit = 50, List<String>? authors}) async {
     try {
+      final mute = EncryptedMuteService.instance;
       final String json;
       if (authors != null && authors.isNotEmpty) {
         json = await rust_db.dbGetArticlesByAuthors(
-            authorsHex: authors, limit: limit);
+          authorsHex: authors,
+          limit: limit,
+          mutedPubkeys: mute.mutedPubkeys,
+          mutedWords: mute.mutedWords,
+        );
       } else {
-        json = await rust_db.dbGetArticles(limit: limit);
+        json = await rust_db.dbGetArticles(
+          limit: limit,
+          mutedPubkeys: mute.mutedPubkeys,
+          mutedWords: mute.mutedWords,
+        );
       }
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();

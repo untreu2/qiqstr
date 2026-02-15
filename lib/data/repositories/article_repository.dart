@@ -1,6 +1,5 @@
 import 'dart:async';
 import '../../domain/entities/article.dart';
-import '../services/encrypted_mute_service.dart';
 import 'base_repository.dart';
 
 abstract class ArticleRepository {
@@ -62,20 +61,14 @@ class ArticleRepositoryImpl extends BaseRepository
       List<Map<String, dynamic>> events) async {
     if (events.isEmpty) return [];
 
-    final muteService = EncryptedMuteService.instance;
-    final filteredEvents =
-        events.where((event) => !muteService.shouldFilterEvent(event)).toList();
-
-    if (filteredEvents.isEmpty) return [];
-
-    final pubkeys = filteredEvents
+    final pubkeys = events
         .map((e) => e['pubkey'] as String? ?? '')
         .where((p) => p.isNotEmpty)
         .toSet()
         .toList();
     final profiles = await db.getUserProfiles(pubkeys);
 
-    return filteredEvents.map((event) {
+    return events.map((event) {
       final pubkey = event['pubkey'] as String? ?? '';
       final profile = profiles[pubkey];
 
