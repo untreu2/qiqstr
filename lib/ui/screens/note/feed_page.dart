@@ -33,6 +33,7 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
+import '../../widgets/common/snackbar_widget.dart';
 import '../../../data/services/favorite_lists_service.dart';
 import '../../../data/services/follow_set_service.dart';
 
@@ -682,6 +683,10 @@ class FeedPageState extends State<FeedPage> {
         : topPadding + 55 + (hasListSelector ? 36 : 0);
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
+
+    if (!isHashtagMode) {
+      AppSnackbar.setHeaderOffset(_showAppBar ? headerHeight : 0);
+    }
 
     return MultiBlocProvider(
       providers: [

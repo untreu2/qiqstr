@@ -368,7 +368,6 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleBookmarkTap() {
-    final l10n = AppLocalizations.of(context)!;
     HapticFeedback.lightImpact();
     if (!mounted) return;
 
@@ -378,16 +377,10 @@ class _InteractionBarState extends State<InteractionBar> {
       bookmarkService.removeBookmark(widget.noteId);
       setState(() => _isBookmarked = false);
       _publishBookmarkUpdate();
-      if (mounted) {
-        AppSnackbar.success(context, l10n.bookmarkRemoved);
-      }
     } else {
       bookmarkService.addBookmark(widget.noteId);
       setState(() => _isBookmarked = true);
       _publishBookmarkUpdate();
-      if (mounted) {
-        AppSnackbar.success(context, l10n.bookmarkAdded);
-      }
     }
   }
 
