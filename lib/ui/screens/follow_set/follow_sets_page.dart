@@ -604,7 +604,11 @@ class _FollowSetCard extends StatelessWidget {
   }
 
   Widget _buildAvatarRow(
-      BuildContext context, List<Map<String, dynamic>> users) {
+      BuildContext context, List<Map<String, dynamic>> allUsers) {
+    final users = allUsers
+        .where((u) => ((u['picture'] as String?) ?? '').isNotEmpty)
+        .toList();
+    if (users.isEmpty) return const SizedBox.shrink();
     final displayCount = users.length > 5 ? 5 : users.length;
     final remaining = users.length - displayCount;
     const double avatarSize = 28;
