@@ -658,14 +658,31 @@ class _InteractionBarState extends State<InteractionBar> {
       );
     }
 
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
+    final screenHeight = MediaQuery.of(context).size.height;
+    final estimatedMenuHeight = items.length * 56.0;
+    final spaceBelow = screenHeight - (offset.dy + size.height);
+    final openAbove = spaceBelow < estimatedMenuHeight + 140;
+
+    final RelativeRect menuPosition;
+    if (openAbove) {
+      menuPosition = RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy - estimatedMenuHeight - size.height,
+        offset.dx + size.width,
+        offset.dy - size.height,
+      );
+    } else {
+      menuPosition = RelativeRect.fromLTRB(
         offset.dx,
         offset.dy + size.height,
         offset.dx + size.width,
-        offset.dy + size.height + 200,
-      ),
+        offset.dy + size.height + estimatedMenuHeight,
+      );
+    }
+
+    showMenu(
+      context: context,
+      position: menuPosition,
       color: context.colors.textPrimary,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
       items: items,
