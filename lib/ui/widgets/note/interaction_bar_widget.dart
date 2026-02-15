@@ -19,6 +19,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../dialogs/zap_dialog.dart';
 import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
+import '../common/popup_menu_widget.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../data/services/encrypted_bookmark_service.dart';
 import '../../../data/services/pinned_notes_service.dart';
@@ -43,7 +44,6 @@ class InteractionBar extends StatefulWidget {
 
 class _InteractionBarState extends State<InteractionBar> {
   final GlobalKey _repostButtonKey = GlobalKey();
-  final GlobalKey _moreButtonKey = GlobalKey();
   late final InteractionBloc _interactionBloc;
   bool _isBookmarked = false;
 
@@ -562,57 +562,18 @@ class _InteractionBarState extends State<InteractionBar> {
     );
   }
 
-  void _showMoreMenu(InteractionLoaded state) {
+  List<AppPopupMenuItem> _buildMoreMenuItems() {
     final l10n = AppLocalizations.of(context)!;
-    final RenderBox? renderBox =
-        _moreButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final offset = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-
-    final items = <PopupMenuItem<String>>[
-      PopupMenuItem(
+    final items = <AppPopupMenuItem>[
+      AppPopupMenuItem(
         value: 'verify',
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Row(
-            children: [
-              Icon(CarbonIcons.checkmark_filled,
-                  size: 17, color: context.colors.background),
-              const SizedBox(width: 12),
-              Text(
-                l10n.verifySignature,
-                style: TextStyle(
-                  color: context.colors.background,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
+        icon: CarbonIcons.checkmark_filled,
+        label: l10n.verifySignature,
       ),
-      PopupMenuItem(
+      AppPopupMenuItem(
         value: 'interactions',
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Row(
-            children: [
-              Icon(CarbonIcons.chart_bar,
-                  size: 17, color: context.colors.background),
-              const SizedBox(width: 12),
-              Text(
-                l10n.interactions,
-                style: TextStyle(
-                  color: context.colors.background,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
+        icon: CarbonIcons.chart_bar,
+        label: l10n.interactions,
       ),
     ];
 
@@ -621,105 +582,38 @@ class _InteractionBarState extends State<InteractionBar> {
         noteForActions?['author'] as String?;
     if (noteAuthor == widget.currentUserHex) {
       final isPinned = PinnedNotesService.instance.isPinned(widget.noteId);
-      items.add(
-        PopupMenuItem(
-          value: 'pin',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Icon(
-                  isPinned ? CarbonIcons.pin_filled : CarbonIcons.pin,
-                  size: 17,
-                  color: context.colors.background,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  isPinned ? l10n.unpinNote : l10n.pinNote,
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-      items.add(
-        PopupMenuItem(
-          value: 'delete',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Icon(CarbonIcons.delete,
-                    size: 17, color: context.colors.background),
-                const SizedBox(width: 12),
-                Text(
-                  l10n.delete,
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      items.add(AppPopupMenuItem(
+        value: 'pin',
+        icon: isPinned ? CarbonIcons.pin_filled : CarbonIcons.pin,
+        label: isPinned ? l10n.unpinNote : l10n.pinNote,
+      ));
+      items.add(AppPopupMenuItem(
+        value: 'delete',
+        icon: CarbonIcons.delete,
+        label: l10n.delete,
+      ));
     }
 
-    final screenHeight = MediaQuery.of(context).size.height;
-    final estimatedMenuHeight = items.length * 56.0;
-    final spaceBelow = screenHeight - (offset.dy + size.height);
-    final openAbove = spaceBelow < estimatedMenuHeight + 140;
+    return items;
+  }
 
-    final RelativeRect menuPosition;
-    if (openAbove) {
-      menuPosition = RelativeRect.fromLTRB(
-        offset.dx,
-        offset.dy - estimatedMenuHeight - size.height,
-        offset.dx + size.width,
-        offset.dy - size.height,
-      );
-    } else {
-      menuPosition = RelativeRect.fromLTRB(
-        offset.dx,
-        offset.dy + size.height,
-        offset.dx + size.width,
-        offset.dy + size.height + estimatedMenuHeight,
-      );
-    }
-
-    showMenu(
-      context: context,
-      position: menuPosition,
-      color: context.colors.textPrimary,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-      items: items,
-    ).then((value) {
-      if (value == null) return;
-      HapticFeedback.lightImpact();
-      if (value == 'verify') {
+  void _handleMoreMenuSelection(String value) {
+    switch (value) {
+      case 'verify':
         _handleVerifyTap();
-      } else if (value == 'interactions') {
+      case 'interactions':
         _handleStatsTap();
-      } else if (value == 'pin') {
+      case 'pin':
         _handlePinTap();
-      } else if (value == 'delete') {
+      case 'delete':
         _handleDeleteTap();
-      }
-    });
+    }
   }
 
   Widget _buildPopupMenu(dynamic colors, InteractionLoaded state) {
-    return InkWell(
-      key: _moreButtonKey,
-      onTap: () => _showMoreMenu(state),
-      borderRadius: BorderRadius.circular(8),
+    return AppPopupMenuButton(
+      items: _buildMoreMenuItems(),
+      onSelected: _handleMoreMenuSelection,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Transform.translate(

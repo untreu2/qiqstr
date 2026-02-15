@@ -10,6 +10,7 @@ import '../../theme/theme_manager.dart';
 import '../media/photo_viewer_widget.dart';
 import '../note/note_content_widget.dart';
 import '../common/snackbar_widget.dart';
+import '../common/popup_menu_widget.dart';
 import '../dialogs/unfollow_user_dialog.dart';
 import '../dialogs/mute_user_dialog.dart';
 import '../dialogs/report_user_dialog.dart';
@@ -437,14 +438,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildAddToListButton(context, state),
+                _buildMoreButton(context, state),
                 const SizedBox(width: 8),
-                _buildReportButton(context, state),
-                const SizedBox(width: 8),
-                if (state.isMuted != null) ...[
-                  _buildMuteButton(context, state),
-                  const SizedBox(width: 8),
-                ],
                 if (state.isFollowing != null)
                   _buildFollowButton(context, state),
               ],
@@ -508,107 +503,56 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
   }
 
-  Widget _buildMuteButton(BuildContext context, ProfileInfoLoaded state) {
+  Widget _buildMoreButton(BuildContext context, ProfileInfoLoaded state) {
     final l10n = AppLocalizations.of(context)!;
     final isMuted = state.isMuted ?? false;
-    final bloc = context.read<ProfileInfoBloc>();
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          debugPrint('Mute button tapped');
-          _toggleMute(state, bloc);
-        },
-        borderRadius: BorderRadius.circular(isMuted ? 16 : 40),
-        child: Ink(
-          padding: isMuted
-              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
-              : const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isMuted
-                ? context.colors.textPrimary
-                : context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(isMuted ? 16 : 40),
-          ),
-          child: isMuted
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      CarbonIcons.notification_off,
-                      size: 16,
-                      color: context.colors.background,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      l10n.mutedButton,
-                      style: TextStyle(
-                        color: context.colors.background,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                )
-              : Icon(
-                  CarbonIcons.notification,
-                  size: 20,
-                  color: context.colors.textPrimary,
-                ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildAddToListButton(BuildContext context, ProfileInfoLoaded state) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          final pubkeyHex = state.user['pubkeyHex'] as String? ?? '';
-          if (pubkeyHex.isNotEmpty) {
-            _showAddToListSheet(context, pubkeyHex);
-          }
-        },
-        borderRadius: BorderRadius.circular(40),
-        child: Ink(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: Icon(
-            CarbonIcons.list_boxes,
-            size: 20,
-            color: context.colors.textPrimary,
-          ),
-        ),
+    final items = <AppPopupMenuItem>[
+      AppPopupMenuItem(
+        value: 'add_to_list',
+        icon: CarbonIcons.list_boxes,
+        label: l10n.addToList,
       ),
-    );
-  }
+      AppPopupMenuItem(
+        value: 'mute',
+        icon: isMuted
+            ? CarbonIcons.notification_off
+            : CarbonIcons.notification,
+        label: isMuted ? l10n.unmute : l10n.mute,
+      ),
+      AppPopupMenuItem(
+        value: 'report',
+        icon: CarbonIcons.flag,
+        label: l10n.report,
+      ),
+    ];
 
-  Widget _buildReportButton(BuildContext context, ProfileInfoLoaded state) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          _showReportDialog(context, state);
-        },
-        borderRadius: BorderRadius.circular(40),
-        child: Ink(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: Icon(
-            CarbonIcons.flag,
-            size: 20,
-            color: context.colors.textPrimary,
-          ),
+    return AppPopupMenuButton(
+      items: items,
+      onSelected: (value) {
+        switch (value) {
+          case 'add_to_list':
+            final pubkeyHex = state.user['pubkeyHex'] as String? ?? '';
+            if (pubkeyHex.isNotEmpty) {
+              _showAddToListSheet(context, pubkeyHex);
+            }
+          case 'mute':
+            final bloc = context.read<ProfileInfoBloc>();
+            _toggleMute(state, bloc);
+          case 'report':
+            _showReportDialog(context, state);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: Icon(
+          Icons.more_horiz,
+          size: 20,
+          color: context.colors.textPrimary,
         ),
       ),
     );
