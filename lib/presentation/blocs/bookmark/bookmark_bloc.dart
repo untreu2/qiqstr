@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/encrypted_bookmark_service.dart';
+import '../../../data/services/rust_database_service.dart';
+import '../../../src/rust/api/relay.dart' as rust_relay;
 import 'bookmark_event.dart';
 import 'bookmark_state.dart';
 
@@ -55,10 +58,18 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
     if (bookmarkService.bookmarkedEventIds.isNotEmpty) {
       final notes =
           await _fetchBookmarkedNotes(bookmarkService.bookmarkedEventIds);
-      emit(BookmarkLoaded(bookmarkedNotes: notes, removingStates: {}));
+      emit(BookmarkLoaded(
+        bookmarkedNotes: notes,
+        removingStates: {},
+        isSyncing: true,
+      ));
       _syncBookmarksInBackground(currentUserHex, emit);
     } else if (bookmarkService.isInitialized) {
-      emit(const BookmarkLoaded(bookmarkedNotes: [], removingStates: {}));
+      emit(const BookmarkLoaded(
+        bookmarkedNotes: [],
+        removingStates: {},
+        isSyncing: true,
+      ));
       _syncBookmarksInBackground(currentUserHex, emit);
     } else {
       emit(const BookmarkLoaded(bookmarkedNotes: [], removingStates: {}));
@@ -73,13 +84,46 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
 
     final authorHexes = <String>{};
     final validNotes = <Map<String, dynamic>>[];
+    final missingIds = <String>[];
 
-    for (final note in noteResults) {
-      if (note == null) continue;
-      final noteMap = note.toMap();
-      validNotes.add(noteMap);
-      final authorHex = noteMap['author'] as String? ?? '';
-      if (authorHex.isNotEmpty) authorHexes.add(authorHex);
+    for (var i = 0; i < eventIds.length; i++) {
+      final note = noteResults[i];
+      if (note != null) {
+        final noteMap = note.toMap();
+        validNotes.add(noteMap);
+        final authorHex = noteMap['author'] as String? ?? '';
+        if (authorHex.isNotEmpty) authorHexes.add(authorHex);
+      } else {
+        missingIds.add(eventIds[i]);
+      }
+    }
+
+    if (missingIds.isNotEmpty) {
+      final fetchFutures = missingIds.map((id) async {
+        try {
+          final eventJson = await rust_relay.fetchEventById(
+            eventId: id,
+            timeoutSecs: 5,
+          );
+          if (eventJson == null) return null;
+
+          final eventData = jsonDecode(eventJson) as Map<String, dynamic>;
+          await RustDatabaseService.instance.saveEvents([eventData]);
+
+          return await _feedRepository.getNote(id);
+        } catch (_) {
+          return null;
+        }
+      }).toList();
+
+      final fetchedNotes = await Future.wait(fetchFutures);
+      for (final note in fetchedNotes) {
+        if (note == null) continue;
+        final noteMap = note.toMap();
+        validNotes.add(noteMap);
+        final authorHex = noteMap['author'] as String? ?? '';
+        if (authorHex.isNotEmpty) authorHexes.add(authorHex);
+      }
     }
 
     if (authorHexes.isEmpty) return validNotes;
@@ -96,6 +140,12 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
       }
     }
 
+    validNotes.sort((a, b) {
+      final aTime = (a['created_at'] as num?) ?? 0;
+      final bTime = (b['created_at'] as num?) ?? 0;
+      return bTime.compareTo(aTime);
+    });
+
     return validNotes;
   }
 
@@ -103,7 +153,13 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
       String currentUserHex, Emitter<BookmarkState> emit) {
     _syncService.syncBookmarkList(currentUserHex).then((_) async {
       final bookmarkService = EncryptedBookmarkService.instance;
-      if (bookmarkService.bookmarkedEventIds.isEmpty) return;
+      if (bookmarkService.bookmarkedEventIds.isEmpty) {
+        if (state is BookmarkLoaded) {
+          final currentState = state as BookmarkLoaded;
+          emit(currentState.copyWith(isSyncing: false));
+        }
+        return;
+      }
 
       final notes =
           await _fetchBookmarkedNotes(bookmarkService.bookmarkedEventIds);
@@ -113,7 +169,13 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
         emit(BookmarkLoaded(
           bookmarkedNotes: notes,
           removingStates: currentState.removingStates,
+          isSyncing: false,
         ));
+      }
+    }).catchError((_) {
+      if (state is BookmarkLoaded) {
+        final currentState = state as BookmarkLoaded;
+        emit(currentState.copyWith(isSyncing: false));
       }
     });
   }

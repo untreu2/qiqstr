@@ -192,66 +192,98 @@ class _BookmarkPageState extends State<BookmarkPage> {
             ),
           ),
         ),
-      BookmarkLoaded(:final bookmarkedNotes) => bookmarkedNotes.isEmpty
-          ? SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(
-                        CarbonIcons.bookmark,
-                        size: 48,
-                        color: context.colors.textSecondary,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        l10n.noBookmarks,
-                        style: TextStyle(
-                          color: context.colors.textPrimary,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        l10n.youHaventBookmarkedAnyNotesYet,
-                        style: TextStyle(
-                          color: context.colors.textSecondary,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ],
+      BookmarkLoaded(:final bookmarkedNotes, :final isSyncing) =>
+        bookmarkedNotes.isEmpty && isSyncing
+            ? SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: context.colors.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-            )
-          : SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final note = bookmarkedNotes[index];
-                  final noteId = note['id'] as String? ?? '';
-
-                  return RepaintBoundary(
-                    key: ValueKey('bookmark_note_$noteId'),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        NoteWidget(
-                          note: note,
-                          currentUserHex: _currentUserHex,
-                          notesNotifier: _notesNotifier,
-                          profiles: const {},
+              )
+            : bookmarkedNotes.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(
+                              CarbonIcons.bookmark,
+                              size: 48,
+                              color: context.colors.textSecondary,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.noBookmarks,
+                              style: TextStyle(
+                                color: context.colors.textPrimary,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              l10n.youHaventBookmarkedAnyNotesYet,
+                              style: TextStyle(
+                                color: context.colors.textSecondary,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
                         ),
-                        if (index < bookmarkedNotes.length - 1)
-                          const ListSeparatorWidget(),
-                      ],
+                      ),
                     ),
-                  );
-                },
-                childCount: bookmarkedNotes.length,
-              ),
-            ),
+                  )
+                : SliverMainAxisGroup(
+                    slivers: [
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final note = bookmarkedNotes[index];
+                            final noteId = note['id'] as String? ?? '';
+
+                            return RepaintBoundary(
+                              key: ValueKey('bookmark_note_$noteId'),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  NoteWidget(
+                                    note: note,
+                                    currentUserHex: _currentUserHex,
+                                    notesNotifier: _notesNotifier,
+                                    profiles: const {},
+                                  ),
+                                  if (index < bookmarkedNotes.length - 1)
+                                    const ListSeparatorWidget(),
+                                ],
+                              ),
+                            );
+                          },
+                          childCount: bookmarkedNotes.length,
+                        ),
+                      ),
+                      if (isSyncing)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: context.colors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
       _ => const SliverToBoxAdapter(child: SizedBox()),
     };
   }
