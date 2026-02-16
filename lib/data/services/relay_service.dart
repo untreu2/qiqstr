@@ -143,6 +143,19 @@ class RustRelayService {
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> syncEvents(Map<String, dynamic> filter) async {
+    try {
+      final filterJson = jsonEncode(filter);
+      final result = await rust_relay.syncEvents(filterJson: filterJson);
+      return jsonDecode(result) as Map<String, dynamic>;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[RustRelayService] syncEvents (negentropy) error: $e');
+      }
+      return {'received': 0, 'sent': 0, 'local': 0, 'remote': 0};
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchEvents(
     Map<String, dynamic> filter, {
     int timeoutSecs = 15,

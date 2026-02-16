@@ -92,21 +92,16 @@ class SyncService {
 
       final since = _getSincestamp(key);
       final notesFilter = NostrService.createNotesFilter(
-          authors: follows, kinds: [1, 6], limit: 300, since: since);
+          authors: follows, kinds: [1, 6], since: since);
       final articlesFilter =
-          NostrService.createArticlesFilter(authors: follows, limit: 50, since: since);
+          NostrService.createArticlesFilter(authors: follows, since: since);
 
-      final results = await Future.wait([
-        _queryRelays(notesFilter),
-        _queryRelays(articlesFilter),
+      await Future.wait([
+        _syncRelays(notesFilter),
+        _syncRelays(articlesFilter),
       ]);
 
-      final noteEvents = results[0];
-      final articleEvents = results[1];
-      final allEvents = [...noteEvents, ...articleEvents];
-
-      await _saveEventsAndProfiles(allEvents);
-
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -119,10 +114,10 @@ class SyncService {
     await _sync('list_feed', () async {
       final since = _getSincestamp(key);
       final notesFilter = NostrService.createNotesFilter(
-          authors: pubkeys, kinds: [1, 6], limit: 300, since: since);
+          authors: pubkeys, kinds: [1, 6], since: since);
 
-      final noteEvents = await _queryRelays(notesFilter);
-      await _saveEventsAndProfiles(noteEvents);
+      await _syncRelays(notesFilter);
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -162,7 +157,6 @@ class SyncService {
       _notifyDbChanged();
       _syncMissingProfilesInBackground(noteEvents);
       _fetchReferencedEventsInBackground(noteEvents);
-
       _markSynced(key);
     });
   }
@@ -199,9 +193,9 @@ class SyncService {
     await _sync('notifications', () async {
       final since = _getSincestamp(key);
       final filter = NostrService.createNotificationFilter(
-          pubkeys: [userPubkey], kinds: [1, 6, 7, 9735], limit: 100, since: since);
-      final events = await _queryRelays(filter);
-      await _saveEventsAndProfiles(events);
+          pubkeys: [userPubkey], kinds: [1, 6, 7, 9735], since: since);
+      await _syncRelays(filter);
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -392,11 +386,10 @@ class SyncService {
       final since = _getSincestamp(key);
       final filter = NostrService.createArticlesFilter(
         authors: authors,
-        limit: limit,
         since: since,
       );
-      final events = await _queryRelays(filter);
-      await _saveEventsAndProfiles(events);
+      await _syncRelays(filter);
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -411,12 +404,10 @@ class SyncService {
       final filter = NostrService.createHashtagFilter(
         hashtag: normalizedHashtag,
         kinds: [1],
-        limit: 100,
         since: since,
       );
-      final events = await _queryRelays(filter);
-      await _saveEventsAndProfiles(events);
-
+      await _syncRelays(filter);
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -796,6 +787,17 @@ class SyncService {
     }
 
     return event;
+  }
+
+  Future<void> _syncRelays(dynamic filter) async {
+    final filterMap = Map<String, dynamic>.from(filter as Map<String, dynamic>);
+    final syncFilter = Map<String, dynamic>.from(filterMap)..remove('limit');
+    final result = await _relayService.syncEvents(syncFilter);
+    final received = result['received'] as int? ?? 0;
+    final remote = result['remote'] as int? ?? 0;
+    if (received == 0 && remote == 0) {
+      await _relayService.fetchEvents(filterMap);
+    }
   }
 
   Future<List<Map<String, dynamic>>> _queryRelays(dynamic filter) async {

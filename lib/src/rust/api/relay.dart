@@ -53,6 +53,9 @@ Future<String> discoverAndConnectOutboxRelays(
     RustLib.instance.api
         .crateApiRelayDiscoverAndConnectOutboxRelays(pubkeysHex: pubkeysHex);
 
+Future<String> syncEvents({required String filterJson}) =>
+    RustLib.instance.api.crateApiRelaySyncEvents(filterJson: filterJson);
+
 Future<String> fetchEvents(
         {required String filterJson, required int timeoutSecs}) =>
     RustLib.instance.api.crateApiRelayFetchEvents(

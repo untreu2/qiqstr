@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1993716846;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -201324695;
 
 // Section: executor
 
@@ -4308,6 +4308,42 @@ fn wire__crate__api__relay__subscribe_to_events_impl(
         },
     )
 }
+fn wire__crate__api__relay__sync_events_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "sync_events",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_filter_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::relay::sync_events(api_filter_json).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__nip17__unwrap_gift_wrap_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -4940,9 +4976,10 @@ fn pde_ffi_dispatcher_primary_impl(
         108 => wire__crate__api__relay__send_event_impl(port, ptr, rust_vec_len, data_len),
         109 => wire__crate__api__relay__send_event_to_impl(port, ptr, rust_vec_len, data_len),
         112 => wire__crate__api__relay__subscribe_to_events_impl(port, ptr, rust_vec_len, data_len),
-        114 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
-        118 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
-        119 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
+        113 => wire__crate__api__relay__sync_events_impl(port, ptr, rust_vec_len, data_len),
+        115 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
+        119 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
+        120 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
             port,
             ptr,
             rust_vec_len,
@@ -5013,10 +5050,10 @@ fn pde_ffi_dispatcher_sync_impl(
         105 => wire__crate__api__nwc__parse_nwc_uri_impl(ptr, rust_vec_len, data_len),
         110 => wire__crate__api__crypto__sha256_hash_impl(ptr, rust_vec_len, data_len),
         111 => wire__crate__api__crypto__sign_event_id_impl(ptr, rust_vec_len, data_len),
-        113 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
-        115 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        116 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
-        117 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
+        114 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
+        116 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        117 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
+        118 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

@@ -62,7 +62,7 @@ pub async fn init_client(
 
     if let Some(ref path) = db_path {
         let database = NostrLMDB::builder(path)
-            .map_size(2 * 1024 * 1024 * 1024) // 2 GB
+            .map_size(10 * 1024 * 1024 * 1024) // 10 GB
             .build()?;
         builder = builder.database(database);
         
@@ -398,6 +398,27 @@ pub async fn discover_and_connect_outbox_relays(pubkeys_hex: Vec<String>) -> Res
         "discoveredRelays": discovered_count,
         "addedRelays": added_count,
         "totalConnected": connected_count,
+    });
+
+    Ok(result.to_string())
+}
+
+pub async fn sync_events(filter_json: String) -> Result<String> {
+    let client = get_client().await?;
+    let filter = Filter::from_json(&filter_json)?;
+    let opts = SyncOptions::default();
+
+    let output = client.sync(filter, &opts).await
+        .map_err(|e| anyhow!("Negentropy sync failed: {}", e))?;
+
+    let received: Vec<String> = output.received.iter().map(|id| id.to_hex()).collect();
+    let sent: Vec<String> = output.sent.iter().map(|id| id.to_hex()).collect();
+
+    let result = serde_json::json!({
+        "received": received.len(),
+        "sent": sent.len(),
+        "local": output.local.len(),
+        "remote": output.remote.len(),
     });
 
     Ok(result.to_string())

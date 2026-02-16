@@ -27,6 +27,7 @@ Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
 | [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay List Metadata |
 | [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md) | Direct Messages (used by NWC) |
 | [NIP-47](https://github.com/nostr-protocol/nips/blob/master/47.md) | Nostr Wallet Connect |
+| [NIP-77](https://github.com/nostr-protocol/nips/blob/master/77.md) | Negentropy Syncing |
 | [NIP-98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP Auth |
 
 ## Supported Event Kinds
