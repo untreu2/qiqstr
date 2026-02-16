@@ -28,7 +28,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   bool _isPlaying = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-  bool _isDownloading = false;
 
   @override
   void initState() {
@@ -161,36 +160,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     return "$minutes:$seconds";
   }
 
-  Future<void> _downloadVideo() async {
-    if (_isDownloading) return;
-
-    setState(() {
-      _isDownloading = true;
-    });
-
-    try {
-      final saved = await GallerySaver.saveVideo(widget.url);
-
-      if (mounted) {
-        if (saved == true) {
-          AppSnackbar.success(context, 'Video saved to gallery');
-        } else {
-          AppSnackbar.error(context, 'Failed to save video to gallery');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Download error: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isDownloading = false;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
@@ -221,40 +190,19 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                         ),
                         Positioned(
                           top: 8,
-                          left: 8,
-                          child: GestureDetector(
-                            onTap: _isDownloading ? null : _downloadVideo,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                _isDownloading
-                                    ? CarbonIcons.download
-                                    : CarbonIcons.download,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
                           right: 8,
                           child: GestureDetector(
                             onTap: _openFullScreen,
                             child: Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
                                 color: Colors.black.withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(8),
+                                shape: BoxShape.circle,
                               ),
                               child: const Icon(
                                 CarbonIcons.maximize,
                                 color: Colors.white,
-                                size: 20,
+                                size: 18,
                               ),
                             ),
                           ),
@@ -295,49 +243,12 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                                       ),
                                     ),
                                   ),
-                                  Expanded(
-                                    child: Builder(
-                                      builder: (context) {
-                                        final colors = context.colors;
-                                        return SliderTheme(
-                                          data:
-                                              SliderTheme.of(context).copyWith(
-                                            activeTrackColor: colors.accent,
-                                            inactiveTrackColor: Colors.white
-                                                .withValues(alpha: 0.3),
-                                            thumbColor: Colors.white,
-                                            thumbShape:
-                                                const RoundSliderThumbShape(
-                                                    enabledThumbRadius: 4),
-                                            overlayShape:
-                                                const RoundSliderOverlayShape(
-                                                    overlayRadius: 8),
-                                            trackHeight: 2,
-                                          ),
-                                          child: Slider(
-                                            value: _position.inMilliseconds
-                                                .toDouble()
-                                                .clamp(
-                                                    0.0,
-                                                    _duration.inMilliseconds
-                                                        .toDouble()),
-                                            max: _duration.inMilliseconds
-                                                .toDouble(),
-                                            onChanged: (value) {
-                                              final position = Duration(
-                                                  milliseconds: value.toInt());
-                                              _controller?.seekTo(position);
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
+                                  const Spacer(),
                                   Padding(
                                     padding: const EdgeInsets.only(
                                         left: 8, right: 4),
                                     child: Text(
-                                      _formatDuration(_duration),
+                                      _formatDuration(_duration - _position),
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 14,
@@ -558,8 +469,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                               decoration: BoxDecoration(
                                 color: colors.surface.withValues(alpha: 0.8),
                                 border: Border.all(
-                                  color: colors.border.withValues(alpha: 0.5),
-                                  width: 1.5,
+                                  color: colors.border.withValues(alpha: 0.2),
+                                  width: 1,
                                 ),
                                 borderRadius: BorderRadius.circular(40),
                               ),

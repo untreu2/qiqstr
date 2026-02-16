@@ -189,6 +189,9 @@ Future<int> dbCountEvents({required String filterJson}) =>
 
 Future<void> dbWipe() => RustLib.instance.api.crateApiDatabaseDbWipe();
 
+Future<void> dbWipeDirectory() =>
+    RustLib.instance.api.crateApiDatabaseDbWipeDirectory();
+
 Future<String> dbSearchNotes({required String query, required int limit}) =>
     RustLib.instance.api
         .crateApiDatabaseDbSearchNotes(query: query, limit: limit);
@@ -199,6 +202,23 @@ Future<String> dbGetOldestEvents({required int limit}) =>
 Future<int> dbCleanupOldEvents({required int daysToKeep}) =>
     RustLib.instance.api
         .crateApiDatabaseDbCleanupOldEvents(daysToKeep: daysToKeep);
+
+Future<int> dbCleanupByKind({required int kindNum, required int daysToKeep}) =>
+    RustLib.instance.api.crateApiDatabaseDbCleanupByKind(
+        kindNum: kindNum, daysToKeep: daysToKeep);
+
+Future<int> dbCleanupForeignContactLists({required String ownPubkeyHex}) =>
+    RustLib.instance.api.crateApiDatabaseDbCleanupForeignContactLists(
+        ownPubkeyHex: ownPubkeyHex);
+
+Future<String> dbSmartCleanup(
+        {required String ownPubkeyHex,
+        required int interactionDays,
+        required int noteDays}) =>
+    RustLib.instance.api.crateApiDatabaseDbSmartCleanup(
+        ownPubkeyHex: ownPubkeyHex,
+        interactionDays: interactionDays,
+        noteDays: noteDays);
 
 Future<String> dbGetDatabaseStats() =>
     RustLib.instance.api.crateApiDatabaseDbGetDatabaseStats();

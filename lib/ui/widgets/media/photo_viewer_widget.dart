@@ -164,8 +164,8 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                           decoration: BoxDecoration(
                             color: colors.surface.withValues(alpha: 0.8),
                             border: Border.all(
-                              color: colors.border.withValues(alpha: 0.5),
-                              width: 1.5,
+                              color: colors.border.withValues(alpha: 0.2),
+                              width: 1,
                             ),
                             borderRadius: BorderRadius.circular(40),
                           ),

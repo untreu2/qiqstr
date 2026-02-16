@@ -67,7 +67,8 @@ class _DatabasePageState extends State<DatabasePage> {
   Future<void> _performCleanup() async {
     setState(() => _isCleaningUp = true);
     try {
-      await RustDatabaseService.instance.wipe();
+      await RustDatabaseService.instance.wipeDatabase();
+
       await _loadStats();
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
@@ -113,7 +114,8 @@ class _DatabasePageState extends State<DatabasePage> {
             controller: _scrollController,
             slivers: [
               SliverToBoxAdapter(
-                child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                child:
+                    SizedBox(height: MediaQuery.of(context).padding.top + 60),
               ),
               SliverToBoxAdapter(
                 child: TitleWidget(
@@ -124,11 +126,15 @@ class _DatabasePageState extends State<DatabasePage> {
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: PrimaryButton(
-                    label: _isCleaningUp ? l10n.cleanupCompleted : l10n.cleanupOldEvents,
+                    label: _isCleaningUp
+                        ? l10n.cleanupCompleted
+                        : l10n.cleanupOldEvents,
                     icon: Icons.cleaning_services,
-                    onPressed: (_isLoading || _isCleaningUp) ? null : _performCleanup,
+                    onPressed:
+                        (_isLoading || _isCleaningUp) ? null : _performCleanup,
                     isLoading: _isCleaningUp,
                     size: ButtonSize.large,
                   ),
@@ -166,13 +172,41 @@ class _DatabasePageState extends State<DatabasePage> {
                       }
 
                       final items = [
-                        {'label': l10n.textNotes, 'count': textNotes, 'icon': CarbonIcons.document},
-                        {'label': l10n.profiles, 'count': metadata, 'icon': CarbonIcons.user},
-                        {'label': l10n.contactLists, 'count': contacts, 'icon': CarbonIcons.user_multiple},
-                        {'label': l10n.reactions, 'count': reactions, 'icon': CarbonIcons.favorite},
-                        {'label': l10n.reposts, 'count': reposts, 'icon': CarbonIcons.repeat},
-                        {'label': l10n.zaps, 'count': zaps, 'icon': CarbonIcons.flash},
-                        {'label': l10n.articles, 'count': articles, 'icon': CarbonIcons.document_blank},
+                        {
+                          'label': l10n.textNotes,
+                          'count': textNotes,
+                          'icon': CarbonIcons.document
+                        },
+                        {
+                          'label': l10n.profiles,
+                          'count': metadata,
+                          'icon': CarbonIcons.user
+                        },
+                        {
+                          'label': l10n.contactLists,
+                          'count': contacts,
+                          'icon': CarbonIcons.user_multiple
+                        },
+                        {
+                          'label': l10n.reactions,
+                          'count': reactions,
+                          'icon': CarbonIcons.favorite
+                        },
+                        {
+                          'label': l10n.reposts,
+                          'count': reposts,
+                          'icon': CarbonIcons.repeat
+                        },
+                        {
+                          'label': l10n.zaps,
+                          'count': zaps,
+                          'icon': CarbonIcons.flash
+                        },
+                        {
+                          'label': l10n.articles,
+                          'count': articles,
+                          'icon': CarbonIcons.document_blank
+                        },
                       ];
 
                       if (index - 1 >= items.length) {

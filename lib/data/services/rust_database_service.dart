@@ -15,6 +15,7 @@ class RustDatabaseService {
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
+  String? _ownPubkeyHex;
 
   final _changeController = StreamController<void>.broadcast();
   Stream<void> get onChange => _changeController.stream;
@@ -25,9 +26,14 @@ class RustDatabaseService {
     }
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize({String? ownPubkeyHex}) async {
     _initialized = true;
+    _ownPubkeyHex = ownPubkeyHex;
     autoCleanupIfNeeded();
+  }
+
+  void updateOwnPubkey(String pubkeyHex) {
+    _ownPubkeyHex = pubkeyHex;
   }
 
   Future<void> close() async {}
@@ -245,7 +251,8 @@ class RustDatabaseService {
 
   Future<List<Map<String, dynamic>>> getHydratedFeedNotes(
       List<String> authorPubkeys,
-      {int limit = 100, bool filterReplies = true}) async {
+      {int limit = 100,
+      bool filterReplies = true}) async {
     try {
       final mute = EncryptedMuteService.instance;
       final json = await rust_db.dbGetHydratedFeedNotes(
@@ -265,7 +272,8 @@ class RustDatabaseService {
 
   Stream<List<Map<String, dynamic>>> watchHydratedFeedNotes(
       List<String> authors,
-      {int limit = 100, bool filterReplies = true}) {
+      {int limit = 100,
+      bool filterReplies = true}) {
     List<Map<String, dynamic>>? lastResult;
     return _changeController.stream
         .debounceTime(const Duration(milliseconds: 300))
@@ -286,7 +294,8 @@ class RustDatabaseService {
 
   Future<List<Map<String, dynamic>>> getHydratedProfileNotes(
       String authorPubkey,
-      {int limit = 50, bool filterReplies = true}) async {
+      {int limit = 50,
+      bool filterReplies = true}) async {
     try {
       final mute = EncryptedMuteService.instance;
       final json = await rust_db.dbGetHydratedProfileNotes(
@@ -304,8 +313,7 @@ class RustDatabaseService {
     }
   }
 
-  Stream<List<Map<String, dynamic>>> watchHydratedProfileNotes(
-      String pubkey,
+  Stream<List<Map<String, dynamic>>> watchHydratedProfileNotes(String pubkey,
       {int limit = 50, bool filterReplies = true}) {
     return _changeController.stream
         .debounceTime(const Duration(milliseconds: 300))
@@ -517,8 +525,7 @@ class RustDatabaseService {
         .asyncMap((_) => getReplies(noteId, limit: limit));
   }
 
-  Future<List<Map<String, dynamic>>> getHydratedNotifications(
-      String userPubkey,
+  Future<List<Map<String, dynamic>>> getHydratedNotifications(String userPubkey,
       {int limit = 100}) async {
     try {
       final mute = EncryptedMuteService.instance;
@@ -542,8 +549,7 @@ class RustDatabaseService {
     return _changeController.stream
         .debounceTime(const Duration(milliseconds: 300))
         .startWith(null)
-        .asyncMap((_) =>
-            getHydratedNotifications(userPubkey, limit: limit));
+        .asyncMap((_) => getHydratedNotifications(userPubkey, limit: limit));
   }
 
   Future<List<Map<String, dynamic>>> getCachedNotifications(String userPubkey,
@@ -700,8 +706,7 @@ class RustDatabaseService {
     return _changeController.stream
         .debounceTime(const Duration(milliseconds: 500))
         .startWith(null)
-        .asyncMap((_) =>
-            getHydratedArticles(limit: limit, authors: authors));
+        .asyncMap((_) => getHydratedArticles(limit: limit, authors: authors));
   }
 
   Future<Map<String, dynamic>?> getHydratedArticle(String eventId) async {
@@ -829,6 +834,26 @@ class RustDatabaseService {
     }
   }
 
+  Future<Map<String, dynamic>> smartCleanup({
+    required String ownPubkeyHex,
+    int interactionDays = 7,
+    int noteDays = 14,
+  }) async {
+    try {
+      final json = await rust_db.dbSmartCleanup(
+        ownPubkeyHex: ownPubkeyHex,
+        interactionDays: interactionDays,
+        noteDays: noteDays,
+      );
+      final result = jsonDecode(json) as Map<String, dynamic>;
+      notifyChange();
+      return result;
+    } catch (e) {
+      if (kDebugMode) print('[LMDB] smartCleanup error: $e');
+      return {'totalDeleted': 0};
+    }
+  }
+
   Future<Map<String, dynamic>> getDatabaseStats() async {
     try {
       final json = await rust_db.dbGetDatabaseStats();
@@ -848,24 +873,64 @@ class RustDatabaseService {
         print('[LMDB] Database size: ${sizeMb}MB');
       }
 
-      if (sizeMb > 1536) {
+      if (sizeMb > 1500) {
         if (kDebugMode) {
-          print('[LMDB] Database size exceeded 1.5GB threshold, wiping...');
+          print('[LMDB] Database > 1.5GB, performing full wipe...');
         }
-
-        await wipe();
-
+        await wipeDatabase();
+      } else if (sizeMb > 500) {
         if (kDebugMode) {
-          final newSize = await getDatabaseSizeMB();
-          print('[LMDB] Wipe completed. New size: ${newSize}MB');
+          print('[LMDB] Database > 500MB, performing standard cleanup...');
+        }
+        if (_ownPubkeyHex != null) {
+          final result = await smartCleanup(
+            ownPubkeyHex: _ownPubkeyHex!,
+            interactionDays: 5,
+            noteDays: 7,
+          );
+          if (kDebugMode) {
+            print('[LMDB] Standard cleanup result: $result');
+          }
+        } else {
+          await cleanupOldEvents(daysToKeep: 7);
+        }
+      } else if (sizeMb > 200) {
+        if (kDebugMode) {
+          print('[LMDB] Database > 200MB, performing light cleanup...');
+        }
+        if (_ownPubkeyHex != null) {
+          final result = await smartCleanup(
+            ownPubkeyHex: _ownPubkeyHex!,
+            interactionDays: 7,
+            noteDays: 7,
+          );
+          if (kDebugMode) {
+            print('[LMDB] Light cleanup result: $result');
+          }
+        } else {
+          await cleanupOldEvents(daysToKeep: 7);
         }
       } else {
         if (kDebugMode) {
-          print('[LMDB] Database size OK (below 1.5GB threshold)');
+          print('[LMDB] Database size OK (${sizeMb}MB)');
         }
       }
     } catch (e) {
       if (kDebugMode) print('[LMDB] autoCleanupIfNeeded error: $e');
+    }
+  }
+
+  Future<void> wipeDatabase() async {
+    try {
+      await rust_db.dbWipeDirectory();
+      notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[LMDB] wipeDatabase error: $e');
+      try {
+        await wipe();
+      } catch (e2) {
+        if (kDebugMode) print('[LMDB] Fallback wipe() also failed: $e2');
+      }
     }
   }
 

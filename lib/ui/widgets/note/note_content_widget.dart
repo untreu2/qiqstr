@@ -15,7 +15,6 @@ import '../../screens/note/feed_page.dart';
 import '../../screens/webview/webview_page.dart';
 import '../media/link_preview_widget.dart';
 import '../media/media_preview_widget.dart';
-import '../media/mini_link_preview_widget.dart';
 import 'quote_widget.dart';
 import '../article/article_quote_widget.dart';
 import '../common/snackbar_widget.dart';
@@ -411,25 +410,12 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                       ),
                     ),
                   ),
-                if (_linkUrls.isNotEmpty &&
+                if (_linkUrls.length == 1 &&
                     _mediaUrls.isEmpty &&
                     !widget.shortMode)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: _linkUrls.length > 1
-                          ? _linkUrls
-                              .map((url) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: MiniLinkPreviewWidget(url: url),
-                                  ))
-                              .toList()
-                          : _linkUrls
-                              .map((url) => LinkPreviewWidget(url: url))
-                              .toList(),
-                    ),
+                    child: LinkPreviewWidget(url: _linkUrls.first),
                   ),
                 if (_quoteIds.isNotEmpty && !widget.shortMode)
                   Column(

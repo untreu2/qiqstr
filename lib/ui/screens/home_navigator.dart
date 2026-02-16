@@ -122,7 +122,7 @@ class _HomeNavigatorState extends State<HomeNavigator>
           ),
           child: SafeArea(
             child: Container(
-              height: 60,
+              height: 55,
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: Row(
                 children: items.map((item) {

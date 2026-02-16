@@ -33,7 +33,7 @@ fn user_relays_state() -> &'static RwLock<Vec<String>> {
     USER_RELAYS.get_or_init(|| RwLock::new(Vec::new()))
 }
 
-fn db_path_state() -> &'static RwLock<Option<String>> {
+pub(crate) fn db_path_state() -> &'static RwLock<Option<String>> {
     DB_PATH.get_or_init(|| RwLock::new(None))
 }
 
@@ -46,6 +46,78 @@ async fn get_client() -> Result<Client> {
 
 pub(crate) async fn get_client_pub() -> Result<Client> {
     get_client().await
+}
+
+fn sanitize_lmdb_dir(path: &str) {
+    let db_dir = std::path::Path::new(path);
+    if !db_dir.exists() {
+        return;
+    }
+
+    let lock_file = db_dir.join("lock.mdb");
+    if lock_file.exists() {
+        let _ = fs::remove_file(&lock_file);
+    }
+
+    let data_file = db_dir.join("data.mdb");
+    if data_file.exists() {
+        match fs::metadata(&data_file) {
+            Ok(meta) if meta.len() == 0 => {
+                let _ = fs::remove_dir_all(db_dir);
+            }
+            Err(_) => {
+                let _ = fs::remove_dir_all(db_dir);
+            }
+            _ => {}
+        }
+    }
+}
+
+const LMDB_MAP_SIZES: &[usize] = &[
+    2 * 1024 * 1024 * 1024,  // 2 GB
+    1024 * 1024 * 1024,       // 1 GB
+    512 * 1024 * 1024,        // 512 MB
+    256 * 1024 * 1024,        // 256 MB
+];
+
+fn try_open_lmdb(path: &str) -> Result<NostrLMDB> {
+    let path_owned = path.to_string();
+
+    for &map_size in LMDB_MAP_SIZES {
+        let p = path_owned.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            NostrLMDB::builder(&p)
+                .map_size(map_size)
+                .build()
+        }));
+
+        match result {
+            Ok(Ok(db)) => return Ok(db),
+            Ok(Err(_)) => continue,
+            Err(_) => continue,
+        }
+    }
+
+    Err(anyhow!("LMDB open failed with all map sizes"))
+}
+
+fn wipe_db_directory(path: &str) {
+    let db_path = std::path::Path::new(path);
+    if db_path.exists() {
+        let _ = fs::remove_dir_all(db_path);
+    }
+}
+
+fn open_or_recreate_lmdb(path: &str) -> Result<NostrLMDB> {
+    sanitize_lmdb_dir(path);
+
+    match try_open_lmdb(path) {
+        Ok(db) => Ok(db),
+        Err(_) => {
+            wipe_db_directory(path);
+            try_open_lmdb(path)
+        }
+    }
 }
 
 pub async fn init_client(
@@ -61,12 +133,9 @@ pub async fn init_client(
     }
 
     if let Some(ref path) = db_path {
-        let database = NostrLMDB::builder(path)
-            .map_size(10 * 1024 * 1024 * 1024) // 10 GB
-            .build()?;
+        let database = open_or_recreate_lmdb(path)?;
         builder = builder.database(database);
-        
-        // DB path'i kaydet
+
         let mut db_path_lock = db_path_state().write().await;
         *db_path_lock = Some(path.clone());
     }
@@ -437,6 +506,113 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
         .collect();
 
     Ok(serde_json::to_string(&events_json)?)
+}
+
+
+pub async fn fetch_counts_from_relays(
+    note_ids: Vec<String>,
+    user_pubkey_hex: Option<String>,
+) -> Result<String> {
+    let main_client = get_client().await?;
+
+    let ids: Vec<EventId> = note_ids
+        .iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .collect();
+
+    if ids.is_empty() {
+        return Ok("{}".to_string());
+    }
+
+    let user_pk = user_pubkey_hex
+        .as_ref()
+        .and_then(|h| PublicKey::from_hex(h).ok());
+
+    let temp_client = Client::builder()
+        .database(MemoryDatabase::default())
+        .build();
+
+    let relay_urls: Vec<String> = main_client
+        .relays()
+        .await
+        .keys()
+        .map(|u| u.to_string())
+        .collect();
+
+    for url in &relay_urls {
+        let _ = temp_client.add_relay(url.as_str()).await;
+    }
+    temp_client.connect().await;
+
+    let filter = Filter::new()
+        .kinds([Kind::Reaction, Kind::Repost, Kind::ZapReceipt, Kind::TextNote])
+        .events(ids)
+        .limit(500);
+
+    let timeout = Duration::from_secs(5);
+    let events = temp_client.fetch_events(filter, timeout).await
+        .unwrap_or_default();
+
+    temp_client.disconnect().await;
+
+    let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
+    let mut user_reacted: HashMap<String, bool> = HashMap::new();
+    let mut user_reposted: HashMap<String, bool> = HashMap::new();
+
+    for nid in &note_ids {
+        counts.insert(nid.clone(), [0; 4]);
+        user_reacted.insert(nid.clone(), false);
+        user_reposted.insert(nid.clone(), false);
+    }
+
+    for event in events.iter() {
+        let kind = event.kind;
+        let is_user = user_pk.as_ref().map_or(false, |pk| event.pubkey == *pk);
+
+        for tag in event.tags.iter() {
+            let tag_kind = tag.kind();
+            if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
+                if let Some(ref_id) = tag.content() {
+                    let ref_hex = ref_id.to_string();
+                    if let Some(c) = counts.get_mut(&ref_hex) {
+                        match kind {
+                            k if k == Kind::Reaction => {
+                                c[0] += 1;
+                                if is_user {
+                                    user_reacted.insert(ref_hex.clone(), true);
+                                }
+                            }
+                            k if k == Kind::Repost => {
+                                c[1] += 1;
+                                if is_user {
+                                    user_reposted.insert(ref_hex.clone(), true);
+                                }
+                            }
+                            k if k == Kind::ZapReceipt => c[2] += 1,
+                            k if k == Kind::TextNote => c[3] += 1,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut result = serde_json::Map::new();
+    for (nid, c) in &counts {
+        result.insert(
+            nid.clone(),
+            serde_json::json!({
+                "reactions": c[0],
+                "reposts": c[1],
+                "zaps": c[2],
+                "replies": c[3],
+                "hasReacted": user_reacted.get(nid).copied().unwrap_or(false),
+                "hasReposted": user_reposted.get(nid).copied().unwrap_or(false),
+            }),
+        );
+    }
+    Ok(serde_json::to_string(&result)?)
 }
 
 pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Option<String>> {

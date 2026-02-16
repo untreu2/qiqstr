@@ -208,7 +208,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (targetHex.isEmpty) return;
 
     try {
-      await _syncService.syncProfile(targetHex);
+      await Future.wait([
+        _syncService.syncProfile(targetHex),
+        _syncService.syncProfileNotes(targetHex, limit: _pageSize, force: true),
+      ]);
 
       final notesFuture =
           _feedRepository.getProfileNotes(targetHex, limit: _pageSize);

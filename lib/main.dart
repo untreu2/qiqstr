@@ -6,6 +6,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'presentation/blocs/theme/theme_bloc.dart';
 import 'presentation/blocs/theme/theme_event.dart';
 import 'presentation/blocs/theme/theme_state.dart';
@@ -20,12 +22,59 @@ import 'core/bloc/observers/app_bloc_observer.dart';
 
 import 'src/rust/frb_generated.dart';
 import 'l10n/app_localizations.dart';
+import 'constants/database.dart';
+
+Future<void> _sanitizeLmdbBeforeRust() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final dbVersion = prefs.getInt('lmdb_version') ?? 0;
+
+    final dir = await getApplicationDocumentsDirectory();
+    final dbPath = '${dir.path}/nostr-lmdb';
+    final dbDir = Directory(dbPath);
+
+    if (dbVersion < lmdbSchemaVersion && await dbDir.exists()) {
+      await dbDir.delete(recursive: true);
+      await prefs.setInt('lmdb_version', lmdbSchemaVersion);
+      return;
+    }
+
+    if (!await dbDir.exists()) {
+      await prefs.setInt('lmdb_version', lmdbSchemaVersion);
+      return;
+    }
+
+    final lockFile = File('$dbPath/lock.mdb');
+    if (await lockFile.exists()) {
+      await lockFile.delete();
+    }
+
+    final dataFile = File('$dbPath/data.mdb');
+    if (await dataFile.exists()) {
+      final stat = await dataFile.stat();
+      if (stat.size == 0) {
+        await dbDir.delete(recursive: true);
+      }
+    }
+
+    await prefs.setInt('lmdb_version', lmdbSchemaVersion);
+  } catch (_) {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final dbDir = Directory('${dir.path}/nostr-lmdb');
+      if (await dbDir.exists()) {
+        await dbDir.delete(recursive: true);
+      }
+    } catch (_) {}
+  }
+}
 
 void main() {
   runZonedGuarded(() async {
     final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
+    await _sanitizeLmdbBeforeRust();
     await RustLib.init();
     try {
       await dotenv.load(fileName: '.env');
@@ -129,13 +178,18 @@ class QiqstrApp extends StatelessWidget {
                       displayColor: colors.textPrimary,
                     )
                     .copyWith(
-                      bodyLarge: TextStyle(height: 2.1, color: colors.textPrimary),
-                      bodyMedium: TextStyle(height: 2.1, color: colors.textPrimary),
-                      bodySmall: TextStyle(height: 2.1, color: colors.textPrimary),
-                      titleLarge: TextStyle(height: 2.1, color: colors.textPrimary),
+                      bodyLarge:
+                          TextStyle(height: 2.1, color: colors.textPrimary),
+                      bodyMedium:
+                          TextStyle(height: 2.1, color: colors.textPrimary),
+                      bodySmall:
+                          TextStyle(height: 2.1, color: colors.textPrimary),
+                      titleLarge:
+                          TextStyle(height: 2.1, color: colors.textPrimary),
                       titleMedium:
                           TextStyle(height: 2.1, color: colors.textPrimary),
-                      titleSmall: TextStyle(height: 2.1, color: colors.textPrimary),
+                      titleSmall:
+                          TextStyle(height: 2.1, color: colors.textPrimary),
                     ),
                 colorScheme: isDark
                     ? ColorScheme.dark(

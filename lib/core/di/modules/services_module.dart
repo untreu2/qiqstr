@@ -82,6 +82,9 @@ class ServicesModule extends DIModule {
       }
 
       if (userPubkeyHex != null) {
+        RustDatabaseService.instance.updateOwnPubkey(userPubkeyHex);
+        RustDatabaseService.instance.autoCleanupIfNeeded();
+
         final prefs = await SharedPreferences.getInstance();
         final gossipEnabled = prefs.getBool('gossip_model_enabled') ?? false;
         if (gossipEnabled) {

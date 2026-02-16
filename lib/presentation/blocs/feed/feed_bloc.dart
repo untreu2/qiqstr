@@ -207,19 +207,34 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     Future.microtask(() async {
       if (isClosed) return;
       try {
-        await _syncService.syncFollowingList(userHex);
+        await Future.wait([
+          _syncService.syncProfile(userHex),
+          _syncService.syncFollowingList(userHex),
+          _syncService.syncMuteList(userHex),
+        ]);
         if (isClosed) return;
-        await _syncService.syncMuteList(userHex);
+
+        final ownProfile = await _profileRepository.getProfile(userHex);
+        if (!isClosed && ownProfile != null) {
+          add(feed_event.FeedUserProfileUpdated(userHex, ownProfile.toMap()));
+        }
+
+        final follows = await _feedRepository.getFollowingList(userHex);
+        if (follows != null && follows.isNotEmpty) {
+          _syncService.syncProfiles(follows);
+        }
+
+        await Future.wait([
+          _syncService.syncBookmarkList(userHex),
+          _syncService.syncPinnedNotes(userHex),
+        ]);
         if (isClosed) return;
-        await _syncService.syncBookmarkList(userHex);
-        if (isClosed) return;
-        await _syncService.syncPinnedNotes(userHex);
-        if (isClosed) return;
+
         final currentState = state;
         if (currentState is FeedLoaded && currentState.activeListId == null) {
           _watchFeed(userHex);
         }
-        await _syncService.syncFeed(userHex);
+        await _syncService.syncFeed(userHex, force: true);
         if (isClosed) return;
         await _syncService.startRealtimeSubscriptions(userHex);
       } catch (_) {}
@@ -244,9 +259,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     final currentState = state;
     if (currentState is FeedLoaded) {
-      final notesToShow = _bufferedNotes.isNotEmpty
-          ? _bufferedNotes
-          : currentState.notes;
+      final notesToShow =
+          _bufferedNotes.isNotEmpty ? _bufferedNotes : currentState.notes;
       _bufferedNotes = [];
       emit(currentState.copyWith(
         notes: notesToShow,
@@ -258,8 +272,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         _syncHashtagInBackground(currentState.hashtag!, null);
       } else if (currentState.activeListId != null) {
         final service = _getFollowSetService();
-        final listPubkeys =
-            service?.pubkeysForList(currentState.activeListId!);
+        final listPubkeys = service?.pubkeysForList(currentState.activeListId!);
         if (listPubkeys != null && listPubkeys.isNotEmpty) {
           _watchListFeed(listPubkeys);
           Future.microtask(() async {
@@ -467,8 +480,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           await _syncService.syncProfiles(missingPubkeys);
           if (isClosed) return;
 
-          final synced =
-              await _profileRepository.getProfiles(missingPubkeys);
+          final synced = await _profileRepository.getProfiles(missingPubkeys);
           if (isClosed) return;
 
           final syncedProfiles = <String, Map<String, dynamic>>{};

@@ -5,9 +5,7 @@ import 'package:carbon_icons/carbon_icons.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/list_separator_widget.dart';
-import '../../../data/sync/sync_service.dart';
 import '../../../data/services/interaction_service.dart';
-import '../../../core/di/app_di.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
 
@@ -151,9 +149,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (_isSyncing || widget.notes.isEmpty) return;
 
     final visibleRange = _getVisibleNoteRange();
-    final start = (visibleRange.$1 - 5).clamp(0, widget.notes.length - 1);
-    final end =
-        (visibleRange.$2 + 5).clamp(0, widget.notes.length - 1);
+    final start = (visibleRange.$1 - 2).clamp(0, widget.notes.length - 1);
+    final end = (visibleRange.$2 + 2).clamp(0, widget.notes.length - 1);
 
     final noteIds = <String>[];
     for (var i = start; i <= end; i++) {
@@ -168,8 +165,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _isSyncing = true;
     Future.microtask(() async {
       try {
-        final syncService = AppDI.get<SyncService>();
-        await syncService.syncInteractionsForNotes(noteIds);
+        await InteractionService.instance.fetchCountsFromRelays(noteIds);
         for (final id in noteIds) {
           _syncedNoteIds.add(id);
         }
@@ -180,7 +176,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             _syncedNoteIds.remove(id);
           }
         }
-        InteractionService.instance.refreshAllActive();
       } catch (_) {}
       _isSyncing = false;
     });
@@ -282,11 +277,9 @@ class _NoteListContent extends StatelessWidget {
           final noteId = note['id'] as String? ?? '';
 
           return RepaintBoundary(
-            key: ValueKey(
-                '${isPinned ? 'pinned' : 'note'}_boundary_$noteId'),
+            key: ValueKey('${isPinned ? 'pinned' : 'note'}_boundary_$noteId'),
             child: _NoteItemWidget(
-              key: ValueKey(
-                  '${isPinned ? 'pinned' : 'note'}_item_$noteId'),
+              key: ValueKey('${isPinned ? 'pinned' : 'note'}_item_$noteId'),
               note: note,
               currentUserHex: currentUserHex,
               notesNotifier: notesNotifier,
@@ -401,7 +394,6 @@ class _LoadingState extends StatelessWidget {
     );
   }
 }
-
 
 class _ErrorState extends StatelessWidget {
   final String errorMessage;

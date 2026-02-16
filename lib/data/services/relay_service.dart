@@ -24,7 +24,7 @@ class RustRelayService {
 
   Future<String> _getDbPath() async {
     if (_dbPath != null) return _dbPath!;
-    
+
     try {
       final dir = await getApplicationDocumentsDirectory();
       _dbPath = '${dir.path}/nostr-lmdb';
@@ -48,18 +48,19 @@ class RustRelayService {
       if (kDebugMode) {
         print('[RustRelayService] Starting initialization...');
       }
-      
+
       final urls = relayUrls ?? await getRelaySetMainSockets();
       _currentRelayUrls = List.from(urls);
-      
+
       if (kDebugMode) {
         print('[RustRelayService] Relay URLs: $urls');
       }
-      
+
       final dbPath = await _getDbPath();
-      
+
       if (kDebugMode) {
-        print('[RustRelayService] Calling Rust initClient with dbPath: $dbPath');
+        print(
+            '[RustRelayService] Calling Rust initClient with dbPath: $dbPath');
       }
 
       await rust_relay.initClient(
@@ -67,11 +68,12 @@ class RustRelayService {
         privateKeyHex: privateKeyHex,
         dbPath: dbPath,
       );
-      
+
       _initialized = true;
 
       if (kDebugMode) {
-        print('[RustRelayService] Initialized successfully with ${urls.length} relays');
+        print(
+            '[RustRelayService] Initialized successfully with ${urls.length} relays');
       }
 
       unawaited(rust_relay.connectRelays().catchError((e) {
@@ -117,8 +119,10 @@ class RustRelayService {
     return added;
   }
 
-  Future<bool> addRelayWithFlags(String url, {required bool read, required bool write}) async {
-    final added = await rust_relay.addRelayWithFlags(url: url, read: read, write: write);
+  Future<bool> addRelayWithFlags(String url,
+      {required bool read, required bool write}) async {
+    final added =
+        await rust_relay.addRelayWithFlags(url: url, read: read, write: write);
     if (added && !_currentRelayUrls.contains(url)) {
       _currentRelayUrls.add(url);
     }
@@ -296,7 +300,8 @@ class RustRelayService {
           final isRead = flags['read'] ?? true;
           final isWrite = flags['write'] ?? true;
           if (!isRead || !isWrite) {
-            flagFutures.add(rust_relay.addRelayWithFlags(url: url, read: isRead, write: isWrite));
+            flagFutures.add(rust_relay.addRelayWithFlags(
+                url: url, read: isRead, write: isWrite));
           }
         }
       }
@@ -313,5 +318,4 @@ class RustRelayService {
       }
     }
   }
-
 }

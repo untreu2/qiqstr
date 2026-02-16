@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'rust_database_service.dart';
+import '../../src/rust/api/relay.dart' as rust_relay;
 
 class InteractionCounts {
   final int reactions;
@@ -77,7 +79,6 @@ class InteractionService {
 
   Stream<InteractionCounts> streamInteractions(String noteId,
       {InteractionCounts? initialCounts}) {
-
     if (!_streams.containsKey(noteId)) {
       _streams[noteId] = StreamController<InteractionCounts>.broadcast();
       if (initialCounts != null && !_cache.containsKey(noteId)) {
@@ -135,8 +136,7 @@ class InteractionService {
     if (_currentUserHex == null || noteIds.isEmpty) return;
 
     try {
-      final data =
-          await _db.getBatchInteractionData(noteIds, _currentUserHex!);
+      final data = await _db.getBatchInteractionData(noteIds, _currentUserHex!);
 
       for (final noteId in noteIds) {
         final d = data[noteId];
@@ -149,29 +149,44 @@ class InteractionService {
         final hasZapped =
             _localZaps.contains(noteId) || (d['hasZapped'] == true);
 
-        if (hasReacted) _localReactions.add(noteId);
-        if (hasReposted) _localReposts.add(noteId);
+        final dbReactions = (d['reactions'] as num?)?.toInt() ?? 0;
+        final dbReposts = (d['reposts'] as num?)?.toInt() ?? 0;
+        final dbReplies = (d['replies'] as num?)?.toInt() ?? 0;
+        final dbZaps = (d['zaps'] as num?)?.toInt() ?? 0;
+
+        final existing = _cache[noteId];
+        final reactions = existing != null && existing.reactions > dbReactions
+            ? existing.reactions
+            : dbReactions;
+        final reposts = existing != null && existing.reposts > dbReposts
+            ? existing.reposts
+            : dbReposts;
+        final replies = existing != null && existing.replies > dbReplies
+            ? existing.replies
+            : dbReplies;
+        final zapAmount = existing != null && existing.zapAmount > dbZaps
+            ? existing.zapAmount
+            : dbZaps;
 
         final counts = InteractionCounts(
-          reactions: (d['reactions'] as num?)?.toInt() ?? 0,
-          reposts: (d['reposts'] as num?)?.toInt() ?? 0,
-          replies: (d['replies'] as num?)?.toInt() ?? 0,
-          zapAmount: (d['zaps'] as num?)?.toInt() ?? 0,
+          reactions: reactions,
+          reposts: reposts,
+          replies: replies,
+          zapAmount: zapAmount,
           hasReacted: hasReacted,
           hasReposted: hasReposted,
           hasZapped: hasZapped,
         );
 
-        final oldCounts = _cache[noteId];
         _cache[noteId] = counts;
 
-        if (oldCounts == null ||
-            oldCounts.reactions != counts.reactions ||
-            oldCounts.reposts != counts.reposts ||
-            oldCounts.replies != counts.replies ||
-            oldCounts.zapAmount != counts.zapAmount ||
-            oldCounts.hasReacted != counts.hasReacted ||
-            oldCounts.hasReposted != counts.hasReposted) {
+        if (existing == null ||
+            existing.reactions != counts.reactions ||
+            existing.reposts != counts.reposts ||
+            existing.replies != counts.replies ||
+            existing.zapAmount != counts.zapAmount ||
+            existing.hasReacted != counts.hasReacted ||
+            existing.hasReposted != counts.hasReposted) {
           _emit(noteId, counts);
         }
       }
@@ -193,6 +208,74 @@ class InteractionService {
     final activeNoteIds = _streams.keys.toList();
     if (activeNoteIds.isEmpty || _currentUserHex == null) return;
     await _loadBatchFromDb(activeNoteIds);
+  }
+
+  Future<void> fetchCountsFromRelays(List<String> noteIds) async {
+    if (noteIds.isEmpty) return;
+    try {
+      final json = await rust_relay.fetchCountsFromRelays(
+        noteIds: noteIds,
+        userPubkeyHex: _currentUserHex,
+      );
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+
+      for (final noteId in noteIds) {
+        final d = decoded[noteId];
+        if (d == null) continue;
+
+        final relayReactions = (d['reactions'] as num?)?.toInt() ?? 0;
+        final relayReposts = (d['reposts'] as num?)?.toInt() ?? 0;
+        final relayReplies = (d['replies'] as num?)?.toInt() ?? 0;
+        final relayZaps = (d['zaps'] as num?)?.toInt() ?? 0;
+
+        final existing = _cache[noteId];
+
+        final hasReacted =
+            _localReactions.contains(noteId) || (d['hasReacted'] == true);
+        final hasReposted =
+            _localReposts.contains(noteId) || (d['hasReposted'] == true);
+
+        final reactions = existing != null
+            ? (relayReactions > existing.reactions
+                ? relayReactions
+                : existing.reactions)
+            : relayReactions;
+        final reposts = existing != null
+            ? (relayReposts > existing.reposts
+                ? relayReposts
+                : existing.reposts)
+            : relayReposts;
+        final replies = existing != null
+            ? (relayReplies > existing.replies
+                ? relayReplies
+                : existing.replies)
+            : relayReplies;
+        final zapAmount = existing != null
+            ? (relayZaps > existing.zapAmount ? relayZaps : existing.zapAmount)
+            : relayZaps;
+
+        final counts = InteractionCounts(
+          reactions: reactions,
+          reposts: reposts,
+          replies: replies,
+          zapAmount: zapAmount,
+          hasReacted: hasReacted,
+          hasReposted: hasReposted,
+          hasZapped: _localZaps.contains(noteId),
+        );
+
+        if (existing == null ||
+            counts.reactions != existing.reactions ||
+            counts.reposts != existing.reposts ||
+            counts.replies != existing.replies ||
+            counts.zapAmount != existing.zapAmount ||
+            counts.hasReacted != existing.hasReacted ||
+            counts.hasReposted != existing.hasReposted) {
+          _cache[noteId] = counts;
+          _emit(noteId, counts);
+        }
+      }
+    } catch (_) {}
   }
 
   void markReacted(String noteId) {

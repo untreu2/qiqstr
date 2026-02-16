@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 class AppColors {
   static const Color accent = Color.fromARGB(255, 240, 160, 90);
 
-  static const Color background = Color.fromARGB(255, 16, 16, 16);
-  static const Color surface = Color.fromARGB(255, 16, 16, 16);
+  static const Color background = Color.fromARGB(255, 10, 10, 10);
+  static const Color surface = Color.fromARGB(255, 15, 15, 15);
 
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFFE0E0E0);

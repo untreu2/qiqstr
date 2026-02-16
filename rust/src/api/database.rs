@@ -892,6 +892,20 @@ pub async fn db_wipe() -> Result<()> {
     Ok(())
 }
 
+pub async fn db_wipe_directory() -> Result<()> {
+    use super::relay::db_path_state;
+
+    let db_path_lock = db_path_state().read().await;
+    if let Some(path) = db_path_lock.as_ref() {
+        let db_dir = std::path::Path::new(path);
+        if db_dir.exists() {
+            std::fs::remove_dir_all(db_dir)
+                .map_err(|e| anyhow::anyhow!("Failed to wipe database directory: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn db_search_notes(query: String, limit: u32) -> Result<String> {
     let client = get_client_pub().await?;
     let filter = Filter::new().kind(Kind::TextNote).limit(500);
@@ -952,6 +966,102 @@ pub async fn db_cleanup_old_events(days_to_keep: u32) -> Result<u32> {
     }
     
     Ok(count)
+}
+
+pub async fn db_cleanup_by_kind(kind_num: u16, days_to_keep: u32) -> Result<u32> {
+    let client = get_client_pub().await?;
+    let now = Timestamp::now();
+    let cutoff = now.as_secs() - (days_to_keep as u64 * 86400);
+    let cutoff_ts = Timestamp::from(cutoff);
+
+    let filter = Filter::new()
+        .kind(Kind::from(kind_num))
+        .until(cutoff_ts);
+
+    let events = client.database().query(filter.clone()).await?;
+    let count = events.len() as u32;
+
+    if count > 0 {
+        client.database().delete(filter).await?;
+    }
+
+    Ok(count)
+}
+
+pub async fn db_cleanup_foreign_contact_lists(own_pubkey_hex: String) -> Result<u32> {
+    let client = get_client_pub().await?;
+    let own_pk = PublicKey::from_hex(&own_pubkey_hex)?;
+
+    let filter = Filter::new().kind(Kind::ContactList);
+    let events = client.database().query(filter).await?;
+
+    let own_follows: HashSet<String> = client
+        .database()
+        .contacts_public_keys(own_pk)
+        .await?
+        .into_iter()
+        .map(|pk| pk.to_hex())
+        .collect();
+
+    let mut to_delete_authors: Vec<PublicKey> = Vec::new();
+    let own_hex = own_pk.to_hex();
+
+    for event in events.iter() {
+        let author_hex = event.pubkey.to_hex();
+        if author_hex == own_hex {
+            continue;
+        }
+        if !own_follows.contains(&author_hex) {
+            to_delete_authors.push(event.pubkey);
+        }
+    }
+
+    let count = to_delete_authors.len() as u32;
+
+    for author in &to_delete_authors {
+        let del_filter = Filter::new().author(*author).kind(Kind::ContactList);
+        let _ = client.database().delete(del_filter).await;
+    }
+
+    Ok(count)
+}
+
+pub async fn db_smart_cleanup(
+    own_pubkey_hex: String,
+    interaction_days: u32,
+    note_days: u32,
+) -> Result<String> {
+    let mut total_deleted: u32 = 0;
+
+    let reactions = db_cleanup_by_kind(7, interaction_days).await.unwrap_or(0);
+    total_deleted += reactions;
+
+    let zaps = db_cleanup_by_kind(9735, interaction_days).await.unwrap_or(0);
+    total_deleted += zaps;
+
+    let reposts = db_cleanup_by_kind(6, interaction_days).await.unwrap_or(0);
+    total_deleted += reposts;
+
+    let notes = db_cleanup_by_kind(1, note_days).await.unwrap_or(0);
+    total_deleted += notes;
+
+    let articles = db_cleanup_by_kind(30023, note_days).await.unwrap_or(0);
+    total_deleted += articles;
+
+    let contacts = db_cleanup_foreign_contact_lists(own_pubkey_hex).await.unwrap_or(0);
+    total_deleted += contacts;
+
+    let result = serde_json::json!({
+        "totalDeleted": total_deleted,
+        "reactions": reactions,
+        "zaps": zaps,
+        "reposts": reposts,
+        "notes": notes,
+        "articles": articles,
+        "foreignContacts": contacts,
+    });
+
+    Ok(result.to_string())
 }
 
 pub async fn db_get_database_stats() -> Result<String> {

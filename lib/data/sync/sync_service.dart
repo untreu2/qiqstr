@@ -90,15 +90,16 @@ class SyncService {
       final follows = await _db.getFollowingList(userPubkey);
       if (follows == null || follows.isEmpty) return;
 
-      final since = _getSincestamp(key);
+      final since = _getSincestamp(key) ??
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final notesFilter = NostrService.createNotesFilter(
-          authors: follows, kinds: [1, 6], since: since);
-      final articlesFilter =
-          NostrService.createArticlesFilter(authors: follows, since: since);
+          authors: follows, kinds: [1, 6], since: since, limit: 100);
+      final articlesFilter = NostrService.createArticlesFilter(
+          authors: follows, since: since, limit: 30);
 
       await Future.wait([
-        _syncRelays(notesFilter),
-        _syncRelays(articlesFilter),
+        _fetchAndStore(notesFilter),
+        _fetchAndStore(articlesFilter),
       ]);
 
       _notifyDbChanged();
@@ -112,11 +113,12 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('list_feed', () async {
-      final since = _getSincestamp(key);
+      final since = _getSincestamp(key) ??
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final notesFilter = NostrService.createNotesFilter(
-          authors: pubkeys, kinds: [1, 6], since: since);
+          authors: pubkeys, kinds: [1, 6], since: since, limit: 100);
 
-      await _syncRelays(notesFilter);
+      await _fetchAndStore(notesFilter);
       _notifyDbChanged();
       _markSynced(key);
     });
@@ -145,7 +147,7 @@ class SyncService {
       final profileFilter =
           NostrService.createProfileFilter(authors: [pubkey], limit: 1);
       final notesFilter = NostrService.createNotesFilter(
-          authors: [pubkey], kinds: [1, 6], limit: 500, since: since);
+          authors: [pubkey], kinds: [1, 6], limit: limit, since: since);
 
       final results = await Future.wait([
         _queryRelays(profileFilter),
@@ -162,7 +164,7 @@ class SyncService {
   }
 
   Future<void> syncProfileReactions(String pubkey,
-      {int limit = 500, bool force = false}) async {
+      {int limit = 50, bool force = false}) async {
     final key = 'profile_reactions_$pubkey';
     if (!force && !_shouldSync(key)) return;
 
@@ -191,10 +193,14 @@ class SyncService {
     if (!_shouldSync(key)) return;
 
     await _sync('notifications', () async {
-      final since = _getSincestamp(key);
+      final since = _getSincestamp(key) ??
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final filter = NostrService.createNotificationFilter(
-          pubkeys: [userPubkey], kinds: [1, 6, 7, 9735], since: since);
-      await _syncRelays(filter);
+          pubkeys: [userPubkey],
+          kinds: [1, 6, 7, 9735],
+          since: since,
+          limit: 100);
+      await _fetchAndStore(filter);
       _notifyDbChanged();
       _markSynced(key);
     });
@@ -219,6 +225,12 @@ class SyncService {
 
         final listWithUser = followList.toSet()..add(userPubkey);
         await _db.saveFollowingList(userPubkey, listWithUser.toList());
+      } else {
+        final existing = await _db.getFollowingList(userPubkey);
+        if (existing == null || !existing.contains(userPubkey)) {
+          final listWithUser = (existing ?? []).toSet()..add(userPubkey);
+          await _db.saveFollowingList(userPubkey, listWithUser.toList());
+        }
       }
 
       _notifyDbChanged();
@@ -237,27 +249,17 @@ class SyncService {
       final pubkeysToSync = follows.where((p) => p != userPubkey).toList();
       if (pubkeysToSync.isEmpty) return;
 
-      const batchSize = 20;
-      for (var i = 0; i < pubkeysToSync.length; i += batchSize) {
-        final end = (i + batchSize).clamp(0, pubkeysToSync.length);
+      const batchSize = 30;
+      const maxBatches = 5;
+      final totalToSync =
+          (maxBatches * batchSize).clamp(0, pubkeysToSync.length);
+
+      for (var i = 0; i < totalToSync; i += batchSize) {
+        final end = (i + batchSize).clamp(0, totalToSync);
         final batch = pubkeysToSync.sublist(i, end);
         final filter = NostrService.createFollowingFilter(
             authors: batch, limit: batch.length);
-        final events = await _queryRelays(filter);
-
-        for (final event in events) {
-          final authorPubkey = event['pubkey'] as String? ?? '';
-          if (authorPubkey.isEmpty) continue;
-
-          final tags = event['tags'] as List<dynamic>? ?? [];
-          final followList = tags
-              .where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'p')
-              .map((tag) => (tag as List)[1] as String)
-              .toList();
-
-          final listWithUser = followList.toSet()..add(authorPubkey);
-          await _db.saveFollowingList(authorPubkey, listWithUser.toList());
-        }
+        await _queryRelays(filter);
       }
 
       _markSynced(key);
@@ -316,8 +318,8 @@ class SyncService {
 
   Future<void> syncPinnedNotes(String userPubkey) async {
     await _sync('pinned_notes', () async {
-      final filter = NostrService.createPinnedNotesFilter(
-          authors: [userPubkey], limit: 1);
+      final filter =
+          NostrService.createPinnedNotesFilter(authors: [userPubkey], limit: 1);
       await _queryRelays(filter);
 
       final authService = AuthService.instance;
@@ -383,12 +385,14 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('articles', () async {
-      final since = _getSincestamp(key);
+      final since = _getSincestamp(key) ??
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 7);
       final filter = NostrService.createArticlesFilter(
         authors: authors,
         since: since,
+        limit: limit,
       );
-      await _syncRelays(filter);
+      await _fetchAndStore(filter);
       _notifyDbChanged();
       _markSynced(key);
     });
@@ -400,13 +404,15 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('hashtag', () async {
-      final since = _getSincestamp(key);
+      final since = _getSincestamp(key) ??
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final filter = NostrService.createHashtagFilter(
         hashtag: normalizedHashtag,
         kinds: [1],
         since: since,
+        limit: 100,
       );
-      await _syncRelays(filter);
+      await _fetchAndStore(filter);
       _notifyDbChanged();
       _markSynced(key);
     });
@@ -415,7 +421,7 @@ class SyncService {
   Future<void> syncInteractionsForNote(String noteId) async {
     await _sync('interactions_$noteId', () async {
       final filter = NostrService.createCombinedInteractionFilter(
-          eventIds: [noteId], limit: 500);
+          eventIds: [noteId], limit: 200);
       final events = await _queryRelays(filter);
       if (events.isNotEmpty) {
         await _saveEventsAndProfiles(events);
@@ -426,8 +432,9 @@ class SyncService {
   Future<void> syncInteractionsForNotes(List<String> noteIds) async {
     if (noteIds.isEmpty) return;
     await _sync('interactions_batch', () async {
+      final limitPerNote = (500 ~/ noteIds.length).clamp(10, 100);
       final filter = NostrService.createCombinedInteractionFilter(
-          eventIds: noteIds, limit: noteIds.length * 10);
+          eventIds: noteIds, limit: noteIds.length * limitPerNote);
       final events = await _queryRelays(filter);
       if (events.isNotEmpty) {
         await _saveEventsAndProfiles(events);
@@ -441,9 +448,9 @@ class SyncService {
       final processedIds = <String>{noteId};
       var pendingIds = <String>[noteId];
 
-      for (var depth = 0; depth < 5 && pendingIds.isNotEmpty; depth++) {
+      for (var depth = 0; depth < 3 && pendingIds.isNotEmpty; depth++) {
         final filter = NostrService.createInteractionFilter(
-            kinds: [1], eventIds: pendingIds, limit: 500);
+            kinds: [1], eventIds: pendingIds, limit: 200);
         final events = await _queryRelays(filter);
         final newIds = <String>[];
 
@@ -456,6 +463,7 @@ class SyncService {
           }
         }
         pendingIds = newIds;
+        if (allEvents.length > 500) break;
       }
 
       await _saveEventsAndProfiles(allEvents);
@@ -468,13 +476,12 @@ class SyncService {
       final processedIds = <String>{};
       var pendingIds = <String>[noteId];
 
-      for (var depth = 0; depth < 10 && pendingIds.isNotEmpty; depth++) {
+      for (var depth = 0; depth < 5 && pendingIds.isNotEmpty; depth++) {
         final idsToFetch =
             pendingIds.where((id) => !processedIds.contains(id)).toList();
         if (idsToFetch.isEmpty) break;
 
-        final filter =
-            NostrService.createEventByIdFilter(eventIds: idsToFetch);
+        final filter = NostrService.createEventByIdFilter(eventIds: idsToFetch);
         final events = await _queryRelays(filter);
         allEvents.addAll(events);
         for (final id in idsToFetch) {
@@ -482,10 +489,9 @@ class SyncService {
         }
 
         final parentIds = _extractParentIds(events);
-        final referencedIds = _extractReferencedEventIds(events);
-        pendingIds = <String>{...parentIds, ...referencedIds}
-            .where((id) => !processedIds.contains(id))
-            .toList();
+        pendingIds =
+            parentIds.where((id) => !processedIds.contains(id)).toList();
+        if (allEvents.length > 200) break;
       }
 
       await _saveEventsAndProfiles(allEvents);
@@ -650,7 +656,9 @@ class SyncService {
       {Duration interval = const Duration(minutes: 10)}) {
     stopPeriodicSync();
     _periodicTimer = Timer.periodic(interval, (_) async {
-      if (_feedSubscription != null || _notificationSubscription != null) return;
+      if (_feedSubscription != null || _notificationSubscription != null) {
+        return;
+      }
       await syncFeed(userPubkey);
       await syncNotifications(userPubkey);
     });
@@ -789,15 +797,29 @@ class SyncService {
     return event;
   }
 
-  Future<void> _syncRelays(dynamic filter) async {
+  Future<List<Map<String, dynamic>>> _fetchAndStore(dynamic filter) async {
     final filterMap = Map<String, dynamic>.from(filter as Map<String, dynamic>);
-    final syncFilter = Map<String, dynamic>.from(filterMap)..remove('limit');
-    final result = await _relayService.syncEvents(syncFilter);
-    final received = result['received'] as int? ?? 0;
-    final remote = result['remote'] as int? ?? 0;
-    if (received == 0 && remote == 0) {
-      await _relayService.fetchEvents(filterMap);
+
+    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final sinceSecs = filterMap['since'] as int? ?? (nowSecs - 86400 * 2);
+    final isRecent = (nowSecs - sinceSecs) <= 86400;
+
+    if (isRecent) {
+      final syncFilter = Map<String, dynamic>.from(filterMap)..remove('limit');
+      if (!syncFilter.containsKey('since')) {
+        syncFilter['since'] = nowSecs - 86400 * 2;
+      }
+
+      try {
+        final result = await _relayService.syncEvents(syncFilter);
+        final received = result['received'] as int? ?? 0;
+        if (received > 0) {
+          return [];
+        }
+      } catch (_) {}
     }
+
+    return await _relayService.fetchEvents(filterMap);
   }
 
   Future<List<Map<String, dynamic>>> _queryRelays(dynamic filter) async {
@@ -917,9 +939,12 @@ class SyncService {
   }
 
   Future<void> _processPendingRefs() async {
-    final ids = _pendingRefIds.toList();
+    var ids = _pendingRefIds.toList();
     _pendingRefIds.clear();
     if (ids.isEmpty) return;
+    if (ids.length > 50) {
+      ids = ids.sublist(0, 50);
+    }
     try {
       final existResults = await _db.eventsExistBatch(ids);
       final missingIds = <String>[];
@@ -928,7 +953,9 @@ class SyncService {
       }
       if (missingIds.isEmpty) return;
 
-      final filter = NostrService.createEventByIdFilter(eventIds: missingIds);
+      final idsToFetch =
+          missingIds.length > 30 ? missingIds.sublist(0, 30) : missingIds;
+      final filter = NostrService.createEventByIdFilter(eventIds: idsToFetch);
       final fetchedEvents = await _queryRelays(filter);
       if (fetchedEvents.isNotEmpty) {
         _notifyDbChanged();

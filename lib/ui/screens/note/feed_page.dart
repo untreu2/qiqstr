@@ -92,8 +92,8 @@ class FeedPageState extends State<FeedPage> {
       _feedBloc = AppDI.get<FeedBloc>();
       _isLocalBloc = false;
     }
-    _feedBloc.add(
-        FeedInitialized(userHex: widget.userHex, hashtag: widget.hashtag));
+    _feedBloc
+        .add(FeedInitialized(userHex: widget.userHex, hashtag: widget.hashtag));
 
     _updateRelayCount();
     _relayCountTimer =
@@ -110,12 +110,25 @@ class FeedPageState extends State<FeedPage> {
     final hex = authService.currentUserPubkeyHex;
     if (hex == null || hex.isEmpty) return;
     final profileRepo = AppDI.get<ProfileRepository>();
-    final profile = await profileRepo.getProfile(hex);
-    if (profile != null && mounted) {
+    final cachedProfile = await profileRepo.getProfile(hex);
+    if (cachedProfile != null && mounted) {
       setState(() {
-        _loggedInUserProfile = profile.toMap();
+        _loggedInUserProfile = cachedProfile.toMap();
       });
+      return;
     }
+
+    try {
+      final syncService = AppDI.get<SyncService>();
+      await syncService.syncProfile(hex);
+      if (!mounted) return;
+      final syncedProfile = await profileRepo.getProfile(hex);
+      if (syncedProfile != null && mounted) {
+        setState(() {
+          _loggedInUserProfile = syncedProfile.toMap();
+        });
+      }
+    } catch (_) {}
   }
 
   void _loadFavoriteLists() {
