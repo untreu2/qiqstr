@@ -67,13 +67,13 @@ class _DatabasePageState extends State<DatabasePage> {
   Future<void> _performCleanup() async {
     setState(() => _isCleaningUp = true);
     try {
-      final deletedCount = await RustDatabaseService.instance.cleanupOldEvents(daysToKeep: 30);
+      await RustDatabaseService.instance.wipe();
       await _loadStats();
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.success(
           context,
-          '${l10n.cleanupCompleted}: $deletedCount ${l10n.eventsDeleted}',
+          '${l10n.cleanupCompleted} — ${l10n.eventsDeleted}',
         );
       }
     } finally {

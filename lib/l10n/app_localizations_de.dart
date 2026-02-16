@@ -1369,7 +1369,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get cleanupInfoBullet3 => 'Läuft automatisch beim App-Start';
 
   @override
-  String get cleanupOldEvents => 'Bereinigen (30+ Tage)';
+  String get cleanupOldEvents => 'Datenbank bereinigen';
 
   @override
   String get cleanupDatabase => 'Datenbank bereinigen';
@@ -1382,7 +1382,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get cleanupCompleted => 'Bereinigung abgeschlossen';
 
   @override
-  String get eventsDeleted => 'Ereignisse gelöscht';
+  String get eventsDeleted => 'Datenbank bereinigt';
 
   @override
   String get cleanup => 'Bereinigen';

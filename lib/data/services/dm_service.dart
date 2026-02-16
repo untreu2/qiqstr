@@ -327,7 +327,7 @@ class DmService {
           }
         }
 
-        await _saveEvent(eventData);
+        _saveEvent(eventData);
       }
 
       final conversations = conversationsMap.values.toList()
@@ -371,7 +371,7 @@ class DmService {
 
   Future<void> _refreshConversationsFromRelays() async {
     try {
-      final relayEvents = await _queryDmRelays(
+      await _queryDmRelays(
         filters: [
           {
             'kinds': [1059],
@@ -380,10 +380,6 @@ class DmService {
           },
         ],
       );
-
-      for (final eventData in relayEvents) {
-        await _saveEvent(eventData);
-      }
     } catch (_) {}
   }
 
@@ -795,9 +791,11 @@ class DmService {
     if (privateKey == null) return;
 
     try {
+      final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
       final filter = {
         'kinds': [1059],
         '#p': [_currentUserPubkeyHex!],
+        'since': since,
       };
 
       final stream = RustRelayService.instance.subscribeToEvents(filter);
@@ -864,11 +862,8 @@ class DmService {
     }
   }
 
-  Future<void> _saveEvent(Map<String, dynamic> eventData) async {
-    try {
-      final eventJson = jsonEncode(eventData);
-      await rust_db.dbSaveEvent(eventJson: eventJson);
-    } catch (_) {}
+  void _saveEvent(Map<String, dynamic> eventData) {
+    // SDK auto-saves events during fetch/subscribe — explicit save is not needed.
   }
 
   void dispose() {

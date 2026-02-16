@@ -2611,7 +2611,7 @@ abstract class AppLocalizations {
   /// No description provided for @cleanupOldEvents.
   ///
   /// In en, this message translates to:
-  /// **'Cleanup Old Events (30+ days)'**
+  /// **'Cleanup Database'**
   String get cleanupOldEvents;
 
   /// No description provided for @cleanupDatabase.
@@ -2635,7 +2635,7 @@ abstract class AppLocalizations {
   /// No description provided for @eventsDeleted.
   ///
   /// In en, this message translates to:
-  /// **'events deleted'**
+  /// **'database wiped'**
   String get eventsDeleted;
 
   /// No description provided for @cleanup.

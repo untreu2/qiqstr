@@ -91,6 +91,9 @@ Future<String?> dbGetEvent({required String eventId}) =>
 Future<bool> dbEventExists({required String eventId}) =>
     RustLib.instance.api.crateApiDatabaseDbEventExists(eventId: eventId);
 
+Future<List<bool>> dbEventsExistBatch({required List<String> eventIds}) =>
+    RustLib.instance.api.crateApiDatabaseDbEventsExistBatch(eventIds: eventIds);
+
 Future<bool> dbSaveEvent({required String eventJson}) =>
     RustLib.instance.api.crateApiDatabaseDbSaveEvent(eventJson: eventJson);
 

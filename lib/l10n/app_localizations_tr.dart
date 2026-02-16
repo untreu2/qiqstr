@@ -1341,7 +1341,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get cleanupInfoBullet3 => 'Uygulama başlangıcında otomatik çalışır';
 
   @override
-  String get cleanupOldEvents => 'Eski Olayları Temizle (30+ gün)';
+  String get cleanupOldEvents => 'Veritabanını Temizle';
 
   @override
   String get cleanupDatabase => 'Veritabanını Temizle';
@@ -1354,7 +1354,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get cleanupCompleted => 'Temizleme tamamlandı';
 
   @override
-  String get eventsDeleted => 'olay silindi';
+  String get eventsDeleted => 'veritabanı temizlendi';
 
   @override
   String get cleanup => 'Temizle';

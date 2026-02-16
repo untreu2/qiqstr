@@ -417,8 +417,24 @@ pub async fn db_get_event(event_id: String) -> Result<Option<String>> {
 pub async fn db_event_exists(event_id: String) -> Result<bool> {
     let client = get_client_pub().await?;
     let id = EventId::from_hex(&event_id)?;
-    let event = client.database().event_by_id(&id).await?;
-    Ok(event.is_some())
+    let status = client.database().check_id(&id).await?;
+    Ok(matches!(status, DatabaseEventStatus::Saved))
+}
+
+#[allow(dead_code)]
+pub async fn db_events_exist_batch(event_ids: Vec<String>) -> Result<Vec<bool>> {
+    let client = get_client_pub().await?;
+    let mut results = Vec::with_capacity(event_ids.len());
+    for id_hex in &event_ids {
+        let exists = if let Ok(id) = EventId::from_hex(id_hex) {
+            let status = client.database().check_id(&id).await;
+            matches!(status, Ok(DatabaseEventStatus::Saved))
+        } else {
+            false
+        };
+        results.push(exists);
+    }
+    Ok(results)
 }
 
 pub async fn db_save_event(event_json: String) -> Result<bool> {
@@ -433,7 +449,15 @@ pub async fn db_save_events(events_json: String) -> Result<u32> {
     let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
     let mut saved: u32 = 0;
 
-    for val in events {
+    for val in &events {
+        if let Some(id_str) = val.get("id").and_then(|v| v.as_str()) {
+            if let Ok(id) = EventId::from_hex(id_str) {
+                if let Ok(DatabaseEventStatus::Saved) = client.database().check_id(&id).await {
+                    continue;
+                }
+            }
+        }
+
         if let Ok(event) = Event::from_json(val.to_string()) {
             if let Ok(status) = client.database().save_event(&event).await {
                 if matches!(status, SaveEventStatus::Success) {
@@ -916,6 +940,7 @@ pub async fn db_cleanup_old_events(days_to_keep: u32) -> Result<u32> {
             Kind::Repost,
             Kind::Reaction,
             Kind::ZapReceipt,
+            Kind::LongFormTextNote,
         ])
         .until(cutoff_ts);
     

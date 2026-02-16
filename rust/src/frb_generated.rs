@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 222144668;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1993716846;
 
 // Section: executor
 
@@ -1198,6 +1198,43 @@ fn wire__crate__api__database__db_event_exists_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
                         let output_ok = crate::api::database::db_event_exists(api_event_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__database__db_events_exist_batch_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "db_events_exist_batch",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_event_ids = <Vec<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::database::db_events_exist_batch(api_event_ids).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -4563,6 +4600,18 @@ impl SseDecode for Vec<String> {
     }
 }
 
+impl SseDecode for Vec<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<bool>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<Vec<String>> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4699,195 +4748,201 @@ fn pde_ffi_dispatcher_primary_impl(
             wire__crate__api__database__db_delete_mute_list_impl(port, ptr, rust_vec_len, data_len)
         }
         30 => wire__crate__api__database__db_event_exists_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__database__db_find_user_repost_event_id_impl(
+        31 => wire__crate__api__database__db_events_exist_batch_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        32 => wire__crate__api__database__db_get_articles_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__database__db_get_articles_by_authors_impl(
+        32 => wire__crate__api__database__db_find_user_repost_event_id_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        34 => wire__crate__api__database__db_get_batch_interaction_counts_impl(
+        33 => wire__crate__api__database__db_get_articles_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__database__db_get_articles_by_authors_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        35 => wire__crate__api__database__db_get_batch_interaction_data_impl(
+        35 => wire__crate__api__database__db_get_batch_interaction_counts_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        36 => wire__crate__api__database__db_get_database_stats_impl(
+        36 => wire__crate__api__database__db_get_batch_interaction_data_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__crate__api__database__db_get_detailed_interactions_impl(
+        37 => wire__crate__api__database__db_get_database_stats_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        38 => wire__crate__api__database__db_get_event_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__database__db_get_feed_notes_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__database__db_get_following_list_impl(
+        38 => wire__crate__api__database__db_get_detailed_interactions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => {
+        39 => wire__crate__api__database__db_get_event_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__database__db_get_feed_notes_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__database__db_get_following_list_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        42 => {
             wire__crate__api__database__db_get_hashtag_notes_impl(port, ptr, rust_vec_len, data_len)
         }
-        42 => wire__crate__api__database__db_get_hydrated_article_impl(
+        43 => wire__crate__api__database__db_get_hydrated_article_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        43 => wire__crate__api__database__db_get_hydrated_articles_impl(
+        44 => wire__crate__api__database__db_get_hydrated_articles_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__crate__api__database__db_get_hydrated_articles_by_authors_impl(
+        45 => wire__crate__api__database__db_get_hydrated_articles_by_authors_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        45 => wire__crate__api__database__db_get_hydrated_feed_notes_impl(
+        46 => wire__crate__api__database__db_get_hydrated_feed_notes_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        46 => wire__crate__api__database__db_get_hydrated_hashtag_notes_impl(
+        47 => wire__crate__api__database__db_get_hydrated_hashtag_notes_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        47 => {
+        48 => {
             wire__crate__api__database__db_get_hydrated_note_impl(port, ptr, rust_vec_len, data_len)
         }
-        48 => wire__crate__api__database__db_get_hydrated_notifications_impl(
+        49 => wire__crate__api__database__db_get_hydrated_notifications_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        49 => wire__crate__api__database__db_get_hydrated_profile_notes_impl(
+        50 => wire__crate__api__database__db_get_hydrated_profile_notes_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        50 => wire__crate__api__database__db_get_hydrated_replies_impl(
+        51 => wire__crate__api__database__db_get_hydrated_replies_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        51 => wire__crate__api__database__db_get_interaction_counts_impl(
+        52 => wire__crate__api__database__db_get_interaction_counts_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        52 => wire__crate__api__database__db_get_mute_list_impl(port, ptr, rust_vec_len, data_len),
-        53 => {
+        53 => wire__crate__api__database__db_get_mute_list_impl(port, ptr, rust_vec_len, data_len),
+        54 => {
             wire__crate__api__database__db_get_notifications_impl(port, ptr, rust_vec_len, data_len)
         }
-        54 => {
+        55 => {
             wire__crate__api__database__db_get_oldest_events_impl(port, ptr, rust_vec_len, data_len)
         }
-        55 => wire__crate__api__database__db_get_profile_impl(port, ptr, rust_vec_len, data_len),
-        56 => {
+        56 => wire__crate__api__database__db_get_profile_impl(port, ptr, rust_vec_len, data_len),
+        57 => {
             wire__crate__api__database__db_get_profile_notes_impl(port, ptr, rust_vec_len, data_len)
         }
-        57 => wire__crate__api__database__db_get_profiles_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__database__db_get_random_profiles_impl(
+        58 => wire__crate__api__database__db_get_profiles_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__database__db_get_random_profiles_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        59 => wire__crate__api__database__db_get_replies_impl(port, ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__database__db_has_following_list_impl(
+        60 => wire__crate__api__database__db_get_replies_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__database__db_has_following_list_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        61 => wire__crate__api__database__db_has_mute_list_impl(port, ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__database__db_has_profile_impl(port, ptr, rust_vec_len, data_len),
-        63 => {
+        62 => wire__crate__api__database__db_has_mute_list_impl(port, ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__database__db_has_profile_impl(port, ptr, rust_vec_len, data_len),
+        64 => {
             wire__crate__api__database__db_has_user_reacted_impl(port, ptr, rust_vec_len, data_len)
         }
-        64 => {
+        65 => {
             wire__crate__api__database__db_has_user_reposted_impl(port, ptr, rust_vec_len, data_len)
         }
-        65 => wire__crate__api__database__db_query_events_impl(port, ptr, rust_vec_len, data_len),
-        66 => wire__crate__api__database__db_save_event_impl(port, ptr, rust_vec_len, data_len),
-        67 => wire__crate__api__database__db_save_events_impl(port, ptr, rust_vec_len, data_len),
-        68 => wire__crate__api__database__db_save_following_list_impl(
+        66 => wire__crate__api__database__db_query_events_impl(port, ptr, rust_vec_len, data_len),
+        67 => wire__crate__api__database__db_save_event_impl(port, ptr, rust_vec_len, data_len),
+        68 => wire__crate__api__database__db_save_events_impl(port, ptr, rust_vec_len, data_len),
+        69 => wire__crate__api__database__db_save_following_list_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        69 => wire__crate__api__database__db_save_mute_list_impl(port, ptr, rust_vec_len, data_len),
-        70 => wire__crate__api__database__db_save_profile_impl(port, ptr, rust_vec_len, data_len),
-        71 => wire__crate__api__database__db_search_notes_impl(port, ptr, rust_vec_len, data_len),
-        72 => {
+        70 => wire__crate__api__database__db_save_mute_list_impl(port, ptr, rust_vec_len, data_len),
+        71 => wire__crate__api__database__db_save_profile_impl(port, ptr, rust_vec_len, data_len),
+        72 => wire__crate__api__database__db_search_notes_impl(port, ptr, rust_vec_len, data_len),
+        73 => {
             wire__crate__api__database__db_search_profiles_impl(port, ptr, rust_vec_len, data_len)
         }
-        73 => wire__crate__api__database__db_wipe_impl(port, ptr, rust_vec_len, data_len),
-        74 => wire__crate__api__relay__delete_events_impl(port, ptr, rust_vec_len, data_len),
-        75 => wire__crate__api__relay__disconnect_relays_impl(port, ptr, rust_vec_len, data_len),
-        76 => wire__crate__api__relay__discover_and_connect_outbox_relays_impl(
+        74 => wire__crate__api__database__db_wipe_impl(port, ptr, rust_vec_len, data_len),
+        75 => wire__crate__api__relay__delete_events_impl(port, ptr, rust_vec_len, data_len),
+        76 => wire__crate__api__relay__disconnect_relays_impl(port, ptr, rust_vec_len, data_len),
+        77 => wire__crate__api__relay__discover_and_connect_outbox_relays_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        78 => wire__crate__api__relay__fetch_event_by_id_impl(port, ptr, rust_vec_len, data_len),
-        79 => wire__crate__api__relay__fetch_events_impl(port, ptr, rust_vec_len, data_len),
-        84 => wire__crate__api__relay__get_connected_relay_count_impl(
+        79 => wire__crate__api__relay__fetch_event_by_id_impl(port, ptr, rust_vec_len, data_len),
+        80 => wire__crate__api__relay__fetch_events_impl(port, ptr, rust_vec_len, data_len),
+        85 => wire__crate__api__relay__get_connected_relay_count_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        85 => wire__crate__api__relay__get_database_size_mb_impl(port, ptr, rust_vec_len, data_len),
-        87 => wire__crate__api__relay__get_relay_list_impl(port, ptr, rust_vec_len, data_len),
-        88 => wire__crate__api__relay__get_relay_status_impl(port, ptr, rust_vec_len, data_len),
-        89 => wire__crate__api__relay__init_client_impl(port, ptr, rust_vec_len, data_len),
-        90 => {
+        86 => wire__crate__api__relay__get_database_size_mb_impl(port, ptr, rust_vec_len, data_len),
+        88 => wire__crate__api__relay__get_relay_list_impl(port, ptr, rust_vec_len, data_len),
+        89 => wire__crate__api__relay__get_relay_status_impl(port, ptr, rust_vec_len, data_len),
+        90 => wire__crate__api__relay__init_client_impl(port, ptr, rust_vec_len, data_len),
+        91 => {
             wire__crate__api__relay__is_client_initialized_impl(port, ptr, rust_vec_len, data_len)
         }
-        100 => wire__crate__api__nwc__nwc_get_balance_impl(port, ptr, rust_vec_len, data_len),
-        101 => wire__crate__api__nwc__nwc_list_transactions_impl(port, ptr, rust_vec_len, data_len),
-        102 => wire__crate__api__nwc__nwc_make_invoice_impl(port, ptr, rust_vec_len, data_len),
-        103 => wire__crate__api__nwc__nwc_pay_invoice_impl(port, ptr, rust_vec_len, data_len),
-        105 => wire__crate__api__relay__remove_relay_impl(port, ptr, rust_vec_len, data_len),
-        106 => wire__crate__api__relay__request_to_vanish_impl(port, ptr, rust_vec_len, data_len),
-        107 => wire__crate__api__relay__send_event_impl(port, ptr, rust_vec_len, data_len),
-        108 => wire__crate__api__relay__send_event_to_impl(port, ptr, rust_vec_len, data_len),
-        111 => wire__crate__api__relay__subscribe_to_events_impl(port, ptr, rust_vec_len, data_len),
-        113 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
-        117 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
-        118 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
+        101 => wire__crate__api__nwc__nwc_get_balance_impl(port, ptr, rust_vec_len, data_len),
+        102 => wire__crate__api__nwc__nwc_list_transactions_impl(port, ptr, rust_vec_len, data_len),
+        103 => wire__crate__api__nwc__nwc_make_invoice_impl(port, ptr, rust_vec_len, data_len),
+        104 => wire__crate__api__nwc__nwc_pay_invoice_impl(port, ptr, rust_vec_len, data_len),
+        106 => wire__crate__api__relay__remove_relay_impl(port, ptr, rust_vec_len, data_len),
+        107 => wire__crate__api__relay__request_to_vanish_impl(port, ptr, rust_vec_len, data_len),
+        108 => wire__crate__api__relay__send_event_impl(port, ptr, rust_vec_len, data_len),
+        109 => wire__crate__api__relay__send_event_to_impl(port, ptr, rust_vec_len, data_len),
+        112 => wire__crate__api__relay__subscribe_to_events_impl(port, ptr, rust_vec_len, data_len),
+        114 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
+        118 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
+        119 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
             port,
             ptr,
             rust_vec_len,
@@ -4940,28 +4995,28 @@ fn pde_ffi_dispatcher_sync_impl(
         23 => wire__crate__api__events__create_repost_event_impl(ptr, rust_vec_len, data_len),
         24 => wire__crate__api__events__create_signed_event_impl(ptr, rust_vec_len, data_len),
         25 => wire__crate__api__events__create_zap_request_event_impl(ptr, rust_vec_len, data_len),
-        77 => wire__crate__api__nip19__encode_basic_bech32_impl(ptr, rust_vec_len, data_len),
-        80 => wire__crate__api__crypto__generate_aes_key_impl(ptr, rust_vec_len, data_len),
-        81 => wire__crate__api__crypto__generate_aes_nonce_impl(ptr, rust_vec_len, data_len),
-        82 => wire__crate__api__crypto__generate_keypair_impl(ptr, rust_vec_len, data_len),
-        83 => wire__crate__api__crypto__generate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        86 => wire__crate__api__crypto__get_public_key_impl(ptr, rust_vec_len, data_len),
-        91 => wire__crate__api__nip17__is_gift_wrap_impl(ptr, rust_vec_len, data_len),
-        92 => wire__crate__api__crypto__mnemonic_to_private_key_impl(ptr, rust_vec_len, data_len),
-        93 => wire__crate__api__nip19__nip19_decode_impl(ptr, rust_vec_len, data_len),
-        94 => wire__crate__api__nip19__nip19_decode_tlv_impl(ptr, rust_vec_len, data_len),
-        95 => wire__crate__api__nip19__nip19_encode_note_impl(ptr, rust_vec_len, data_len),
-        96 => wire__crate__api__nip19__nip19_encode_privkey_impl(ptr, rust_vec_len, data_len),
-        97 => wire__crate__api__nip19__nip19_encode_pubkey_impl(ptr, rust_vec_len, data_len),
-        98 => wire__crate__api__nip17__nip44_decrypt_impl(ptr, rust_vec_len, data_len),
-        99 => wire__crate__api__nip17__nip44_encrypt_impl(ptr, rust_vec_len, data_len),
-        104 => wire__crate__api__nwc__parse_nwc_uri_impl(ptr, rust_vec_len, data_len),
-        109 => wire__crate__api__crypto__sha256_hash_impl(ptr, rust_vec_len, data_len),
-        110 => wire__crate__api__crypto__sign_event_id_impl(ptr, rust_vec_len, data_len),
-        112 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
-        114 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        115 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
-        116 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
+        78 => wire__crate__api__nip19__encode_basic_bech32_impl(ptr, rust_vec_len, data_len),
+        81 => wire__crate__api__crypto__generate_aes_key_impl(ptr, rust_vec_len, data_len),
+        82 => wire__crate__api__crypto__generate_aes_nonce_impl(ptr, rust_vec_len, data_len),
+        83 => wire__crate__api__crypto__generate_keypair_impl(ptr, rust_vec_len, data_len),
+        84 => wire__crate__api__crypto__generate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        87 => wire__crate__api__crypto__get_public_key_impl(ptr, rust_vec_len, data_len),
+        92 => wire__crate__api__nip17__is_gift_wrap_impl(ptr, rust_vec_len, data_len),
+        93 => wire__crate__api__crypto__mnemonic_to_private_key_impl(ptr, rust_vec_len, data_len),
+        94 => wire__crate__api__nip19__nip19_decode_impl(ptr, rust_vec_len, data_len),
+        95 => wire__crate__api__nip19__nip19_decode_tlv_impl(ptr, rust_vec_len, data_len),
+        96 => wire__crate__api__nip19__nip19_encode_note_impl(ptr, rust_vec_len, data_len),
+        97 => wire__crate__api__nip19__nip19_encode_privkey_impl(ptr, rust_vec_len, data_len),
+        98 => wire__crate__api__nip19__nip19_encode_pubkey_impl(ptr, rust_vec_len, data_len),
+        99 => wire__crate__api__nip17__nip44_decrypt_impl(ptr, rust_vec_len, data_len),
+        100 => wire__crate__api__nip17__nip44_encrypt_impl(ptr, rust_vec_len, data_len),
+        105 => wire__crate__api__nwc__parse_nwc_uri_impl(ptr, rust_vec_len, data_len),
+        110 => wire__crate__api__crypto__sha256_hash_impl(ptr, rust_vec_len, data_len),
+        111 => wire__crate__api__crypto__sign_event_id_impl(ptr, rust_vec_len, data_len),
+        113 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
+        115 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        116 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
+        117 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5009,6 +5064,16 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <bool>::sse_encode(item, serializer);
         }
     }
 }

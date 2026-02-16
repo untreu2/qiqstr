@@ -35,10 +35,18 @@ class SyncService {
   final _syncStatusController =
       StreamController<SyncOperationStatus>.broadcast();
   final Map<String, DateTime> _lastSyncTime = {};
-  static const _minSyncInterval = Duration(seconds: 30);
+  static const _minSyncInterval = Duration(minutes: 3);
 
   StreamSubscription<Map<String, dynamic>>? _feedSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+
+  final _recentEventIds = <String>{};
+  static const _maxCachedIds = 10000;
+
+  final _pendingRefIds = <String>{};
+  Timer? _refFetchTimer;
+  final _pendingProfilePubkeys = <String>{};
+  Timer? _profileSyncTimer;
 
   Stream<SyncOperationStatus> get syncStatus => _syncStatusController.stream;
 
@@ -58,6 +66,22 @@ class SyncService {
     _lastSyncTime[key] = DateTime.now();
   }
 
+  int? _getSincestamp(String key) {
+    final lastSync = _lastSyncTime[key];
+    if (lastSync == null) return null;
+    return lastSync.millisecondsSinceEpoch ~/ 1000 - 60;
+  }
+
+  bool _isDuplicate(String? eventId) {
+    if (eventId == null || eventId.isEmpty) return false;
+    if (_recentEventIds.contains(eventId)) return true;
+    if (_recentEventIds.length >= _maxCachedIds) {
+      _recentEventIds.clear();
+    }
+    _recentEventIds.add(eventId);
+    return false;
+  }
+
   Future<void> syncFeed(String userPubkey, {bool force = false}) async {
     final key = 'feed_$userPubkey';
     if (!force && !_shouldSync(key)) return;
@@ -66,10 +90,11 @@ class SyncService {
       final follows = await _db.getFollowingList(userPubkey);
       if (follows == null || follows.isEmpty) return;
 
+      final since = _getSincestamp(key);
       final notesFilter = NostrService.createNotesFilter(
-          authors: follows, kinds: [1, 6], limit: 300);
+          authors: follows, kinds: [1, 6], limit: 300, since: since);
       final articlesFilter =
-          NostrService.createArticlesFilter(authors: follows, limit: 50);
+          NostrService.createArticlesFilter(authors: follows, limit: 50, since: since);
 
       final results = await Future.wait([
         _queryRelays(notesFilter),
@@ -92,8 +117,9 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('list_feed', () async {
+      final since = _getSincestamp(key);
       final notesFilter = NostrService.createNotesFilter(
-          authors: pubkeys, kinds: [1, 6], limit: 300);
+          authors: pubkeys, kinds: [1, 6], limit: 300, since: since);
 
       final noteEvents = await _queryRelays(notesFilter);
       await _saveEventsAndProfiles(noteEvents);
@@ -108,8 +134,8 @@ class SyncService {
     await _sync('profile', () async {
       final filter =
           NostrService.createProfileFilter(authors: [pubkey], limit: 1);
-      final events = await _queryRelays(filter);
-      await _saveEvents(events);
+      await _queryRelays(filter);
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -120,23 +146,22 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('profile_notes', () async {
+      final since = _getSincestamp(key);
       final profileFilter =
           NostrService.createProfileFilter(authors: [pubkey], limit: 1);
       final notesFilter = NostrService.createNotesFilter(
-          authors: [pubkey], kinds: [1, 6], limit: 500);
+          authors: [pubkey], kinds: [1, 6], limit: 500, since: since);
 
       final results = await Future.wait([
         _queryRelays(profileFilter),
         _queryRelays(notesFilter),
       ]);
 
-      final profileEvents = results[0];
       final noteEvents = results[1];
 
-      await Future.wait([
-        _saveEvents(profileEvents),
-        _saveEventsAndProfiles(noteEvents),
-      ]);
+      _notifyDbChanged();
+      _syncMissingProfilesInBackground(noteEvents);
+      _fetchReferencedEventsInBackground(noteEvents);
 
       _markSynced(key);
     });
@@ -148,10 +173,11 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('profile_reactions', () async {
+      final since = _getSincestamp(key);
       final filter = NostrService.createNotesFilter(
-          authors: [pubkey], kinds: [7], limit: limit);
-      final events = await _queryRelays(filter);
-      await _saveEvents(events);
+          authors: [pubkey], kinds: [7], limit: limit, since: since);
+      await _queryRelays(filter);
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -161,8 +187,8 @@ class SyncService {
     await _sync('profiles', () async {
       final filter = NostrService.createProfileFilter(
           authors: pubkeys, limit: pubkeys.length);
-      final events = await _queryRelays(filter);
-      await _saveEvents(events);
+      await _queryRelays(filter);
+      _notifyDbChanged();
     });
   }
 
@@ -171,8 +197,9 @@ class SyncService {
     if (!_shouldSync(key)) return;
 
     await _sync('notifications', () async {
+      final since = _getSincestamp(key);
       final filter = NostrService.createNotificationFilter(
-          pubkeys: [userPubkey], kinds: [1, 6, 7, 9735], limit: 100);
+          pubkeys: [userPubkey], kinds: [1, 6, 7, 9735], limit: 100, since: since);
       final events = await _queryRelays(filter);
       await _saveEventsAndProfiles(events);
       _markSynced(key);
@@ -200,7 +227,7 @@ class SyncService {
         await _db.saveFollowingList(userPubkey, listWithUser.toList());
       }
 
-      await _saveEvents(events);
+      _notifyDbChanged();
       _markSynced(key);
     });
   }
@@ -237,8 +264,6 @@ class SyncService {
           final listWithUser = followList.toSet()..add(authorPubkey);
           await _db.saveFollowingList(authorPubkey, listWithUser.toList());
         }
-
-        await _saveEvents(events);
       }
 
       _markSynced(key);
@@ -249,9 +274,7 @@ class SyncService {
     await _sync('mute', () async {
       final filter =
           NostrService.createMuteFilter(authors: [userPubkey], limit: 1);
-      final events = await _queryRelays(filter);
-      await _saveEvents(events);
-
+      await _queryRelays(filter);
       final authService = AuthService.instance;
       final pkResult = await authService.getCurrentUserPrivateKey();
       final pubResult = await authService.getCurrentUserPublicKeyHex();
@@ -271,8 +294,7 @@ class SyncService {
     await _sync('bookmark', () async {
       final filter =
           NostrService.createBookmarkFilter(authors: [userPubkey], limit: 1);
-      final events = await _queryRelays(filter);
-      await _saveEvents(events);
+      await _queryRelays(filter);
 
       final authService = AuthService.instance;
       final pkResult = await authService.getCurrentUserPrivateKey();
@@ -302,8 +324,7 @@ class SyncService {
     await _sync('pinned_notes', () async {
       final filter = NostrService.createPinnedNotesFilter(
           authors: [userPubkey], limit: 1);
-      final events = await _queryRelays(filter);
-      await _saveEvents(events);
+      await _queryRelays(filter);
 
       final authService = AuthService.instance;
       final pubResult = await authService.getCurrentUserPublicKeyHex();
@@ -333,8 +354,7 @@ class SyncService {
 
       final filter =
           NostrService.createFollowSetsFilter(authors: allAuthors, limit: 500);
-      final events = await _queryRelays(filter);
-      await _saveEvents(events);
+      await _queryRelays(filter);
 
       await FollowSetService.instance
           .loadFromDatabase(userPubkeyHex: userPubkey);
@@ -369,9 +389,11 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('articles', () async {
+      final since = _getSincestamp(key);
       final filter = NostrService.createArticlesFilter(
         authors: authors,
         limit: limit,
+        since: since,
       );
       final events = await _queryRelays(filter);
       await _saveEventsAndProfiles(events);
@@ -385,10 +407,12 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('hashtag', () async {
+      final since = _getSincestamp(key);
       final filter = NostrService.createHashtagFilter(
         hashtag: normalizedHashtag,
         kinds: [1],
         limit: 100,
+        since: since,
       );
       final events = await _queryRelays(filter);
       await _saveEventsAndProfiles(events);
@@ -632,9 +656,10 @@ class SyncService {
   }
 
   void startPeriodicSync(String userPubkey,
-      {Duration interval = const Duration(minutes: 5)}) {
+      {Duration interval = const Duration(minutes: 10)}) {
     stopPeriodicSync();
     _periodicTimer = Timer.periodic(interval, (_) async {
+      if (_feedSubscription != null || _notificationSubscription != null) return;
       await syncFeed(userPubkey);
       await syncNotifications(userPubkey);
     });
@@ -656,9 +681,11 @@ class SyncService {
       final follows = await _db.getFollowingList(userPubkey);
       if (follows == null || follows.isEmpty) return;
 
+      final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
       final filter = <String, dynamic>{
         'kinds': [1, 6],
         'authors': follows,
+        'since': since,
       };
 
       final muteService = EncryptedMuteService.instance;
@@ -666,8 +693,10 @@ class SyncService {
       _feedSubscription = stream.listen(
         (eventData) async {
           try {
+            final eventId = eventData['id'] as String?;
+            if (_isDuplicate(eventId)) return;
             if (muteService.shouldFilterEvent(eventData)) return;
-            await _db.saveEvents([eventData]);
+            _notifyDbChanged();
             _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}
         },
@@ -684,9 +713,11 @@ class SyncService {
   Future<void> _startNotificationSubscription(String userPubkey) async {
     _notificationSubscription?.cancel();
     try {
+      final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
       final filter = <String, dynamic>{
         'kinds': [1, 6, 7, 9735],
         '#p': [userPubkey],
+        'since': since,
       };
 
       final muteService = EncryptedMuteService.instance;
@@ -694,8 +725,10 @@ class SyncService {
       _notificationSubscription = stream.listen(
         (eventData) async {
           try {
+            final eventId = eventData['id'] as String?;
+            if (_isDuplicate(eventId)) return;
             if (muteService.shouldFilterEvent(eventData)) return;
-            await _db.saveEvents([eventData]);
+            _notifyDbChanged();
             _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}
         },
@@ -723,6 +756,8 @@ class SyncService {
   void dispose() {
     stopPeriodicSync();
     stopRealtimeSubscriptions();
+    _refFetchTimer?.cancel();
+    _profileSyncTimer?.cancel();
     _syncStatusController.close();
   }
 
@@ -768,9 +803,8 @@ class SyncService {
     return await _relayService.fetchEvents(filterMap);
   }
 
-  Future<void> _saveEvents(List<Map<String, dynamic>> events) async {
-    if (events.isEmpty) return;
-    await _db.saveEvents(events);
+  void _notifyDbChanged() {
+    _db.notifyChange();
   }
 
   Set<String> _extractAllPubkeys(List<Map<String, dynamic>> events) {
@@ -810,18 +844,31 @@ class SyncService {
   }
 
   void _syncMissingProfilesInBackground(List<Map<String, dynamic>> events) {
-    Future.microtask(() async {
-      try {
-        final pubkeys = _extractAllPubkeys(events);
-        await _syncMissingProfiles(pubkeys);
-      } catch (_) {}
+    _schedulePendingProfileSync(_extractAllPubkeys(events));
+  }
+
+  void _schedulePendingProfileSync(Set<String> pubkeys) {
+    if (pubkeys.isEmpty) return;
+    _pendingProfilePubkeys.addAll(pubkeys);
+    _profileSyncTimer?.cancel();
+    _profileSyncTimer = Timer(const Duration(seconds: 5), () {
+      _processPendingProfiles();
     });
+  }
+
+  Future<void> _processPendingProfiles() async {
+    final pubkeys = _pendingProfilePubkeys.toSet();
+    _pendingProfilePubkeys.clear();
+    if (pubkeys.isEmpty) return;
+    try {
+      await _syncMissingProfiles(pubkeys);
+    } catch (_) {}
   }
 
   Future<void> _saveEventsAndProfiles(List<Map<String, dynamic>> events) async {
     if (events.isEmpty) return;
 
-    await _saveEvents(events);
+    _notifyDbChanged();
     _syncMissingProfilesInBackground(events);
     _fetchReferencedEventsInBackground(events);
   }
@@ -858,27 +905,34 @@ class SyncService {
   }
 
   void _fetchReferencedEventsInBackground(List<Map<String, dynamic>> events) {
-    Future.microtask(() async {
-      try {
-        final refIds = _extractReferencedEventIds(events);
-        if (refIds.isEmpty) return;
-
-        final missingIds = <String>[];
-        for (final id in refIds) {
-          final exists = await _db.eventExists(id);
-          if (!exists) missingIds.add(id);
-        }
-        if (missingIds.isEmpty) return;
-
-        final filter = NostrService.createEventByIdFilter(eventIds: missingIds);
-        final fetchedEvents = await _queryRelays(filter);
-        if (fetchedEvents.isNotEmpty) {
-          final pubkeys = _extractAllPubkeys(fetchedEvents);
-          await _syncMissingProfiles(pubkeys);
-          await _saveEvents(fetchedEvents);
-        }
-      } catch (_) {}
+    final refIds = _extractReferencedEventIds(events);
+    if (refIds.isEmpty) return;
+    _pendingRefIds.addAll(refIds);
+    _refFetchTimer?.cancel();
+    _refFetchTimer = Timer(const Duration(seconds: 5), () {
+      _processPendingRefs();
     });
+  }
+
+  Future<void> _processPendingRefs() async {
+    final ids = _pendingRefIds.toList();
+    _pendingRefIds.clear();
+    if (ids.isEmpty) return;
+    try {
+      final existResults = await _db.eventsExistBatch(ids);
+      final missingIds = <String>[];
+      for (var i = 0; i < ids.length; i++) {
+        if (!existResults[i]) missingIds.add(ids[i]);
+      }
+      if (missingIds.isEmpty) return;
+
+      final filter = NostrService.createEventByIdFilter(eventIds: missingIds);
+      final fetchedEvents = await _queryRelays(filter);
+      if (fetchedEvents.isNotEmpty) {
+        _notifyDbChanged();
+        _schedulePendingProfileSync(_extractAllPubkeys(fetchedEvents));
+      }
+    } catch (_) {}
   }
 
   List<String> _extractParentIds(List<Map<String, dynamic>> events) {

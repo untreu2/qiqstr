@@ -1335,7 +1335,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cleanupInfoBullet3 => 'Runs automatically on app startup';
 
   @override
-  String get cleanupOldEvents => 'Cleanup Old Events (30+ days)';
+  String get cleanupOldEvents => 'Cleanup Database';
 
   @override
   String get cleanupDatabase => 'Cleanup Database';
@@ -1348,7 +1348,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cleanupCompleted => 'Cleanup completed';
 
   @override
-  String get eventsDeleted => 'events deleted';
+  String get eventsDeleted => 'database wiped';
 
   @override
   String get cleanup => 'Cleanup';

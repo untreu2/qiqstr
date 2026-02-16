@@ -473,6 +473,14 @@ class RustDatabaseService {
     }
   }
 
+  Future<List<bool>> eventsExistBatch(List<String> eventIds) async {
+    try {
+      return await rust_db.dbEventsExistBatch(eventIds: eventIds);
+    } catch (_) {
+      return List.filled(eventIds.length, false);
+    }
+  }
+
   Future<void> saveEvents(List<Map<String, dynamic>> events) async {
     try {
       final json = jsonEncode(events);
@@ -835,34 +843,25 @@ class RustDatabaseService {
   Future<void> autoCleanupIfNeeded() async {
     try {
       final sizeMb = await getDatabaseSizeMB();
-      final stats = await getDatabaseStats();
-      final totalEvents = stats['totalEvents'] as int? ?? 0;
 
       if (kDebugMode) {
-        print('[LMDB] Database size: ${sizeMb}MB | Total events: $totalEvents');
+        print('[LMDB] Database size: ${sizeMb}MB');
       }
 
-      if (sizeMb > 1024) {
+      if (sizeMb > 1536) {
         if (kDebugMode) {
-          print(
-              '[LMDB] Database size exceeded 1GB threshold, starting cleanup...');
+          print('[LMDB] Database size exceeded 1.5GB threshold, wiping...');
         }
 
-        final deletedCount = await cleanupOldEvents(daysToKeep: 30);
-        final newSize = await getDatabaseSizeMB();
-        final newStats = await getDatabaseStats();
-        final newTotalEvents = newStats['totalEvents'] as int? ?? 0;
+        await wipe();
 
         if (kDebugMode) {
-          print('[LMDB] Cleanup completed:');
-          print('[LMDB]   - Deleted events: $deletedCount');
-          print('[LMDB]   - Old size: ${sizeMb}MB → New size: ${newSize}MB');
-          print(
-              '[LMDB]   - Old events: $totalEvents → New events: $newTotalEvents');
+          final newSize = await getDatabaseSizeMB();
+          print('[LMDB] Wipe completed. New size: ${newSize}MB');
         }
       } else {
         if (kDebugMode) {
-          print('[LMDB] Database size OK (below 1GB threshold)');
+          print('[LMDB] Database size OK (below 1.5GB threshold)');
         }
       }
     } catch (e) {
