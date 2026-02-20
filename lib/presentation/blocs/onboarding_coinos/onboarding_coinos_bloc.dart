@@ -88,7 +88,8 @@ class OnboardingCoinosBloc
       'nip05': existingProfile?.nip05 ?? '',
       'lud16': lud16,
       'website': existingProfile?.website ?? '',
-      'location': existingProfile?.location ?? '',
+      if ((existingProfile?.location ?? '').isNotEmpty)
+        'location': existingProfile!.location!,
     };
 
     await _syncService.publishProfileUpdate(profileContent: profile);
