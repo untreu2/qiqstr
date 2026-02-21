@@ -78,10 +78,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     ));
 
     if (event.hashtag != null) {
-      _watchHashtagFeed(event.hashtag!);
       _syncHashtagInBackground(event.hashtag!, emit);
     } else {
-      _watchFeed(event.userHex);
       _syncInBackground(event.userHex, emit);
     }
   }
@@ -139,6 +137,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       if (isClosed) return;
       try {
         await _syncService.syncHashtag(hashtag);
+        if (isClosed) return;
+        _watchHashtagFeed(hashtag);
       } catch (_) {}
       if (!isClosed && state is FeedLoaded) {
         add(feed_event.FeedSyncCompleted());
@@ -230,12 +230,14 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         ]);
         if (isClosed) return;
 
+        await _syncService.syncFeed(userHex, force: true);
+        if (isClosed) return;
+
         final currentState = state;
         if (currentState is FeedLoaded && currentState.activeListId == null) {
           _watchFeed(userHex);
         }
-        await _syncService.syncFeed(userHex, force: true);
-        if (isClosed) return;
+
         await _syncService.startRealtimeSubscriptions(userHex);
       } catch (_) {}
       if (!isClosed && state is FeedLoaded) {
@@ -554,7 +556,6 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         clearActiveList: true,
       ));
       if (_currentUserHex != null) {
-        _watchFeed(_currentUserHex!);
         _syncInBackground(_currentUserHex!, null);
       }
     } else {
@@ -565,12 +566,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         activeListId: event.listId,
         activeListTitle: event.listTitle,
       ));
-      _watchListFeed(event.pubkeys!);
 
       Future.microtask(() async {
         if (isClosed) return;
         try {
           await _syncService.syncListFeed(event.pubkeys!);
+          if (!isClosed) _watchListFeed(event.pubkeys!);
         } catch (_) {}
         if (!isClosed && state is FeedLoaded) {
           add(feed_event.FeedSyncCompleted());

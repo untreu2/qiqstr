@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -10,6 +10,12 @@ use nostr_sdk::prelude::*;
 use tokio::sync::RwLock;
 
 use crate::frb_generated::StreamSink;
+
+static COUNTING_CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
+
+fn counting_client_lock() -> &'static RwLock<Option<Client>> {
+    COUNTING_CLIENT.get_or_init(|| RwLock::new(None))
+}
 
 const DISCOVERY_RELAYS: &[&str] = &[
     "wss://relay.damus.io",
@@ -528,9 +534,26 @@ pub async fn fetch_counts_from_relays(
         .as_ref()
         .and_then(|h| PublicKey::from_hex(h).ok());
 
-    let temp_client = Client::builder()
-        .database(MemoryDatabase::default())
-        .build();
+    let lock = counting_client_lock();
+    let client = {
+        let reader = lock.read().await;
+        reader.clone()
+    };
+    let client = match client {
+        Some(c) => c,
+        None => {
+            let mut writer = lock.write().await;
+            if let Some(ref c) = *writer {
+                c.clone()
+            } else {
+                let c = Client::builder()
+                    .database(MemoryDatabase::default())
+                    .build();
+                *writer = Some(c.clone());
+                c
+            }
+        }
+    };
 
     let relay_urls: Vec<String> = main_client
         .relays()
@@ -538,11 +561,10 @@ pub async fn fetch_counts_from_relays(
         .keys()
         .map(|u| u.to_string())
         .collect();
-
     for url in &relay_urls {
-        let _ = temp_client.add_relay(url.as_str()).await;
+        let _ = client.add_relay(url.as_str()).await;
     }
-    temp_client.connect().await;
+    client.connect().await;
 
     let filter = Filter::new()
         .kinds([Kind::Reaction, Kind::Repost, Kind::ZapReceipt, Kind::TextNote])
@@ -550,10 +572,8 @@ pub async fn fetch_counts_from_relays(
         .limit(500);
 
     let timeout = Duration::from_secs(5);
-    let events = temp_client.fetch_events(filter, timeout).await
+    let events = client.fetch_events(filter, timeout).await
         .unwrap_or_default();
-
-    temp_client.disconnect().await;
 
     let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
     let mut user_reacted: HashMap<String, bool> = HashMap::new();
@@ -568,27 +588,35 @@ pub async fn fetch_counts_from_relays(
     for event in events.iter() {
         let kind = event.kind;
         let is_user = user_pk.as_ref().map_or(false, |pk| event.pubkey == *pk);
+        let zap_sats = if kind == Kind::ZapReceipt {
+            super::database::extract_zap_amount_sats(event) as usize
+        } else {
+            0
+        };
 
+        let mut counted_for: HashSet<String> = HashSet::new();
         for tag in event.tags.iter() {
             let tag_kind = tag.kind();
             if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
                 if let Some(ref_id) = tag.content() {
                     let ref_hex = ref_id.to_string();
+                    if counted_for.contains(&ref_hex) { continue; }
                     if let Some(c) = counts.get_mut(&ref_hex) {
+                        counted_for.insert(ref_hex.clone());
                         match kind {
                             k if k == Kind::Reaction => {
                                 c[0] += 1;
                                 if is_user {
-                                    user_reacted.insert(ref_hex.clone(), true);
+                                    user_reacted.insert(ref_hex, true);
                                 }
                             }
                             k if k == Kind::Repost => {
                                 c[1] += 1;
                                 if is_user {
-                                    user_reposted.insert(ref_hex.clone(), true);
+                                    user_reposted.insert(ref_hex, true);
                                 }
                             }
-                            k if k == Kind::ZapReceipt => c[2] += 1,
+                            k if k == Kind::ZapReceipt => c[2] += zap_sats,
                             k if k == Kind::TextNote => c[3] += 1,
                             _ => {}
                         }
@@ -613,6 +641,236 @@ pub async fn fetch_counts_from_relays(
         );
     }
     Ok(serde_json::to_string(&result)?)
+}
+
+#[frb]
+pub async fn stream_interaction_counts(
+    note_ids: Vec<String>,
+    user_pubkey_hex: Option<String>,
+    sink: StreamSink<String>,
+) -> Result<()> {
+    let main_client = get_client().await?;
+
+    let ids: Vec<EventId> = note_ids
+        .iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .collect();
+
+    if ids.is_empty() {
+        return Ok(());
+    }
+
+    let user_pk = user_pubkey_hex
+        .as_ref()
+        .and_then(|h| PublicKey::from_hex(h).ok());
+
+    let lock = counting_client_lock();
+    let client = {
+        let reader = lock.read().await;
+        reader.clone()
+    };
+    let client = match client {
+        Some(c) => c,
+        None => {
+            let mut writer = lock.write().await;
+            if let Some(ref c) = *writer {
+                c.clone()
+            } else {
+                let c = Client::builder()
+                    .database(MemoryDatabase::default())
+                    .build();
+                *writer = Some(c.clone());
+                c
+            }
+        }
+    };
+
+    let relay_urls: Vec<String> = main_client
+        .relays()
+        .await
+        .keys()
+        .map(|u| u.to_string())
+        .collect();
+    for url in &relay_urls {
+        let _ = client.add_relay(url.as_str()).await;
+    }
+    client.connect().await;
+
+    let filter = Filter::new()
+        .kinds([Kind::Reaction, Kind::Repost, Kind::ZapReceipt, Kind::TextNote])
+        .events(ids);
+
+    let Output { val: sub_id, .. } = client
+        .subscribe(filter, None)
+        .await
+        .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
+
+    let mut notifications = client.notifications();
+
+    let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
+    let mut user_reacted: HashMap<String, bool> = HashMap::new();
+    let mut user_reposted: HashMap<String, bool> = HashMap::new();
+    let mut seen_events: HashSet<String> = HashSet::new();
+
+    for nid in &note_ids {
+        counts.insert(nid.clone(), [0; 4]);
+        user_reacted.insert(nid.clone(), false);
+        user_reposted.insert(nid.clone(), false);
+    }
+
+    let mut eose_count: usize = 0;
+    let relay_count = relay_urls.len();
+    let mut last_emit = std::time::Instant::now();
+    let mut has_data = false;
+
+    loop {
+        let recv = tokio::time::timeout(
+            Duration::from_secs(3),
+            notifications.recv(),
+        )
+        .await;
+
+        match recv {
+            Ok(Ok(notification)) => match notification {
+                RelayPoolNotification::Event {
+                    subscription_id,
+                    event,
+                    ..
+                } => {
+                    if subscription_id != sub_id {
+                        continue;
+                    }
+                    let event_id = event.id.to_hex();
+                    if seen_events.contains(&event_id) {
+                        continue;
+                    }
+                    seen_events.insert(event_id);
+
+                    let kind = event.kind;
+                    let is_user = user_pk
+                        .as_ref()
+                        .map_or(false, |pk| event.pubkey == *pk);
+                    let zap_sats = if kind == Kind::ZapReceipt {
+                        super::database::extract_zap_amount_sats(&event) as usize
+                    } else {
+                        0
+                    };
+
+                    let mut counted_for: HashSet<String> = HashSet::new();
+                    for tag in event.tags.iter() {
+                        let tag_kind = tag.kind();
+                        if matches!(
+                            tag_kind,
+                            TagKind::SingleLetter(SingleLetterTag {
+                                character: Alphabet::E,
+                                ..
+                            })
+                        ) {
+                            if let Some(ref_id) = tag.content() {
+                                let ref_hex = ref_id.to_string();
+                                if counted_for.contains(&ref_hex) {
+                                    continue;
+                                }
+                                if let Some(c) = counts.get_mut(&ref_hex) {
+                                    counted_for.insert(ref_hex.clone());
+                                    has_data = true;
+                                    match kind {
+                                        k if k == Kind::Reaction => {
+                                            c[0] += 1;
+                                            if is_user {
+                                                user_reacted
+                                                    .insert(ref_hex, true);
+                                            }
+                                        }
+                                        k if k == Kind::Repost => {
+                                            c[1] += 1;
+                                            if is_user {
+                                                user_reposted
+                                                    .insert(ref_hex, true);
+                                            }
+                                        }
+                                        k if k == Kind::ZapReceipt => {
+                                            c[2] += zap_sats;
+                                        }
+                                        k if k == Kind::TextNote => {
+                                            c[3] += 1;
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if has_data
+                        && last_emit.elapsed() >= Duration::from_millis(250)
+                    {
+                        let json = build_counts_json(
+                            &counts,
+                            &note_ids,
+                            &user_reacted,
+                            &user_reposted,
+                        );
+                        if sink.add(json).is_err() {
+                            break;
+                        }
+                        last_emit = std::time::Instant::now();
+                    }
+                }
+                RelayPoolNotification::Message { message, .. } => {
+                    if let RelayMessage::EndOfStoredEvents(sid) = message {
+                        if *sid == sub_id {
+                            eose_count += 1;
+                            if eose_count >= relay_count {
+                                break;
+                            }
+                        }
+                    }
+                }
+                RelayPoolNotification::Shutdown => break,
+            },
+            Ok(Err(_)) => break,
+            Err(_) => break,
+        }
+    }
+
+    if has_data {
+        let json = build_counts_json(
+            &counts,
+            &note_ids,
+            &user_reacted,
+            &user_reposted,
+        );
+        let _ = sink.add(json);
+    }
+
+    let _ = client.unsubscribe(&sub_id).await;
+    Ok(())
+}
+
+fn build_counts_json(
+    counts: &HashMap<String, [usize; 4]>,
+    note_ids: &[String],
+    user_reacted: &HashMap<String, bool>,
+    user_reposted: &HashMap<String, bool>,
+) -> String {
+    let mut result = serde_json::Map::new();
+    for nid in note_ids {
+        if let Some(c) = counts.get(nid) {
+            result.insert(
+                nid.clone(),
+                serde_json::json!({
+                    "reactions": c[0],
+                    "reposts": c[1],
+                    "zaps": c[2],
+                    "replies": c[3],
+                    "hasReacted": user_reacted.get(nid).copied().unwrap_or(false),
+                    "hasReposted": user_reposted.get(nid).copied().unwrap_or(false),
+                }),
+            );
+        }
+    }
+    serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string())
 }
 
 pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Option<String>> {
@@ -848,6 +1106,389 @@ pub async fn subscribe_to_events(
     }
 
     Ok(())
+}
+
+pub async fn resolve_thread_root(note_id: String) -> Result<String> {
+    let client = get_client().await?;
+    let mut current_id = note_id.clone();
+    let mut visited: HashSet<String> = HashSet::new();
+
+    for _ in 0..15 {
+        if visited.contains(&current_id) {
+            break;
+        }
+        visited.insert(current_id.clone());
+
+        let eid = EventId::from_hex(&current_id)?;
+        let mut event = client.database().event_by_id(&eid).await.ok().flatten();
+
+        if event.is_none() {
+            let filter = Filter::new().id(eid).limit(1);
+            let _ = client.fetch_events(filter, Duration::from_secs(5)).await;
+            event = client.database().event_by_id(&eid).await.ok().flatten();
+            if event.is_none() {
+                break;
+            }
+        }
+
+        let ev = event.unwrap();
+        let mut root_id: Option<String> = None;
+        let mut parent_id: Option<String> = None;
+
+        for tag in ev.tags.iter() {
+            let tag_kind = tag.kind();
+            if !matches!(
+                tag_kind,
+                TagKind::SingleLetter(SingleLetterTag {
+                    character: Alphabet::E,
+                    ..
+                })
+            ) {
+                continue;
+            }
+            if let Some(ref_id) = tag.content() {
+                let tag_vec: Vec<String> =
+                    tag.as_slice().iter().map(|s| s.to_string()).collect();
+                let marker = tag_vec.get(3).map(|s| s.as_str());
+                match marker {
+                    Some("root") => {
+                        root_id = Some(ref_id.to_string());
+                        break;
+                    }
+                    Some("reply") => {
+                        parent_id = Some(ref_id.to_string());
+                    }
+                    None if parent_id.is_none() => {
+                        parent_id = Some(ref_id.to_string());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if let Some(rid) = root_id {
+            if !rid.is_empty() {
+                let root_eid = EventId::from_hex(&rid)?;
+                if client
+                    .database()
+                    .event_by_id(&root_eid)
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_none()
+                {
+                    let f = Filter::new().id(root_eid).limit(1);
+                    let _ = client.fetch_events(f, Duration::from_secs(5)).await;
+                }
+                return Ok(rid);
+            }
+        }
+
+        if let Some(pid) = parent_id {
+            if !pid.is_empty() && pid != current_id {
+                current_id = pid;
+                continue;
+            }
+        }
+
+        break;
+    }
+
+    Ok(current_id)
+}
+
+pub async fn sync_replies_recursive(
+    note_id: String,
+    max_depth: u32,
+) -> Result<u32> {
+    let client = get_client().await?;
+    let mut processed_ids: HashSet<String> = HashSet::new();
+    processed_ids.insert(note_id.clone());
+    let mut pending_ids: Vec<EventId> = vec![EventId::from_hex(&note_id)?];
+    let mut total_fetched: u32 = 0;
+
+    for _ in 0..max_depth {
+        if pending_ids.is_empty() {
+            break;
+        }
+
+        let filter = Filter::new()
+            .kind(Kind::TextNote)
+            .events(pending_ids.clone())
+            .limit(200);
+
+        let events: Events = client
+            .fetch_events(filter, Duration::from_secs(8))
+            .await?;
+
+        let mut new_ids: Vec<EventId> = Vec::new();
+        for event in events.iter() {
+            let eid_hex = event.id.to_hex();
+            if !processed_ids.contains(&eid_hex) {
+                processed_ids.insert(eid_hex);
+                new_ids.push(event.id);
+                total_fetched += 1;
+            }
+        }
+
+        pending_ids = new_ids;
+        if total_fetched > 500 {
+            break;
+        }
+    }
+
+    let all_pubkeys: HashSet<PublicKey> = {
+        let mut pks = HashSet::new();
+        for id_hex in &processed_ids {
+            if let Ok(eid) = EventId::from_hex(id_hex) {
+                if let Ok(Some(ev)) = client.database().event_by_id(&eid).await {
+                    pks.insert(ev.pubkey);
+                }
+            }
+        }
+        pks
+    };
+
+    if !all_pubkeys.is_empty() {
+        let existing_filter = Filter::new()
+            .authors(all_pubkeys.iter().cloned().collect::<Vec<_>>())
+            .kind(Kind::Metadata)
+            .limit(all_pubkeys.len());
+        let existing = client.database().query(existing_filter.clone()).await?;
+        let existing_pks: HashSet<PublicKey> =
+            existing.iter().map(|e| e.pubkey).collect();
+        let missing: Vec<PublicKey> = all_pubkeys
+            .into_iter()
+            .filter(|pk| !existing_pks.contains(pk))
+            .collect();
+
+        if !missing.is_empty() {
+            let profile_filter = Filter::new()
+                .authors(missing)
+                .kind(Kind::Metadata)
+                .limit(200);
+            let _ = client
+                .fetch_events(profile_filter, Duration::from_secs(5))
+                .await;
+        }
+    }
+
+    Ok(total_fetched)
+}
+
+pub async fn build_thread_structure(
+    root_note_json: String,
+    replies_json: String,
+) -> Result<String> {
+    let root: serde_json::Value = serde_json::from_str(&root_note_json)?;
+    let replies: Vec<serde_json::Value> = serde_json::from_str(&replies_json)?;
+
+    let root_id = root["id"].as_str().unwrap_or("").to_string();
+    let mut notes_map: HashMap<String, serde_json::Value> = HashMap::new();
+    notes_map.insert(root_id.clone(), root.clone());
+    let mut reply_ids: HashSet<String> = HashSet::new();
+
+    for reply in &replies {
+        let rid = reply["id"].as_str().unwrap_or("").to_string();
+        if !rid.is_empty() {
+            notes_map.insert(rid.clone(), reply.clone());
+            reply_ids.insert(rid);
+        }
+    }
+
+    let mut children_map: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+
+    for reply in &replies {
+        let reply_id = reply["id"].as_str().unwrap_or("").to_string();
+        if reply_id.is_empty() {
+            continue;
+        }
+
+        let mut parent = reply["parentId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let reply_root = reply["rootId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        if parent.is_none() {
+            if let Some(ref rr) = reply_root {
+                if *rr == root_id
+                    || reply_ids.contains(rr)
+                    || notes_map.contains_key(rr)
+                {
+                    parent = Some(rr.clone());
+                } else {
+                    parent = Some(root_id.clone());
+                }
+            }
+        }
+
+        let parent = parent.unwrap_or_else(|| root_id.clone());
+
+        let parent = if parent != root_id
+            && !reply_ids.contains(&parent)
+            && !notes_map.contains_key(&parent)
+        {
+            root_id.clone()
+        } else {
+            parent
+        };
+
+        children_map
+            .entry(parent)
+            .or_default()
+            .push(reply.clone());
+    }
+
+    for children in children_map.values_mut() {
+        children.sort_by(|a, b| {
+            let at = a["created_at"].as_i64().unwrap_or(0);
+            let bt = b["created_at"].as_i64().unwrap_or(0);
+            at.cmp(&bt)
+        });
+    }
+
+    let result = serde_json::json!({
+        "rootNote": root,
+        "childrenMap": children_map,
+        "notesMap": notes_map,
+        "totalReplies": replies.len(),
+    });
+
+    Ok(serde_json::to_string(&result)?)
+}
+
+pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
+    let client = get_client().await?;
+
+    let own_ids: HashSet<String> = event_ids.iter().cloned().collect();
+    let mut ref_ids: HashSet<String> = HashSet::new();
+
+    for id_hex in &event_ids {
+        let eid = match EventId::from_hex(id_hex) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let event = match client.database().event_by_id(&eid).await {
+            Ok(Some(e)) => e,
+            _ => continue,
+        };
+
+        for tag in event.tags.iter() {
+            let tag_vec: Vec<String> =
+                tag.as_slice().iter().map(|s| s.to_string()).collect();
+            let tag_type = tag_vec.first().map(|s| s.as_str());
+            let ref_id = tag_vec.get(1).cloned().unwrap_or_default();
+            if ref_id.is_empty() || own_ids.contains(&ref_id) {
+                continue;
+            }
+            match tag_type {
+                Some("q") => {
+                    ref_ids.insert(ref_id);
+                }
+                Some("e") => {
+                    let marker = tag_vec.get(3).map(|s| s.as_str());
+                    if marker == Some("mention") || marker.is_none() {
+                        ref_ids.insert(ref_id);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if ref_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let mut missing_ids: Vec<EventId> = Vec::new();
+    for ref_hex in &ref_ids {
+        if let Ok(eid) = EventId::from_hex(ref_hex) {
+            let status = client.database().check_id(&eid).await;
+            if !matches!(status, Ok(DatabaseEventStatus::Saved)) {
+                missing_ids.push(eid);
+            }
+        }
+    }
+
+    if missing_ids.is_empty() {
+        return Ok(0);
+    }
+
+    if missing_ids.len() > 30 {
+        missing_ids.truncate(30);
+    }
+
+    let filter = Filter::new().ids(missing_ids.clone()).limit(30);
+    let fetched: Events = client
+        .fetch_events(filter, Duration::from_secs(5))
+        .await?;
+
+    let fetched_count = fetched.len() as u32;
+
+    if fetched_count > 0 {
+        let mut missing_pks: HashSet<PublicKey> = HashSet::new();
+        for ev in fetched.iter() {
+            let pk_filter = Filter::new()
+                .author(ev.pubkey)
+                .kind(Kind::Metadata)
+                .limit(1);
+            let profile = client.database().query(pk_filter).await?;
+            if profile.is_empty() {
+                missing_pks.insert(ev.pubkey);
+            }
+        }
+
+        if !missing_pks.is_empty() {
+            let profile_filter = Filter::new()
+                .authors(missing_pks.into_iter().collect::<Vec<_>>())
+                .kind(Kind::Metadata)
+                .limit(50);
+            let _ = client
+                .fetch_events(profile_filter, Duration::from_secs(5))
+                .await;
+        }
+    }
+
+    Ok(fetched_count)
+}
+
+pub async fn merge_and_sort_notes(
+    existing_json: String,
+    incoming_json: String,
+) -> Result<String> {
+    let existing: Vec<serde_json::Value> = serde_json::from_str(&existing_json)?;
+    let incoming: Vec<serde_json::Value> = serde_json::from_str(&incoming_json)?;
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut merged: Vec<serde_json::Value> = Vec::new();
+
+    for note in incoming.into_iter().chain(existing.into_iter()) {
+        let id = note["id"].as_str().unwrap_or("").to_string();
+        if id.is_empty() || seen.contains(&id) {
+            continue;
+        }
+        seen.insert(id);
+        merged.push(note);
+    }
+
+    merged.sort_by(|a, b| {
+        let at = a["repostCreatedAt"]
+            .as_i64()
+            .or_else(|| a["created_at"].as_i64())
+            .unwrap_or(0);
+        let bt = b["repostCreatedAt"]
+            .as_i64()
+            .or_else(|| b["created_at"].as_i64())
+            .unwrap_or(0);
+        bt.cmp(&at)
+    });
+
+    Ok(serde_json::to_string(&merged)?)
 }
 
 pub async fn get_database_size_mb() -> Result<u64> {

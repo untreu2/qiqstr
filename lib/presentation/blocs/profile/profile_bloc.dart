@@ -346,8 +346,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     _currentProfileHex = event.pubkeyHex;
 
-    _watchProfileNotes(event.pubkeyHex);
-    _watchProfileReplies(event.pubkeyHex);
     _syncProfileNotesInBackground(event.pubkeyHex);
 
     add(ProfileArticlesRequested(event.pubkeyHex));
@@ -363,6 +361,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
             limit: _pageSize, force: true);
 
         if (isClosed || state is! ProfileLoaded) return;
+
+        _watchProfileNotes(pubkeyHex);
+        _watchProfileReplies(pubkeyHex);
+
         final currentState = state as ProfileLoaded;
 
         final authorIds = currentState.notes
@@ -584,6 +586,28 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     return notes.map((note) => note.toMap()).toList();
   }
 
+  List<Map<String, dynamic>> _mergeNotesLocal(
+    List<Map<String, dynamic>> existing,
+    List<Map<String, dynamic>> incoming,
+  ) {
+    final seen = <String>{};
+    final merged = <Map<String, dynamic>>[];
+    for (final note in incoming) {
+      final id = note['id'] as String? ?? '';
+      if (id.isNotEmpty && seen.add(id)) merged.add(note);
+    }
+    for (final note in existing) {
+      final id = note['id'] as String? ?? '';
+      if (id.isNotEmpty && seen.add(id)) merged.add(note);
+    }
+    merged.sort((a, b) {
+      final at = a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
+      final bt = b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
+      return bt.compareTo(at);
+    });
+    return merged;
+  }
+
   void _watchProfileNotes(String pubkeyHex) {
     _notesSubscription?.cancel();
     _notesSubscription =
@@ -601,49 +625,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final currentState = state as ProfileLoaded;
 
     final newNoteMaps = _feedNotesToMaps(event.notes);
-    final currentNotes = currentState.notes;
 
-    if (currentNotes.isEmpty) {
+    if (currentState.notes.isEmpty) {
       emit(currentState.copyWith(notes: newNoteMaps));
     } else {
-      final currentIds = currentNotes
-          .map((n) => n['id'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
-
-      final trulyNewNotes = newNoteMaps.where((n) {
-        final noteId = n['id'] as String? ?? '';
-        return noteId.isNotEmpty && !currentIds.contains(noteId);
-      }).toList();
-
-      final updatedNotes = <Map<String, dynamic>>[];
-      final newNoteMap = <String, Map<String, dynamic>>{};
-      for (final note in newNoteMaps) {
-        final id = note['id'] as String? ?? '';
-        if (id.isNotEmpty) newNoteMap[id] = note;
-      }
-
-      for (final note in currentNotes) {
-        final id = note['id'] as String? ?? '';
-        if (newNoteMap.containsKey(id)) {
-          updatedNotes.add(newNoteMap[id]!);
-        } else {
-          updatedNotes.add(note);
-        }
-      }
-
-      if (trulyNewNotes.isNotEmpty) {
-        updatedNotes.addAll(trulyNewNotes);
-        updatedNotes.sort((a, b) {
-          final aTime =
-              a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
-          final bTime =
-              b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
-          return bTime.compareTo(aTime);
-        });
-      }
-
-      emit(currentState.copyWith(notes: updatedNotes));
+      emit(currentState.copyWith(
+          notes: _mergeNotesLocal(currentState.notes, newNoteMaps)));
     }
 
     if (newNoteMaps.isNotEmpty) {
@@ -679,49 +666,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final currentState = state as ProfileLoaded;
 
     final newReplyMaps = _feedNotesToMaps(event.replies);
-    final currentReplies = currentState.replies;
 
-    if (currentReplies.isEmpty) {
+    if (currentState.replies.isEmpty) {
       emit(currentState.copyWith(replies: newReplyMaps));
     } else {
-      final currentIds = currentReplies
-          .map((n) => n['id'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
-
-      final trulyNewReplies = newReplyMaps.where((n) {
-        final noteId = n['id'] as String? ?? '';
-        return noteId.isNotEmpty && !currentIds.contains(noteId);
-      }).toList();
-
-      final updatedReplies = <Map<String, dynamic>>[];
-      final newReplyMap = <String, Map<String, dynamic>>{};
-      for (final reply in newReplyMaps) {
-        final id = reply['id'] as String? ?? '';
-        if (id.isNotEmpty) newReplyMap[id] = reply;
-      }
-
-      for (final reply in currentReplies) {
-        final id = reply['id'] as String? ?? '';
-        if (newReplyMap.containsKey(id)) {
-          updatedReplies.add(newReplyMap[id]!);
-        } else {
-          updatedReplies.add(reply);
-        }
-      }
-
-      if (trulyNewReplies.isNotEmpty) {
-        updatedReplies.addAll(trulyNewReplies);
-        updatedReplies.sort((a, b) {
-          final aTime =
-              a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
-          final bTime =
-              b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
-          return bTime.compareTo(aTime);
-        });
-      }
-
-      emit(currentState.copyWith(replies: updatedReplies));
+      emit(currentState.copyWith(
+          replies: _mergeNotesLocal(currentState.replies, newReplyMaps)));
     }
 
     if (newReplyMaps.isNotEmpty) {

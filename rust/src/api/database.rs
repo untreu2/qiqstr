@@ -89,7 +89,7 @@ fn extract_bolt11_amount_sats(bolt11: &str) -> Option<u64> {
     Some(msats / 1000)
 }
 
-fn extract_zap_amount_sats(event: &Event) -> u64 {
+pub(crate) fn extract_zap_amount_sats(event: &Event) -> u64 {
     for tag in event.tags.iter() {
         if tag.kind() == TagKind::Bolt11 {
             if let Some(bolt11) = tag.content() {
@@ -1095,6 +1095,7 @@ async fn hydrate_notes(
     client: &Client,
     events: &[Event],
     filter_replies: bool,
+    current_user_pubkey_hex: Option<String>,
 ) -> Result<String> {
     if events.is_empty() {
         return Ok("[]".to_string());
@@ -1267,6 +1268,9 @@ async fn hydrate_notes(
             "repostCount": 0,
             "replyCount": 0,
             "zapCount": 0,
+            "hasReacted": false,
+            "hasReposted": false,
+            "hasZapped": false,
         }));
     }
 
@@ -1310,36 +1314,58 @@ async fn hydrate_notes(
         .collect();
 
     if !ids.is_empty() {
-        let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
+        let user_pk = current_user_pubkey_hex.as_ref()
+            .and_then(|h| if h.is_empty() { None } else { PublicKey::from_hex(h).ok() });
+
+        let local_filter = Filter::new()
+            .kinds([Kind::TextNote, Kind::Reaction, Kind::Repost, Kind::ZapReceipt])
+            .events(ids);
+        let local_events = client.database().query(local_filter).await?;
+
+        let mut reply_counts: HashMap<String, usize> = HashMap::new();
+        let mut has_reacted: HashSet<String> = HashSet::new();
+        let mut has_reposted: HashSet<String> = HashSet::new();
+        let mut has_zapped: HashSet<String> = HashSet::new();
+
         for nid in &note_ids {
-            counts.insert(nid.clone(), [0; 4]);
+            reply_counts.insert(nid.clone(), 0);
         }
 
-        let count_filter = Filter::new()
-            .kinds([Kind::Reaction, Kind::Repost, Kind::ZapReceipt, Kind::TextNote])
-            .events(ids);
-        let count_events = client.database().query(count_filter).await?;
-
-        for ce in count_events.iter() {
-            let kind = ce.kind;
-            let zap_sats = if kind == Kind::ZapReceipt {
-                extract_zap_amount_sats(ce) as usize
-            } else { 0 };
+        for ev in local_events.iter() {
+            let is_user = user_pk.as_ref().map_or(false, |pk| ev.pubkey == *pk);
+            let is_zap_sender = if ev.kind == Kind::ZapReceipt {
+                user_pk.as_ref().map_or(false, |pk| {
+                    extract_zap_sender(ev)
+                        .map_or(false, |sender| sender == pk.to_hex())
+                })
+            } else {
+                false
+            };
 
             let mut counted_for: HashSet<String> = HashSet::new();
-            for tag in ce.tags.iter() {
+            for tag in ev.tags.iter() {
                 let tag_kind = tag.kind();
                 if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
                     if let Some(ref_id) = tag.content() {
                         let ref_hex = ref_id.to_string();
                         if counted_for.contains(&ref_hex) { continue; }
-                        if let Some(c) = counts.get_mut(&ref_hex) {
-                            counted_for.insert(ref_hex);
-                            match kind {
-                                k if k == Kind::Reaction => c[0] += 1,
-                                k if k == Kind::Repost => c[1] += 1,
-                                k if k == Kind::ZapReceipt => c[2] += zap_sats,
-                                k if k == Kind::TextNote => c[3] += 1,
+                        if reply_counts.contains_key(&ref_hex) {
+                            counted_for.insert(ref_hex.clone());
+                            match ev.kind {
+                                k if k == Kind::TextNote => {
+                                    if let Some(c) = reply_counts.get_mut(&ref_hex) {
+                                        *c += 1;
+                                    }
+                                }
+                                k if k == Kind::Reaction => {
+                                    if is_user { has_reacted.insert(ref_hex); }
+                                }
+                                k if k == Kind::Repost => {
+                                    if is_user { has_reposted.insert(ref_hex); }
+                                }
+                                k if k == Kind::ZapReceipt => {
+                                    if is_zap_sender { has_zapped.insert(ref_hex); }
+                                }
                                 _ => {}
                             }
                         }
@@ -1349,13 +1375,15 @@ async fn hydrate_notes(
         }
 
         for note in notes.iter_mut() {
-            if let Some(nid) = note["id"].as_str() {
-                if let Some(c) = counts.get(nid) {
-                    note["reactionCount"] = serde_json::json!(c[0]);
-                    note["repostCount"] = serde_json::json!(c[1]);
-                    note["zapCount"] = serde_json::json!(c[2]);
-                    note["replyCount"] = serde_json::json!(c[3]);
-                }
+            let nid = note["id"].as_str().map(|s| s.to_string());
+            if let Some(ref nid) = nid {
+                note["reactionCount"] = serde_json::json!(0);
+                note["repostCount"] = serde_json::json!(0);
+                note["zapCount"] = serde_json::json!(0);
+                note["replyCount"] = serde_json::json!(reply_counts.get(nid).copied().unwrap_or(0));
+                note["hasReacted"] = serde_json::json!(has_reacted.contains(nid));
+                note["hasReposted"] = serde_json::json!(has_reposted.contains(nid));
+                note["hasZapped"] = serde_json::json!(has_zapped.contains(nid));
             }
         }
     }
@@ -1369,6 +1397,7 @@ pub async fn db_get_hydrated_feed_notes(
     muted_pubkeys: Vec<String>,
     muted_words: Vec<String>,
     filter_replies: bool,
+    current_user_pubkey_hex: Option<String>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
     let authors: Vec<PublicKey> = authors_hex.iter()
@@ -1385,7 +1414,7 @@ pub async fn db_get_hydrated_feed_notes(
         .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
-    hydrate_notes(&client, &filtered, filter_replies).await
+    hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await
 }
 
 pub async fn db_get_hydrated_profile_notes(
@@ -1394,6 +1423,7 @@ pub async fn db_get_hydrated_profile_notes(
     muted_pubkeys: Vec<String>,
     muted_words: Vec<String>,
     filter_replies: bool,
+    current_user_pubkey_hex: Option<String>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
@@ -1408,7 +1438,7 @@ pub async fn db_get_hydrated_profile_notes(
         .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
-    hydrate_notes(&client, &filtered, filter_replies).await
+    hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await
 }
 
 pub async fn db_get_hydrated_hashtag_notes(
@@ -1416,6 +1446,7 @@ pub async fn db_get_hydrated_hashtag_notes(
     limit: u32,
     muted_pubkeys: Vec<String>,
     muted_words: Vec<String>,
+    current_user_pubkey_hex: Option<String>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
 
@@ -1429,7 +1460,7 @@ pub async fn db_get_hydrated_hashtag_notes(
         .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
-    hydrate_notes(&client, &filtered, true).await
+    hydrate_notes(&client, &filtered, true, current_user_pubkey_hex).await
 }
 
 pub async fn db_get_hydrated_replies(
@@ -1437,6 +1468,7 @@ pub async fn db_get_hydrated_replies(
     limit: u32,
     muted_pubkeys: Vec<String>,
     muted_words: Vec<String>,
+    current_user_pubkey_hex: Option<String>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
     let id = EventId::from_hex(&note_id)?;
@@ -1451,17 +1483,20 @@ pub async fn db_get_hydrated_replies(
         .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
-    hydrate_notes(&client, &filtered, false).await
+    hydrate_notes(&client, &filtered, false, current_user_pubkey_hex).await
 }
 
-pub async fn db_get_hydrated_note(event_id: String) -> Result<Option<String>> {
+pub async fn db_get_hydrated_note(
+    event_id: String,
+    current_user_pubkey_hex: Option<String>,
+) -> Result<Option<String>> {
     let client = get_client_pub().await?;
     let id = EventId::from_hex(&event_id)?;
     let event = client.database().event_by_id(&id).await?;
 
     match event {
         Some(e) => {
-            let result = hydrate_notes(&client, &[e], false).await?;
+            let result = hydrate_notes(&client, &[e], false, current_user_pubkey_hex).await?;
             let arr: Vec<serde_json::Value> = serde_json::from_str(&result)?;
             if arr.is_empty() {
                 Ok(None)

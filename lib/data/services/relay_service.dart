@@ -273,6 +273,47 @@ class RustRelayService {
         .map((eventJson) => jsonDecode(eventJson) as Map<String, dynamic>);
   }
 
+  Future<String> resolveThreadRoot(String noteId) async {
+    return await rust_relay.resolveThreadRoot(noteId: noteId);
+  }
+
+  Future<int> syncRepliesRecursive(String noteId,
+      {int maxDepth = 3}) async {
+    final count = await rust_relay.syncRepliesRecursive(
+      noteId: noteId,
+      maxDepth: maxDepth,
+    );
+    return count;
+  }
+
+  Future<Map<String, dynamic>> buildThreadStructure(
+    Map<String, dynamic> rootNote,
+    List<Map<String, dynamic>> replies,
+  ) async {
+    final result = await rust_relay.buildThreadStructure(
+      rootNoteJson: jsonEncode(rootNote),
+      repliesJson: jsonEncode(replies),
+    );
+    return jsonDecode(result) as Map<String, dynamic>;
+  }
+
+  Future<int> fetchMissingReferences(List<String> eventIds) async {
+    final count = await rust_relay.fetchMissingReferences(eventIds: eventIds);
+    return count;
+  }
+
+  Future<List<Map<String, dynamic>>> mergeAndSortNotes(
+    List<Map<String, dynamic>> existing,
+    List<Map<String, dynamic>> incoming,
+  ) async {
+    final result = await rust_relay.mergeAndSortNotes(
+      existingJson: jsonEncode(existing),
+      incomingJson: jsonEncode(incoming),
+    );
+    final decoded = jsonDecode(result) as List<dynamic>;
+    return decoded.cast<Map<String, dynamic>>();
+  }
+
   Future<void> reloadCustomRelays() async {
     try {
       final customRelays = await getRelaySetMainSockets();

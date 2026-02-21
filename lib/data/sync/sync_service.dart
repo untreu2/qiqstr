@@ -444,29 +444,8 @@ class SyncService {
 
   Future<void> syncReplies(String noteId) async {
     await _sync('replies', () async {
-      final allEvents = <Map<String, dynamic>>[];
-      final processedIds = <String>{noteId};
-      var pendingIds = <String>[noteId];
-
-      for (var depth = 0; depth < 3 && pendingIds.isNotEmpty; depth++) {
-        final filter = NostrService.createInteractionFilter(
-            kinds: [1], eventIds: pendingIds, limit: 200);
-        final events = await _queryRelays(filter);
-        final newIds = <String>[];
-
-        for (final event in events) {
-          final eventId = event['id'] as String?;
-          if (eventId != null && !processedIds.contains(eventId)) {
-            processedIds.add(eventId);
-            allEvents.add(event);
-            newIds.add(eventId);
-          }
-        }
-        pendingIds = newIds;
-        if (allEvents.length > 500) break;
-      }
-
-      await _saveEventsAndProfiles(allEvents);
+      await _relayService.syncRepliesRecursive(noteId, maxDepth: 3);
+      _notifyDbChanged();
     });
   }
 
@@ -499,55 +478,12 @@ class SyncService {
   }
 
   Future<String> resolveThreadRoot(String noteId) async {
-    var currentId = noteId;
-    final visited = <String>{};
-
-    for (var depth = 0; depth < 15; depth++) {
-      if (visited.contains(currentId)) break;
-      visited.add(currentId);
-
-      var event = await _db.getEventModel(currentId);
-      if (event == null) {
-        await syncNote(currentId);
-        event = await _db.getEventModel(currentId);
-        if (event == null) break;
-      }
-
-      final tags = event['tags'] as List<dynamic>? ?? [];
-      String? rootId;
-      String? parentId;
-
-      for (final tag in tags) {
-        if (tag is List && tag.length > 1 && tag[0] == 'e') {
-          final marker = tag.length >= 4 ? tag[3] as String? : null;
-          if (marker == 'root') {
-            rootId = tag[1] as String;
-            break;
-          } else if (marker == 'reply') {
-            parentId = tag[1] as String;
-          } else if (marker == null && parentId == null) {
-            parentId = tag[1] as String;
-          }
-        }
-      }
-
-      if (rootId != null && rootId.isNotEmpty) {
-        var rootEvent = await _db.getEventModel(rootId);
-        if (rootEvent == null) {
-          await syncNote(rootId);
-        }
-        return rootId;
-      }
-
-      if (parentId != null && parentId.isNotEmpty && parentId != currentId) {
-        currentId = parentId;
-        continue;
-      }
-
-      break;
+    try {
+      return await _relayService.resolveThreadRoot(noteId);
+    } catch (e) {
+      if (kDebugMode) print('[SyncService] resolveThreadRoot error: $e');
+      return noteId;
     }
-
-    return currentId;
   }
 
   Future<Map<String, dynamic>> publishNote(
@@ -897,41 +833,13 @@ class SyncService {
     _fetchReferencedEventsInBackground(events);
   }
 
-  Set<String> _extractReferencedEventIds(List<Map<String, dynamic>> events) {
-    final refIds = <String>{};
-    final ownIds = events
+  void _fetchReferencedEventsInBackground(List<Map<String, dynamic>> events) {
+    final eventIds = events
         .map((e) => e['id'] as String? ?? '')
         .where((id) => id.isNotEmpty)
-        .toSet();
-
-    for (final event in events) {
-      final tags = event['tags'] as List<dynamic>? ?? [];
-      for (final tag in tags) {
-        if (tag is List && tag.length > 1) {
-          final tagType = tag[0] as String?;
-          final refId = tag[1] as String?;
-          if (refId == null || refId.isEmpty || ownIds.contains(refId)) {
-            continue;
-          }
-
-          if (tagType == 'q') {
-            refIds.add(refId);
-          } else if (tagType == 'e') {
-            final marker = tag.length >= 4 ? tag[3] as String? : null;
-            if (marker == 'mention' || marker == null) {
-              refIds.add(refId);
-            }
-          }
-        }
-      }
-    }
-    return refIds;
-  }
-
-  void _fetchReferencedEventsInBackground(List<Map<String, dynamic>> events) {
-    final refIds = _extractReferencedEventIds(events);
-    if (refIds.isEmpty) return;
-    _pendingRefIds.addAll(refIds);
+        .toList();
+    if (eventIds.isEmpty) return;
+    _pendingRefIds.addAll(eventIds);
     _refFetchTimer?.cancel();
     _refFetchTimer = Timer(const Duration(seconds: 5), () {
       _processPendingRefs();
@@ -946,20 +854,9 @@ class SyncService {
       ids = ids.sublist(0, 50);
     }
     try {
-      final existResults = await _db.eventsExistBatch(ids);
-      final missingIds = <String>[];
-      for (var i = 0; i < ids.length; i++) {
-        if (!existResults[i]) missingIds.add(ids[i]);
-      }
-      if (missingIds.isEmpty) return;
-
-      final idsToFetch =
-          missingIds.length > 30 ? missingIds.sublist(0, 30) : missingIds;
-      final filter = NostrService.createEventByIdFilter(eventIds: idsToFetch);
-      final fetchedEvents = await _queryRelays(filter);
-      if (fetchedEvents.isNotEmpty) {
+      final fetched = await _relayService.fetchMissingReferences(ids);
+      if (fetched > 0) {
         _notifyDbChanged();
-        _schedulePendingProfileSync(_extractAllPubkeys(fetchedEvents));
       }
     } catch (_) {}
   }

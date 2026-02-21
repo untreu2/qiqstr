@@ -154,6 +154,29 @@ class _ThreadPageState extends State<ThreadPage> {
       return _buildErrorState(context, state.message, l10n);
     }
 
+    if (state is ThreadInitial && widget.initialNoteData != null) {
+      final rootNote = _stripRepostDataForPlaceholder(
+          widget.initialNoteData!, widget.rootNoteId);
+      final structure = ThreadStructure(
+        rootNote: rootNote,
+        childrenMap: const {},
+        notesMap: {widget.rootNoteId: rootNote},
+        totalReplies: 0,
+      );
+      final placeholderState = ThreadLoaded(
+        rootNote: rootNote,
+        replies: const [],
+        threadStructure: structure,
+        focusedNote: widget.focusedNoteId != null ? null : rootNote,
+        userProfiles: const {},
+        rootNoteId: widget.rootNoteId,
+        focusedNoteId: widget.focusedNoteId,
+        currentUserHex: '',
+        currentUser: null,
+      );
+      return _buildThreadContent(context, placeholderState);
+    }
+
     if (state is ThreadLoading) {
       return Center(
         child: CircularProgressIndicator(
@@ -164,6 +187,18 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     return const SizedBox.shrink();
+  }
+
+  Map<String, dynamic> _stripRepostDataForPlaceholder(
+      Map<String, dynamic> noteData, String rootNoteId) {
+    final stripped = Map<String, dynamic>.from(noteData);
+    stripped['isRepost'] = false;
+    stripped.remove('repostedBy');
+    stripped.remove('repostCreatedAt');
+    if ((stripped['id'] as String? ?? '') != rootNoteId) {
+      stripped['id'] = rootNoteId;
+    }
+    return stripped;
   }
 
   Widget _buildThreadContent(BuildContext context, ThreadLoaded state) {

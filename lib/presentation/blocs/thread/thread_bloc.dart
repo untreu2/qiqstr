@@ -143,6 +143,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         final id = r['id'] as String? ?? '';
         if (id.isNotEmpty) allIds.add(id);
       }
+      if (currentUserHex.isNotEmpty) {
+        InteractionService.instance.setCurrentUser(currentUserHex);
+      }
       await _preloadInteractionCounts(allIds);
 
       _watchReplies(rootNoteId);
@@ -300,10 +303,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     }
 
     try {
-      await _syncService.syncInteractionsForNotes(allNoteIds);
       if (!isClosed) {
-        await _preloadInteractionCounts(allNoteIds);
-        InteractionService.instance.refreshAllActive();
+        await InteractionService.instance.fetchCountsFromRelays(allNoteIds);
       }
     } catch (_) {}
 
@@ -325,12 +326,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           }
         }
 
-        if (newNoteIds.isNotEmpty) {
-          await _syncService.syncInteractionsForNotes(newNoteIds);
-          if (!isClosed) {
-            await _preloadInteractionCounts(newNoteIds);
-            InteractionService.instance.refreshAllActive();
-          }
+        if (newNoteIds.isNotEmpty && !isClosed) {
+          await InteractionService.instance.fetchCountsFromRelays(newNoteIds);
         }
       } catch (_) {
         if (!isClosed) add(const _ThreadRepliesSyncCompleted());
@@ -419,9 +416,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           if (id.isNotEmpty) allIds.add(id);
         }
         
-        await _syncService.syncInteractionsForNotes(allIds);
-        await _preloadInteractionCounts(allIds);
-        InteractionService.instance.refreshAllActive();
+        await InteractionService.instance.fetchCountsFromRelays(allIds);
       }
     } catch (_) {}
   }
@@ -476,32 +471,24 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       String? parentId = reply['parentId'] as String?;
       final replyRootId = reply['rootId'] as String?;
 
-      if (parentId != null && parentId.isEmpty) {
-        parentId = null;
-      }
+      if (parentId != null && parentId.isEmpty) parentId = null;
 
       if (parentId == null && replyRootId != null && replyRootId.isNotEmpty) {
-        if (replyRootId == rootNoteId) {
-          parentId = rootNoteId;
-        } else if (replyIds.contains(replyRootId) || notesMap.containsKey(replyRootId)) {
+        if (replyRootId == rootNoteId ||
+            replyIds.contains(replyRootId) ||
+            notesMap.containsKey(replyRootId)) {
           parentId = replyRootId;
         } else {
           parentId = rootNoteId;
         }
       }
 
-      if (parentId == null || parentId.isEmpty) {
-        parentId = rootNoteId;
-      }
+      parentId ??= rootNoteId;
 
       if (parentId != rootNoteId &&
           !replyIds.contains(parentId) &&
           !notesMap.containsKey(parentId)) {
-        if (replyRootId != null && replyRootId == rootNoteId) {
-          parentId = rootNoteId;
-        } else {
-          parentId = rootNoteId;
-        }
+        parentId = rootNoteId;
       }
 
       childrenMap.putIfAbsent(parentId, () => []);

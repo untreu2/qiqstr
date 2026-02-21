@@ -81,11 +81,19 @@ class InteractionService {
       {InteractionCounts? initialCounts}) {
     if (!_streams.containsKey(noteId)) {
       _streams[noteId] = StreamController<InteractionCounts>.broadcast();
-      if (initialCounts != null && !_cache.containsKey(noteId)) {
+      if (_cache.containsKey(noteId)) {
+        final cached = _cache[noteId]!;
+        if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
+          final merged = _mergeCounts(cached, initialCounts);
+          _cache[noteId] = merged;
+          Future.microtask(() => _emit(noteId, merged));
+        } else {
+          Future.microtask(() => _emit(noteId, cached));
+        }
+      } else if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
         _cache[noteId] = initialCounts;
         Future.microtask(() => _emit(noteId, initialCounts));
-      }
-      if (initialCounts == null || _isEmptyCounts(initialCounts)) {
+      } else {
         _scheduleBatchLoad(noteId);
       }
     } else if (_cache.containsKey(noteId)) {
@@ -105,6 +113,19 @@ class InteractionService {
         counts.reposts == 0 &&
         counts.replies == 0 &&
         counts.zapAmount == 0;
+  }
+
+  InteractionCounts _mergeCounts(
+      InteractionCounts a, InteractionCounts b) {
+    return InteractionCounts(
+      reactions: a.reactions > b.reactions ? a.reactions : b.reactions,
+      reposts: a.reposts > b.reposts ? a.reposts : b.reposts,
+      replies: a.replies > b.replies ? a.replies : b.replies,
+      zapAmount: a.zapAmount > b.zapAmount ? a.zapAmount : b.zapAmount,
+      hasReacted: a.hasReacted || b.hasReacted,
+      hasReposted: a.hasReposted || b.hasReposted,
+      hasZapped: a.hasZapped || b.hasZapped,
+    );
   }
 
   void _scheduleBatchLoad(String noteId) {
@@ -194,8 +215,11 @@ class InteractionService {
   }
 
   void prePopulateCache(String noteId, InteractionCounts counts) {
-    if (!_cache.containsKey(noteId)) {
+    final existing = _cache[noteId];
+    if (existing == null) {
       _cache[noteId] = counts;
+    } else {
+      _cache[noteId] = _mergeCounts(existing, counts);
     }
   }
 
@@ -352,7 +376,6 @@ class InteractionService {
   void disposeStream(String noteId) {
     _streams[noteId]?.close();
     _streams.remove(noteId);
-    _cache.remove(noteId);
   }
 
   void clearCache() {
