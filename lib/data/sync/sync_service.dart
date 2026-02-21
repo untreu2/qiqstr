@@ -93,7 +93,7 @@ class SyncService {
       final since = _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final notesFilter = NostrService.createNotesFilter(
-          authors: follows, kinds: [1, 6], since: since, limit: 100);
+          authors: follows, kinds: [1, 5, 6], since: since, limit: 100);
       final articlesFilter = NostrService.createArticlesFilter(
           authors: follows, since: since, limit: 30);
 
@@ -102,6 +102,7 @@ class SyncService {
         _fetchAndStore(articlesFilter),
       ]);
 
+      await _db.processDeletionEvents();
       _notifyDbChanged();
       _markSynced(key);
     });
@@ -116,9 +117,10 @@ class SyncService {
       final since = _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final notesFilter = NostrService.createNotesFilter(
-          authors: pubkeys, kinds: [1, 6], since: since, limit: 100);
+          authors: pubkeys, kinds: [1, 5, 6], since: since, limit: 100);
 
       await _fetchAndStore(notesFilter);
+      await _db.processDeletionEvents();
       _notifyDbChanged();
       _markSynced(key);
     });
@@ -147,7 +149,7 @@ class SyncService {
       final profileFilter =
           NostrService.createProfileFilter(authors: [pubkey], limit: 1);
       final notesFilter = NostrService.createNotesFilter(
-          authors: [pubkey], kinds: [1, 6], limit: limit, since: since);
+          authors: [pubkey], kinds: [1, 5, 6], limit: limit, since: since);
 
       final results = await Future.wait([
         _queryRelays(profileFilter),
@@ -156,6 +158,7 @@ class SyncService {
 
       final noteEvents = results[1];
 
+      await _db.processDeletionEvents();
       _notifyDbChanged();
       _syncMissingProfilesInBackground(noteEvents);
       _fetchReferencedEventsInBackground(noteEvents);
@@ -537,6 +540,7 @@ class SyncService {
     final event = await _publish(
         () => _publisher.createDeletion(eventIds: eventIds, reason: reason));
     try {
+      await _db.deleteEventsByIds(eventIds);
       await _db.saveEvents([event]);
     } catch (_) {}
     return event;
@@ -618,7 +622,7 @@ class SyncService {
 
       final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
       final filter = <String, dynamic>{
-        'kinds': [1, 6],
+        'kinds': [1, 5, 6],
         'authors': follows,
         'since': since,
       };
@@ -630,6 +634,11 @@ class SyncService {
           try {
             final eventId = eventData['id'] as String?;
             if (_isDuplicate(eventId)) return;
+            final kind = (eventData['kind'] as num?)?.toInt();
+            if (kind == 5) {
+              await _db.processDeletionEvents();
+              return;
+            }
             if (muteService.shouldFilterEvent(eventData)) return;
             _notifyDbChanged();
             _syncMissingProfilesInBackground([eventData]);

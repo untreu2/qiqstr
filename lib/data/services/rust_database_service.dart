@@ -535,6 +535,29 @@ class RustDatabaseService {
     }
   }
 
+  Future<int> deleteEventsByIds(List<String> eventIds) async {
+    if (eventIds.isEmpty) return 0;
+    try {
+      final count = await rust_db.dbDeleteEventsByIds(eventIds: eventIds);
+      notifyChange();
+      return count;
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] deleteEventsByIds error: $e');
+      return 0;
+    }
+  }
+
+  Future<int> processDeletionEvents() async {
+    try {
+      final count = await rust_db.dbProcessDeletionEvents();
+      if (count > 0) notifyChange();
+      return count;
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] processDeletionEvents error: $e');
+      return 0;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getReplies(String noteId,
       {int limit = 500}) async {
     try {

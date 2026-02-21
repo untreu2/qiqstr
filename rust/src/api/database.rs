@@ -469,6 +469,59 @@ pub async fn db_save_events(events_json: String) -> Result<u32> {
     Ok(saved)
 }
 
+pub async fn db_delete_events_by_ids(event_ids: Vec<String>) -> Result<u32> {
+    let client = get_client_pub().await?;
+    let ids: Vec<EventId> = event_ids
+        .iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .collect();
+
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let filter = Filter::new().ids(ids.clone());
+    client.database().delete(filter).await?;
+
+    Ok(ids.len() as u32)
+}
+
+pub async fn db_process_deletion_events() -> Result<u32> {
+    let client = get_client_pub().await?;
+
+    let filter = Filter::new().kind(Kind::EventDeletion);
+    let deletion_events = client.database().query(filter).await?;
+
+    let mut deleted_count: u32 = 0;
+
+    for del_event in deletion_events {
+        let mut ids_to_delete: Vec<EventId> = Vec::new();
+
+        for tag in del_event.tags.iter() {
+            let tag_kind = tag.kind();
+            if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
+                if let Some(ref_id_str) = tag.content() {
+                    if let Ok(ref_id) = EventId::from_hex(ref_id_str) {
+                        if let Ok(Some(referenced)) = client.database().event_by_id(&ref_id).await {
+                            if referenced.pubkey == del_event.pubkey {
+                                ids_to_delete.push(ref_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !ids_to_delete.is_empty() {
+            let del_filter = Filter::new().ids(ids_to_delete.clone());
+            let _ = client.database().delete(del_filter).await;
+            deleted_count += ids_to_delete.len() as u32;
+        }
+    }
+
+    Ok(deleted_count)
+}
+
 pub async fn db_query_events(filter_json: String, limit: u32) -> Result<String> {
     let client = get_client_pub().await?;
     let mut filter = Filter::from_json(&filter_json)?;

@@ -100,6 +100,13 @@ Future<bool> dbSaveEvent({required String eventJson}) =>
 Future<int> dbSaveEvents({required String eventsJson}) =>
     RustLib.instance.api.crateApiDatabaseDbSaveEvents(eventsJson: eventsJson);
 
+Future<int> dbDeleteEventsByIds({required List<String> eventIds}) =>
+    RustLib.instance.api
+        .crateApiDatabaseDbDeleteEventsByIds(eventIds: eventIds);
+
+Future<int> dbProcessDeletionEvents() =>
+    RustLib.instance.api.crateApiDatabaseDbProcessDeletionEvents();
+
 Future<String> dbQueryEvents(
         {required String filterJson, required int limit}) =>
     RustLib.instance.api
