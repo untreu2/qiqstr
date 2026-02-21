@@ -16,6 +16,9 @@ import 'presentation/blocs/locale/locale_event.dart';
 import 'presentation/blocs/locale/locale_state.dart';
 
 import 'data/services/logging_service.dart';
+import 'data/services/relay_service.dart';
+import 'data/services/auth_service.dart';
+import 'data/sync/sync_service.dart';
 import 'core/di/app_di.dart';
 import 'core/router/app_router.dart';
 import 'core/bloc/observers/app_bloc_observer.dart';
@@ -141,8 +144,67 @@ void unawaited(Future<void> future) {
   future.catchError((error) {});
 }
 
-class QiqstrApp extends StatelessWidget {
+class QiqstrApp extends StatefulWidget {
   const QiqstrApp({super.key});
+
+  @override
+  State<QiqstrApp> createState() => _QiqstrAppState();
+}
+
+class _QiqstrAppState extends State<QiqstrApp> with WidgetsBindingObserver {
+  bool _wasBackgrounded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _wasBackgrounded = true;
+      _onAppBackgrounded();
+    } else if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+      _wasBackgrounded = false;
+      _onAppResumed();
+    }
+  }
+
+  void _onAppBackgrounded() {
+    try {
+      AppDI.get<SyncService>().stopRealtimeSubscriptions();
+    } catch (_) {}
+  }
+
+  void _onAppResumed() {
+    Future.microtask(() async {
+      try {
+        final relayService = RustRelayService.instance;
+        if (!relayService.isInitialized) return;
+
+        await relayService.connect();
+        await relayService.waitForReady(timeoutSecs: 3);
+
+        final authService = AuthService.instance;
+        final pubResult = await authService.getCurrentUserPublicKeyHex();
+        if (pubResult.isError || pubResult.data == null) return;
+
+        final userPubkey = pubResult.data!;
+        final syncService = AppDI.get<SyncService>();
+        await syncService.startRealtimeSubscriptions(userPubkey);
+        syncService.syncFeed(userPubkey, force: true);
+        syncService.syncNotifications(userPubkey);
+      } catch (_) {}
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
