@@ -90,7 +90,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   static const String _retryText = 'Retry';
 
-  late TextEditingController _noteController;
+  late _MentionTextEditingController _noteController;
   final FocusNode _focusNode = FocusNode();
   final Map<String, String> _mentionMap = {};
   late final NoteBloc _noteBloc;
@@ -135,7 +135,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   void _initializeController() {
-    _noteController = TextEditingController();
+    _noteController = _MentionTextEditingController(mentionMap: _mentionMap);
   }
 
   void _setupTextListener() {
@@ -408,7 +408,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final state = _noteBloc.state;
     if (state is! NoteComposeState) return;
 
-    final mentions = _mentionMap.keys.toList();
+    final mentions = _mentionMap.values.toList();
     _noteBloc.add(NoteComposed(
       content: content,
       replyToId: state.replyId,
@@ -471,7 +471,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   String _getCurrentWord(int cursorPos) {
     final text = _noteController.text;
     final textBeforeCursor = text.substring(0, cursorPos);
-    final words = textBeforeCursor.split(' ');
+    final words = textBeforeCursor.split(RegExp(r'[\s]'));
     return words.isNotEmpty ? words.last : '';
   }
 
@@ -532,7 +532,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       }
     }
 
-    _mentionMap['nostr:$npubBech32'] = mentionKey;
+    _mentionMap[mentionKey] = 'nostr:$npubBech32';
 
     final textAfterCursor = text.substring(cursorPos);
     final newText = '${text.substring(0, atIndex)}$mentionKey $textAfterCursor';
@@ -657,8 +657,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
                 children: [
                   _buildHeader(context),
                   Expanded(child: _buildMainContent(composeState)),
-                  if (composeState.isSearchingUsers)
-                    _buildUserSuggestions(composeState),
                 ],
               ),
             );
@@ -842,6 +840,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           if (_isReply()) _buildReplyPreview(),
           const SizedBox(height: 12),
           _buildComposerRow(state),
+          if (state.isSearchingUsers) _buildUserSuggestions(state),
           const SizedBox(height: 16),
           if (state.mediaUrls.isNotEmpty) _buildMediaList(state),
           if (_hasQuoteContent()) _buildQuoteWidget(),
@@ -1067,88 +1066,67 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Widget _buildUserSuggestions(NoteComposeState state) {
     if (state.userSuggestions.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Material(
-            elevation: 4.0,
-            borderRadius: BorderRadius.circular(40),
-            color: context.colors.textPrimary,
-            child: Container(
-              constraints:
-                  const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: state.userSuggestions.length,
-                itemBuilder: (context, index) {
-                  final user = state.userSuggestions[index];
-                  return _buildUserSuggestionItem(user);
-                },
-              ),
+    return Padding(
+      padding: const EdgeInsets.only(left: 52, top: 8),
+      child: Material(
+        elevation: 4.0,
+        borderRadius: BorderRadius.circular(16),
+        color: context.colors.textPrimary,
+        child: Container(
+          constraints:
+              const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: state.userSuggestions.length,
+              itemBuilder: (context, index) {
+                final user = state.userSuggestions[index];
+                return _buildUserSuggestionItem(user);
+              },
             ),
           ),
         ),
-        const SizedBox(height: 24),
-      ],
+      ),
     );
   }
 
   Widget _buildUserSuggestionItem(Map<String, dynamic> user) {
     final l10n = AppLocalizations.of(context)!;
     final userName = user['name'] as String? ?? '';
-    final userAbout = user['about'] as String? ?? '';
     final userProfileImage = user['profileImage'] as String? ?? '';
 
     return Semantics(
-      label: '${l10n.mention} $userName, $userAbout',
+      label: '${l10n.mention} $userName',
       button: true,
       child: GestureDetector(
         onTap: () => _onUserSelected(user),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               CircleAvatar(
-                radius: _avatarRadius,
+                radius: 16,
                 backgroundImage: userProfileImage.isNotEmpty
                     ? CachedNetworkImageProvider(userProfileImage)
                     : null,
                 backgroundColor: context.colors.surfaceTransparent,
                 child: userProfileImage.isEmpty
                     ? Icon(Icons.person,
-                        color: context.colors.background, size: 20)
+                        color: context.colors.background, size: 16)
                     : null,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      userName,
-                      style: TextStyle(
-                        color: context.colors.background,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (userAbout.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        userAbout,
-                        style: TextStyle(
-                          color:
-                              context.colors.background.withValues(alpha: 0.7),
-                          fontSize: 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
-                      ),
-                    ],
-                  ],
+                child: Text(
+                  userName,
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: _fontSize,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -1156,5 +1134,60 @@ class _ShareNotePageState extends State<ShareNotePage> {
         ),
       ),
     );
+  }
+}
+
+class _MentionTextEditingController extends TextEditingController {
+  final Map<String, String> mentionMap;
+
+  _MentionTextEditingController({required this.mentionMap});
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    if (mentionMap.isEmpty) {
+      return TextSpan(text: text, style: style);
+    }
+
+    final accentColor = context.colors.accent;
+    final mentionKeys = mentionMap.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+
+    final pattern = mentionKeys.map(RegExp.escape).join('|');
+    final regex = RegExp(pattern);
+
+    final spans = <InlineSpan>[];
+    int lastEnd = 0;
+
+    for (final match in regex.allMatches(text)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastEnd, match.start),
+          style: style,
+        ));
+      }
+
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: style?.copyWith(
+          color: accentColor,
+          fontWeight: FontWeight.w600,
+        ),
+      ));
+
+      lastEnd = match.end;
+    }
+
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastEnd),
+        style: style,
+      ));
+    }
+
+    return TextSpan(children: spans, style: style);
   }
 }

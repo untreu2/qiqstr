@@ -92,16 +92,10 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     final hasMedia = currentState.mediaUrls.isNotEmpty;
     final canPost = trimmedContent.isNotEmpty || hasMedia;
 
-    if (event.content.contains('@')) {
-      add(NoteUserSearchRequested(event.content));
-    } else {
-      emit(currentState.copyWith(
-        content: event.content,
-        canPost: canPost,
-        isSearchingUsers: false,
-        userSuggestions: const [],
-      ));
-    }
+    emit(currentState.copyWith(
+      content: event.content,
+      canPost: canPost,
+    ));
   }
 
   Future<void> _onNoteMediaUploaded(
@@ -226,16 +220,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
 
-    final isSearching = event.query.contains('@');
-    if (!isSearching) {
-      emit(currentState
-          .copyWith(isSearchingUsers: false, userSuggestions: const []));
-      return;
-    }
-
-    final query =
-        event.query.substring(event.query.lastIndexOf('@') + 1).trim();
-    if (query.isEmpty) {
+    if (event.query.isEmpty) {
       emit(currentState
           .copyWith(isSearchingUsers: false, userSuggestions: const []));
       return;
@@ -245,14 +230,20 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
 
     try {
       final profiles =
-          await _profileRepository.searchProfiles(query, limit: 10);
+          await _profileRepository.searchProfiles(event.query, limit: 10);
       final users = profiles.map((p) => p.toMap()).toList();
-      emit(currentState.copyWith(
-        isSearchingUsers: false,
+      final latestState = state is NoteComposeState
+          ? (state as NoteComposeState)
+          : currentState;
+      emit(latestState.copyWith(
+        isSearchingUsers: users.isNotEmpty,
         userSuggestions: users,
       ));
     } catch (e) {
-      emit(currentState
+      final latestState = state is NoteComposeState
+          ? (state as NoteComposeState)
+          : currentState;
+      emit(latestState
           .copyWith(isSearchingUsers: false, userSuggestions: const []));
     }
   }
