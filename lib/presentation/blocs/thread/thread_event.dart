@@ -5,31 +5,20 @@ abstract class ThreadEvent extends BaseEvent {
 }
 
 class ThreadLoadRequested extends ThreadEvent {
-  final String rootNoteId;
-  final String? focusedNoteId;
+  final List<String> chain;
   final Map<String, dynamic>? initialNoteData;
 
   const ThreadLoadRequested({
-    required this.rootNoteId,
-    this.focusedNoteId,
+    required this.chain,
     this.initialNoteData,
   });
 
   @override
-  List<Object?> get props => [rootNoteId, focusedNoteId, initialNoteData];
+  List<Object?> get props => [chain, initialNoteData];
 }
 
 class ThreadRefreshed extends ThreadEvent {
   const ThreadRefreshed();
-}
-
-class ThreadFocusedNoteChanged extends ThreadEvent {
-  final String? noteId;
-
-  const ThreadFocusedNoteChanged(this.noteId);
-
-  @override
-  List<Object?> get props => [noteId];
 }
 
 class ThreadReplyPublished extends ThreadEvent {

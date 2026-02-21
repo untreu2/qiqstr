@@ -6,6 +6,7 @@ import '../../../utils/string_optimizer.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../utils/thread_chain.dart';
 import '../../theme/theme_manager.dart';
 import 'note_content_widget.dart';
 import 'interaction_bar_widget.dart';
@@ -525,42 +526,44 @@ class _NoteWidgetState extends State<NoteWidget> {
     try {
       if (!mounted || _isDisposed || !_isInitialized) return;
 
-      String rootId;
-      String focusedId;
-
       var noteRootId = widget.note['rootId'] as String?;
       if ((noteRootId == null || noteRootId.isEmpty) && _isReply) {
         noteRootId = _resolveRootFromTags(widget.note);
       }
 
-      if (_isRepost && noteRootId != null && noteRootId.isNotEmpty) {
-        rootId = noteRootId;
-        focusedId = noteRootId;
-      } else if (_isReply && noteRootId != null && noteRootId.isNotEmpty) {
-        rootId = noteRootId;
-        focusedId = _noteId;
-      } else if (_isReply) {
-        rootId = _noteId;
-        focusedId = _noteId;
-      } else {
-        rootId = _noteId;
-        focusedId = _noteId;
+      if (widget.onNoteTap != null) {
+        widget.onNoteTap!(_noteId, noteRootId);
+        return;
       }
 
-      if (widget.onNoteTap != null) {
-        widget.onNoteTap!(_noteId, rootId);
-      } else {
-        final noteData = Map<String, dynamic>.from(widget.note);
-        final currentLocation = GoRouterState.of(context).matchedLocation;
-        final query =
-            'rootNoteId=${Uri.encodeComponent(rootId)}&focusedNoteId=${Uri.encodeComponent(focusedId)}';
-        if (currentLocation.startsWith('/home/feed')) {
-          context.push('/home/feed/thread?$query', extra: noteData);
-        } else if (currentLocation.startsWith('/home/notifications')) {
-          context.push('/home/notifications/thread?$query', extra: noteData);
-        } else {
-          context.push('/thread?$query', extra: noteData);
+      final chain = <String>[];
+      final hasRoot = noteRootId != null && noteRootId.isNotEmpty;
+
+      if (hasRoot) {
+        chain.add(noteRootId);
+        final parentId = widget.note['parentId'] as String?;
+        if (parentId != null &&
+            parentId.isNotEmpty &&
+            parentId != noteRootId &&
+            parentId != _noteId) {
+          chain.add(parentId);
         }
+        if (_noteId != noteRootId) {
+          chain.add(_noteId);
+        }
+      } else {
+        chain.add(_noteId);
+      }
+
+      final chainStr = ThreadChain.build(chain);
+      final noteData = Map<String, dynamic>.from(widget.note);
+      final currentLocation = GoRouterState.of(context).matchedLocation;
+      if (currentLocation.startsWith('/home/feed')) {
+        context.push('/home/feed/thread/$chainStr', extra: noteData);
+      } else if (currentLocation.startsWith('/home/notifications')) {
+        context.push('/home/notifications/thread/$chainStr', extra: noteData);
+      } else {
+        context.push('/thread/$chainStr', extra: noteData);
       }
     } catch (e) {
       debugPrint('[NoteWidget] Navigate to thread error: $e');

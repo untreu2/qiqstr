@@ -149,18 +149,14 @@ class AppRouter {
                     },
                   ),
                   GoRoute(
-                    path: 'thread',
+                    path: 'thread/:chain',
                     name: 'feed-thread',
                     builder: (context, state) {
-                      final rootNoteId =
-                          state.uri.queryParameters['rootNoteId'] ?? '';
-                      final focusedNoteId =
-                          state.uri.queryParameters['focusedNoteId'];
+                      final chain = state.pathParameters['chain'] ?? '';
                       final initialNoteData =
                           state.extra as Map<String, dynamic>?;
                       return ThreadPage(
-                        rootNoteId: rootNoteId,
-                        focusedNoteId: focusedNoteId,
+                        chain: chain,
                         initialNoteData: initialNoteData,
                       );
                     },
@@ -318,18 +314,14 @@ class AppRouter {
                     },
                   ),
                   GoRoute(
-                    path: 'thread',
+                    path: 'thread/:chain',
                     name: 'notifications-thread',
                     builder: (context, state) {
-                      final rootNoteId =
-                          state.uri.queryParameters['rootNoteId'] ?? '';
-                      final focusedNoteId =
-                          state.uri.queryParameters['focusedNoteId'];
+                      final chain = state.pathParameters['chain'] ?? '';
                       final initialNoteData =
                           state.extra as Map<String, dynamic>?;
                       return ThreadPage(
-                        rootNoteId: rootNoteId,
-                        focusedNoteId: focusedNoteId,
+                        chain: chain,
                         initialNoteData: initialNoteData,
                       );
                     },
@@ -419,15 +411,13 @@ class AppRouter {
         },
       ),
       GoRoute(
-        path: '/thread',
+        path: '/thread/:chain',
         name: 'thread',
         builder: (context, state) {
-          final rootNoteId = state.uri.queryParameters['rootNoteId'] ?? '';
-          final focusedNoteId = state.uri.queryParameters['focusedNoteId'];
+          final chain = state.pathParameters['chain'] ?? '';
           final initialNoteData = state.extra as Map<String, dynamic>?;
           return ThreadPage(
-            rootNoteId: rootNoteId,
-            focusedNoteId: focusedNoteId,
+            chain: chain,
             initialNoteData: initialNoteData,
           );
         },

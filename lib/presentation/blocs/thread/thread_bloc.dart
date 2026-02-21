@@ -31,7 +31,6 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         super(const ThreadInitial()) {
     on<ThreadLoadRequested>(_onThreadLoaded);
     on<ThreadRefreshed>(_onThreadRefreshed);
-    on<ThreadFocusedNoteChanged>(_onThreadFocusedNoteChanged);
     on<ThreadProfilesUpdated>(_onThreadProfilesUpdated);
     on<_ThreadRepliesUpdated>(_onThreadRepliesUpdated);
     on<_ThreadRepliesSyncCompleted>(_onThreadRepliesSyncCompleted);
@@ -72,73 +71,81 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     Emitter<ThreadState> emit,
   ) async {
     try {
-      final currentUserHex = _authService.currentUserPubkeyHex ?? '';
-      var rootNoteId = event.rootNoteId;
-
-      var rootNoteRaw = await _feedRepository.getNoteRaw(rootNoteId);
-
-      if (rootNoteRaw == null && event.initialNoteData != null) {
-        rootNoteRaw =
-            _stripRepostData(event.initialNoteData!, rootNoteId);
+      final chain = event.chain;
+      if (chain.isEmpty) {
+        emit(const ThreadError('Invalid thread chain'));
+        return;
       }
 
-      if (rootNoteRaw == null) {
+      final currentUserHex = _authService.currentUserPubkeyHex ?? '';
+      final rootNoteId = chain.first;
+
+      final chainNotes = <Map<String, dynamic>>[];
+      for (final noteId in chain) {
+        var noteRaw = await _feedRepository.getNoteRaw(noteId);
+
+        if (noteRaw == null && noteId == chain.first && event.initialNoteData != null) {
+          noteRaw = _stripRepostData(event.initialNoteData!, noteId);
+        }
+
+        if (noteRaw == null) {
+          await _syncService.syncNote(noteId);
+          noteRaw = await _feedRepository.getNoteRaw(noteId);
+        }
+
+        if (noteRaw != null) {
+          chainNotes.add(noteRaw);
+        }
+      }
+
+      if (chainNotes.isEmpty) {
         emit(const ThreadLoading());
 
-        final resolvedRootId =
-            await _syncService.resolveThreadRoot(rootNoteId);
-        rootNoteId = resolvedRootId;
-        rootNoteRaw = await _feedRepository.getNoteRaw(rootNoteId);
-
-        if (rootNoteRaw == null) {
+        final resolvedRootId = await _syncService.resolveThreadRoot(rootNoteId);
+        final rootNote = await _feedRepository.getNoteRaw(resolvedRootId);
+        if (rootNote == null) {
           emit(const ThreadError('Note not found'));
           return;
         }
+        chainNotes.add(rootNote);
       }
 
-      _currentRootNoteId = rootNoteId;
+      final rootNote = chainNotes.first;
+      final actualRootNoteId = rootNote['id'] as String? ?? rootNoteId;
+      _currentRootNoteId = actualRootNoteId;
 
-      var ancestorChain = <Map<String, dynamic>>[];
-      if (event.focusedNoteId != null &&
-          event.focusedNoteId != rootNoteId) {
-        ancestorChain =
-            await _ensureAncestorChain(event.focusedNoteId!, rootNoteId);
-      }
-
-      final dbReplies =
-          await _feedRepository.getRepliesRaw(rootNoteId);
-      final replyIds =
-          dbReplies.map((r) => r['id'] as String? ?? '').toSet();
+      final dbReplies = await _feedRepository.getRepliesRaw(actualRootNoteId);
+      final replyIds = dbReplies.map((r) => r['id'] as String? ?? '').toSet();
       final allReplies = [...dbReplies];
-      for (final ancestor in ancestorChain) {
-        final aid = ancestor['id'] as String? ?? '';
-        if (aid.isNotEmpty && aid != rootNoteId && !replyIds.contains(aid)) {
-          allReplies.add(ancestor);
-          replyIds.add(aid);
+
+      for (final chainNote in chainNotes) {
+        final cid = chainNote['id'] as String? ?? '';
+        if (cid.isNotEmpty && cid != actualRootNoteId && !replyIds.contains(cid)) {
+          allReplies.add(chainNote);
+          replyIds.add(cid);
         }
       }
-      final initialStructure =
-          _buildThreadStructure(rootNoteRaw, allReplies);
 
-      Map<String, dynamic>? focusedNote;
-      if (event.focusedNoteId != null) {
-        focusedNote = initialStructure.getNote(event.focusedNoteId!);
-        focusedNote ??= rootNoteRaw;
-      }
+      final structure = _buildThreadStructure(rootNote, allReplies);
 
       emit(ThreadLoaded(
-        rootNote: rootNoteRaw,
+        rootNote: rootNote,
         replies: allReplies,
-        threadStructure: initialStructure,
-        focusedNote: focusedNote,
+        threadStructure: structure,
+        chainNotes: chainNotes,
+        chain: chain,
         userProfiles: const {},
-        rootNoteId: rootNoteId,
-        focusedNoteId: event.focusedNoteId,
         currentUserHex: currentUserHex,
         currentUser: null,
       ));
 
-      final allIds = <String>[rootNoteId];
+      _watchReplies(actualRootNoteId);
+      _syncRepliesOnly(actualRootNoteId);
+
+      _loadAndSyncProfilesForNotes([...chainNotes, ...allReplies]);
+      _loadCurrentUserProfile(currentUserHex);
+
+      final allIds = <String>[actualRootNoteId];
       for (final r in allReplies) {
         final id = r['id'] as String? ?? '';
         if (id.isNotEmpty) allIds.add(id);
@@ -146,47 +153,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       if (currentUserHex.isNotEmpty) {
         InteractionService.instance.setCurrentUser(currentUserHex);
       }
-      await _preloadInteractionCounts(allIds);
-
-      _watchReplies(rootNoteId);
-      _syncInBackground(rootNoteId);
-      _loadAndSyncProfilesForNotes([rootNoteRaw, ...allReplies]);
-      _loadCurrentUserProfile(currentUserHex);
+      _loadInteractionCountsInBackground(allIds);
     } catch (e) {
       emit(ThreadError('Failed to load thread: ${e.toString()}'));
     }
-  }
-
-  Future<List<Map<String, dynamic>>> _ensureAncestorChain(
-      String focusedNoteId, String rootNoteId) async {
-    final chainNotes = <Map<String, dynamic>>[];
-    var currentId = focusedNoteId;
-    final visited = <String>{rootNoteId};
-
-    for (var depth = 0; depth < 15; depth++) {
-      if (visited.contains(currentId)) break;
-      visited.add(currentId);
-
-      var noteMap = await _feedRepository.getNoteRaw(currentId);
-      if (noteMap == null) {
-        await _syncService.syncNote(currentId);
-        noteMap = await _feedRepository.getNoteRaw(currentId);
-        if (noteMap == null) break;
-      }
-
-      chainNotes.add(noteMap);
-
-      final parentId = noteMap['parentId'] as String?;
-      if (parentId == null ||
-          parentId.isEmpty ||
-          parentId == rootNoteId) {
-        break;
-      }
-
-      currentId = parentId;
-    }
-
-    return chainNotes;
   }
 
   Map<String, dynamic> _stripRepostData(
@@ -200,7 +170,6 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     }
     return stripped;
   }
-
 
   void _loadCurrentUserProfile(String currentUserHex) {
     if (currentUserHex.isEmpty) return;
@@ -234,6 +203,17 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     final currentState = state as ThreadLoaded;
 
     final repliesMap = event.replies.map((r) => r.toMap()).toList();
+
+    final replyIds = repliesMap.map((r) => r['id'] as String? ?? '').toSet();
+    final rootNoteId = currentState.rootNoteId;
+    for (final chainNote in currentState.chainNotes) {
+      final cid = chainNote['id'] as String? ?? '';
+      if (cid.isNotEmpty && cid != rootNoteId && !replyIds.contains(cid)) {
+        repliesMap.add(chainNote);
+        replyIds.add(cid);
+      }
+    }
+
     final structure = _buildThreadStructure(currentState.rootNote, repliesMap);
 
     emit(currentState.copyWith(
@@ -293,44 +273,47 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     } catch (_) {}
   }
 
-  Future<void> _syncInBackground(String rootNoteId) async {
-    final allNoteIds = <String>[rootNoteId];
-    if (state is ThreadLoaded) {
-      for (final reply in (state as ThreadLoaded).replies) {
-        final id = reply['id'] as String? ?? '';
-        if (id.isNotEmpty) allNoteIds.add(id);
-      }
-    }
-
-    try {
-      if (!isClosed) {
-        await InteractionService.instance.fetchCountsFromRelays(allNoteIds);
-      }
-    } catch (_) {}
-
+  void _syncRepliesOnly(String rootNoteId) {
     Future.microtask(() async {
       if (isClosed) return;
       try {
         await _syncService.syncReplies(rootNoteId);
         if (isClosed) return;
-
         add(const _ThreadRepliesSyncCompleted());
-        
-        final newNoteIds = <String>[];
-        if (state is ThreadLoaded) {
-          for (final reply in (state as ThreadLoaded).replies) {
-            final id = reply['id'] as String? ?? '';
-            if (id.isNotEmpty && !allNoteIds.contains(id)) {
-              newNoteIds.add(id);
-            }
-          }
-        }
-
-        if (newNoteIds.isNotEmpty && !isClosed) {
-          await InteractionService.instance.fetchCountsFromRelays(newNoteIds);
-        }
       } catch (_) {
         if (!isClosed) add(const _ThreadRepliesSyncCompleted());
+      }
+    });
+  }
+
+  void _loadInteractionCountsInBackground(List<String> initialNoteIds) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      await _preloadInteractionCounts(initialNoteIds);
+
+      if (isClosed) return;
+      try {
+        await InteractionService.instance
+            .fetchCountsFromRelays(initialNoteIds);
+      } catch (_) {}
+
+      if (isClosed || state is! ThreadLoaded) return;
+      final currentReplies = (state as ThreadLoaded).replies;
+      final newIds = <String>[];
+      final initialSet = initialNoteIds.toSet();
+      for (final reply in currentReplies) {
+        final id = reply['id'] as String? ?? '';
+        if (id.isNotEmpty && !initialSet.contains(id)) {
+          newIds.add(id);
+        }
+      }
+      if (newIds.isNotEmpty && !isClosed) {
+        await _preloadInteractionCounts(newIds);
+        if (!isClosed) {
+          try {
+            await InteractionService.instance.fetchCountsFromRelays(newIds);
+          } catch (_) {}
+        }
       }
     });
   }
@@ -408,45 +391,17 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (_currentRootNoteId == null) return;
     try {
       await _syncService.syncReplies(_currentRootNoteId!);
-      
+
       if (state is ThreadLoaded) {
         final allIds = <String>[_currentRootNoteId!];
         for (final reply in (state as ThreadLoaded).replies) {
           final id = reply['id'] as String? ?? '';
           if (id.isNotEmpty) allIds.add(id);
         }
-        
+
         await InteractionService.instance.fetchCountsFromRelays(allIds);
       }
     } catch (_) {}
-  }
-
-  void _onThreadFocusedNoteChanged(
-    ThreadFocusedNoteChanged event,
-    Emitter<ThreadState> emit,
-  ) async {
-    if (state is ThreadLoaded) {
-      final currentState = state as ThreadLoaded;
-      if (event.noteId == null) {
-        emit(currentState.copyWith(focusedNote: null, focusedNoteId: null));
-        return;
-      }
-
-      final structure = currentState.threadStructure;
-      final note = structure.getNote(event.noteId!);
-      if (note != null) {
-        emit(currentState.copyWith(
-            focusedNote: note, focusedNoteId: event.noteId));
-      } else {
-        final fetchedNote = await _feedRepository.getNote(event.noteId!);
-        if (fetchedNote != null && state is ThreadLoaded) {
-          emit((state as ThreadLoaded).copyWith(
-            focusedNote: fetchedNote.toMap(),
-            focusedNoteId: event.noteId,
-          ));
-        }
-      }
-    }
   }
 
   ThreadStructure _buildThreadStructure(

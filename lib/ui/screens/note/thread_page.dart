@@ -18,16 +18,15 @@ import '../../../presentation/blocs/thread/thread_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'share_note.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../utils/thread_chain.dart';
 
 class ThreadPage extends StatefulWidget {
-  final String rootNoteId;
-  final String? focusedNoteId;
+  final String chain;
   final Map<String, dynamic>? initialNoteData;
 
   const ThreadPage({
     super.key,
-    required this.rootNoteId,
-    this.focusedNoteId,
+    required this.chain,
     this.initialNoteData,
   });
 
@@ -38,7 +37,6 @@ class ThreadPage extends StatefulWidget {
 class _ThreadPageState extends State<ThreadPage> {
   late ScrollController _scrollController;
   final Map<String, GlobalKey> _noteKeys = {};
-  String? _currentFocusedNoteId;
 
   int _visibleRepliesCount = 20;
   static const int _repliesPerPage = 20;
@@ -49,20 +47,20 @@ class _ThreadPageState extends State<ThreadPage> {
   final List<String> _stableReplyOrder = [];
 
   bool _isRefreshing = false;
-  Timer? _cacheCheckTimer;
   final ValueNotifier<List<Map<String, dynamic>>> _emptyNotesNotifier =
       ValueNotifier([]);
+
+  late final List<String> _parsedChain;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    _currentFocusedNoteId = widget.focusedNoteId;
+    _parsedChain = ThreadChain.parse(widget.chain);
   }
 
   @override
   void dispose() {
-    _cacheCheckTimer?.cancel();
     _scrollController.dispose();
     _emptyNotesNotifier.dispose();
     super.dispose();
@@ -74,33 +72,25 @@ class _ThreadPageState extends State<ThreadPage> {
       create: (context) {
         final bloc = AppDI.get<ThreadBloc>();
         bloc.add(ThreadLoadRequested(
-          rootNoteId: widget.rootNoteId,
-          focusedNoteId: widget.focusedNoteId,
+          chain: _parsedChain,
           initialNoteData: widget.initialNoteData,
         ));
         return bloc;
       },
       child: BlocConsumer<ThreadBloc, ThreadState>(
         listenWhen: (previous, current) {
-          // Listen when we first get loaded state to trigger scroll
           return previous is! ThreadLoaded && current is ThreadLoaded;
         },
         listener: (context, state) {
-          if (state is ThreadLoaded) {
-            final focusedNoteId = _currentFocusedNoteId ?? state.focusedNoteId;
-            final rootNoteId = state.rootNote['id'] as String? ?? '';
-            if (focusedNoteId != null && focusedNoteId != rootNoteId) {
-              _scrollToFocusedNote(focusedNoteId);
-            }
+          if (state is ThreadLoaded && state.chainNotes.length > 1) {
+            _scrollToFocusedNote(state.focusedNoteId);
           }
         },
         buildWhen: (previous, current) {
           if (previous is ThreadLoaded && current is ThreadLoaded) {
-            final prevRootNoteId = previous.rootNote['id'] as String? ?? '';
-            final currRootNoteId = current.rootNote['id'] as String? ?? '';
             return previous.replies.length != current.replies.length ||
-                prevRootNoteId != currRootNoteId ||
-                previous.focusedNoteId != current.focusedNoteId ||
+                previous.rootNoteId != current.rootNoteId ||
+                previous.chainNotes.length != current.chainNotes.length ||
                 previous.userProfiles.length != current.userProfiles.length ||
                 previous.repliesSynced != current.repliesSynced;
           }
@@ -145,7 +135,8 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Widget _buildContent(BuildContext context, ThreadState state, AppLocalizations l10n) {
+  Widget _buildContent(
+      BuildContext context, ThreadState state, AppLocalizations l10n) {
     if (state is ThreadLoaded) {
       return _buildThreadContent(context, state);
     }
@@ -154,23 +145,24 @@ class _ThreadPageState extends State<ThreadPage> {
       return _buildErrorState(context, state.message, l10n);
     }
 
-    if (state is ThreadInitial && widget.initialNoteData != null) {
+    if (state is ThreadInitial &&
+        widget.initialNoteData != null &&
+        _parsedChain.isNotEmpty) {
       final rootNote = _stripRepostDataForPlaceholder(
-          widget.initialNoteData!, widget.rootNoteId);
+          widget.initialNoteData!, _parsedChain.first);
       final structure = ThreadStructure(
         rootNote: rootNote,
         childrenMap: const {},
-        notesMap: {widget.rootNoteId: rootNote},
+        notesMap: {_parsedChain.first: rootNote},
         totalReplies: 0,
       );
       final placeholderState = ThreadLoaded(
         rootNote: rootNote,
         replies: const [],
         threadStructure: structure,
-        focusedNote: widget.focusedNoteId != null ? null : rootNote,
+        chainNotes: [rootNote],
+        chain: _parsedChain,
         userProfiles: const {},
-        rootNoteId: widget.rootNoteId,
-        focusedNoteId: widget.focusedNoteId,
         currentUserHex: '',
         currentUser: null,
       );
@@ -202,16 +194,8 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildThreadContent(BuildContext context, ThreadLoaded state) {
-    Map<String, dynamic>? displayNote = state.rootNote;
-    final focusedNoteId = _currentFocusedNoteId ?? state.focusedNoteId;
-    if (focusedNoteId != null) {
-      if (state.focusedNote != null) {
-        displayNote = state.focusedNote;
-      } else {
-        displayNote =
-            state.threadStructure.getNote(focusedNoteId) ?? state.rootNote;
-      }
-    }
+    final focusedNote = state.focusedNote;
+    final contextNotes = state.contextNotes;
 
     return RefreshIndicator(
       onRefresh: () => _debouncedRefresh(context),
@@ -221,131 +205,37 @@ class _ThreadPageState extends State<ThreadPage> {
           SliverToBoxAdapter(
             child: SizedBox(height: MediaQuery.of(context).padding.top + 68),
           ),
-          if (displayNote != null) ...[
+          if (contextNotes.isNotEmpty)
             SliverToBoxAdapter(
-              child: _buildContextNote(context, state, displayNote),
+              child: _buildContextChain(context, state, contextNotes),
             ),
-            SliverToBoxAdapter(
-              child: _buildMainNote(context, state, displayNote),
-            ),
-            SliverToBoxAdapter(
-              child: _buildReplyInputSection(context, state),
-            ),
-            _buildThreadRepliesSliver(context, state, displayNote),
-          ] else ...[
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: context.colors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Loading thread...',
-                      style: TextStyle(
-                        color: context.colors.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
           SliverToBoxAdapter(
-            child:
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 120),
+            child: _buildMainNote(context, state, focusedNote),
+          ),
+          SliverToBoxAdapter(
+            child: _buildReplyInputSection(context, state),
+          ),
+          _buildThreadRepliesSliver(context, state, focusedNote),
+          SliverToBoxAdapter(
+            child: SizedBox(
+                height: MediaQuery.of(context).padding.bottom + 120),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildContextNote(BuildContext context, ThreadLoaded state,
-      Map<String, dynamic> displayNote) {
-    final threadStructure = state.threadStructure;
-    final displayNoteId = displayNote['id'] as String? ?? '';
-    final rootNoteId = threadStructure.rootNote['id'] as String? ?? '';
-
-    // If the focused note is the root note itself, no parent chain to show
-    if (displayNoteId == rootNoteId) {
-      return const SizedBox.shrink();
-    }
-
-    // Get parent chain including root note
-    final parentChain = _getParentChain(threadStructure, displayNoteId);
-    if (parentChain.isEmpty) return const SizedBox.shrink();
-
+  Widget _buildContextChain(BuildContext context, ThreadLoaded state,
+      List<Map<String, dynamic>> contextNotes) {
     return Column(
-      children: parentChain.map((parentNote) {
+      children: contextNotes.map((note) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: _buildSimpleNoteWidget(context, parentNote, state,
+          child: _buildSimpleNoteWidget(context, note, state,
               isSmallView: true),
         );
       }).toList(),
     );
-  }
-
-  /// Builds the parent chain from root note down to (but not including) the focused note.
-  /// Returns [root, parent1, parent2, ...] where the last item is the direct parent of noteId.
-  List<Map<String, dynamic>> _getParentChain(
-      ThreadStructure structure, String noteId) {
-    final rootNote = structure.rootNote;
-    final rootNoteId = rootNote['id'] as String? ?? '';
-
-    // If noteId is root, no parent chain
-    if (noteId == rootNoteId) {
-      return [];
-    }
-
-    // Collect ancestors by walking up from the focused note
-    final ancestors = <Map<String, dynamic>>[];
-    String? currentId = noteId;
-    final visited = <String>{};
-
-    while (currentId != null &&
-        currentId.isNotEmpty &&
-        !visited.contains(currentId)) {
-      visited.add(currentId);
-
-      final note = structure.getNote(currentId);
-      if (note == null) break;
-
-      // Get parent ID
-      final parentId = note['parentId'] as String? ?? note['rootId'] as String?;
-
-      if (parentId == null || parentId.isEmpty || parentId == currentId) {
-        // No parent or self-reference, this note is a direct child of root
-        break;
-      }
-
-      // If parent is root, we're done collecting
-      if (parentId == rootNoteId) {
-        break;
-      }
-
-      // Get parent note and add to ancestors
-      final parentNote = structure.getNote(parentId);
-      if (parentNote != null) {
-        ancestors.insert(0, parentNote);
-      }
-
-      currentId = parentId;
-    }
-
-    // Always prepend root note at the beginning
-    ancestors.insert(0, rootNote);
-
-    return ancestors;
   }
 
   Widget _buildMainNote(
@@ -376,7 +266,7 @@ class _ThreadPageState extends State<ThreadPage> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: GestureDetector(
-        onTap: _handleReplyInputTap,
+        onTap: () => _handleReplyInputTap(state),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -446,11 +336,16 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  void _handleReplyInputTap() {
+  void _handleReplyInputTap(ThreadLoaded state) {
+    final focusedNote = state.focusedNote;
+    final focusedNoteId = focusedNote['id'] as String? ?? '';
+    final parentAuthor = focusedNote['pubkey'] as String? ??
+        focusedNote['author'] as String?;
+
     ShareNotePage.show(
       context,
-      replyToNoteId: widget.rootNoteId,
-      parentAuthor: widget.initialNoteData?['pubkey'] as String?,
+      replyToNoteId: focusedNoteId,
+      parentAuthor: parentAuthor,
     );
   }
 
@@ -621,9 +516,7 @@ class _ThreadPageState extends State<ThreadPage> {
     const double baseIndentWidth = 16.0;
     final double currentIndent = depth * baseIndentWidth;
 
-    final focusedNoteId = _currentFocusedNoteId ?? state.focusedNoteId;
     final replyId = reply['id'] as String? ?? '';
-    final isFocused = replyId == focusedNoteId;
     final noteKey = _getNoteKey(replyId);
     final allNestedReplies = threadStructure.getChildren(replyId);
     final nestedReplies = <Map<String, dynamic>>[];
@@ -659,7 +552,7 @@ class _ThreadPageState extends State<ThreadPage> {
           if (depth > 0) SizedBox(width: currentIndent),
           Expanded(
             child: Column(
-              key: isFocused ? noteKey : null,
+              key: noteKey,
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -722,7 +615,7 @@ class _ThreadPageState extends State<ThreadPage> {
         scrollController: _scrollController,
         isVisible: true,
         onNoteTap: (noteId, rootId) =>
-            _handleNoteTap(noteId, rootId, state.threadStructure),
+            _handleNoteTap(noteId, rootId, state),
       ),
     );
   }
@@ -746,12 +639,13 @@ class _ThreadPageState extends State<ThreadPage> {
         scrollController: _scrollController,
         isVisible: true,
         onNoteTap: (noteId, rootId) =>
-            _handleNoteTap(noteId, rootId, state.threadStructure),
+            _handleNoteTap(noteId, rootId, state),
       ),
     );
   }
 
-  Widget _buildErrorState(BuildContext context, String message, AppLocalizations l10n) {
+  Widget _buildErrorState(
+      BuildContext context, String message, AppLocalizations l10n) {
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -798,47 +692,58 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  void _handleNoteTap(String noteId, String? rootId,
-      [ThreadStructure? threadStructure]) {
-    // When a reply is tapped, we want to show it as the focused note
-    // with its parent chain visible above it, and its replies below
-    String targetRootId = widget.rootNoteId;
-    String targetFocusedId = noteId;
+  void _handleNoteTap(String noteId, String? rootId, ThreadLoaded state) {
+    if (noteId == state.focusedNoteId) return;
 
-    if (threadStructure != null) {
-      final note = threadStructure.getNote(noteId);
-      if (note != null) {
-        final isRepost = note['isRepost'] as bool? ?? false;
-        final noteRootId = note['rootId'] as String?;
+    final threadStructure = state.threadStructure;
+    final rootNoteId = state.rootNoteId;
 
-        if (isRepost && noteRootId != null && noteRootId.isNotEmpty) {
-          // For reposts, navigate to the original note's thread and focus on it
-          targetRootId = noteRootId;
-          targetFocusedId = noteRootId;
+    final note = threadStructure.getNote(noteId);
+    if (note != null) {
+      final isRepost = note['isRepost'] as bool? ?? false;
+      if (isRepost) {
+        final originalRootId = note['rootId'] as String?;
+        final originalParentId = note['parentId'] as String?;
+        final originalNoteId = note['id'] as String? ?? noteId;
+
+        final chain = <String>[];
+        if (originalRootId != null && originalRootId.isNotEmpty) {
+          chain.add(originalRootId);
+          if (originalParentId != null &&
+              originalParentId.isNotEmpty &&
+              originalParentId != originalRootId &&
+              originalParentId != originalNoteId) {
+            chain.add(originalParentId);
+          }
+          if (originalNoteId != originalRootId) {
+            chain.add(originalNoteId);
+          }
         } else {
-          // For regular notes/replies, keep the same root but focus on this note
-          targetRootId = noteRootId ?? widget.rootNoteId;
-          targetFocusedId = noteId;
+          chain.add(originalNoteId);
         }
+
+        _navigateToThread(ThreadChain.build(chain));
+        return;
       }
     }
 
-    // If tapping on the currently displayed note, no need to navigate
-    final currentDisplayedNoteId = _currentFocusedNoteId ?? widget.rootNoteId;
-    if (noteId == currentDisplayedNoteId) {
-      return;
-    }
+    final newChain = ThreadChain.buildChainToNote(
+      noteId,
+      rootNoteId,
+      threadStructure.getNote,
+    );
 
+    _navigateToThread(ThreadChain.build(newChain));
+  }
+
+  void _navigateToThread(String chainStr) {
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push(
-          '/home/feed/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
+      context.push('/home/feed/thread/$chainStr');
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push(
-          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
+      context.push('/home/notifications/thread/$chainStr');
     } else {
-      context.push(
-          '/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
+      context.push('/thread/$chainStr');
     }
   }
 
@@ -861,11 +766,13 @@ class _ThreadPageState extends State<ThreadPage> {
 
     final noteKey = _noteKeys[noteId];
     if (noteKey != null && noteKey.currentContext != null) {
+      final topBar = MediaQuery.of(context).padding.top + 175;
+
       Scrollable.ensureVisible(
         noteKey.currentContext!,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
-        alignment: 0.15,
+        alignment: topBar / MediaQuery.of(context).size.height,
       );
       return;
     }
@@ -894,7 +801,6 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
   }
-
 
   Future<void> _handleShare(BuildContext context, ThreadState state) async {
     final rootNote = state is ThreadLoaded ? state.rootNote : null;

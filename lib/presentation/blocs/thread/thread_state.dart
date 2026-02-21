@@ -16,10 +16,9 @@ class ThreadLoaded extends ThreadState {
   final Map<String, dynamic> rootNote;
   final List<Map<String, dynamic>> replies;
   final ThreadStructure threadStructure;
-  final Map<String, dynamic>? focusedNote;
+  final List<Map<String, dynamic>> chainNotes;
+  final List<String> chain;
   final Map<String, Map<String, dynamic>> userProfiles;
-  final String rootNoteId;
-  final String? focusedNoteId;
   final String currentUserHex;
   final Map<String, dynamic>? currentUser;
   final bool repliesSynced;
@@ -28,24 +27,29 @@ class ThreadLoaded extends ThreadState {
     required this.rootNote,
     required this.replies,
     required this.threadStructure,
-    this.focusedNote,
+    required this.chainNotes,
+    required this.chain,
     required this.userProfiles,
-    required this.rootNoteId,
-    this.focusedNoteId,
     required this.currentUserHex,
     this.currentUser,
     this.repliesSynced = false,
   });
+
+  Map<String, dynamic> get focusedNote => chainNotes.last;
+  String get focusedNoteId => focusedNote['id'] as String? ?? '';
+  String get rootNoteId => rootNote['id'] as String? ?? '';
+
+  List<Map<String, dynamic>> get contextNotes =>
+      chainNotes.length > 1 ? chainNotes.sublist(0, chainNotes.length - 1) : [];
 
   @override
   List<Object?> get props => [
         rootNote,
         replies,
         threadStructure,
-        focusedNote,
+        chainNotes,
+        chain,
         userProfiles,
-        rootNoteId,
-        focusedNoteId,
         currentUserHex,
         currentUser,
         repliesSynced,
@@ -55,10 +59,9 @@ class ThreadLoaded extends ThreadState {
     Map<String, dynamic>? rootNote,
     List<Map<String, dynamic>>? replies,
     ThreadStructure? threadStructure,
-    Map<String, dynamic>? focusedNote,
+    List<Map<String, dynamic>>? chainNotes,
+    List<String>? chain,
     Map<String, Map<String, dynamic>>? userProfiles,
-    String? rootNoteId,
-    String? focusedNoteId,
     String? currentUserHex,
     Map<String, dynamic>? currentUser,
     bool? repliesSynced,
@@ -67,10 +70,9 @@ class ThreadLoaded extends ThreadState {
       rootNote: rootNote ?? this.rootNote,
       replies: replies ?? this.replies,
       threadStructure: threadStructure ?? this.threadStructure,
-      focusedNote: focusedNote ?? this.focusedNote,
+      chainNotes: chainNotes ?? this.chainNotes,
+      chain: chain ?? this.chain,
       userProfiles: userProfiles ?? this.userProfiles,
-      rootNoteId: rootNoteId ?? this.rootNoteId,
-      focusedNoteId: focusedNoteId ?? this.focusedNoteId,
       currentUserHex: currentUserHex ?? this.currentUserHex,
       currentUser: currentUser ?? this.currentUser,
       repliesSynced: repliesSynced ?? this.repliesSynced,

@@ -16,6 +16,7 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../utils/thread_chain.dart';
 import '../../../l10n/app_localizations.dart';
 
 class NotificationPage extends StatefulWidget {
@@ -308,39 +309,47 @@ class _NotificationTileState extends State<_NotificationTile> {
         _navigateToProfile(author);
       }
     } else if (targetEventId.isNotEmpty) {
-      String rootNoteId = targetEventId;
-      String? focusedNoteId;
+      final chain = <String>[];
 
       if (type == 'reply' && notificationEventId.isNotEmpty) {
         try {
           final feedRepo = AppDI.get<FeedRepository>();
           final replyNote = await feedRepo.getNoteRaw(notificationEventId);
-          
+
           if (replyNote != null) {
             final replyRootId = replyNote['rootId'] as String?;
-            
+            final parentId = replyNote['parentId'] as String?;
+
             if (replyRootId != null && replyRootId.isNotEmpty) {
-              rootNoteId = replyRootId;
-              focusedNoteId = notificationEventId;
-            } else if (targetEventId.isNotEmpty) {
-              rootNoteId = targetEventId;
-              focusedNoteId = notificationEventId;
+              chain.add(replyRootId);
+              if (parentId != null &&
+                  parentId.isNotEmpty &&
+                  parentId != replyRootId &&
+                  parentId != notificationEventId) {
+                chain.add(parentId);
+              }
+              chain.add(notificationEventId);
+            } else {
+              chain.add(targetEventId);
+              if (notificationEventId != targetEventId) {
+                chain.add(notificationEventId);
+              }
             }
+          } else {
+            chain.add(targetEventId);
           }
         } catch (e) {
           debugPrint('[NotificationTile] Error resolving thread: $e');
+          chain.add(targetEventId);
         }
+      } else {
+        chain.add(targetEventId);
       }
 
       if (!mounted) return;
-      
-      if (focusedNoteId != null && focusedNoteId.isNotEmpty) {
-        context.push(
-            '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(rootNoteId)}&focusedNoteId=${Uri.encodeComponent(focusedNoteId)}');
-      } else {
-        context.push(
-            '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(rootNoteId)}');
-      }
+
+      final chainStr = ThreadChain.build(chain);
+      context.push('/home/notifications/thread/$chainStr');
     }
   }
 

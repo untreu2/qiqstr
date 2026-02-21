@@ -10,6 +10,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_event.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_state.dart';
+import '../../../utils/thread_chain.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'note_content_widget.dart';
 
@@ -125,22 +126,30 @@ class _QuoteContent extends StatelessWidget {
     final noteId = note['id'] as String? ?? '';
     final isReply = note['isReply'] as bool? ?? false;
     final rootId = note['rootId'] as String?;
-    
-    final targetRootId = (isReply && rootId != null && rootId.isNotEmpty) 
-        ? rootId 
-        : noteId;
-    final targetFocusedId = noteId;
-    
+    final parentId = note['parentId'] as String?;
+
+    final chain = <String>[];
+    if (isReply && rootId != null && rootId.isNotEmpty) {
+      chain.add(rootId);
+      if (parentId != null &&
+          parentId.isNotEmpty &&
+          parentId != rootId &&
+          parentId != noteId) {
+        chain.add(parentId);
+      }
+      chain.add(noteId);
+    } else {
+      chain.add(noteId);
+    }
+
+    final chainStr = ThreadChain.build(chain);
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push(
-          '/home/feed/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
+      context.push('/home/feed/thread/$chainStr');
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push(
-          '/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
+      context.push('/home/notifications/thread/$chainStr');
     } else {
-      context.push(
-          '/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}');
+      context.push('/thread/$chainStr');
     }
   }
 
