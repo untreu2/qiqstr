@@ -1785,4 +1785,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get nwcAccept => 'Ich verstehe und stimme zu';
+
+  @override
+  String get dmTabFollowing => 'Gefolgt';
+
+  @override
+  String get dmTabOther => 'Andere';
 }

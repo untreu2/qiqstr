@@ -35,7 +35,8 @@ class EncryptedMediaService {
   factory EncryptedMediaService() => _instance;
   EncryptedMediaService._internal();
 
-  
+  final Map<String, String> _pathCache = {};
+
   static String _normalizeToHex(String input, int expectedByteLength) {
     if (input.length == expectedByteLength * 2) {
       try {
@@ -115,20 +116,24 @@ class EncryptedMediaService {
     required String fileExtension,
   }) async {
     try {
-      // Normalize key to hex format (handles both hex and base64)
-      final normalizedKey = _normalizeToHex(decryptionKey, 32); // 32 bytes for AES-256
+      final cacheDir = await getTemporaryDirectory();
+      final decryptedCacheDir = Directory('${cacheDir.path}/decrypted_media');
+      final decryptedFileName = 'decrypted_${originalHash.substring(0, 16)}.$fileExtension';
+      final decryptedFile = File('${decryptedCacheDir.path}/$decryptedFileName');
+
+      if (await decryptedFile.exists()) {
+        _pathCache[originalHash] = decryptedFile.path;
+        return Result.success(decryptedFile.path);
+      }
+
+      final normalizedKey = _normalizeToHex(decryptionKey, 32);
       
-      // Amethyst uses 16-byte nonces, we use 12-byte nonces
-      // Try both (Rust will handle 16-byte by truncating to 12)
       String normalizedNonce;
       if (decryptionNonce.length == 32) {
-        // Already 16 bytes in hex format (Amethyst style)
         normalizedNonce = decryptionNonce;
       } else if (decryptionNonce.length == 24) {
-        // Already 12 bytes in hex format (our style)
         normalizedNonce = decryptionNonce;
       } else {
-        // Try to normalize (could be base64)
         normalizedNonce = _normalizeToHex(decryptionNonce, 12);
         if (normalizedNonce.length != 24 && normalizedNonce.length != 32) {
           normalizedNonce = _normalizeToHex(decryptionNonce, 16);
@@ -165,20 +170,12 @@ class EncryptedMediaService {
         );
       }
 
-      final cacheDir = await getTemporaryDirectory();
-      final decryptedCacheDir = Directory('${cacheDir.path}/decrypted_media');
       if (!await decryptedCacheDir.exists()) {
         await decryptedCacheDir.create(recursive: true);
       }
 
-      final decryptedFileName = 'decrypted_${originalHash.substring(0, 16)}.$fileExtension';
-      final decryptedFile = File('${decryptedCacheDir.path}/$decryptedFileName');
-
-      if (await decryptedFile.exists()) {
-        return Result.success(decryptedFile.path);
-      }
-
       await decryptedFile.writeAsBytes(decryptedBytes);
+      _pathCache[originalHash] = decryptedFile.path;
       return Result.success(decryptedFile.path);
     } catch (e, stackTrace) {
       return Result.error('Failed to decrypt file: $e\nStack: $stackTrace');
@@ -188,6 +185,12 @@ class EncryptedMediaService {
   
   Future<String?> getDecryptedCachePath(
       String originalHash, String fileExtension) async {
+    final cached = _pathCache[originalHash];
+    if (cached != null) {
+      if (await File(cached).exists()) return cached;
+      _pathCache.remove(originalHash);
+    }
+
     try {
       final cacheDir = await getTemporaryDirectory();
       final decryptedCacheDir = Directory('${cacheDir.path}/decrypted_media');
@@ -196,6 +199,7 @@ class EncryptedMediaService {
       final decryptedFile =
           File('${decryptedCacheDir.path}/$decryptedFileName');
       if (await decryptedFile.exists()) {
+        _pathCache[originalHash] = decryptedFile.path;
         return decryptedFile.path;
       }
       return null;
@@ -219,6 +223,8 @@ class EncryptedMediaService {
   
   Future<Result<void>> clearDecryptedMediaCache() async {
     try {
+      _pathCache.clear();
+
       final cacheDir = await getTemporaryDirectory();
       final decryptedCacheDir = Directory('${cacheDir.path}/decrypted_media');
       

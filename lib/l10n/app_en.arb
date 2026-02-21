@@ -815,5 +815,8 @@
   "nwcInvalidConnectionString": "Invalid NWC connection string",
   "nwcPleaseEnterConnectionString": "Please enter a connection string",
   "nwcDisclaimer": "NWC connects to a third-party wallet provider. We do not hold, control, or have access to your funds. All responsibility lies with your wallet provider.",
-  "nwcAccept": "I understand and agree"
+  "nwcAccept": "I understand and agree",
+
+  "dmTabFollowing": "Following",
+  "dmTabOther": "Other"
 }

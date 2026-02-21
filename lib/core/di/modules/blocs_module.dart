@@ -70,6 +70,9 @@ class BlocsModule extends DIModule {
     AppDI.registerLazySingleton<DmBloc>(() => DmBloc(
           dmService: AppDI.get<DmService>(),
           profileRepository: AppDI.get<ProfileRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
+          authService: AppDI.get<AuthService>(),
+          syncService: AppDI.get<SyncService>(),
         ));
 
     AppDI.registerFactory<NotificationBloc>(() => NotificationBloc(

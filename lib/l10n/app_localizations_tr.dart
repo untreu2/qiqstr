@@ -1742,4 +1742,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get nwcAccept => 'Anladım ve kabul ediyorum';
+
+  @override
+  String get dmTabFollowing => 'Takip edilenler';
+
+  @override
+  String get dmTabOther => 'Diğer';
 }

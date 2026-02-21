@@ -18,6 +18,8 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/media/photo_viewer_widget.dart';
+import '../../widgets/note/note_content_widget.dart';
+import '../../../utils/string_optimizer.dart';
 import '../../../l10n/app_localizations.dart';
 
 class DmChatPage extends StatefulWidget {
@@ -43,7 +45,6 @@ class _DmChatPageState extends State<DmChatPage> {
   final Map<String, Future<Widget>> _mediaCache = {};
 
   static const _imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-  static const _videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
   static const _blossomHosts = [
     'blossom.primal.net',
     'blossom.oxtr.dev',
@@ -396,11 +397,6 @@ class _DmChatPageState extends State<DmChatPage> {
     return false;
   }
 
-  bool _isVideoUrl(String url) {
-    final lower = url.toLowerCase();
-    return _videoExtensions.any((ext) => lower.endsWith('.$ext'));
-  }
-
   bool _isBlossomUrl(String url) {
     try {
       final uri = Uri.parse(url);
@@ -415,31 +411,6 @@ class _DmChatPageState extends State<DmChatPage> {
     }
   }
 
-  bool _isMediaUrl(String url) {
-    return _isImageUrl(url) || _isVideoUrl(url);
-  }
-
-  ({String text, List<String> mediaUrls}) _parseMessageContent(String content) {
-    final lines = content.split('\n');
-    final textLines = <String>[];
-    final mediaUrls = <String>[];
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        if (_isMediaUrl(trimmed)) {
-          mediaUrls.add(trimmed);
-        } else {
-          textLines.add(line);
-        }
-      } else {
-        textLines.add(line);
-      }
-    }
-
-    return (text: textLines.join('\n').trim(), mediaUrls: mediaUrls);
-  }
-
   Widget _buildMessageBubble(
       BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
@@ -447,12 +418,16 @@ class _DmChatPageState extends State<DmChatPage> {
     final content = message['content'] as String? ?? '';
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
     final messageKind = message['kind'] as int? ?? 14;
+    final messageId = message['id'] as String? ?? '';
 
     if (messageKind == 15) {
       return _buildEncryptedMediaBubble(context, message);
     }
 
-    final parsed = _parseMessageContent(content);
+    final parsedContent = stringOptimizer.parseContentOptimized(content);
+    final textColor = isFromMe ? colors.background : colors.textPrimary;
+    final linkColor =
+        isFromMe ? colors.background.withValues(alpha: 0.8) : colors.accent;
 
     return RepaintBoundary(
       child: Align(
@@ -473,94 +448,25 @@ class _DmChatPageState extends State<DmChatPage> {
                   bottomLeft: !isFromMe ? const Radius.circular(4) : null,
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (parsed.mediaUrls.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20).copyWith(
-                        bottomRight: parsed.text.isNotEmpty
-                            ? null
-                            : (isFromMe ? const Radius.circular(4) : null),
-                        bottomLeft: parsed.text.isNotEmpty
-                            ? null
-                            : (!isFromMe ? const Radius.circular(4) : null),
-                      ),
-                      child: Column(
-                        children: parsed.mediaUrls.map((url) {
-                          if (_isImageUrl(url)) {
-                            return GestureDetector(
-                              onTap: () {
-                                Navigator.of(context, rootNavigator: true).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        PhotoViewerWidget(imageUrls: [url]),
-                                  ),
-                                );
-                              },
-                              child: CachedNetworkImage(
-                                key: ValueKey(url),
-                                imageUrl: url,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                placeholder: (_, __) => Container(
-                                  height: 200,
-                                  color: colors.overlayLight,
-                                  child: const Center(
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  ),
-                                ),
-                                errorWidget: (_, __, ___) => Container(
-                                  height: 100,
-                                  color: colors.overlayLight,
-                                  child: Icon(CarbonIcons.image,
-                                      color: colors.textSecondary),
-                                ),
-                              ),
-                            );
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              children: [
-                                Icon(CarbonIcons.play_filled,
-                                    size: 20, color: colors.textSecondary),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    url.split('/').last,
-                                    style: TextStyle(
-                                      color: isFromMe
-                                          ? colors.background
-                                          : colors.accent,
-                                      fontSize: 13,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  if (parsed.text.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      child: Text(
-                        parsed.text,
-                        style: TextStyle(
-                          color:
-                              isFromMe ? colors.background : colors.textPrimary,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                ],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20).copyWith(
+                  bottomRight: isFromMe ? const Radius.circular(4) : null,
+                  bottomLeft: !isFromMe ? const Radius.circular(4) : null,
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: NoteContentWidget(
+                    parsedContent: parsedContent,
+                    noteId: messageId,
+                    textColor: textColor,
+                    linkColor: linkColor,
+                    size: NoteContentSize.small,
+                    onNavigateToMentionProfile: (npub) {
+                      context.push('/home/profile/$npub');
+                    },
+                  ),
+                ),
               ),
             ),
             Padding(
@@ -938,6 +844,9 @@ class _DmChatPageState extends State<DmChatPage> {
     AppLocalizations l10n,
   ) {
     if (isImage) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      final maxBubbleWidth = (screenWidth * 0.75).toInt();
+
       return GestureDetector(
         onTap: () {
           Navigator.of(context, rootNavigator: true).push(
@@ -951,6 +860,7 @@ class _DmChatPageState extends State<DmChatPage> {
           key: ValueKey(filePath),
           fit: BoxFit.cover,
           width: double.infinity,
+          cacheWidth: maxBubbleWidth * 2,
           errorBuilder: (_, __, ___) => Container(
             height: 100,
             color: colors.overlayLight,

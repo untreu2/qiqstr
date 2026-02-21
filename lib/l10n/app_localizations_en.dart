@@ -1746,4 +1746,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get nwcAccept => 'I understand and agree';
+
+  @override
+  String get dmTabFollowing => 'Following';
+
+  @override
+  String get dmTabOther => 'Other';
 }

@@ -1,15 +1,22 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/services/dm_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../data/repositories/profile_repository.dart';
+import '../../../data/repositories/following_repository.dart';
+import '../../../data/sync/sync_service.dart';
 import 'dm_event.dart';
 import 'dm_state.dart';
 
 class DmBloc extends Bloc<DmEvent, DmState> {
   final DmService _dmService;
   final ProfileRepository _profileRepository;
+  final FollowingRepository _followingRepository;
+  final AuthService _authService;
+  final SyncService _syncService;
 
   final List<StreamSubscription> _subscriptions = [];
+  StreamSubscription<List<Map<String, dynamic>>>? _conversationsSubscription;
   String? _currentChatPubkeyHex;
   Timer? _conversationsTimer;
   List<Map<String, dynamic>>? _cachedConversations;
@@ -23,8 +30,14 @@ class DmBloc extends Bloc<DmEvent, DmState> {
   DmBloc({
     required DmService dmService,
     required ProfileRepository profileRepository,
+    required FollowingRepository followingRepository,
+    required AuthService authService,
+    required SyncService syncService,
   })  : _dmService = dmService,
         _profileRepository = profileRepository,
+        _followingRepository = followingRepository,
+        _authService = authService,
+        _syncService = syncService,
         super(const DmInitial()) {
     on<DmConversationsLoadRequested>(_onDmConversationsLoadRequested);
     on<DmConversationOpened>(_onDmConversationOpened);
@@ -79,6 +92,8 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     if (_cachedConversations != null) {
       emit(DmConversationsLoaded(_cachedConversations!));
       _startConversationsPolling();
+      _startConversationsStreamListener();
+      _dmService.startRealtimeSubscription();
       return;
     }
 
@@ -97,6 +112,18 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     emit(DmConversationsLoaded(enriched));
 
     _startConversationsPolling();
+    _startConversationsStreamListener();
+    _dmService.startRealtimeSubscription();
+  }
+
+  void _startConversationsStreamListener() {
+    _conversationsSubscription?.cancel();
+    _conversationsSubscription = _dmService.conversationsStream.listen(
+      (conversations) async {
+        final enriched = await _enrichConversations(conversations);
+        add(DmConversationsUpdated(enriched));
+      },
+    );
   }
 
   void _startConversationsPolling() {
@@ -134,12 +161,40 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
     if (pubkeys.isEmpty) return conversations;
 
-    final profiles = await _profileRepository.getProfiles(pubkeys);
+    var profiles = await _profileRepository.getProfiles(pubkeys);
+
+    final missingPubkeys =
+        pubkeys.where((p) => !profiles.containsKey(p)).toList();
+
+    if (missingPubkeys.isNotEmpty) {
+      try {
+        await _syncService.syncProfiles(missingPubkeys);
+        final syncedProfiles =
+            await _profileRepository.getProfiles(missingPubkeys);
+        profiles = {...profiles, ...syncedProfiles};
+      } catch (_) {}
+    }
+
+    Set<String> followingSet = {};
+    try {
+      final currentPubkeyHex = _authService.currentUserPubkeyHex;
+      if (currentPubkeyHex != null) {
+        final followingList =
+            await _followingRepository.getFollowingList(currentPubkeyHex);
+        if (followingList != null) {
+          followingSet = followingList.toSet();
+        }
+      }
+    } catch (_) {}
 
     return conversations.map((conversation) {
       final otherUserPubkeyHex =
           conversation['otherUserPubkeyHex'] as String? ?? '';
       final profile = profiles[otherUserPubkeyHex];
+      final isFollowing = followingSet.contains(otherUserPubkeyHex);
+
+      final enriched = Map<String, dynamic>.from(conversation)
+        ..['isFollowing'] = isFollowing;
 
       if (profile != null) {
         final userName = profile.name ?? '';
@@ -150,12 +205,11 @@ class DmBloc extends Bloc<DmEvent, DmState> {
                 ? otherUserPubkeyHex.substring(0, 12)
                 : otherUserPubkeyHex);
 
-        return Map<String, dynamic>.from(conversation)
-          ..['otherUserName'] = displayName
-          ..['otherUserProfileImage'] = userProfileImage;
+        enriched['otherUserName'] = displayName;
+        enriched['otherUserProfileImage'] = userProfileImage;
       }
 
-      return conversation;
+      return enriched;
     }).toList();
   }
 
@@ -278,6 +332,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
   @override
   Future<void> close() {
     _conversationsTimer?.cancel();
+    _conversationsSubscription?.cancel();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }

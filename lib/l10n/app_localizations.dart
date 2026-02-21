@@ -3297,6 +3297,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'I understand and agree'**
   String get nwcAccept;
+
+  /// No description provided for @dmTabFollowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Following'**
+  String get dmTabFollowing;
+
+  /// No description provided for @dmTabOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get dmTabOther;
 }
 
 class _AppLocalizationsDelegate

@@ -31,6 +31,8 @@ class NoteContentWidget extends StatefulWidget {
   final bool isSelectable;
   final bool shortMode;
   final Map<String, Map<String, dynamic>>? initialProfiles;
+  final Color? textColor;
+  final Color? linkColor;
 
   const NoteContentWidget({
     super.key,
@@ -43,6 +45,8 @@ class NoteContentWidget extends StatefulWidget {
     this.isSelectable = false,
     this.shortMode = false,
     this.initialProfiles,
+    this.textColor,
+    this.linkColor,
   });
 
   @override
@@ -155,6 +159,10 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   List<InlineSpan> _buildSpans(
       BuildContext context, Map<String, Map<String, dynamic>> mentionUsers) {
+    final colors = context.colors;
+    final effectiveTextColor = widget.textColor ?? colors.textPrimary;
+    final effectiveLinkColor = widget.linkColor ?? colors.accent;
+
     final mentionUsersHash = mentionUsers.entries
         .map((e) => Object.hash(e.key, e.value['name'] as String? ?? '',
             e.value['profileImage'] as String? ?? ''))
@@ -164,8 +172,8 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
       mentionUsersHash,
       _mentionLoadingStates.length,
       _textParts.length,
-      context.colors.textPrimary.hashCode,
-      context.colors.accent.hashCode,
+      effectiveTextColor.hashCode,
+      effectiveLinkColor.hashCode,
     );
 
     if (_cachedSpans != null && _cachedSpansHash == currentHash) {
@@ -179,7 +187,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
     final parts = _textParts;
     final spans = <InlineSpan>[];
-    final colors = context.colors;
 
     for (var p in parts) {
       if (p['type'] == 'text') {
@@ -194,7 +201,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               text: text.substring(last, m.start),
               style: TextStyle(
                 fontSize: _fontSize(context),
-                color: colors.textPrimary,
+                color: effectiveTextColor,
               ),
             ));
           }
@@ -210,7 +217,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               text: urlMatch,
               style: TextStyle(
                 fontSize: _fontSize(context),
-                color: colors.accent,
+                color: effectiveLinkColor,
                 decoration: TextDecoration.underline,
               ),
               recognizer: recognizer,
@@ -224,7 +231,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               text: hashtagMatch,
               style: TextStyle(
                 fontSize: _fontSize(context),
-                color: colors.accent,
+                color: effectiveLinkColor,
                 fontWeight: FontWeight.w500,
               ),
               recognizer: recognizer,
@@ -260,7 +267,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             text: text.substring(last),
             style: TextStyle(
               fontSize: _fontSize(context),
-              color: colors.textPrimary,
+              color: effectiveTextColor,
             ),
           ));
         }
@@ -321,7 +328,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           text: displayText,
           style: TextStyle(
             fontSize: fontSize,
-            color: colors.accent,
+            color: effectiveLinkColor,
             fontWeight: FontWeight.w500,
           ),
           recognizer: recognizer,
@@ -334,7 +341,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           text: p['text'] as String,
           style: TextStyle(
             fontSize: _fontSize(context),
-            color: colors.accent,
+            color: effectiveLinkColor,
             fontWeight: FontWeight.w500,
           ),
           recognizer: recognizer,

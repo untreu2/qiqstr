@@ -17,6 +17,14 @@ class DmService {
   final Set<String> _failedUnwrapIds = {};
   final Map<String, Map<String, dynamic>?> _decryptedEventCache = {};
   StreamSubscription<Map<String, dynamic>>? _realtimeSubscription;
+  Timer? _reconnectTimer;
+  Timer? _chatPollTimer;
+  String? _activeChatPubkeyHex;
+  String? _cachedPrivateKey;
+
+  final StreamController<List<Map<String, dynamic>>>
+      _conversationsStreamController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
 
   List<Map<String, dynamic>>? _cachedConversations;
   DateTime? _lastConversationsFetch;
@@ -27,6 +35,9 @@ class DmService {
   }) : _authService = authService;
 
   List<Map<String, dynamic>>? get cachedConversations => _cachedConversations;
+
+  Stream<List<Map<String, dynamic>>> get conversationsStream =>
+      _conversationsStreamController.stream;
 
   Future<String?> _getPrivateKey() async {
     final result = await _authService.getCurrentUserPrivateKey();
@@ -212,7 +223,7 @@ class DmService {
 
     final Map<String, Map<String, dynamic>> conversationsMap = {};
 
-    final cachedDMs = await _getDMEvents(_currentUserPubkeyHex!, limit: 60);
+    final cachedDMs = await _getDMEvents(_currentUserPubkeyHex!, limit: 500);
 
     for (final eventData in cachedDMs) {
       try {
@@ -271,7 +282,7 @@ class DmService {
           {
             'kinds': [1059],
             '#p': [_currentUserPubkeyHex!],
-            'limit': 40
+            'limit': 200
           },
         ],
       );
@@ -371,22 +382,87 @@ class DmService {
 
   Future<void> _refreshConversationsFromRelays() async {
     try {
-      await _queryDmRelays(
+      final privateKey = await _getPrivateKey();
+      if (privateKey == null) return;
+
+      final relayEvents = await _queryDmRelays(
         filters: [
           {
             'kinds': [1059],
             '#p': [_currentUserPubkeyHex!],
-            'limit': 40
+            'limit': 200
           },
         ],
       );
+
+      if (relayEvents.isEmpty) return;
+
+      final Map<String, Map<String, dynamic>> conversationsMap = {};
+
+      if (_cachedConversations != null) {
+        for (final conv in _cachedConversations!) {
+          final key = conv['otherUserPubkeyHex'] as String? ?? '';
+          if (key.isNotEmpty) conversationsMap[key] = Map.from(conv);
+        }
+      }
+
+      bool hasNewData = false;
+
+      for (final eventData in relayEvents) {
+        final message = _unwrapGiftWrapCached(eventData, privateKey);
+        if (message == null) continue;
+
+        final otherUserPubkeyHex = message['isFromCurrentUser'] == true
+            ? message['recipientPubkeyHex'] as String
+            : message['senderPubkeyHex'] as String;
+
+        if (otherUserPubkeyHex.isEmpty) continue;
+
+        final messageTime = message['createdAt'] as DateTime?;
+
+        if (!conversationsMap.containsKey(otherUserPubkeyHex)) {
+          conversationsMap[otherUserPubkeyHex] = <String, dynamic>{
+            'otherUserPubkeyHex': otherUserPubkeyHex,
+            'lastMessage': message,
+            'lastMessageTime': messageTime,
+          };
+          hasNewData = true;
+        } else {
+          final existing = conversationsMap[otherUserPubkeyHex]!;
+          final existingLastTime = existing['lastMessageTime'] as DateTime?;
+          if (existingLastTime == null ||
+              (messageTime != null && messageTime.isAfter(existingLastTime))) {
+            conversationsMap[otherUserPubkeyHex] = <String, dynamic>{
+              ...existing,
+              'lastMessage': message,
+              'lastMessageTime': messageTime,
+            };
+            hasNewData = true;
+          }
+        }
+
+        _saveEvent(eventData);
+      }
+
+      if (hasNewData) {
+        final conversations = conversationsMap.values.toList()
+          ..sort((a, b) {
+            final aTime = a['lastMessageTime'] as DateTime? ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final bTime = b['lastMessageTime'] as DateTime? ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            return bTime.compareTo(aTime);
+          });
+        _cachedConversations = conversations;
+        _lastConversationsFetch = DateTime.now();
+      }
     } catch (_) {}
   }
 
   Future<List<Map<String, dynamic>>> _loadMessagesFromDb(
       String otherUserPubkeyHex, String privateKey) async {
     try {
-      final cachedDMs = await _getDMEvents(_currentUserPubkeyHex!, limit: 200);
+      final cachedDMs = await _getDMEvents(_currentUserPubkeyHex!, limit: 1000);
       final messages = <Map<String, dynamic>>[];
 
       for (var i = 0; i < cachedDMs.length; i++) {
@@ -443,7 +519,7 @@ class DmService {
           {
             'kinds': [1059],
             '#p': [_currentUserPubkeyHex!],
-            'limit': 80
+            'limit': 200
           },
         ],
         timeout: const Duration(seconds: 8),
@@ -485,7 +561,7 @@ class DmService {
           {
             'kinds': [1059],
             '#p': [_currentUserPubkeyHex!],
-            'limit': 80
+            'limit': 200
           },
         ],
         timeout: const Duration(seconds: 5),
@@ -743,7 +819,8 @@ class DmService {
 
     final cachedMessages = _messagesCache[otherUserPubkeyHex] ?? [];
 
-    _startRealtimeSubscription();
+    startRealtimeSubscription();
+    _startChatPolling(otherUserPubkeyHex);
 
     return Stream.multi((sink) {
       if (cachedMessages.isNotEmpty) {
@@ -761,8 +838,26 @@ class DmService {
 
       sink.onCancel = () {
         subscription.cancel();
+        _stopChatPolling();
       };
     });
+  }
+
+  void _startChatPolling(String otherUserPubkeyHex) {
+    _stopChatPolling();
+    _activeChatPubkeyHex = otherUserPubkeyHex;
+    _chatPollTimer =
+        Timer.periodic(const Duration(seconds: 8), (_) {
+      if (_activeChatPubkeyHex != null) {
+        _fetchMessagesInBackground(_activeChatPubkeyHex!);
+      }
+    });
+  }
+
+  void _stopChatPolling() {
+    _chatPollTimer?.cancel();
+    _chatPollTimer = null;
+    _activeChatPubkeyHex = null;
   }
 
   Future<void> _loadDbThenFetchRelay(
@@ -781,17 +876,27 @@ class DmService {
     _fetchMessagesInBackground(otherUserPubkeyHex);
   }
 
-  Future<void> _startRealtimeSubscription() async {
+  Future<void> startRealtimeSubscription() async {
     if (_realtimeSubscription != null) return;
 
     final initResult = await _ensureInitialized();
     if (initResult.isError || _currentUserPubkeyHex == null) return;
 
-    final privateKey = await _getPrivateKey();
-    if (privateKey == null) return;
+    _cachedPrivateKey = await _getPrivateKey();
+    if (_cachedPrivateKey == null) return;
+
+    _connectRealtimeSubscription();
+  }
+
+  void _connectRealtimeSubscription() {
+    if (_cachedPrivateKey == null || _currentUserPubkeyHex == null) return;
+
+    _realtimeSubscription?.cancel();
+    _realtimeSubscription = null;
 
     try {
-      final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
+      final since =
+          DateTime.now().millisecondsSinceEpoch ~/ 1000 - 259200;
       final filter = {
         'kinds': [1059],
         '#p': [_currentUserPubkeyHex!],
@@ -802,16 +907,27 @@ class DmService {
 
       _realtimeSubscription = stream.listen(
         (eventData) {
-          _handleRealtimeEvent(eventData, privateKey);
+          _handleRealtimeEvent(eventData, _cachedPrivateKey!);
         },
         onError: (_) {
           _realtimeSubscription = null;
+          _scheduleReconnect();
         },
         onDone: () {
           _realtimeSubscription = null;
+          _scheduleReconnect();
         },
       );
-    } catch (_) {}
+    } catch (_) {
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 5), () {
+      _connectRealtimeSubscription();
+    });
   }
 
   void _handleRealtimeEvent(
@@ -840,8 +956,16 @@ class DmService {
       }
 
       _updateConversationCache(otherUserPubkeyHex, message);
+      _notifyConversationsStream();
       _saveEvent(eventData);
     } catch (_) {}
+  }
+
+  void _notifyConversationsStream() {
+    if (_cachedConversations != null &&
+        !_conversationsStreamController.isClosed) {
+      _conversationsStreamController.add(List.from(_cachedConversations!));
+    }
   }
 
   Future<List<Map<String, dynamic>>> _getDMEvents(String userPubkey,
@@ -867,8 +991,11 @@ class DmService {
   }
 
   void dispose() {
+    _stopChatPolling();
+    _reconnectTimer?.cancel();
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
+    _conversationsStreamController.close();
     for (final controller in _messageStreams.values) {
       controller.close();
     }

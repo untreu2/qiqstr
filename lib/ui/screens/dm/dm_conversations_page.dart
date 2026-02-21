@@ -20,9 +20,23 @@ class DmConversationsPage extends StatefulWidget {
 }
 
 class _DmConversationsPageState extends State<DmConversationsPage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,182 +50,137 @@ class _DmConversationsPageState extends State<DmConversationsPage>
       child: BlocBuilder<DmBloc, DmState>(
         builder: (context, state) {
           if (state is DmConversationsLoaded) {
-            return _buildConversationList(context, state);
+            return _buildPage(context, state);
           }
           final cached = bloc.cachedConversations;
           if (cached != null) {
-            return _buildConversationList(
-                context, DmConversationsLoaded(cached));
+            return _buildPage(context, DmConversationsLoaded(cached));
           }
-          return _buildConversationList(context, state);
+          return _buildPage(context, state);
         },
       ),
     );
   }
 
-  Widget _buildConversationList(BuildContext context, DmState state) {
+  Widget _buildPage(BuildContext context, DmState state) {
     final l10n = AppLocalizations.of(context)!;
-    
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          switch (state) {
-            DmConversationsLoaded(:final conversations) => conversations.isEmpty
-                ? CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: TitleWidget(
-                          title: l10n.messages,
-                          fontSize: 32,
-                          useTopPadding: true,
-                          padding: EdgeInsets.fromLTRB(
-                            16,
-                            MediaQuery.of(context).padding.top + 70,
-                            16,
-                            0,
-                          ),
-                        ),
-                      ),
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _buildEmptyState(context),
-                      ),
-                    ],
-                  )
-                : RefreshIndicator(
-                    onRefresh: () async {
-                      context
-                          .read<DmBloc>()
-                          .add(const dm_events.DmConversationsLoadRequested());
-                    },
-                    color: context.colors.textPrimary,
-                    child: CustomScrollView(
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: TitleWidget(
-                            title: l10n.messages,
-                            fontSize: 32,
-                            useTopPadding: true,
-                            padding: EdgeInsets.fromLTRB(
-                              16,
-                              MediaQuery.of(context).padding.top + 70,
-                              16,
-                              0,
-                            ),
-                          ),
-                        ),
-                        SliverPadding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          sliver: SliverList.separated(
-                            itemCount: conversations.length,
-                            itemBuilder: (context, index) {
-                              return _buildConversationTile(
-                                context,
-                                conversations[index],
-                              );
-                            },
-                            separatorBuilder: (_, __) =>
-                                const _ConversationSeparator(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-            DmLoading() => CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: TitleWidget(
-                      title: l10n.messages,
-                      fontSize: 32,
-                      useTopPadding: true,
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        MediaQuery.of(context).padding.top + 70,
-                        16,
-                        0,
-                      ),
-                    ),
-                  ),
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                ],
+          Column(
+            children: [
+              SizedBox(height: topPadding + 16),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 60, 0),
+                child: TitleWidget(
+                  title: l10n.messages,
+                  fontSize: 32,
+                  useTopPadding: false,
+                  padding: const EdgeInsets.only(bottom: 8),
+                ),
               ),
-            DmError() => CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: TitleWidget(
-                      title: l10n.messages,
-                      fontSize: 32,
-                      useTopPadding: true,
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        MediaQuery.of(context).padding.top + 70,
-                        16,
-                        0,
-                      ),
-                    ),
-                  ),
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            l10n.errorLoadingConversations,
-                            style:
-                                TextStyle(color: context.colors.textSecondary),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: () {
-                              context.read<DmBloc>().add(const dm_events
-                                  .DmConversationsLoadRequested());
-                            },
-                            child: Builder(
-                              builder: (context) {
-                                final l10n = AppLocalizations.of(context)!;
-                                return Text(l10n.retryText);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              _buildTabBar(context),
+              Expanded(
+                child: _buildTabContent(context, state),
               ),
-            _ => CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: TitleWidget(
-                      title: l10n.messages,
-                      fontSize: 32,
-                      useTopPadding: true,
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        MediaQuery.of(context).padding.top + 70,
-                        16,
-                        0,
-                      ),
-                    ),
-                  ),
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                ],
-              ),
-          },
+            ],
+          ),
           _buildTopBar(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: context.colors.divider.withValues(alpha: 0.2),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        labelColor: context.colors.textPrimary,
+        unselectedLabelColor: context.colors.textSecondary,
+        indicatorColor: context.colors.textPrimary,
+        indicatorWeight: 2,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerHeight: 0,
+        labelStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+        ),
+        tabs: [
+          Tab(text: l10n.dmTabFollowing),
+          Tab(text: l10n.dmTabOther),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabContent(BuildContext context, DmState state) {
+    if (state is! DmConversationsLoaded) {
+      if (state is DmLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (state is DmError) {
+        return _buildErrorState(context);
+      }
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final conversations = state.conversations;
+    final following = conversations
+        .where((c) => c['isFollowing'] == true)
+        .toList();
+    final other = conversations
+        .where((c) => c['isFollowing'] != true)
+        .toList();
+
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildConversationsList(context, following),
+        _buildConversationsList(context, other),
+      ],
+    );
+  }
+
+  Widget _buildConversationsList(
+    BuildContext context,
+    List<Map<String, dynamic>> conversations,
+  ) {
+    if (conversations.isEmpty) {
+      return _buildEmptyState(context);
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        context
+            .read<DmBloc>()
+            .add(const dm_events.DmConversationsLoadRequested());
+      },
+      color: context.colors.textPrimary,
+      child: ListView.separated(
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
+        itemCount: conversations.length,
+        itemBuilder: (context, index) {
+          return _buildConversationTile(context, conversations[index]);
+        },
+        separatorBuilder: (_, __) => const _ConversationSeparator(),
       ),
     );
   }
@@ -372,6 +341,30 @@ class _DmConversationsPageState extends State<DmConversationsPage>
               color: context.colors.textSecondary,
               fontSize: 14,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            l10n.errorLoadingConversations,
+            style: TextStyle(color: context.colors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              context
+                  .read<DmBloc>()
+                  .add(const dm_events.DmConversationsLoadRequested());
+            },
+            child: Text(l10n.retryText),
           ),
         ],
       ),

@@ -748,5 +748,8 @@
   "nwcInvalidConnectionString": "Ungültige NWC-Verbindungszeichenfolge",
   "nwcPleaseEnterConnectionString": "Bitte Verbindungszeichenfolge eingeben",
   "nwcDisclaimer": "NWC verbindet sich mit einem Drittanbieter-Wallet. Wir verwahren, kontrollieren oder haben keinen Zugriff auf Ihre Gelder. Die gesamte Verantwortung liegt bei Ihrem Wallet-Anbieter.",
-  "nwcAccept": "Ich verstehe und stimme zu"
+  "nwcAccept": "Ich verstehe und stimme zu",
+
+  "dmTabFollowing": "Gefolgt",
+  "dmTabOther": "Andere"
 }

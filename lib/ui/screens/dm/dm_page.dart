@@ -12,7 +12,9 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
+import '../../widgets/note/note_content_widget.dart';
 import '../search/users_search_page.dart';
+import '../../../utils/string_optimizer.dart';
 import '../../../l10n/app_localizations.dart';
 
 class DmPage extends StatefulWidget {
@@ -539,6 +541,12 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
     final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
     final content = message['content'] as String? ?? '';
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
+    final messageId = message['id'] as String? ?? '';
+
+    final parsedContent = stringOptimizer.parseContentOptimized(content);
+    final textColor = isFromMe ? colors.background : colors.textPrimary;
+    final linkColor =
+        isFromMe ? colors.background.withValues(alpha: 0.8) : colors.accent;
 
     return RepaintBoundary(
       child: Align(
@@ -552,7 +560,6 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.75,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: isFromMe ? colors.textPrimary : colors.overlayLight,
                 borderRadius: BorderRadius.circular(20).copyWith(
@@ -560,11 +567,26 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                   bottomLeft: !isFromMe ? const Radius.circular(4) : null,
                 ),
               ),
-              child: Text(
-                content,
-                style: TextStyle(
-                  color: isFromMe ? colors.background : colors.textPrimary,
-                  fontSize: 15,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20).copyWith(
+                  bottomRight: isFromMe ? const Radius.circular(4) : null,
+                  bottomLeft: !isFromMe ? const Radius.circular(4) : null,
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: NoteContentWidget(
+                    parsedContent: parsedContent,
+                    noteId: messageId,
+                    textColor: textColor,
+                    linkColor: linkColor,
+                    size: NoteContentSize.small,
+                    onNavigateToMentionProfile: (npub) {
+                      Navigator.of(context).pushNamed(
+                        '/home/profile/$npub',
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
