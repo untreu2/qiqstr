@@ -180,6 +180,25 @@ pub async fn connect_relays() -> Result<()> {
     Ok(())
 }
 
+pub async fn wait_for_ready(timeout_secs: u32) -> Result<u32> {
+    let client = get_client().await?;
+    let timeout = Duration::from_secs(timeout_secs as u64);
+    client.wait_for_connection(timeout).await;
+
+    let relays = client.relays().await;
+    let mut connected: u32 = 0;
+    for (_, relay) in relays.iter() {
+        let flags = relay.flags();
+        let is_discovery_only = flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
+            && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
+            && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All);
+        if !is_discovery_only && relay.status() == RelayStatus::Connected {
+            connected += 1;
+        }
+    }
+    Ok(connected)
+}
+
 pub async fn disconnect_relays() -> Result<()> {
     let client = get_client().await?;
     client.disconnect().await;
@@ -481,17 +500,33 @@ pub async fn discover_and_connect_outbox_relays(pubkeys_hex: Vec<String>) -> Res
 pub async fn sync_events(filter_json: String) -> Result<String> {
     let client = get_client().await?;
     let filter = Filter::from_json(&filter_json)?;
-    let opts = SyncOptions::default();
+    let opts = SyncOptions::default()
+        .initial_timeout(Duration::from_secs(5));
 
-    let output = client.sync(filter, &opts).await
-        .map_err(|e| anyhow!("Negentropy sync failed: {}", e))?;
-
-    let received: Vec<String> = output.received.iter().map(|id| id.to_hex()).collect();
-    let sent: Vec<String> = output.sent.iter().map(|id| id.to_hex()).collect();
+    let sync_future = client.sync(filter, &opts);
+    let output = match tokio::time::timeout(Duration::from_secs(12), sync_future).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(_)) => {
+            return Ok(serde_json::json!({
+                "received": 0,
+                "sent": 0,
+                "local": 0,
+                "remote": 0,
+            }).to_string());
+        }
+        Err(_) => {
+            return Ok(serde_json::json!({
+                "received": 0,
+                "sent": 0,
+                "local": 0,
+                "remote": 0,
+            }).to_string());
+        }
+    };
 
     let result = serde_json::json!({
-        "received": received.len(),
-        "sent": sent.len(),
+        "received": output.received.len(),
+        "sent": output.sent.len(),
         "local": output.local.len(),
         "remote": output.remote.len(),
     });
@@ -504,7 +539,8 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
     let filter = Filter::from_json(&filter_json)?;
     let timeout = Duration::from_secs(timeout_secs as u64);
 
-    let events: Events = client.fetch_events(filter, timeout).await?;
+    let events: Events = client.fetch_events(filter, timeout).await
+        .unwrap_or_default();
 
     let events_json: Vec<serde_json::Value> = events
         .into_iter()

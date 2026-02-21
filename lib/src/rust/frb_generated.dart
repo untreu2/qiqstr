@@ -74,7 +74,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1421647913;
+  int get rustContentHash => 941793796;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -538,6 +538,8 @@ abstract class RustLibApi extends BaseApi {
   Future<bool> crateApiCryptoVerifyNoteById({required String eventIdHex});
 
   Future<bool> crateApiCryptoVerifyProfileByPubkey({required String pubkeyHex});
+
+  Future<int> crateApiRelayWaitForReady({required int timeoutSecs});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -4255,6 +4257,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "verify_profile_by_pubkey",
         argNames: ["pubkeyHex"],
+      );
+
+  @override
+  Future<int> crateApiRelayWaitForReady({required int timeoutSecs}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_u_32(timeoutSecs, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 134, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_u_32,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiRelayWaitForReadyConstMeta,
+      argValues: [timeoutSecs],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiRelayWaitForReadyConstMeta => const TaskConstMeta(
+        debugName: "wait_for_ready",
+        argNames: ["timeoutSecs"],
       );
 
   @protected

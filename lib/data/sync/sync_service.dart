@@ -756,7 +756,9 @@ class SyncService {
       }
 
       try {
-        final result = await _relayService.syncEvents(syncFilter);
+        final result = await _relayService
+            .syncEvents(syncFilter)
+            .timeout(const Duration(seconds: 15));
         final received = result['received'] as int? ?? 0;
         if (received > 0) {
           return [];
@@ -764,7 +766,7 @@ class SyncService {
       } catch (_) {}
     }
 
-    return await _relayService.fetchEvents(filterMap);
+    return await _relayService.fetchEvents(filterMap, timeoutSecs: 10);
   }
 
   Future<List<Map<String, dynamic>>> _queryRelays(dynamic filter) async {

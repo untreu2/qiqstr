@@ -181,7 +181,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Future.microtask(() async {
       if (isClosed) return;
       try {
-        await _syncService.syncProfile(targetHex);
+        await _syncService
+            .syncProfile(targetHex)
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
         if (isClosed) return;
         final freshProfile = await _profileRepository.getProfile(targetHex);
         if (freshProfile != null && !isClosed && state is ProfileLoaded) {
@@ -354,39 +356,43 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   void _syncProfileNotesInBackground(String pubkeyHex) {
+    _watchProfileNotes(pubkeyHex);
+    _watchProfileReplies(pubkeyHex);
+
     Future.microtask(() async {
       if (isClosed) return;
       try {
-        await _syncService.syncProfileNotes(pubkeyHex,
-            limit: _pageSize, force: true);
-
-        if (isClosed || state is! ProfileLoaded) return;
-
-        _watchProfileNotes(pubkeyHex);
-        _watchProfileReplies(pubkeyHex);
-
-        final currentState = state as ProfileLoaded;
-
-        final authorIds = currentState.notes
-            .map((n) {
-              final pubkey = n['pubkey'] as String? ?? '';
-              final reposter = n['repostedBy'] as String? ?? '';
-              return [pubkey, reposter];
-            })
-            .expand((ids) => ids)
-            .where((id) => id.isNotEmpty)
-            .toSet()
-            .toList();
-
-        if (authorIds.isNotEmpty) {
-          await _syncService.syncProfiles(authorIds);
-        }
-
-        await InteractionService.instance.refreshAllActive();
+        await _syncService
+            .syncProfileNotes(pubkeyHex, limit: _pageSize, force: true)
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
       } catch (_) {}
+
       if (!isClosed) {
         add(const ProfileSyncCompleted());
       }
+
+      Future.microtask(() async {
+        if (isClosed || state is! ProfileLoaded) return;
+        try {
+          final currentState = state as ProfileLoaded;
+          final authorIds = currentState.notes
+              .map((n) {
+                final pubkey = n['pubkey'] as String? ?? '';
+                final reposter = n['repostedBy'] as String? ?? '';
+                return [pubkey, reposter];
+              })
+              .expand((ids) => ids)
+              .where((id) => id.isNotEmpty)
+              .toSet()
+              .toList();
+
+          if (authorIds.isNotEmpty) {
+            await _syncService.syncProfiles(authorIds);
+          }
+
+          await InteractionService.instance.refreshAllActive();
+        } catch (_) {}
+      });
     });
   }
 
@@ -563,7 +569,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         }
 
         if (missingPubkeys.isNotEmpty) {
-          await _syncService.syncProfiles(missingPubkeys);
+          try {
+            await _syncService
+                .syncProfiles(missingPubkeys)
+                .timeout(const Duration(seconds: 2));
+          } catch (_) {}
           if (isClosed) return;
 
           final synced = await _profileRepository.getProfiles(missingPubkeys);

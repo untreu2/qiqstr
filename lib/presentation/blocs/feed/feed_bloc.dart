@@ -172,15 +172,38 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       if (id.isNotEmpty) displayedIds.add(id);
     }
 
-    int newCount = 0;
+    int othersCount = 0;
+    bool hasOwnNew = false;
     for (final n in sortedNotes) {
       final id = n['id'] as String? ?? '';
-      if (id.isNotEmpty && !displayedIds.contains(id)) newCount++;
+      if (id.isNotEmpty && !displayedIds.contains(id)) {
+        final pubkey = n['pubkey'] as String? ?? '';
+        if (pubkey == _currentUserHex) {
+          hasOwnNew = true;
+        } else {
+          othersCount++;
+        }
+      }
     }
 
-    if (newCount > 0) {
+    if (othersCount > 0) {
       _bufferedNotes = sortedNotes;
-      emit(currentState.copyWith(pendingNotesCount: newCount));
+      if (hasOwnNew) {
+        final ownNotes = sortedNotes.where((n) {
+          final id = n['id'] as String? ?? '';
+          final pubkey = n['pubkey'] as String? ?? '';
+          return displayedIds.contains(id) || pubkey == _currentUserHex;
+        }).toList();
+        emit(currentState.copyWith(
+          notes: ownNotes,
+          pendingNotesCount: othersCount,
+        ));
+      } else {
+        emit(currentState.copyWith(pendingNotesCount: othersCount));
+      }
+    } else if (hasOwnNew) {
+      _bufferedNotes = [];
+      emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
     } else {
       _bufferedNotes = [];
       emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
@@ -204,47 +227,50 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   }
 
   void _syncInBackground(String userHex, Emitter<FeedState>? emit) {
+    _watchFeed(userHex);
+
     Future.microtask(() async {
       if (isClosed) return;
-      try {
-        await Future.wait([
-          _syncService.syncProfile(userHex),
-          _syncService.syncFollowingList(userHex),
-          _syncService.syncMuteList(userHex),
-        ]);
-        if (isClosed) return;
 
-        final ownProfile = await _profileRepository.getProfile(userHex);
-        if (!isClosed && ownProfile != null) {
-          add(feed_event.FeedUserProfileUpdated(userHex, ownProfile.toMap()));
-        }
+      final initialSyncs = Future.wait([
+        _syncService.syncProfile(userHex),
+        _syncService.syncFollowingList(userHex),
+        _syncService.syncMuteList(userHex),
+        _syncService.syncFeed(userHex, force: true),
+      ]);
 
-        final follows = await _feedRepository.getFollowingList(userHex);
-        if (follows != null && follows.isNotEmpty) {
-          _syncService.syncProfiles(follows);
-        }
+      await initialSyncs.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => [],
+      );
 
-        await Future.wait([
-          _syncService.syncBookmarkList(userHex),
-          _syncService.syncPinnedNotes(userHex),
-        ]);
-        if (isClosed) return;
+      if (isClosed) return;
 
-        await _syncService.syncFeed(userHex, force: true);
-        if (isClosed) return;
+      _watchFeed(userHex);
 
-        final currentState = state;
-        if (currentState is FeedLoaded && currentState.activeListId == null) {
-          _watchFeed(userHex);
-        }
+      final ownProfile = await _profileRepository.getProfile(userHex);
+      if (!isClosed && ownProfile != null) {
+        add(feed_event.FeedUserProfileUpdated(userHex, ownProfile.toMap()));
+      }
 
-        await _syncService.startRealtimeSubscriptions(userHex);
-      } catch (_) {}
       if (!isClosed && state is FeedLoaded) {
         add(feed_event.FeedSyncCompleted());
       }
+
       Future.microtask(() async {
+        if (isClosed) return;
         try {
+          final follows = await _feedRepository.getFollowingList(userHex);
+          if (follows != null && follows.isNotEmpty) {
+            _syncService.syncProfiles(follows);
+          }
+
+          await Future.wait([
+            _syncService.syncBookmarkList(userHex),
+            _syncService.syncPinnedNotes(userHex),
+          ]);
+
+          await _syncService.startRealtimeSubscriptions(userHex);
           await _syncService.syncFollowsOfFollows(userHex);
         } catch (_) {}
       });
@@ -479,7 +505,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         }
 
         if (missingPubkeys.isNotEmpty) {
-          await _syncService.syncProfiles(missingPubkeys);
+          try {
+            await _syncService
+                .syncProfiles(missingPubkeys)
+                .timeout(const Duration(seconds: 2));
+          } catch (_) {}
           if (isClosed) return;
 
           final synced = await _profileRepository.getProfiles(missingPubkeys);

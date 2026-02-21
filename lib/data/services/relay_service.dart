@@ -76,11 +76,23 @@ class RustRelayService {
             '[RustRelayService] Initialized successfully with ${urls.length} relays');
       }
 
-      unawaited(rust_relay.connectRelays().catchError((e) {
+      rust_relay.connectRelays().catchError((e) {
         if (kDebugMode) {
           print('[RustRelayService] connectRelays error: $e');
         }
-      }));
+      });
+
+      try {
+        final connected =
+            await rust_relay.waitForReady(timeoutSecs: 2);
+        if (kDebugMode) {
+          print('[RustRelayService] $connected relays connected');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('[RustRelayService] waitForReady error: $e');
+        }
+      }
     } catch (e, stackTrace) {
       if (kDebugMode) {
         print('[RustRelayService] INIT ERROR: $e');
@@ -101,6 +113,17 @@ class RustRelayService {
 
   Future<void> connect() async {
     await rust_relay.connectRelays();
+  }
+
+  Future<int> waitForReady({int timeoutSecs = 5}) async {
+    try {
+      return await rust_relay.waitForReady(timeoutSecs: timeoutSecs);
+    } catch (e) {
+      if (kDebugMode) {
+        print('[RustRelayService] waitForReady error: $e');
+      }
+      return 0;
+    }
   }
 
   Future<void> disconnect() async {

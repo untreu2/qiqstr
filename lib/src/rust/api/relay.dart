@@ -18,6 +18,9 @@ Future<void> initClient(
 Future<void> connectRelays() =>
     RustLib.instance.api.crateApiRelayConnectRelays();
 
+Future<int> waitForReady({required int timeoutSecs}) =>
+    RustLib.instance.api.crateApiRelayWaitForReady(timeoutSecs: timeoutSecs);
+
 Future<void> disconnectRelays() =>
     RustLib.instance.api.crateApiRelayDisconnectRelays();
 
