@@ -751,5 +751,7 @@
   "nwcAccept": "Ich verstehe und stimme zu",
 
   "dmTabFollowing": "Gefolgt",
-  "dmTabOther": "Andere"
+  "dmTabOther": "Andere",
+
+  "dmEncryptionNotice": "Ihre Nachrichten sind Ende-zu-Ende-verschlüsselt. Niemand kann sehen, mit wem Sie sprechen oder was Sie schreiben."
 }

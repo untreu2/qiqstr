@@ -751,5 +751,7 @@
   "nwcAccept": "Anladım ve kabul ediyorum",
 
   "dmTabFollowing": "Takip edilenler",
-  "dmTabOther": "Diğer"
+  "dmTabOther": "Diğer",
+
+  "dmEncryptionNotice": "Mesajlarınız uçtan uca şifrelidir. Kimle konuştuğunuzu veya ne yazdığınızı kimse göremez."
 }

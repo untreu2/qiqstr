@@ -1791,4 +1791,8 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get dmTabOther => 'Andere';
+
+  @override
+  String get dmEncryptionNotice =>
+      'Ihre Nachrichten sind Ende-zu-Ende-verschlüsselt. Niemand kann sehen, mit wem Sie sprechen oder was Sie schreiben.';
 }

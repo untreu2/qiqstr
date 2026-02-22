@@ -818,5 +818,7 @@
   "nwcAccept": "I understand and agree",
 
   "dmTabFollowing": "Following",
-  "dmTabOther": "Other"
+  "dmTabOther": "Other",
+
+  "dmEncryptionNotice": "Your messages are end-to-end encrypted. No one can see who you talk to or what you write."
 }

@@ -1748,4 +1748,8 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dmTabOther => 'Diğer';
+
+  @override
+  String get dmEncryptionNotice =>
+      'Mesajlarınız uçtan uca şifrelidir. Kimle konuştuğunuzu veya ne yazdığınızı kimse göremez.';
 }

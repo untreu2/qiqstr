@@ -3309,6 +3309,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Other'**
   String get dmTabOther;
+
+  /// No description provided for @dmEncryptionNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your messages are end-to-end encrypted. No one can see who you talk to or what you write.'**
+  String get dmEncryptionNotice;
 }
 
 class _AppLocalizationsDelegate

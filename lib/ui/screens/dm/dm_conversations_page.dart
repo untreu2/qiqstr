@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../theme/theme_manager.dart';
 import '../../../presentation/blocs/dm/dm_bloc.dart';
 import '../../../presentation/blocs/dm/dm_event.dart' as dm_events;
 import '../../../presentation/blocs/dm/dm_state.dart';
 import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../widgets/common/title_widget.dart';
 import '../search/users_search_page.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -63,33 +63,75 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   }
 
   Widget _buildPage(BuildContext context, DmState state) {
-    final l10n = AppLocalizations.of(context)!;
-    final topPadding = MediaQuery.of(context).padding.top;
-
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
           Column(
             children: [
-              SizedBox(height: topPadding + 16),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 60, 0),
-                child: TitleWidget(
-                  title: l10n.messages,
-                  fontSize: 32,
-                  useTopPadding: false,
-                  padding: const EdgeInsets.only(bottom: 8),
-                ),
-              ),
+              _buildHeader(context),
               _buildTabBar(context),
               Expanded(
                 child: _buildTabContent(context, state),
               ),
             ],
           ),
-          _buildTopBar(context),
+          _buildNewMessageButton(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 100, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.messages,
+            style: GoogleFonts.poppins(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.dmEncryptionNotice,
+            style: TextStyle(
+              fontSize: 15,
+              color: context.colors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewMessageButton(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    return Positioned(
+      top: topPadding + 16,
+      right: 16,
+      child: GestureDetector(
+        onTap: () => _showUserSearchDialog(context),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: context.colors.textPrimary,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Icon(
+            Icons.add,
+            color: context.colors.background,
+            size: 24,
+          ),
+        ),
       ),
     );
   }
@@ -181,31 +223,6 @@ class _DmConversationsPageState extends State<DmConversationsPage>
           return _buildConversationTile(context, conversations[index]);
         },
         separatorBuilder: (_, __) => const _ConversationSeparator(),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Positioned(
-      top: topPadding + 16,
-      right: 16,
-      child: GestureDetector(
-        onTap: () => _showUserSearchDialog(context),
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: context.colors.textPrimary,
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Icon(
-            Icons.add,
-            color: context.colors.background,
-            size: 24,
-          ),
-        ),
       ),
     );
   }
