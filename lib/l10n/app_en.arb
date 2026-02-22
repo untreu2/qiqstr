@@ -478,7 +478,52 @@
   "mentionedYou": "mentioned you",
   "zappedYou": "zapped you",
   "interactedWithYou": "interacted with you",
+  "andCountOthers": "and {count} others",
+  "@andCountOthers": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "now": "now",
+
+  "notificationSummaryPrefix": "Today you received ",
+  "notificationSummaryAnd": " and ",
+  "notificationReactionCount": "{count, plural, =1{1 reaction} other{{count} reactions}}",
+  "@notificationReactionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationRepostCount": "{count, plural, =1{1 repost} other{{count} reposts}}",
+  "@notificationRepostCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationReplyCount": "{count, plural, =1{1 reply} other{{count} replies}}",
+  "@notificationReplyCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationMentionCount": "{count, plural, =1{1 mention} other{{count} mentions}}",
+  "@notificationMentionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationZapCount": "{count, plural, =1{1 zap} other{{count} zaps}}",
+  "@notificationZapCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationZapSatsCount": "{count, plural, =1{1 sat} other{{count} sats}}",
+  "@notificationZapSatsCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   
   "errorLoadingRelays": "Error loading relays",
   "privateKeyNotFound": "Private key not found. Please set up your profile first",

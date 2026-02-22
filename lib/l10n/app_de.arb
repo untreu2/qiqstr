@@ -408,7 +408,52 @@
   "mentionedYou": "hat dich erwähnt",
   "zappedYou": "hat dir gezappt",
   "interactedWithYou": "hat mit dir interagiert",
+  "andCountOthers": "und {count} weitere",
+  "@andCountOthers": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "now": "jetzt",
+
+  "notificationSummaryPrefix": "Heute erhalten: ",
+  "notificationSummaryAnd": " und ",
+  "notificationReactionCount": "{count, plural, =1{1 Reaktion} other{{count} Reaktionen}}",
+  "@notificationReactionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationRepostCount": "{count, plural, =1{1 Repost} other{{count} Reposts}}",
+  "@notificationRepostCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationReplyCount": "{count, plural, =1{1 Antwort} other{{count} Antworten}}",
+  "@notificationReplyCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationMentionCount": "{count, plural, =1{1 Erwähnung} other{{count} Erwähnungen}}",
+  "@notificationMentionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationZapCount": "{count, plural, =1{1 Zap} other{{count} Zaps}}",
+  "@notificationZapCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationZapSatsCount": "{count} Sats",
+  "@notificationZapSatsCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   
   "errorLoadingRelays": "Fehler beim Laden der Relays",
   "privateKeyNotFound": "Privater Schlüssel nicht gefunden. Bitte richten Sie zuerst Ihr Profil ein",

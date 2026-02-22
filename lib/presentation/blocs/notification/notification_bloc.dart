@@ -141,6 +141,7 @@ class NotificationBloc
         'name': n.fromName ?? '',
         'targetEventId': n.targetNoteId,
         'createdAt': n.createdAt,
+        'zapAmount': n.zapAmount ?? 0,
         'isRead': _readNotificationIds.contains(id),
       };
     }).toList();

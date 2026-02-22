@@ -2116,11 +2116,65 @@ abstract class AppLocalizations {
   /// **'interacted with you'**
   String get interactedWithYou;
 
+  /// No description provided for @andCountOthers.
+  ///
+  /// In en, this message translates to:
+  /// **'and {count} others'**
+  String andCountOthers(int count);
+
   /// No description provided for @now.
   ///
   /// In en, this message translates to:
   /// **'now'**
   String get now;
+
+  /// No description provided for @notificationSummaryPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Today you received '**
+  String get notificationSummaryPrefix;
+
+  /// No description provided for @notificationSummaryAnd.
+  ///
+  /// In en, this message translates to:
+  /// **' and '**
+  String get notificationSummaryAnd;
+
+  /// No description provided for @notificationReactionCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 reaction} other{{count} reactions}}'**
+  String notificationReactionCount(int count);
+
+  /// No description provided for @notificationRepostCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 repost} other{{count} reposts}}'**
+  String notificationRepostCount(int count);
+
+  /// No description provided for @notificationReplyCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 reply} other{{count} replies}}'**
+  String notificationReplyCount(int count);
+
+  /// No description provided for @notificationMentionCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 mention} other{{count} mentions}}'**
+  String notificationMentionCount(int count);
+
+  /// No description provided for @notificationZapCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 zap} other{{count} zaps}}'**
+  String notificationZapCount(int count);
+
+  /// No description provided for @notificationZapSatsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 sat} other{{count} sats}}'**
+  String notificationZapSatsCount(int count);
 
   /// No description provided for @errorLoadingRelays.
   ///

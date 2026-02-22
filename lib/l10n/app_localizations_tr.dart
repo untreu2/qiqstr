@@ -1074,7 +1074,48 @@ class AppLocalizationsTr extends AppLocalizations {
   String get interactedWithYou => 'sizinle etkileşime girdi';
 
   @override
+  String andCountOthers(int count) {
+    return 've $count kişi daha';
+  }
+
+  @override
   String get now => 'şimdi';
+
+  @override
+  String get notificationSummaryPrefix => 'Bugün ';
+
+  @override
+  String get notificationSummaryAnd => ' ve ';
+
+  @override
+  String notificationReactionCount(int count) {
+    return '$count tepki';
+  }
+
+  @override
+  String notificationRepostCount(int count) {
+    return '$count paylaşım';
+  }
+
+  @override
+  String notificationReplyCount(int count) {
+    return '$count yanıt';
+  }
+
+  @override
+  String notificationMentionCount(int count) {
+    return '$count bahsetme';
+  }
+
+  @override
+  String notificationZapCount(int count) {
+    return '$count zap';
+  }
+
+  @override
+  String notificationZapSatsCount(int count) {
+    return '$count sat';
+  }
 
   @override
   String get errorLoadingRelays => 'Röle yükleme hatası';

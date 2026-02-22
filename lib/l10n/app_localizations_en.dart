@@ -1065,7 +1065,84 @@ class AppLocalizationsEn extends AppLocalizations {
   String get interactedWithYou => 'interacted with you';
 
   @override
+  String andCountOthers(int count) {
+    return 'and $count others';
+  }
+
+  @override
   String get now => 'now';
+
+  @override
+  String get notificationSummaryPrefix => 'Today you received ';
+
+  @override
+  String get notificationSummaryAnd => ' and ';
+
+  @override
+  String notificationReactionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reactions',
+      one: '1 reaction',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String notificationRepostCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reposts',
+      one: '1 repost',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String notificationReplyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count replies',
+      one: '1 reply',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String notificationMentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mentions',
+      one: '1 mention',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String notificationZapCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count zaps',
+      one: '1 zap',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String notificationZapSatsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sats',
+      one: '1 sat',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get errorLoadingRelays => 'Error loading relays';

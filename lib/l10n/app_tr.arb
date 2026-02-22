@@ -408,7 +408,52 @@
   "mentionedYou": "sizi bahsetti",
   "zappedYou": "size zap gönderdi",
   "interactedWithYou": "sizinle etkileşime girdi",
+  "andCountOthers": "ve {count} kişi daha",
+  "@andCountOthers": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "now": "şimdi",
+
+  "notificationSummaryPrefix": "Bugün ",
+  "notificationSummaryAnd": " ve ",
+  "notificationReactionCount": "{count} tepki",
+  "@notificationReactionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationRepostCount": "{count} paylaşım",
+  "@notificationRepostCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationReplyCount": "{count} yanıt",
+  "@notificationReplyCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationMentionCount": "{count} bahsetme",
+  "@notificationMentionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationZapCount": "{count} zap",
+  "@notificationZapCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationZapSatsCount": "{count} sat",
+  "@notificationZapSatsCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   
   "errorLoadingRelays": "Röle yükleme hatası",
   "privateKeyNotFound": "Özel anahtar bulunamadı. Lütfen önce profilinizi ayarlayın",
