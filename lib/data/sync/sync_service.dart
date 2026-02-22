@@ -205,6 +205,24 @@ class SyncService {
           limit: 100);
       await _fetchAndStore(filter);
       _notifyDbChanged();
+
+      final notifications =
+          await _db.getHydratedNotifications(userPubkey, limit: 100);
+      final missingPubkeys = <String>{};
+      for (final n in notifications) {
+        final pk = n['fromPubkey'] as String? ?? '';
+        if (pk.isNotEmpty &&
+            pk != userPubkey &&
+            n['fromName'] == null &&
+            n['fromImage'] == null) {
+          missingPubkeys.add(pk);
+        }
+      }
+      if (missingPubkeys.isNotEmpty) {
+        await _syncMissingProfiles(missingPubkeys);
+        _notifyDbChanged();
+      }
+
       _markSynced(key);
     });
   }

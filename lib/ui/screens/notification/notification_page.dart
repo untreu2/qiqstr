@@ -16,6 +16,7 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../utils/thread_chain.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -227,6 +228,24 @@ class _NotificationTileState extends State<_NotificationTile> {
     _loadProfile();
   }
 
+  @override
+  void didUpdateWidget(covariant _NotificationTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldName = oldWidget.notification['fromName'] as String? ?? '';
+    final newName = widget.notification['fromName'] as String? ?? '';
+    final oldImage = oldWidget.notification['fromImage'] as String? ?? '';
+    final newImage = widget.notification['fromImage'] as String? ?? '';
+    if ((newName.isNotEmpty && oldName.isEmpty) ||
+        (newImage.isNotEmpty && oldImage.isEmpty)) {
+      setState(() {
+        _profile = {
+          'name': newName,
+          'profileImage': newImage,
+        };
+      });
+    }
+  }
+
   Future<void> _loadProfile() async {
     final author = widget.notification['author'] as String? ?? '';
     if (author.isEmpty) return;
@@ -235,12 +254,15 @@ class _NotificationTileState extends State<_NotificationTile> {
     final fromImage = widget.notification['fromImage'] as String? ?? '';
 
     if (fromName.isNotEmpty || fromImage.isNotEmpty) {
-      setState(() {
-        _profile = {
-          'name': fromName,
-          'profileImage': fromImage,
-        };
-      });
+      if (mounted) {
+        setState(() {
+          _profile = {
+            'name': fromName,
+            'profileImage': fromImage,
+          };
+        });
+      }
+      return;
     }
 
     try {
@@ -251,6 +273,19 @@ class _NotificationTileState extends State<_NotificationTile> {
           _profile = {
             'name': profile.name ?? profile.displayName ?? '',
             'profileImage': profile.picture ?? '',
+          };
+        });
+        return;
+      }
+
+      final syncService = AppDI.get<SyncService>();
+      await syncService.syncProfile(author);
+      final synced = await profileRepo.getProfile(author);
+      if (synced != null && mounted) {
+        setState(() {
+          _profile = {
+            'name': synced.name ?? synced.displayName ?? '',
+            'profileImage': synced.picture ?? '',
           };
         });
       }
