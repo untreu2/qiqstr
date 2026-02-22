@@ -654,8 +654,9 @@ class DmService {
       await RustRelayService.instance.broadcastEvent(recipientWrap);
       await RustRelayService.instance.broadcastEvent(senderWrap);
 
+      final senderMessage = _unwrapGiftWrapCached(senderWrap, privateKey);
       final optimisticMessage = <String, dynamic>{
-        'id': recipientWrap['id'] as String? ?? '',
+        'id': senderMessage?['id'] as String? ?? recipientWrap['id'] as String? ?? '',
         'senderPubkeyHex': _currentUserPubkeyHex!,
         'recipientPubkeyHex': recipientPubkeyHex,
         'content': content,
@@ -731,8 +732,9 @@ class DmService {
       await RustRelayService.instance.broadcastEvent(recipientWrap);
       await RustRelayService.instance.broadcastEvent(senderWrap);
 
+      final senderMessage = _unwrapGiftWrapCached(senderWrap, privateKey);
       final optimisticMessage = <String, dynamic>{
-        'id': recipientWrap['id'] as String? ?? '',
+        'id': senderMessage?['id'] as String? ?? recipientWrap['id'] as String? ?? '',
         'senderPubkeyHex': _currentUserPubkeyHex!,
         'recipientPubkeyHex': recipientPubkeyHex,
         'content': encryptedFileUrl,
