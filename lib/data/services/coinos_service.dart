@@ -539,15 +539,16 @@ class CoinosService {
       endpoint,
       'GET',
       (json) {
-        final jsonMap = json;
-        final payments = jsonMap['payments'] as List<dynamic>?;
-        if (payments != null) {
-          return payments.map((p) => p as Map<String, dynamic>).toList();
-        }
-        if (json is List) {
-          return (json as List).map((p) => p as Map<String, dynamic>).toList();
-        }
-        return <Map<String, dynamic>>[];
+        final payments = json['payments'] as List<dynamic>?;
+        if (payments == null) return <Map<String, dynamic>>[];
+        return payments.map((p) {
+          final raw = p as Map<String, dynamic>;
+          final mapped = Map<String, dynamic>.from(raw);
+          final amount = (raw['amount'] as num?)?.toDouble() ?? 0.0;
+          mapped['isIncoming'] = amount >= 0;
+          mapped['amount'] = amount.abs();
+          return mapped;
+        }).toList();
       },
     );
   }

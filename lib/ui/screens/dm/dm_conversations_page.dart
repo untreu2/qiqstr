@@ -185,12 +185,9 @@ class _DmConversationsPageState extends State<DmConversationsPage>
     }
 
     final conversations = state.conversations;
-    final following = conversations
-        .where((c) => c['isFollowing'] == true)
-        .toList();
-    final other = conversations
-        .where((c) => c['isFollowing'] != true)
-        .toList();
+    final following =
+        conversations.where((c) => c['isFollowing'] == true).toList();
+    final other = conversations.where((c) => c['isFollowing'] != true).toList();
 
     return TabBarView(
       controller: _tabController,
@@ -217,7 +214,10 @@ class _DmConversationsPageState extends State<DmConversationsPage>
       },
       color: context.colors.textPrimary,
       child: ListView.separated(
-        padding: const EdgeInsets.only(top: 8, bottom: 8),
+        padding: EdgeInsets.only(
+          top: 8,
+          bottom: MediaQuery.of(context).padding.bottom + 100,
+        ),
         itemCount: conversations.length,
         itemBuilder: (context, index) {
           return _buildConversationTile(context, conversations[index]);
