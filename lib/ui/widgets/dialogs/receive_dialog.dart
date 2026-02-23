@@ -8,6 +8,7 @@ import '../../../data/services/nwc_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
+import '../common/snackbar_widget.dart';
 import '../../../l10n/app_localizations.dart';
 
 class ReceiveDialog extends StatefulWidget {
@@ -249,7 +250,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                   ),
                 ),
               ),
-            if (hasLightningAddress) ...[
+            if (hasLightningAddress && _invoice == null) ...[
               GestureDetector(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: widget.lud16!));
@@ -316,12 +317,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                   label: l10n.copy,
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: qrData));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.copiedToClipboard),
-                        backgroundColor: colors.success,
-                      ),
-                    );
+                    AppSnackbar.success(context, l10n.copiedToClipboard);
                   },
                   size: ButtonSize.large,
                 ),

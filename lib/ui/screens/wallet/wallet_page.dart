@@ -9,6 +9,7 @@ import '../../../presentation/blocs/wallet/wallet_event.dart';
 import '../../../presentation/blocs/wallet/wallet_state.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
+import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/dialogs/receive_dialog.dart';
 import '../../widgets/dialogs/send_dialog.dart';
 import '../../widgets/wallet/recaptcha_widget.dart';
@@ -511,19 +512,71 @@ class _WalletPageState extends State<WalletPage>
     super.build(context);
     return BlocProvider<WalletBloc>.value(
       value: AppDI.get<WalletBloc>(),
-      child: BlocBuilder<WalletBloc, WalletState>(
-        builder: (context, state) {
-          if (state is WalletLoading) {
-            return Scaffold(
-              backgroundColor: context.colors.background,
-              body: Center(
-                child: CircularProgressIndicator(
-                    color: context.colors.textPrimary),
-              ),
-            );
-          }
-
+      child: BlocListener<WalletBloc, WalletState>(
+        listener: (context, state) {
           if (state is WalletError) {
+            AppSnackbar.error(context, state.message);
+          }
+        },
+        child: BlocBuilder<WalletBloc, WalletState>(
+          builder: (context, state) {
+            if (state is WalletLoading) {
+              return Scaffold(
+                backgroundColor: context.colors.background,
+                body: Center(
+                  child: CircularProgressIndicator(
+                      color: context.colors.textPrimary),
+                ),
+              );
+            }
+
+            if (state is WalletError) {
+              return Scaffold(
+                backgroundColor: context.colors.background,
+                body: Stack(
+                  children: [
+                    CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(child: _buildHeader(context)),
+                      ],
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: ClipRect(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                          child: Container(
+                            color:
+                                context.colors.surface.withValues(alpha: 0.8),
+                            padding: EdgeInsets.only(
+                              left: 16,
+                              right: 16,
+                              top: 12,
+                              bottom:
+                                  MediaQuery.of(context).padding.bottom + 12,
+                            ),
+                            child: _buildConnectButton(context),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            if (state is! WalletLoaded) {
+              return Scaffold(
+                backgroundColor: context.colors.background,
+                body: Center(
+                  child: CircularProgressIndicator(
+                      color: context.colors.textPrimary),
+                ),
+              );
+            }
+
             return Scaffold(
               backgroundColor: context.colors.background,
               body: Stack(
@@ -531,106 +584,45 @@ class _WalletPageState extends State<WalletPage>
                   CustomScrollView(
                     slivers: [
                       SliverToBoxAdapter(child: _buildHeader(context)),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color:
-                                  context.colors.error.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              state.message,
-                              style: TextStyle(
-                                color: context.colors.error,
-                                fontSize: 14,
+                      if (state.user == null) ...[
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyState(context),
+                        ),
+                      ] else ...[
+                        SliverToBoxAdapter(
+                          child: _buildBalanceSection(context, state),
+                        ),
+                        SliverToBoxAdapter(
+                          child: _buildPriceRow(context, state),
+                        ),
+                        if (state.transactions != null &&
+                            state.transactions!.isNotEmpty)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .recentTransactions,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.colors.textSecondary,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
+                        _buildTransactionsSliver(context, state),
+                      ],
                     ],
                   ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: ClipRect(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                        child: Container(
-                          color: context.colors.surface.withValues(alpha: 0.8),
-                          padding: EdgeInsets.only(
-                            left: 16,
-                            right: 16,
-                            top: 12,
-                            bottom: MediaQuery.of(context).padding.bottom + 12,
-                          ),
-                          child: _buildConnectButton(context),
-                        ),
-                      ),
-                    ),
-                  ),
+                  _buildBottomBar(context, state),
                 ],
               ),
             );
-          }
-
-          if (state is! WalletLoaded) {
-            return Scaffold(
-              backgroundColor: context.colors.background,
-              body: Center(
-                child: CircularProgressIndicator(
-                    color: context.colors.textPrimary),
-              ),
-            );
-          }
-
-          return Scaffold(
-            backgroundColor: context.colors.background,
-            body: Stack(
-              children: [
-                CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(child: _buildHeader(context)),
-                    if (state.user == null) ...[
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _buildEmptyState(context),
-                      ),
-                    ] else ...[
-                      SliverToBoxAdapter(
-                        child: _buildBalanceSection(context, state),
-                      ),
-                      SliverToBoxAdapter(
-                        child: _buildPriceRow(context, state),
-                      ),
-                      if (state.transactions != null &&
-                          state.transactions!.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-                            child: Text(
-                              AppLocalizations.of(context)!.recentTransactions,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      _buildTransactionsSliver(context, state),
-                    ],
-                  ],
-                ),
-                _buildBottomBar(context, state),
-              ],
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }
