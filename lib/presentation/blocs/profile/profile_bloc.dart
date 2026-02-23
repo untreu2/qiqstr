@@ -592,6 +592,23 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     });
   }
 
+  void _preCacheInteractions(List<FeedNote> notes) {
+    final service = InteractionService.instance;
+    for (final note in notes) {
+      if (note.id.isEmpty) continue;
+      final counts = InteractionCounts(
+        reactions: note.reactionCount,
+        reposts: note.repostCount,
+        replies: note.replyCount,
+        zapAmount: note.zapCount,
+        hasReacted: note.hasReacted,
+        hasReposted: note.hasReposted,
+        hasZapped: note.hasZapped,
+      );
+      service.prePopulateCache(note.id, counts);
+    }
+  }
+
   List<Map<String, dynamic>> _feedNotesToMaps(List<FeedNote> notes) {
     return notes.map((note) => note.toMap()).toList();
   }
@@ -633,6 +650,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   ) {
     if (state is! ProfileLoaded) return;
     final currentState = state as ProfileLoaded;
+
+    _preCacheInteractions(event.notes);
 
     final newNoteMaps = _feedNotesToMaps(event.notes);
 

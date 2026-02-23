@@ -5,6 +5,7 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../domain/entities/feed_note.dart';
 import '../../../data/services/follow_set_service.dart';
+import '../../../data/services/interaction_service.dart';
 import 'feed_event.dart' as feed_event;
 import 'feed_state.dart';
 
@@ -152,6 +153,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   ) {
     if (state is! FeedLoaded) return;
     final currentState = state as FeedLoaded;
+
+    _preCacheInteractions(event.notes);
 
     final sortedNotes = _feedNotesToMaps(event.notes);
     _sortNotes(sortedNotes, currentState.sortMode);
@@ -526,6 +529,23 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         }
       } catch (_) {}
     });
+  }
+
+  void _preCacheInteractions(List<FeedNote> notes) {
+    final service = InteractionService.instance;
+    for (final note in notes) {
+      if (note.id.isEmpty) continue;
+      final counts = InteractionCounts(
+        reactions: note.reactionCount,
+        reposts: note.repostCount,
+        replies: note.replyCount,
+        zapAmount: note.zapCount,
+        hasReacted: note.hasReacted,
+        hasReposted: note.hasReposted,
+        hasZapped: note.hasZapped,
+      );
+      service.prePopulateCache(note.id, counts);
+    }
   }
 
   List<Map<String, dynamic>> _feedNotesToMaps(List<FeedNote> notes) {

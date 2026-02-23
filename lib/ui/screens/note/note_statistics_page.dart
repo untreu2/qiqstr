@@ -6,6 +6,7 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../presentation/blocs/note_statistics/note_statistics_bloc.dart';
 import '../../../presentation/blocs/note_statistics/note_statistics_event.dart';
 import '../../../presentation/blocs/note_statistics/note_statistics_state.dart';
@@ -283,6 +284,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
           interactionRepository: AppDI.get<InteractionRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
           authService: AppDI.get<AuthService>(),
+          syncService: AppDI.get<SyncService>(),
           noteId: widget.noteId,
         );
         bloc.add(NoteStatisticsInitialized(noteId: widget.noteId));
@@ -291,7 +293,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       child: BlocBuilder<NoteStatisticsBloc, NoteStatisticsState>(
         builder: (context, state) {
           final l10n = AppLocalizations.of(context)!;
-          
+
           if (state is NoteStatisticsLoading ||
               state is NoteStatisticsInitial) {
             return Scaffold(

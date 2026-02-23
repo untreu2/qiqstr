@@ -46,38 +46,72 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     note = event.note;
     _interactionService.setCurrentUser(currentUserHex);
 
+    final cached = _interactionService.getCachedInteractions(noteId);
+
     InteractionCounts? initialCounts;
     if (note != null) {
       final reactionCount = note!['reactionCount'] as int? ?? 0;
       final repostCount = note!['repostCount'] as int? ?? 0;
       final replyCount = note!['replyCount'] as int? ?? 0;
       final zapCount = note!['zapCount'] as int? ?? 0;
+      final noteHasReacted = note!['hasReacted'] == true;
+      final noteHasReposted = note!['hasReposted'] == true;
+      final noteHasZapped = note!['hasZapped'] == true;
 
-      if (reactionCount > 0 ||
-          repostCount > 0 ||
-          replyCount > 0 ||
-          zapCount > 0) {
-        initialCounts = InteractionCounts(
-          reactions: reactionCount,
-          reposts: repostCount,
-          replies: replyCount,
-          zapAmount: zapCount,
-          hasReacted: _interactionService.hasReacted(noteId),
-          hasReposted: _interactionService.hasReposted(noteId),
-          hasZapped: false,
-        );
-        emit(InteractionLoaded(
-          reactionCount: reactionCount,
-          repostCount: repostCount,
-          replyCount: replyCount,
-          zapAmount: zapCount,
-          hasReacted: initialCounts.hasReacted,
-          hasReposted: initialCounts.hasReposted,
-          hasZapped: false,
-        ));
-      } else {
-        emit(const InteractionLoaded());
-      }
+      final hasReacted = _interactionService.hasReacted(noteId) ||
+          noteHasReacted ||
+          (cached?.hasReacted ?? false);
+      final hasReposted = _interactionService.hasReposted(noteId) ||
+          noteHasReposted ||
+          (cached?.hasReposted ?? false);
+      final hasZapped = _interactionService.hasZapped(noteId) ||
+          noteHasZapped ||
+          (cached?.hasZapped ?? false);
+
+      final effectiveReactions =
+          cached != null && cached.reactions > reactionCount
+              ? cached.reactions
+              : reactionCount;
+      final effectiveReposts = cached != null && cached.reposts > repostCount
+          ? cached.reposts
+          : repostCount;
+      final effectiveReplies = cached != null && cached.replies > replyCount
+          ? cached.replies
+          : replyCount;
+      final effectiveZaps = cached != null && cached.zapAmount > zapCount
+          ? cached.zapAmount
+          : zapCount;
+
+      initialCounts = InteractionCounts(
+        reactions: effectiveReactions,
+        reposts: effectiveReposts,
+        replies: effectiveReplies,
+        zapAmount: effectiveZaps,
+        hasReacted: hasReacted,
+        hasReposted: hasReposted,
+        hasZapped: hasZapped,
+      );
+      emit(InteractionLoaded(
+        reactionCount: effectiveReactions,
+        repostCount: effectiveReposts,
+        replyCount: effectiveReplies,
+        zapAmount: effectiveZaps,
+        hasReacted: hasReacted,
+        hasReposted: hasReposted,
+        hasZapped: hasZapped,
+      ));
+    } else if (cached != null) {
+      initialCounts = cached;
+      emit(InteractionLoaded(
+        reactionCount: cached.reactions,
+        repostCount: cached.reposts,
+        replyCount: cached.replies,
+        zapAmount: cached.zapAmount,
+        hasReacted: cached.hasReacted || _interactionService.hasReacted(noteId),
+        hasReposted:
+            cached.hasReposted || _interactionService.hasReposted(noteId),
+        hasZapped: cached.hasZapped || _interactionService.hasZapped(noteId),
+      ));
     } else {
       emit(const InteractionLoaded());
     }
@@ -95,13 +129,25 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     final currentState =
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
 
+    final hasZapped = event.counts.hasZapped ||
+        _interactionService.hasZapped(noteId) ||
+        (currentState?.hasZapped ?? false);
+    final hasReacted = event.counts.hasReacted ||
+        _interactionService.hasReacted(noteId) ||
+        (currentState?.hasReacted ?? false);
+    final hasReposted = event.counts.hasReposted ||
+        _interactionService.hasReposted(noteId) ||
+        (currentState?.hasReposted ?? false);
+
     if (currentState != null && currentState.zapProcessing) {
       emit(currentState.copyWith(
         reactionCount: event.counts.reactions,
         repostCount: event.counts.reposts,
         replyCount: event.counts.replies,
-        hasReacted: event.counts.hasReacted,
-        hasReposted: event.counts.hasReposted,
+        zapAmount: event.counts.zapAmount,
+        hasReacted: hasReacted,
+        hasReposted: hasReposted,
+        hasZapped: hasZapped,
       ));
       return;
     }
@@ -111,9 +157,9 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       repostCount: event.counts.reposts,
       replyCount: event.counts.replies,
       zapAmount: event.counts.zapAmount,
-      hasReacted: event.counts.hasReacted,
-      hasReposted: event.counts.hasReposted,
-      hasZapped: event.counts.hasZapped,
+      hasReacted: hasReacted,
+      hasReposted: hasReposted,
+      hasZapped: hasZapped,
     ));
   }
 

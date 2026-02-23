@@ -4,9 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/interaction_service.dart';
 import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
+import '../../../data/sync/sync_service.dart';
 import 'note_statistics_event.dart';
 import 'note_statistics_state.dart';
 
@@ -15,18 +15,19 @@ class NoteStatisticsBloc
   final InteractionRepository _interactionRepository;
   final ProfileRepository _profileRepository;
   final AuthService _authService;
-  final InteractionService _interactionService;
+  final SyncService _syncService;
   final String noteId;
 
   NoteStatisticsBloc({
     required InteractionRepository interactionRepository,
     required ProfileRepository profileRepository,
     required AuthService authService,
+    required SyncService syncService,
     required this.noteId,
   })  : _interactionRepository = interactionRepository,
         _profileRepository = profileRepository,
         _authService = authService,
-        _interactionService = InteractionService.instance,
+        _syncService = syncService,
         super(const NoteStatisticsInitial()) {
     on<NoteStatisticsInitialized>(_onNoteStatisticsInitialized);
     on<NoteStatisticsRefreshed>(_onNoteStatisticsRefreshed);
@@ -38,32 +39,10 @@ class NoteStatisticsBloc
   ) async {
     emit(const NoteStatisticsLoading());
 
-    if (kDebugMode) {
-      debugPrint(
-          '[NoteStatisticsBloc] Loading interactions for noteId: $noteId');
-    }
+    await _syncService.syncInteractionsForNote(noteId);
 
-    var interactions =
+    final interactions =
         await _interactionRepository.getDetailedInteractions(noteId);
-
-    if (kDebugMode) {
-      debugPrint(
-          '[NoteStatisticsBloc] Cache returned ${interactions.length} interactions');
-    }
-
-    if (interactions.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('[NoteStatisticsBloc] Cache empty, fetching from relays...');
-      }
-      await _interactionService.refreshInteractions(noteId);
-      await Future.delayed(const Duration(milliseconds: 1000));
-      interactions =
-          await _interactionRepository.getDetailedInteractions(noteId);
-      if (kDebugMode) {
-        debugPrint(
-            '[NoteStatisticsBloc] After refresh: ${interactions.length} interactions');
-      }
-    }
 
     await _buildInteractionsList(emit, interactions);
   }
@@ -72,8 +51,7 @@ class NoteStatisticsBloc
     NoteStatisticsRefreshed event,
     Emitter<NoteStatisticsState> emit,
   ) async {
-    await _interactionService.refreshInteractions(noteId);
-    await Future.delayed(const Duration(milliseconds: 300));
+    await _syncService.syncInteractionsForNote(noteId);
     final interactions =
         await _interactionRepository.getDetailedInteractions(noteId);
     await _buildInteractionsList(emit, interactions);

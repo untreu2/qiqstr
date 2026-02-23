@@ -8,8 +8,6 @@ import '../../src/rust/api/relay.dart' as rust_relay;
 import 'auth_service.dart';
 import 'encrypted_mute_service.dart';
 
-const _kindsOwnOnly = [6, 7, 9735];
-
 class RustDatabaseService {
   static final RustDatabaseService _instance = RustDatabaseService._internal();
   static RustDatabaseService get instance => _instance;
@@ -393,9 +391,8 @@ class RustDatabaseService {
 
   Future<void> saveFeedNotes(List<Map<String, dynamic>> notes) async {
     try {
-      final filtered = await _filterEventsForLmdb(notes);
-      if (filtered.isEmpty) return;
-      final json = jsonEncode(filtered);
+      if (notes.isEmpty) return;
+      final json = jsonEncode(notes);
       await rust_db.dbSaveEvents(eventsJson: json);
       notifyChange();
     } catch (e) {
@@ -501,33 +498,10 @@ class RustDatabaseService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _filterEventsForLmdb(
-      List<Map<String, dynamic>> events) async {
-    final pubResult = await AuthService.instance.getCurrentUserPublicKeyHex();
-    final currentUserHex = pubResult.isSuccess ? pubResult.data : null;
-    if (currentUserHex == null || currentUserHex.isEmpty) {
-      return events
-          .where((e) {
-            final kind = (e['kind'] as num?)?.toInt();
-            return kind == null || !_kindsOwnOnly.contains(kind);
-          })
-          .toList();
-    }
-    return events
-        .where((e) {
-          final kind = (e['kind'] as num?)?.toInt();
-          final pubkey = e['pubkey'] as String? ?? '';
-          if (kind == null || !_kindsOwnOnly.contains(kind)) return true;
-          return pubkey == currentUserHex;
-        })
-        .toList();
-  }
-
   Future<void> saveEvents(List<Map<String, dynamic>> events) async {
     try {
-      final filtered = await _filterEventsForLmdb(events);
-      if (filtered.isEmpty) return;
-      final json = jsonEncode(filtered);
+      if (events.isEmpty) return;
+      final json = jsonEncode(events);
       await rust_db.dbSaveEvents(eventsJson: json);
       notifyChange();
     } catch (e) {
@@ -632,9 +606,8 @@ class RustDatabaseService {
   Future<void> saveNotifications(
       String userPubkey, List<Map<String, dynamic>> notifications) async {
     try {
-      final filtered = await _filterEventsForLmdb(notifications);
-      if (filtered.isEmpty) return;
-      final json = jsonEncode(filtered);
+      if (notifications.isEmpty) return;
+      final json = jsonEncode(notifications);
       await rust_db.dbSaveEvents(eventsJson: json);
       notifyChange();
     } catch (e) {
@@ -810,9 +783,8 @@ class RustDatabaseService {
 
   Future<void> saveArticles(List<Map<String, dynamic>> articles) async {
     try {
-      final filtered = await _filterEventsForLmdb(articles);
-      if (filtered.isEmpty) return;
-      final json = jsonEncode(filtered);
+      if (articles.isEmpty) return;
+      final json = jsonEncode(articles);
       await rust_db.dbSaveEvents(eventsJson: json);
       notifyChange();
     } catch (e) {

@@ -1376,12 +1376,18 @@ async fn hydrate_notes(
         let local_events = client.database().query(local_filter).await?;
 
         let mut reply_counts: HashMap<String, usize> = HashMap::new();
+        let mut reaction_counts: HashMap<String, usize> = HashMap::new();
+        let mut repost_counts: HashMap<String, usize> = HashMap::new();
+        let mut zap_counts: HashMap<String, usize> = HashMap::new();
         let mut has_reacted: HashSet<String> = HashSet::new();
         let mut has_reposted: HashSet<String> = HashSet::new();
         let mut has_zapped: HashSet<String> = HashSet::new();
 
         for nid in &note_ids {
             reply_counts.insert(nid.clone(), 0);
+            reaction_counts.insert(nid.clone(), 0);
+            repost_counts.insert(nid.clone(), 0);
+            zap_counts.insert(nid.clone(), 0);
         }
 
         for ev in local_events.iter() {
@@ -1393,6 +1399,11 @@ async fn hydrate_notes(
                 })
             } else {
                 false
+            };
+            let zap_sats = if ev.kind == Kind::ZapReceipt {
+                extract_zap_amount_sats(ev) as usize
+            } else {
+                0
             };
 
             let mut counted_for: HashSet<String> = HashSet::new();
@@ -1411,12 +1422,21 @@ async fn hydrate_notes(
                                     }
                                 }
                                 k if k == Kind::Reaction => {
+                                    if let Some(c) = reaction_counts.get_mut(&ref_hex) {
+                                        *c += 1;
+                                    }
                                     if is_user { has_reacted.insert(ref_hex); }
                                 }
                                 k if k == Kind::Repost => {
+                                    if let Some(c) = repost_counts.get_mut(&ref_hex) {
+                                        *c += 1;
+                                    }
                                     if is_user { has_reposted.insert(ref_hex); }
                                 }
                                 k if k == Kind::ZapReceipt => {
+                                    if let Some(c) = zap_counts.get_mut(&ref_hex) {
+                                        *c += zap_sats;
+                                    }
                                     if is_zap_sender { has_zapped.insert(ref_hex); }
                                 }
                                 _ => {}
@@ -1430,9 +1450,9 @@ async fn hydrate_notes(
         for note in notes.iter_mut() {
             let nid = note["id"].as_str().map(|s| s.to_string());
             if let Some(ref nid) = nid {
-                note["reactionCount"] = serde_json::json!(0);
-                note["repostCount"] = serde_json::json!(0);
-                note["zapCount"] = serde_json::json!(0);
+                note["reactionCount"] = serde_json::json!(reaction_counts.get(nid).copied().unwrap_or(0));
+                note["repostCount"] = serde_json::json!(repost_counts.get(nid).copied().unwrap_or(0));
+                note["zapCount"] = serde_json::json!(zap_counts.get(nid).copied().unwrap_or(0));
                 note["replyCount"] = serde_json::json!(reply_counts.get(nid).copied().unwrap_or(0));
                 note["hasReacted"] = serde_json::json!(has_reacted.contains(nid));
                 note["hasReposted"] = serde_json::json!(has_reposted.contains(nid));

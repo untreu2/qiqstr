@@ -90,20 +90,31 @@ class InteractionService {
         } else {
           Future.microtask(() => _emit(noteId, cached));
         }
+        if (_isEmptyCounts(_cache[noteId]!)) {
+          _scheduleBatchLoad(noteId);
+        }
       } else if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
         _cache[noteId] = initialCounts;
         Future.microtask(() => _emit(noteId, initialCounts));
+        _scheduleBatchLoad(noteId);
       } else {
         _scheduleBatchLoad(noteId);
       }
     } else if (_cache.containsKey(noteId)) {
-      Future.microtask(() => _emit(noteId, _cache[noteId]!));
-    } else if (initialCounts != null) {
+      final cached = _cache[noteId]!;
+      if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
+        final merged = _mergeCounts(cached, initialCounts);
+        _cache[noteId] = merged;
+        Future.microtask(() => _emit(noteId, merged));
+      } else {
+        Future.microtask(() => _emit(noteId, cached));
+      }
+    } else if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
       _cache[noteId] = initialCounts;
       Future.microtask(() => _emit(noteId, initialCounts));
-      if (_isEmptyCounts(initialCounts)) {
-        _scheduleBatchLoad(noteId);
-      }
+      _scheduleBatchLoad(noteId);
+    } else {
+      _scheduleBatchLoad(noteId);
     }
     return _streams[noteId]!.stream;
   }
@@ -112,11 +123,13 @@ class InteractionService {
     return counts.reactions == 0 &&
         counts.reposts == 0 &&
         counts.replies == 0 &&
-        counts.zapAmount == 0;
+        counts.zapAmount == 0 &&
+        !counts.hasReacted &&
+        !counts.hasReposted &&
+        !counts.hasZapped;
   }
 
-  InteractionCounts _mergeCounts(
-      InteractionCounts a, InteractionCounts b) {
+  InteractionCounts _mergeCounts(InteractionCounts a, InteractionCounts b) {
     return InteractionCounts(
       reactions: a.reactions > b.reactions ? a.reactions : b.reactions,
       reposts: a.reposts > b.reposts ? a.reposts : b.reposts,
@@ -163,19 +176,23 @@ class InteractionService {
         final d = data[noteId];
         if (d == null) continue;
 
-        final hasReacted =
-            _localReactions.contains(noteId) || (d['hasReacted'] == true);
-        final hasReposted =
-            _localReposts.contains(noteId) || (d['hasReposted'] == true);
-        final hasZapped =
-            _localZaps.contains(noteId) || (d['hasZapped'] == true);
-
         final dbReactions = (d['reactions'] as num?)?.toInt() ?? 0;
         final dbReposts = (d['reposts'] as num?)?.toInt() ?? 0;
         final dbReplies = (d['replies'] as num?)?.toInt() ?? 0;
         final dbZaps = (d['zaps'] as num?)?.toInt() ?? 0;
 
         final existing = _cache[noteId];
+
+        final hasReacted = _localReactions.contains(noteId) ||
+            (d['hasReacted'] == true) ||
+            (existing?.hasReacted ?? false);
+        final hasReposted = _localReposts.contains(noteId) ||
+            (d['hasReposted'] == true) ||
+            (existing?.hasReposted ?? false);
+        final hasZapped = _localZaps.contains(noteId) ||
+            (d['hasZapped'] == true) ||
+            (existing?.hasZapped ?? false);
+
         final reactions = existing != null && existing.reactions > dbReactions
             ? existing.reactions
             : dbReactions;
@@ -207,7 +224,8 @@ class InteractionService {
             existing.replies != counts.replies ||
             existing.zapAmount != counts.zapAmount ||
             existing.hasReacted != counts.hasReacted ||
-            existing.hasReposted != counts.hasReposted) {
+            existing.hasReposted != counts.hasReposted ||
+            existing.hasZapped != counts.hasZapped) {
           _emit(noteId, counts);
         }
       }
@@ -254,10 +272,15 @@ class InteractionService {
 
         final existing = _cache[noteId];
 
-        final hasReacted =
-            _localReactions.contains(noteId) || (d['hasReacted'] == true);
-        final hasReposted =
-            _localReposts.contains(noteId) || (d['hasReposted'] == true);
+        final hasReacted = _localReactions.contains(noteId) ||
+            (d['hasReacted'] == true) ||
+            (existing?.hasReacted ?? false);
+        final hasReposted = _localReposts.contains(noteId) ||
+            (d['hasReposted'] == true) ||
+            (existing?.hasReposted ?? false);
+        final hasZapped = _localZaps.contains(noteId) ||
+            (d['hasZapped'] == true) ||
+            (existing?.hasZapped ?? false);
 
         final reactions = existing != null
             ? (relayReactions > existing.reactions
@@ -285,7 +308,7 @@ class InteractionService {
           zapAmount: zapAmount,
           hasReacted: hasReacted,
           hasReposted: hasReposted,
-          hasZapped: _localZaps.contains(noteId),
+          hasZapped: hasZapped,
         );
 
         if (existing == null ||
@@ -294,7 +317,8 @@ class InteractionService {
             counts.replies != existing.replies ||
             counts.zapAmount != existing.zapAmount ||
             counts.hasReacted != existing.hasReacted ||
-            counts.hasReposted != existing.hasReposted) {
+            counts.hasReposted != existing.hasReposted ||
+            counts.hasZapped != existing.hasZapped) {
           _cache[noteId] = counts;
           _emit(noteId, counts);
         }
@@ -372,6 +396,7 @@ class InteractionService {
   InteractionCounts? getCachedInteractions(String noteId) => _cache[noteId];
   bool hasReacted(String noteId) => _localReactions.contains(noteId);
   bool hasReposted(String noteId) => _localReposts.contains(noteId);
+  bool hasZapped(String noteId) => _localZaps.contains(noteId);
 
   void disposeStream(String noteId) {
     _streams[noteId]?.close();

@@ -18,6 +18,9 @@ class FeedNote {
   final int repostCount;
   final int replyCount;
   final int zapCount;
+  final bool hasReacted;
+  final bool hasReposted;
+  final bool hasZapped;
 
   const FeedNote({
     required this.id,
@@ -39,6 +42,9 @@ class FeedNote {
     this.repostCount = 0,
     this.replyCount = 0,
     this.zapCount = 0,
+    this.hasReacted = false,
+    this.hasReposted = false,
+    this.hasZapped = false,
   });
 
   factory FeedNote.fromMap(Map<String, dynamic> map) {
@@ -68,6 +74,9 @@ class FeedNote {
       repostCount: map['repostCount'] as int? ?? 0,
       replyCount: map['replyCount'] as int? ?? 0,
       zapCount: map['zapCount'] as int? ?? 0,
+      hasReacted: map['hasReacted'] as bool? ?? false,
+      hasReposted: map['hasReposted'] as bool? ?? false,
+      hasZapped: map['hasZapped'] as bool? ?? false,
     );
   }
 
@@ -91,6 +100,9 @@ class FeedNote {
     int? repostCount,
     int? replyCount,
     int? zapCount,
+    bool? hasReacted,
+    bool? hasReposted,
+    bool? hasZapped,
   }) {
     return FeedNote(
       id: id ?? this.id,
@@ -112,6 +124,9 @@ class FeedNote {
       repostCount: repostCount ?? this.repostCount,
       replyCount: replyCount ?? this.replyCount,
       zapCount: zapCount ?? this.zapCount,
+      hasReacted: hasReacted ?? this.hasReacted,
+      hasReposted: hasReposted ?? this.hasReposted,
+      hasZapped: hasZapped ?? this.hasZapped,
     );
   }
 
@@ -161,6 +176,9 @@ class FeedNote {
       'repostCount': repostCount,
       'replyCount': replyCount,
       'zapCount': zapCount,
+      'hasReacted': hasReacted,
+      'hasReposted': hasReposted,
+      'hasZapped': hasZapped,
     };
   }
 }

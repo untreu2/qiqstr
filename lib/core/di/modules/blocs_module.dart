@@ -150,6 +150,7 @@ class BlocsModule extends DIModule {
           interactionRepository: AppDI.get<InteractionRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
           authService: AppDI.get<AuthService>(),
+          syncService: AppDI.get<SyncService>(),
           noteId: '',
         ));
 
