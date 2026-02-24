@@ -11,9 +11,13 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 Future<void> initClient(
         {required List<String> relayUrls,
         String? privateKeyHex,
-        String? dbPath}) =>
+        String? dbPath,
+        required List<String> discoveryRelays}) =>
     RustLib.instance.api.crateApiRelayInitClient(
-        relayUrls: relayUrls, privateKeyHex: privateKeyHex, dbPath: dbPath);
+        relayUrls: relayUrls,
+        privateKeyHex: privateKeyHex,
+        dbPath: dbPath,
+        discoveryRelays: discoveryRelays);
 
 Future<void> connectRelays() =>
     RustLib.instance.api.crateApiRelayConnectRelays();
@@ -52,9 +56,13 @@ Future<String> getRelayStatus() =>
     RustLib.instance.api.crateApiRelayGetRelayStatus();
 
 Future<String> discoverAndConnectOutboxRelays(
-        {required List<String> pubkeysHex}) =>
-    RustLib.instance.api
-        .crateApiRelayDiscoverAndConnectOutboxRelays(pubkeysHex: pubkeysHex);
+        {required List<String> pubkeysHex,
+        required BigInt maxOutboxRelays,
+        required BigInt minRelayFrequency}) =>
+    RustLib.instance.api.crateApiRelayDiscoverAndConnectOutboxRelays(
+        pubkeysHex: pubkeysHex,
+        maxOutboxRelays: maxOutboxRelays,
+        minRelayFrequency: minRelayFrequency);
 
 Future<String> syncEvents({required String filterJson}) =>
     RustLib.instance.api.crateApiRelaySyncEvents(filterJson: filterJson);

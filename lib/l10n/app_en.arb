@@ -589,7 +589,7 @@
   "broadcasted": "broadcasted",
   
   "gossipMode": "Gossip Mode",
-  "gossipModeDescription": "Automatically discover and connect to relays used by people you follow. When off, only your own relays above are used to read and write.",
+  "gossipModeDescription": "Automatically discover and connect to relays used by people you follow. When off, only your own relays are used to read and write.",
   "fetching": "Fetching...",
   "fetch": "Fetch",
   "publishing": "Publishing...",

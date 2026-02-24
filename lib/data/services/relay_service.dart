@@ -67,6 +67,7 @@ class RustRelayService {
         relayUrls: urls,
         privateKeyHex: privateKeyHex,
         dbPath: dbPath,
+        discoveryRelays: discoveryRelays,
       );
 
       _initialized = true;
@@ -83,8 +84,7 @@ class RustRelayService {
       });
 
       try {
-        final connected =
-            await rust_relay.waitForReady(timeoutSecs: 2);
+        final connected = await rust_relay.waitForReady(timeoutSecs: 2);
         if (kDebugMode) {
           print('[RustRelayService] $connected relays connected');
         }
@@ -268,8 +268,13 @@ class RustRelayService {
   Future<Map<String, dynamic>> discoverAndConnectOutboxRelays(
       List<String> pubkeysHex) async {
     try {
+      final mode = await getGossipMode();
+      final maxRelays = gossipMaxOutboxRelays[mode]!;
+      final minFreq = gossipMinRelayFrequency[mode]!;
       final resultJson = await rust_relay.discoverAndConnectOutboxRelays(
         pubkeysHex: pubkeysHex,
+        maxOutboxRelays: BigInt.from(maxRelays),
+        minRelayFrequency: BigInt.from(minFreq),
       );
       final result = jsonDecode(resultJson) as Map<String, dynamic>;
       if (kDebugMode) {
@@ -300,8 +305,7 @@ class RustRelayService {
     return await rust_relay.resolveThreadRoot(noteId: noteId);
   }
 
-  Future<int> syncRepliesRecursive(String noteId,
-      {int maxDepth = 3}) async {
+  Future<int> syncRepliesRecursive(String noteId, {int maxDepth = 3}) async {
     final count = await rust_relay.syncRepliesRecursive(
       noteId: noteId,
       maxDepth: maxDepth,

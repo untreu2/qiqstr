@@ -415,7 +415,9 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiRelayDisconnectRelays();
 
   Future<String> crateApiRelayDiscoverAndConnectOutboxRelays(
-      {required List<String> pubkeysHex});
+      {required List<String> pubkeysHex,
+      required BigInt maxOutboxRelays,
+      required BigInt minRelayFrequency});
 
   String crateApiNip19EncodeBasicBech32(
       {required String hexStr, required String prefix});
@@ -451,7 +453,10 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiRelayGetRelayStatus();
 
   Future<void> crateApiRelayInitClient(
-      {required List<String> relayUrls, String? privateKeyHex, String? dbPath});
+      {required List<String> relayUrls,
+      String? privateKeyHex,
+      String? dbPath,
+      required List<String> discoveryRelays});
 
   Future<bool> crateApiRelayIsClientInitialized();
 
@@ -3007,11 +3012,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiRelayDiscoverAndConnectOutboxRelays(
-      {required List<String> pubkeysHex}) {
+      {required List<String> pubkeysHex,
+      required BigInt maxOutboxRelays,
+      required BigInt minRelayFrequency}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_String(pubkeysHex, serializer);
+        sse_encode_usize(maxOutboxRelays, serializer);
+        sse_encode_usize(minRelayFrequency, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 84, port: port_);
       },
@@ -3020,7 +3029,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiRelayDiscoverAndConnectOutboxRelaysConstMeta,
-      argValues: [pubkeysHex],
+      argValues: [pubkeysHex, maxOutboxRelays, minRelayFrequency],
       apiImpl: this,
     ));
   }
@@ -3028,7 +3037,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiRelayDiscoverAndConnectOutboxRelaysConstMeta =>
       const TaskConstMeta(
         debugName: "discover_and_connect_outbox_relays",
-        argNames: ["pubkeysHex"],
+        argNames: ["pubkeysHex", "maxOutboxRelays", "minRelayFrequency"],
       );
 
   @override
@@ -3377,13 +3386,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<void> crateApiRelayInitClient(
       {required List<String> relayUrls,
       String? privateKeyHex,
-      String? dbPath}) {
+      String? dbPath,
+      required List<String> discoveryRelays}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_String(relayUrls, serializer);
         sse_encode_opt_String(privateKeyHex, serializer);
         sse_encode_opt_String(dbPath, serializer);
+        sse_encode_list_String(discoveryRelays, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 99, port: port_);
       },
@@ -3392,14 +3403,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiRelayInitClientConstMeta,
-      argValues: [relayUrls, privateKeyHex, dbPath],
+      argValues: [relayUrls, privateKeyHex, dbPath, discoveryRelays],
       apiImpl: this,
     ));
   }
 
   TaskConstMeta get kCrateApiRelayInitClientConstMeta => const TaskConstMeta(
         debugName: "init_client",
-        argNames: ["relayUrls", "privateKeyHex", "dbPath"],
+        argNames: ["relayUrls", "privateKeyHex", "dbPath", "discoveryRelays"],
       );
 
   @override
@@ -4411,6 +4422,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BigInt dco_decode_usize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
+
+  @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_String(deserializer);
@@ -4568,6 +4585,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
@@ -4731,6 +4754,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
   }
 
   @protected

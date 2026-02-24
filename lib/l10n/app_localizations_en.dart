@@ -1274,7 +1274,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get gossipModeDescription =>
-      'Automatically discover and connect to relays used by people you follow. When off, only your own relays above are used to read and write.';
+      'Automatically discover and connect to relays used by people you follow. When off, only your own relays are used to read and write.';
 
   @override
   String get fetching => 'Fetching...';

@@ -3348,13 +3348,18 @@ fn wire__crate__api__relay__discover_and_connect_outbox_relays_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_pubkeys_hex = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_max_outbox_relays = <usize>::sse_decode(&mut deserializer);
+            let api_min_relay_frequency = <usize>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok =
-                            crate::api::relay::discover_and_connect_outbox_relays(api_pubkeys_hex)
-                                .await?;
+                        let output_ok = crate::api::relay::discover_and_connect_outbox_relays(
+                            api_pubkeys_hex,
+                            api_max_outbox_relays,
+                            api_min_relay_frequency,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -3868,6 +3873,7 @@ fn wire__crate__api__relay__init_client_impl(
             let api_relay_urls = <Vec<String>>::sse_decode(&mut deserializer);
             let api_private_key_hex = <Option<String>>::sse_decode(&mut deserializer);
             let api_db_path = <Option<String>>::sse_decode(&mut deserializer);
+            let api_discovery_relays = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
@@ -3876,6 +3882,7 @@ fn wire__crate__api__relay__init_client_impl(
                             api_relay_urls,
                             api_private_key_hex,
                             api_db_path,
+                            api_discovery_relays,
                         )
                         .await?;
                         Ok(output_ok)
@@ -5306,6 +5313,13 @@ impl SseDecode for () {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
 }
 
+impl SseDecode for usize {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u64::<NativeEndian>().unwrap() as _
+    }
+}
+
 impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5815,6 +5829,16 @@ impl SseEncode for u8 {
 impl SseEncode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
+}
+
+impl SseEncode for usize {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer
+            .cursor
+            .write_u64::<NativeEndian>(self as _)
+            .unwrap();
+    }
 }
 
 impl SseEncode for i32 {

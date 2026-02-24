@@ -17,16 +17,6 @@ fn counting_client_lock() -> &'static RwLock<Option<Client>> {
     COUNTING_CLIENT.get_or_init(|| RwLock::new(None))
 }
 
-const DISCOVERY_RELAYS: &[&str] = &[
-    "wss://relay.damus.io",
-    "wss://nos.lol",
-    "wss://relay.primal.net",
-    "wss://vitor.nostr1.com",
-];
-
-const MAX_OUTBOX_RELAYS: usize = 30;
-const MIN_RELAY_FREQUENCY: usize = 2;
-
 static CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
 static USER_RELAYS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
 static DB_PATH: OnceLock<RwLock<Option<String>>> = OnceLock::new();
@@ -130,6 +120,7 @@ pub async fn init_client(
     relay_urls: Vec<String>,
     private_key_hex: Option<String>,
     db_path: Option<String>,
+    discovery_relays: Vec<String>,
 ) -> Result<()> {
     let mut builder = Client::builder();
 
@@ -154,9 +145,9 @@ pub async fn init_client(
         .collect();
     futures::future::join_all(relay_futures).await;
 
-    let discovery_futures: Vec<_> = DISCOVERY_RELAYS
+    let discovery_futures: Vec<_> = discovery_relays
         .iter()
-        .map(|url| client.add_discovery_relay(*url))
+        .map(|url| client.add_discovery_relay(url.as_str()))
         .collect();
     futures::future::join_all(discovery_futures).await;
 
@@ -351,7 +342,11 @@ pub async fn get_relay_status() -> Result<String> {
     Ok(result.to_string())
 }
 
-pub async fn discover_and_connect_outbox_relays(pubkeys_hex: Vec<String>) -> Result<String> {
+pub async fn discover_and_connect_outbox_relays(
+    pubkeys_hex: Vec<String>,
+    max_outbox_relays: usize,
+    min_relay_frequency: usize,
+) -> Result<String> {
     let client = get_client().await?;
 
     let public_keys: Vec<PublicKey> = pubkeys_hex
@@ -437,12 +432,12 @@ pub async fn discover_and_connect_outbox_relays(pubkeys_hex: Vec<String>) -> Res
 
     let mut candidates: Vec<(String, usize, bool, bool)> = all_relays
         .into_iter()
-        .filter(|(_, (count, _, _))| *count >= MIN_RELAY_FREQUENCY)
+        .filter(|(_, (count, _, _))| *count >= min_relay_frequency)
         .map(|(url, (count, is_outbox, is_inbox))| (url, count, is_outbox, is_inbox))
         .collect();
 
     candidates.sort_by(|a, b| b.1.cmp(&a.1));
-    candidates.truncate(MAX_OUTBOX_RELAYS);
+    candidates.truncate(max_outbox_relays);
 
     let discovered_count = candidates.len() as u32;
     let mut added_count: u32 = 0;

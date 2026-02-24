@@ -2407,7 +2407,7 @@ abstract class AppLocalizations {
   /// No description provided for @gossipModeDescription.
   ///
   /// In en, this message translates to:
-  /// **'Automatically discover and connect to relays used by people you follow. When off, only your own relays above are used to read and write.'**
+  /// **'Automatically discover and connect to relays used by people you follow. When off, only your own relays are used to read and write.'**
   String get gossipModeDescription;
 
   /// No description provided for @fetching.

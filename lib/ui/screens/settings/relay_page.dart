@@ -39,6 +39,7 @@ class _RelayPageState extends State<RelayPage> {
   bool _isPublishingRelays = false;
   bool _disposed = false;
   bool _gossipModelEnabled = false;
+  GossipMode _gossipMode = GossipMode.normal;
   int _connectedRelayCount = 0;
   int _totalRelayCount = 0;
   int _totalBytesSent = 0;
@@ -132,6 +133,8 @@ class _RelayPageState extends State<RelayPage> {
       final userRelaysJson = prefs.getString('user_relays');
       final flagsJson = prefs.getString('relay_flags');
       _gossipModelEnabled = prefs.getBool('gossip_model_enabled') ?? false;
+      _gossipMode =
+          gossipModeFromString(prefs.getString('gossip_mode') ?? 'normal');
 
       if (userRelaysJson != null) {
         final List<dynamic> decoded = jsonDecode(userRelaysJson);
@@ -161,7 +164,6 @@ class _RelayPageState extends State<RelayPage> {
         _relayFlags = loadedFlags;
         _isLoading = false;
       });
-
     } catch (e) {
       setState(() {
         _relays = List.from(relaySetMainSockets);
@@ -173,7 +175,8 @@ class _RelayPageState extends State<RelayPage> {
       });
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
-        AppSnackbar.error(context, '${l10n.errorLoadingRelays}: ${e.toString()}');
+        AppSnackbar.error(
+            context, '${l10n.errorLoadingRelays}: ${e.toString()}');
       }
     }
   }
@@ -190,8 +193,7 @@ class _RelayPageState extends State<RelayPage> {
       if (privateKeyResult.isError || privateKeyResult.data == null) {
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
-          AppSnackbar.error(
-              context, l10n.privateKeyNotFound);
+          AppSnackbar.error(context, l10n.privateKeyNotFound);
         }
         return;
       }
@@ -338,7 +340,8 @@ class _RelayPageState extends State<RelayPage> {
         'limit': 1,
       };
 
-      final events = await RustRelayService.instance.fetchEvents(filter, timeoutSecs: 10);
+      final events =
+          await RustRelayService.instance.fetchEvents(filter, timeoutSecs: 10);
 
       if (events.isNotEmpty) {
         final eventData = events.first;
@@ -379,17 +382,15 @@ class _RelayPageState extends State<RelayPage> {
   Future<void> _useUserRelays() async {
     if (_userRelays.isEmpty) {
       final l10n = AppLocalizations.of(context)!;
-      AppSnackbar.info(
-          context, l10n.noRelayListFoundInYourProfile);
+      AppSnackbar.info(context, l10n.noRelayListFoundInYourProfile);
       return;
     }
 
     try {
       final previousRelays = Set<String>.from(_relays.map(_normalizeRelayUrl));
 
-      final newRelays = _userRelays
-          .map((relay) => relay['url'] as String)
-          .toList();
+      final newRelays =
+          _userRelays.map((relay) => relay['url'] as String).toList();
 
       final newFlags = <String, Map<String, bool>>{};
       for (final relay in _userRelays) {
@@ -463,7 +464,8 @@ class _RelayPageState extends State<RelayPage> {
       }
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
-        AppSnackbar.error(context, '${l10n.errorSavingRelays}: ${e.toString()}');
+        AppSnackbar.error(
+            context, '${l10n.errorSavingRelays}: ${e.toString()}');
       }
     }
   }
@@ -496,8 +498,7 @@ class _RelayPageState extends State<RelayPage> {
 
     if (!_isValidRelayUrl(url)) {
       final l10n = AppLocalizations.of(context)!;
-      AppSnackbar.error(
-          context, l10n.invalidRelayUrl);
+      AppSnackbar.error(context, l10n.invalidRelayUrl);
       return;
     }
 
@@ -567,8 +568,8 @@ class _RelayPageState extends State<RelayPage> {
         return;
       }
 
-      AppSnackbar.info(
-          context, l10n.broadcastingEvents(result.allEvents.length, relayUrls.length));
+      AppSnackbar.info(context,
+          l10n.broadcastingEvents(result.allEvents.length, relayUrls.length));
 
       final success = await EventCountsService.instance.rebroadcastEvents(
         result.allEvents,
@@ -580,7 +581,8 @@ class _RelayPageState extends State<RelayPage> {
       if (success) {
         AppSnackbar.success(
           context,
-          l10n.eventsSuccessfullyBroadcast(result.allEvents.length, relayUrls.length),
+          l10n.eventsSuccessfullyBroadcast(
+              result.allEvents.length, relayUrls.length),
         );
       } else {
         AppSnackbar.error(context, l10n.errorBroadcastingEvents);
@@ -755,11 +757,16 @@ class _RelayPageState extends State<RelayPage> {
                   activeThumbColor: context.colors.switchActive,
                   inactiveThumbColor: context.colors.textSecondary,
                   inactiveTrackColor: context.colors.border,
-                  activeTrackColor: context.colors.switchActive.withValues(alpha: 0.3),
+                  activeTrackColor:
+                      context.colors.switchActive.withValues(alpha: 0.3),
                 ),
               ],
             ),
           ),
+          if (_gossipModelEnabled) ...[
+            const SizedBox(height: 8),
+            _buildGossipModeSelector(context),
+          ],
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -774,6 +781,56 @@ class _RelayPageState extends State<RelayPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildGossipModeSelector(BuildContext context) {
+    final modes = [
+      (GossipMode.normal, 'Normal'),
+      (GossipMode.aggressive, 'Aggressive'),
+      (GossipMode.psycho, 'Psycho'),
+    ];
+
+    return Row(
+      children: modes.map((entry) {
+        final (mode, label) = entry;
+        final isSelected = _gossipMode == mode;
+        return Expanded(
+          child: GestureDetector(
+            onTap: () async {
+              setState(() => _gossipMode = mode);
+              await setGossipMode(mode);
+            },
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? context.colors.switchActive.withValues(alpha: 0.15)
+                    : context.colors.overlayLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected
+                      ? context.colors.switchActive
+                      : Colors.transparent,
+                  width: 1.5,
+                ),
+              ),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected
+                      ? context.colors.switchActive
+                      : context.colors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -840,11 +897,13 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  Widget _buildRelayTile(String relay, bool isMainRelay, AppLocalizations l10n) {
+  Widget _buildRelayTile(
+      String relay, bool isMainRelay, AppLocalizations l10n) {
     final stats = _relayStats[relay];
     final relayStatus = stats?['status'] as String? ?? 'disconnected';
     final isConnected = relayStatus == 'connected';
-    final isConnecting = relayStatus == 'connecting' || relayStatus == 'pending';
+    final isConnecting =
+        relayStatus == 'connecting' || relayStatus == 'pending';
 
     return RepaintBoundary(
       child: Container(
