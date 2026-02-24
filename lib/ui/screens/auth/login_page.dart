@@ -22,6 +22,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _inputController = TextEditingController();
   String _message = '';
   bool _isLoading = false;
+  bool _obscureText = true;
   final AuthService _authService = AuthService.instance;
 
   @override
@@ -163,23 +164,38 @@ class _LoginPageState extends State<LoginPage> {
             controller: _inputController,
             labelText: l10n.enterSeedPhraseOrNsec,
             fillColor: context.colors.inputFill,
+            obscureText: _obscureText,
             suffixIcon: Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: _pasteFromClipboard,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: context.colors.textPrimary,
-                    shape: BoxShape.circle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () => setState(() => _obscureText = !_obscureText),
+                    child: Icon(
+                      _obscureText ? Icons.visibility_off : Icons.visibility,
+                      color: context.colors.textSecondary,
+                      size: 22,
+                    ),
                   ),
-                  child: Icon(
-                    Icons.content_paste,
-                    color: context.colors.background,
-                    size: 20,
+                  const SizedBox(width: 16),
+                  GestureDetector(
+                    onTap: _pasteFromClipboard,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: context.colors.textPrimary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.content_paste,
+                        color: context.colors.background,
+                        size: 20,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),

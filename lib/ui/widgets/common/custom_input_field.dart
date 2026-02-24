@@ -26,6 +26,7 @@ class CustomInputField extends StatelessWidget {
   final EdgeInsets? contentPadding;
   final double? height;
   final TextCapitalization textCapitalization;
+  final bool obscureText;
 
   const CustomInputField({
     super.key,
@@ -53,6 +54,7 @@ class CustomInputField extends StatelessWidget {
     this.contentPadding,
     this.height = 56,
     this.textCapitalization = TextCapitalization.none,
+    this.obscureText = false,
   });
 
   @override
@@ -100,6 +102,7 @@ class CustomInputField extends StatelessWidget {
         maxLength: maxLength,
         keyboardType: keyboardType,
         textCapitalization: textCapitalization,
+        obscureText: obscureText,
         onChanged: onChanged,
         onEditingComplete: onEditingComplete,
         onFieldSubmitted: onSubmitted,
@@ -125,6 +128,7 @@ class CustomInputField extends StatelessWidget {
         maxLength: maxLength,
         keyboardType: keyboardType,
         textCapitalization: textCapitalization,
+        obscureText: obscureText,
         onChanged: onChanged,
         onEditingComplete: onEditingComplete,
         onSubmitted: onSubmitted,
