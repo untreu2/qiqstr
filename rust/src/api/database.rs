@@ -1,9 +1,18 @@
 use std::collections::{HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use nostr_sdk::prelude::*;
 
 use super::relay::get_client_pub;
+
+fn is_future_dated(event: &Event) -> bool {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    event.created_at.as_secs() > now
+}
 
 fn is_event_muted(event: &Event, muted_pubkeys: &[String], muted_words: &[String]) -> bool {
     if muted_pubkeys.is_empty() && muted_words.is_empty() {
@@ -363,7 +372,7 @@ pub async fn db_get_feed_notes(authors_hex: Vec<String>, limit: u32, muted_pubke
 
     let json: Vec<serde_json::Value> = events
         .into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
@@ -381,7 +390,7 @@ pub async fn db_get_profile_notes(pubkey_hex: String, limit: u32, muted_pubkeys:
 
     let json: Vec<serde_json::Value> = events
         .into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
@@ -398,7 +407,7 @@ pub async fn db_get_hashtag_notes(hashtag: String, limit: u32, muted_pubkeys: Ve
 
     let json: Vec<serde_json::Value> = events
         .into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
         .collect();
     Ok(serde_json::to_string(&json)?)
@@ -1484,7 +1493,7 @@ pub async fn db_get_hydrated_feed_notes(
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events.into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
     hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await
@@ -1508,7 +1517,7 @@ pub async fn db_get_hydrated_profile_notes(
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events.into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
     hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await
@@ -1530,7 +1539,7 @@ pub async fn db_get_hydrated_hashtag_notes(
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events.into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
     hydrate_notes(&client, &filtered, true, current_user_pubkey_hex).await
@@ -1553,7 +1562,7 @@ pub async fn db_get_hydrated_replies(
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events.into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
     hydrate_notes(&client, &filtered, false, current_user_pubkey_hex).await
