@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import '../../src/rust/api/nip17.dart' as nip17;
 import '../../src/rust/api/events.dart' as rust_events;
@@ -13,12 +14,13 @@ class EncryptedBookmarkService {
   List<String> _bookmarkedEventIds = [];
   bool _initialized = false;
 
-  List<String> get bookmarkedEventIds =>
-      List.unmodifiable(_bookmarkedEventIds);
+  final _changesController = StreamController<void>.broadcast();
+  Stream<void> get changes => _changesController.stream;
+
+  List<String> get bookmarkedEventIds => List.unmodifiable(_bookmarkedEventIds);
   bool get isInitialized => _initialized;
 
-  bool isBookmarked(String eventId) =>
-      _bookmarkedEventIds.contains(eventId);
+  bool isBookmarked(String eventId) => _bookmarkedEventIds.contains(eventId);
 
   Future<void> loadFromDatabase({
     required String userPubkeyHex,
@@ -69,10 +71,7 @@ class EncryptedBookmarkService {
     final tags = event['tags'] as List<dynamic>? ?? [];
     return tags
         .where((tag) =>
-            tag is List &&
-            tag.isNotEmpty &&
-            tag[0] == 'e' &&
-            tag.length > 1)
+            tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1)
         .map((tag) => (tag as List)[1] as String)
         .toList();
   }
@@ -81,10 +80,7 @@ class EncryptedBookmarkService {
     final privateTags = jsonDecode(decryptedJson) as List<dynamic>;
     return privateTags
         .where((tag) =>
-            tag is List &&
-            tag.isNotEmpty &&
-            tag[0] == 'e' &&
-            tag.length > 1)
+            tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1)
         .map((tag) => (tag as List)[1] as String)
         .toList();
   }
@@ -124,21 +120,25 @@ class EncryptedBookmarkService {
   void addBookmark(String eventId) {
     if (!_bookmarkedEventIds.contains(eventId)) {
       _bookmarkedEventIds = [..._bookmarkedEventIds, eventId];
+      _changesController.add(null);
     }
   }
 
   void removeBookmark(String eventId) {
     _bookmarkedEventIds =
         _bookmarkedEventIds.where((id) => id != eventId).toList();
+    _changesController.add(null);
   }
 
   void updateCache({List<String>? eventIds}) {
     if (eventIds != null) _bookmarkedEventIds = List.from(eventIds);
     _initialized = true;
+    _changesController.add(null);
   }
 
   void clear() {
     _bookmarkedEventIds = [];
     _initialized = false;
+    _changesController.add(null);
   }
 }

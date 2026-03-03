@@ -45,12 +45,22 @@ class InteractionBar extends StatefulWidget {
 class _InteractionBarState extends State<InteractionBar> {
   late final InteractionBloc _interactionBloc;
   bool _isBookmarked = false;
+  StreamSubscription<void>? _bookmarkChangesSubscription;
 
   @override
   void initState() {
     super.initState();
     _isBookmarked =
         EncryptedBookmarkService.instance.isBookmarked(widget.noteId);
+    _bookmarkChangesSubscription =
+        EncryptedBookmarkService.instance.changes.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isBookmarked =
+              EncryptedBookmarkService.instance.isBookmarked(widget.noteId);
+        });
+      }
+    });
     _interactionBloc = InteractionBloc(
       syncService: AppDI.get<SyncService>(),
       feedRepository: AppDI.get<FeedRepository>(),
@@ -75,6 +85,7 @@ class _InteractionBarState extends State<InteractionBar> {
 
   @override
   void dispose() {
+    _bookmarkChangesSubscription?.cancel();
     _interactionBloc.close();
     super.dispose();
   }
@@ -290,8 +301,7 @@ class _InteractionBarState extends State<InteractionBar> {
         AppSnackbar.success(
             context, l10n.eventAndAuthorProfileSignaturesVerified);
       } else if (noteValid && !profileValid) {
-        AppSnackbar.success(context,
-            l10n.eventSignatureVerified);
+        AppSnackbar.success(context, l10n.eventSignatureVerified);
       } else {
         AppSnackbar.error(context, l10n.eventSignatureVerificationFailed);
       }
@@ -542,9 +552,8 @@ class _InteractionBarState extends State<InteractionBar> {
                   style: TextStyle(
                     fontSize: fontSize,
                     color: effectiveColor,
-                    fontWeight: state.hasReposted
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                    fontWeight:
+                        state.hasReposted ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               ),
