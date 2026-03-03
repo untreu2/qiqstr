@@ -36,7 +36,13 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletAutoConnectRequested event,
     Emitter<WalletState> emit,
   ) async {
-    emit(const WalletLoading());
+    if (state is WalletLoaded && event.recaptchaToken == null) {
+      return;
+    }
+
+    if (state is! WalletLoaded) {
+      emit(const WalletLoading());
+    }
 
     final hasNwcConnection = await _nwcService.hasConnection();
 
@@ -261,8 +267,6 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         if (state is WalletLoaded) {
           final currentState = state as WalletLoaded;
           emit(currentState.copyWith(btcPriceUsd: price));
-        } else {
-          emit(WalletLoaded(btcPriceUsd: price));
         }
       },
       (_) {},
@@ -274,13 +278,21 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     Emitter<WalletState> emit,
   ) async {
     final result = await _coinosService.setApiKey(event.apiKey);
-    result.fold(
-      (_) {
-        debugPrint('[WalletBloc] API key stored');
-        add(const WalletAutoConnectRequested());
-      },
-      (error) => emit(WalletError('Failed to set API key: $error')),
-    );
+    if (result.isError) {
+      emit(WalletError('Failed to set API key: ${result.error}'));
+      return;
+    }
+    emit(const WalletLoading());
+    final userResult = await _coinosService.getStoredUser();
+    if (userResult.isSuccess && userResult.data != null) {
+      emit(WalletLoaded(user: userResult.data));
+      add(const WalletBalanceRequested());
+      add(const WalletTransactionsLoaded());
+      add(const WalletPriceRequested());
+      _startBalanceTimer(emit);
+    } else {
+      emit(const WalletLoaded());
+    }
   }
 
   void _startBalanceTimer(Emitter<WalletState> emit) {

@@ -16,8 +16,6 @@ import '../../presentation/blocs/notification_indicator/notification_indicator_e
 import '../../presentation/blocs/notification_indicator/notification_indicator_state.dart';
 import '../../presentation/blocs/dm/dm_bloc.dart';
 import '../../presentation/blocs/dm/dm_event.dart' as dm_events;
-import '../../presentation/blocs/wallet/wallet_bloc.dart';
-import '../../presentation/blocs/wallet/wallet_event.dart';
 import '../../data/services/coinos_service.dart';
 
 class HomeNavigator extends StatefulWidget {
@@ -58,9 +56,6 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
         final dmBloc = AppDI.get<DmBloc>();
         dmBloc.add(const dm_events.DmConversationsLoadRequested());
-
-        final walletBloc = AppDI.get<WalletBloc>();
-        walletBloc.add(const WalletAutoConnectRequested());
       }
     });
   }
