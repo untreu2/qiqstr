@@ -8,6 +8,7 @@ import '../../../presentation/blocs/notification/notification_bloc.dart';
 import '../../../presentation/blocs/wallet/wallet_bloc.dart';
 import '../../../presentation/blocs/thread/thread_bloc.dart';
 import '../../../presentation/blocs/notification_indicator/notification_indicator_bloc.dart';
+import '../../../presentation/blocs/dm_indicator/dm_indicator_bloc.dart';
 import '../../../presentation/blocs/sidebar/sidebar_bloc.dart';
 import '../../../presentation/blocs/edit_profile/edit_profile_bloc.dart';
 import '../../../presentation/blocs/following/following_bloc.dart';
@@ -100,6 +101,9 @@ class BlocsModule extends DIModule {
               authService: AppDI.get<AuthService>(),
               db: AppDI.get<RustDatabaseService>(),
             ));
+
+    AppDI.registerLazySingleton<DmIndicatorBloc>(
+        () => DmIndicatorBloc(dmBloc: AppDI.get<DmBloc>()));
 
     AppDI.registerLazySingleton<SidebarBloc>(() => SidebarBloc(
           followingRepository: AppDI.get<FollowingRepository>(),

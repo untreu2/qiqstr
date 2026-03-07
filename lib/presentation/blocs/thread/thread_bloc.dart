@@ -43,9 +43,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   ) {
     if (state is ThreadLoaded) {
       final currentState = state as ThreadLoaded;
-      final merged = Map<String, Map<String, dynamic>>.from(
-          currentState.userProfiles)
-        ..addAll(event.profiles);
+      final merged =
+          Map<String, Map<String, dynamic>>.from(currentState.userProfiles)
+            ..addAll(event.profiles);
       emit(currentState.copyWith(userProfiles: merged));
     }
   }
@@ -56,9 +56,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   ) {
     if (state is ThreadLoaded) {
       final currentState = state as ThreadLoaded;
-      final merged = Map<String, Map<String, dynamic>>.from(
-          currentState.userProfiles)
-        ..[currentState.currentUserHex] = event.profileMap;
+      final merged =
+          Map<String, Map<String, dynamic>>.from(currentState.userProfiles)
+            ..[currentState.currentUserHex] = event.profileMap;
       emit(currentState.copyWith(
         currentUser: event.profileMap,
         userProfiles: merged,
@@ -84,7 +84,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       for (final noteId in chain) {
         var noteRaw = await _feedRepository.getNoteRaw(noteId);
 
-        if (noteRaw == null && noteId == chain.first && event.initialNoteData != null) {
+        if (noteRaw == null &&
+            noteId == chain.first &&
+            event.initialNoteData != null) {
           noteRaw = _stripRepostData(event.initialNoteData!, noteId);
         }
 
@@ -120,7 +122,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
       for (final chainNote in chainNotes) {
         final cid = chainNote['id'] as String? ?? '';
-        if (cid.isNotEmpty && cid != actualRootNoteId && !replyIds.contains(cid)) {
+        if (cid.isNotEmpty &&
+            cid != actualRootNoteId &&
+            !replyIds.contains(cid)) {
           allReplies.add(chainNote);
           replyIds.add(cid);
         }
@@ -214,6 +218,14 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       }
     }
 
+    final existingIds =
+        currentState.replies.map((r) => r['id'] as String? ?? '').toSet();
+
+    final hasNewReplies = replyIds.length != existingIds.length ||
+        replyIds.any((id) => !existingIds.contains(id));
+
+    if (!hasNewReplies) return;
+
     final structure = _buildThreadStructure(currentState.rootNote, repliesMap);
 
     emit(currentState.copyWith(
@@ -221,16 +233,21 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       threadStructure: structure,
     ));
 
-    _loadAndSyncProfilesForNotes(repliesMap);
+    final newNotes = repliesMap
+        .where((r) => !existingIds.contains(r['id'] as String? ?? ''))
+        .toList();
+    if (newNotes.isNotEmpty) {
+      _loadAndSyncProfilesForNotes(newNotes);
+    }
 
-    final newReplyIds = repliesMap
+    final newIds = newNotes
         .map((r) => r['id'] as String? ?? '')
         .where((id) => id.isNotEmpty)
         .toList();
-    if (newReplyIds.isNotEmpty) {
+    if (newIds.isNotEmpty) {
       Future.microtask(() async {
         if (isClosed) return;
-        await _preloadInteractionCounts(newReplyIds);
+        await _preloadInteractionCounts(newIds);
       });
     }
   }
@@ -293,8 +310,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
       if (isClosed) return;
       try {
-        await InteractionService.instance
-            .fetchCountsFromRelays(initialNoteIds);
+        await InteractionService.instance.fetchCountsFromRelays(initialNoteIds);
       } catch (_) {}
 
       if (isClosed || state is! ThreadLoaded) return;
@@ -365,8 +381,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           await _syncService.syncProfiles(missingPubkeys);
           if (isClosed) return;
 
-          final synced =
-              await _profileRepository.getProfiles(missingPubkeys);
+          final synced = await _profileRepository.getProfiles(missingPubkeys);
           if (isClosed) return;
 
           final syncedProfiles = <String, Map<String, dynamic>>{};

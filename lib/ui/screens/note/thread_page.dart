@@ -45,6 +45,7 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int _maxReplyDepth = 1;
 
   final List<String> _stableReplyOrder = [];
+  final Set<String> _stableReplyOrderSet = {};
 
   bool _isRefreshing = false;
   final ValueNotifier<List<Map<String, dynamic>>> _emptyNotesNotifier =
@@ -217,8 +218,8 @@ class _ThreadPageState extends State<ThreadPage> {
           ),
           _buildThreadRepliesSliver(context, state, focusedNote),
           SliverToBoxAdapter(
-            child: SizedBox(
-                height: MediaQuery.of(context).padding.bottom + 120),
+            child:
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 120),
           ),
         ],
       ),
@@ -231,8 +232,8 @@ class _ThreadPageState extends State<ThreadPage> {
       children: contextNotes.map((note) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: _buildSimpleNoteWidget(context, note, state,
-              isSmallView: true),
+          child:
+              _buildSimpleNoteWidget(context, note, state, isSmallView: true),
         );
       }).toList(),
     );
@@ -339,8 +340,8 @@ class _ThreadPageState extends State<ThreadPage> {
   void _handleReplyInputTap(ThreadLoaded state) {
     final focusedNote = state.focusedNote;
     final focusedNoteId = focusedNote['id'] as String? ?? '';
-    final parentAuthor = focusedNote['pubkey'] as String? ??
-        focusedNote['author'] as String?;
+    final parentAuthor =
+        focusedNote['pubkey'] as String? ?? focusedNote['author'] as String?;
 
     ShareNotePage.show(
       context,
@@ -364,9 +365,10 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     _stableReplyOrder.removeWhere((id) => !repliesById.containsKey(id));
+    _stableReplyOrderSet.removeWhere((id) => !repliesById.containsKey(id));
 
     final newIds = repliesById.keys
-        .where((id) => !_stableReplyOrder.contains(id))
+        .where((id) => !_stableReplyOrderSet.contains(id))
         .toList();
 
     if (_stableReplyOrder.isEmpty && newIds.isNotEmpty) {
@@ -386,18 +388,17 @@ class _ThreadPageState extends State<ThreadPage> {
       });
     } else if (newIds.isNotEmpty) {
       newIds.sort((a, b) {
-        final aTime =
-            repliesById[a]!['timestamp'] as DateTime? ?? DateTime(0);
-        final bTime =
-            repliesById[b]!['timestamp'] as DateTime? ?? DateTime(0);
+        final aTime = repliesById[a]!['timestamp'] as DateTime? ?? DateTime(0);
+        final bTime = repliesById[b]!['timestamp'] as DateTime? ?? DateTime(0);
         return aTime.compareTo(bTime);
       });
     }
 
     _stableReplyOrder.addAll(newIds);
+    _stableReplyOrderSet.addAll(newIds);
 
     final directReplies = _stableReplyOrder
-        .where((id) => repliesById.containsKey(id))
+        .where((id) => _stableReplyOrderSet.contains(id))
         .map((id) => repliesById[id]!)
         .toList();
 
@@ -614,8 +615,7 @@ class _ThreadPageState extends State<ThreadPage> {
         isSmallView: depth > 0,
         scrollController: _scrollController,
         isVisible: true,
-        onNoteTap: (noteId, rootId) =>
-            _handleNoteTap(noteId, rootId, state),
+        onNoteTap: (noteId, rootId) => _handleNoteTap(noteId, rootId, state),
       ),
     );
   }
@@ -638,8 +638,7 @@ class _ThreadPageState extends State<ThreadPage> {
         isSmallView: isSmallView,
         scrollController: _scrollController,
         isVisible: true,
-        onNoteTap: (noteId, rootId) =>
-            _handleNoteTap(noteId, rootId, state),
+        onNoteTap: (noteId, rootId) => _handleNoteTap(noteId, rootId, state),
       ),
     );
   }

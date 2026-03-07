@@ -16,6 +16,9 @@ import '../../presentation/blocs/notification_indicator/notification_indicator_e
 import '../../presentation/blocs/notification_indicator/notification_indicator_state.dart';
 import '../../presentation/blocs/dm/dm_bloc.dart';
 import '../../presentation/blocs/dm/dm_event.dart' as dm_events;
+import '../../presentation/blocs/dm_indicator/dm_indicator_bloc.dart';
+import '../../presentation/blocs/dm_indicator/dm_indicator_event.dart';
+import '../../presentation/blocs/dm_indicator/dm_indicator_state.dart';
 import '../../data/services/coinos_service.dart';
 
 class HomeNavigator extends StatefulWidget {
@@ -56,6 +59,9 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
         final dmBloc = AppDI.get<DmBloc>();
         dmBloc.add(const dm_events.DmConversationsLoadRequested());
+
+        final dmIndicatorBloc = AppDI.get<DmIndicatorBloc>();
+        dmIndicatorBloc.add(const DmIndicatorInitialized());
       }
     });
   }
@@ -67,7 +73,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
     super.dispose();
   }
 
-  Widget _buildCustomBottomBar(bool hasNewNotifications) {
+  Widget _buildCustomBottomBar(
+      bool hasNewNotifications, bool hasNewDmMessages) {
     final themeState = context.themeState;
     final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
 
@@ -183,11 +190,12 @@ class _HomeNavigatorState extends State<HomeNavigator>
                                 ? _buildWalletIcon(
                                     item['icon'] as String, isSelected)
                                 : originalIndex == 1
-                                    ? _buildExploreIcon(
+                                    ? _buildDmIcon(
                                         item['icon'] as String,
                                         item['iconSelected'] as String? ??
                                             item['icon'] as String,
-                                        isSelected)
+                                        isSelected,
+                                        hasNewDmMessages)
                                     : _buildRegularIcon(item, isSelected),
                       ),
                     ),
@@ -314,15 +322,50 @@ class _HomeNavigatorState extends State<HomeNavigator>
     );
   }
 
-  Widget _buildExploreIcon(
-      String iconPath, String iconSelectedPath, bool isSelected) {
-    return _buildIcon(
+  Widget _buildDmIcon(String iconPath, String iconSelectedPath, bool isSelected,
+      bool hasNewDmMessages) {
+    final icon = _buildIcon(
       iconPath: iconPath,
       iconSelectedPath: iconSelectedPath,
       isSelected: isSelected,
       index: 1,
-      iconType: 'explore',
+      iconType: 'dm',
     );
+
+    if (hasNewDmMessages) {
+      return SizedBox(
+        width: _iconSize + 6,
+        height: _iconSize + 6,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              child: icon,
+            ),
+            Positioned(
+              right: -6,
+              top: -2,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: context.colors.accent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: context.colors.background,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return icon;
   }
 
   Widget _buildRegularIcon(Map<String, dynamic> item, bool isSelected) {
@@ -369,6 +412,13 @@ class _HomeNavigatorState extends State<HomeNavigator>
       _iconAnimationController.reset();
       _iconAnimationController.forward();
       widget.navigationShell.goBranch(pageViewIndex);
+    } else if (originalIndex == 1) {
+      AppDI.get<DmIndicatorBloc>().add(const DmIndicatorChecked());
+      if (mounted) {
+        _iconAnimationController.reset();
+        _iconAnimationController.forward();
+        widget.navigationShell.goBranch(pageViewIndex);
+      }
     } else if (originalIndex == 3) {
       final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
       indicatorBloc.add(const NotificationIndicatorChecked());
@@ -418,11 +468,19 @@ class _HomeNavigatorState extends State<HomeNavigator>
             bottomNavigationBar: BlocBuilder<NotificationIndicatorBloc,
                 NotificationIndicatorState>(
               bloc: AppDI.get<NotificationIndicatorBloc>(),
-              builder: (context, state) {
+              builder: (context, notifState) {
                 final hasNewNotifications =
-                    state is NotificationIndicatorLoaded &&
-                        state.hasNewNotifications;
-                return _buildCustomBottomBar(hasNewNotifications);
+                    notifState is NotificationIndicatorLoaded &&
+                        notifState.hasNewNotifications;
+                return BlocBuilder<DmIndicatorBloc, DmIndicatorState>(
+                  bloc: AppDI.get<DmIndicatorBloc>(),
+                  builder: (context, dmState) {
+                    final hasNewDmMessages =
+                        dmState is DmIndicatorLoaded && dmState.hasNewMessages;
+                    return _buildCustomBottomBar(
+                        hasNewNotifications, hasNewDmMessages);
+                  },
+                );
               },
             ),
           );
