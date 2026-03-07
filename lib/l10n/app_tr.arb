@@ -406,6 +406,7 @@
   "repostedYourPost": "gönderinizi paylaştı",
   "repliedToYourPost": "gönderinize yanıt verdi",
   "mentionedYou": "sizi bahsetti",
+  "quotedYourPost": "gönderinizi alıntıladı",
   "zappedYou": "size zap gönderdi",
   "interactedWithYou": "sizinle etkileşime girdi",
   "andCountOthers": "ve {count} kişi daha",
@@ -438,6 +439,12 @@
   },
   "notificationMentionCount": "{count} bahsetme",
   "@notificationMentionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationQuoteCount": "{count} alıntı",
+  "@notificationQuoteCount": {
     "placeholders": {
       "count": {"type": "int"}
     }

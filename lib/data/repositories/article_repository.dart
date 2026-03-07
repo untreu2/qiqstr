@@ -7,6 +7,8 @@ abstract class ArticleRepository {
   Future<List<Article>> getArticles({int limit = 50});
   Future<List<Article>> getArticlesByAuthor(String pubkey, {int limit = 50});
   Future<Article?> getArticle(String articleId);
+  Future<Article?> getArticleByNaddr(
+      {required String pubkeyHex, required String identifier});
   Future<void> saveArticles(List<Map<String, dynamic>> articles);
 }
 
@@ -33,14 +35,26 @@ class ArticleRepositoryImpl extends BaseRepository
   @override
   Future<List<Article>> getArticlesByAuthor(String pubkey,
       {int limit = 50}) async {
-    final maps =
-        await db.getHydratedArticles(limit: limit, authors: [pubkey]);
+    final maps = await db.getHydratedArticles(limit: limit, authors: [pubkey]);
     return maps.map((m) => Article.fromMap(m)).toList();
   }
 
   @override
   Future<Article?> getArticle(String articleId) async {
     final map = await db.getHydratedArticle(articleId);
+    if (map == null) return null;
+    return Article.fromMap(map);
+  }
+
+  @override
+  Future<Article?> getArticleByNaddr({
+    required String pubkeyHex,
+    required String identifier,
+  }) async {
+    final map = await db.getHydratedArticleByNaddr(
+      pubkeyHex: pubkeyHex,
+      identifier: identifier,
+    );
     if (map == null) return null;
     return Article.fromMap(map);
   }

@@ -754,6 +754,23 @@ class RustDatabaseService {
     }
   }
 
+  Future<Map<String, dynamic>?> getHydratedArticleByNaddr({
+    required String pubkeyHex,
+    required String identifier,
+  }) async {
+    try {
+      final articles =
+          await getHydratedArticles(authors: [pubkeyHex], limit: 50);
+      for (final article in articles) {
+        if (article['dTag'] == identifier) return article;
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedArticleByNaddr error: $e');
+      return null;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getCachedArticles(
       {int limit = 50, List<String>? authors}) async {
     try {

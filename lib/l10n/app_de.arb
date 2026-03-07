@@ -406,6 +406,7 @@
   "repostedYourPost": "hat deinen Beitrag geteilt",
   "repliedToYourPost": "hat auf deinen Beitrag geantwortet",
   "mentionedYou": "hat dich erwähnt",
+  "quotedYourPost": "hat deinen Beitrag zitiert",
   "zappedYou": "hat dir gezappt",
   "interactedWithYou": "hat mit dir interagiert",
   "andCountOthers": "und {count} weitere",
@@ -438,6 +439,12 @@
   },
   "notificationMentionCount": "{count, plural, =1{1 Erwähnung} other{{count} Erwähnungen}}",
   "@notificationMentionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationQuoteCount": "{count, plural, =1{1 Zitat} other{{count} Zitate}}",
+  "@notificationQuoteCount": {
     "placeholders": {
       "count": {"type": "int"}
     }

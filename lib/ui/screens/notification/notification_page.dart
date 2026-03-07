@@ -79,8 +79,7 @@ class _NotificationPageState extends State<NotificationPage> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverToBoxAdapter(
-                child: _buildHeader(context, notifications)),
+            SliverToBoxAdapter(child: _buildHeader(context, notifications)),
             SliverPadding(
               padding: const EdgeInsets.only(bottom: 100),
               sliver: SliverList.separated(
@@ -92,8 +91,7 @@ class _NotificationPageState extends State<NotificationPage> {
                   }
                   return _NotificationTile(notification: item);
                 },
-                separatorBuilder: (_, __) =>
-                    const ListSeparatorWidget(),
+                separatorBuilder: (_, __) => const ListSeparatorWidget(),
               ),
             ),
           ],
@@ -140,8 +138,7 @@ class _NotificationPageState extends State<NotificationPage> {
           ),
           const SizedBox(height: 4),
           RichText(
-            text: TextSpan(
-                children: _buildSummarySpans(context, counts)),
+            text: TextSpan(children: _buildSummarySpans(context, counts)),
           ),
           const SizedBox(height: 12),
           _buildActivityBar(context, counts),
@@ -164,6 +161,7 @@ class _NotificationPageState extends State<NotificationPage> {
     int reposts = 0;
     int replies = 0;
     int mentions = 0;
+    int quotes = 0;
     int zaps = 0;
     int totalSats = 0;
 
@@ -177,13 +175,15 @@ class _NotificationPageState extends State<NotificationPage> {
           replies++;
         case 'mention':
           mentions++;
+        case 'quote':
+          quotes++;
         case 'zap':
           zaps++;
           totalSats += (n['zapAmount'] as int? ?? 0);
       }
     }
 
-    final total = reactions + reposts + replies + mentions + zaps;
+    final total = reactions + reposts + replies + mentions + quotes + zaps;
     if (total == 0) return null;
 
     return _NotificationCounts(
@@ -191,6 +191,7 @@ class _NotificationPageState extends State<NotificationPage> {
       reposts: reposts,
       replies: replies,
       mentions: mentions,
+      quotes: quotes,
       zaps: zaps,
       totalSats: totalSats,
       total: total,
@@ -220,6 +221,9 @@ class _NotificationPageState extends State<NotificationPage> {
     if (counts.mentions > 0) {
       parts.add(l10n.notificationMentionCount(counts.mentions));
     }
+    if (counts.quotes > 0) {
+      parts.add(l10n.notificationQuoteCount(counts.quotes));
+    }
 
     final normalStyle = TextStyle(
       fontSize: 15,
@@ -240,8 +244,8 @@ class _NotificationPageState extends State<NotificationPage> {
     for (var i = 0; i < parts.length; i++) {
       if (i > 0) {
         if (i == parts.length - 1) {
-          spans.add(TextSpan(
-              text: l10n.notificationSummaryAnd, style: normalStyle));
+          spans.add(
+              TextSpan(text: l10n.notificationSummaryAnd, style: normalStyle));
         } else {
           spans.add(TextSpan(text: ', ', style: normalStyle));
         }
@@ -268,8 +272,16 @@ class _NotificationPageState extends State<NotificationPage> {
       segments.add(_BarSegment(counts.replies, context.colors.reply));
     }
     if (counts.mentions > 0) {
+      segments.add(_BarSegment(counts.mentions,
+          context.colors.textSecondary.withValues(alpha: 0.5)));
+    }
+    if (counts.quotes > 0) {
       segments.add(_BarSegment(
-          counts.mentions, context.colors.textSecondary.withValues(alpha: 0.5)));
+          counts.quotes, context.colors.textSecondary.withValues(alpha: 0.3)));
+    }
+    if (counts.mentions > 0) {
+      segments.add(_BarSegment(counts.mentions,
+          context.colors.textSecondary.withValues(alpha: 0.5)));
     }
 
     return ClipRRect(
@@ -396,6 +408,7 @@ class _NotificationCounts {
   final int reposts;
   final int replies;
   final int mentions;
+  final int quotes;
   final int zaps;
   final int totalSats;
   final int total;
@@ -405,6 +418,7 @@ class _NotificationCounts {
     required this.reposts,
     required this.replies,
     required this.mentions,
+    required this.quotes,
     required this.zaps,
     required this.totalSats,
     required this.total,
@@ -477,8 +491,8 @@ List<Map<String, dynamic>> _groupNotifications(
     }
   }
 
-  result.sort((a, b) =>
-      (a['_sortIndex'] as int).compareTo(b['_sortIndex'] as int));
+  result.sort(
+      (a, b) => (a['_sortIndex'] as int).compareTo(b['_sortIndex'] as int));
 
   return result;
 }
@@ -578,6 +592,8 @@ class _NotificationTileState extends State<_NotificationTile> {
         return l10n.repliedToYourPost;
       case 'mention':
         return l10n.mentionedYou;
+      case 'quote':
+        return l10n.quotedYourPost;
       case 'zap':
         return l10n.zappedYou;
       default:
@@ -672,6 +688,20 @@ class _NotificationTileState extends State<_NotificationTile> {
     }
   }
 
+  Widget _buildMentionCard(BuildContext context) {
+    final notificationId = widget.notification['id'] as String? ?? '';
+    if (notificationId.isEmpty) return const SizedBox.shrink();
+    try {
+      final bech32 = encodeBasicBech32(notificationId, 'note');
+      return GestureDetector(
+        onTap: _onTap,
+        child: QuoteWidget(bech32: bech32, shortMode: true),
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
+  }
+
   Widget _buildTargetNote(BuildContext context) {
     final targetEventId = widget.notification['targetEventId'] as String? ?? '';
     if (targetEventId.isEmpty) return const SizedBox.shrink();
@@ -692,7 +722,6 @@ class _NotificationTileState extends State<_NotificationTile> {
     final type = widget.notification['type'] as String? ?? '';
     final author = widget.notification['author'] as String? ?? '';
     final createdAt = widget.notification['createdAt'] as int?;
-    final content = widget.notification['content'] as String? ?? '';
 
     final name = _profile?['name'] as String? ?? '';
     final image = _profile?['profileImage'] as String? ?? '';
@@ -754,7 +783,8 @@ class _NotificationTileState extends State<_NotificationTile> {
                                   ),
                                   if (type == 'zap') ...[
                                     TextSpan(
-                                      text: ' ${AppLocalizations.of(context)!.notificationZapSatsCount(widget.notification['zapAmount'] as int? ?? 0)}',
+                                      text:
+                                          ' ${AppLocalizations.of(context)!.notificationZapSatsCount(widget.notification['zapAmount'] as int? ?? 0)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 15,
@@ -776,21 +806,9 @@ class _NotificationTileState extends State<_NotificationTile> {
                           ),
                         ],
                       ),
-                      if (content.isNotEmpty &&
-                          type != 'reaction' &&
-                          type != 'repost') ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          content.length > 100
-                              ? '${content.substring(0, 100)}...'
-                              : content,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: context.colors.textSecondary,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      if (type == 'mention' || type == 'quote') ...[
+                        const SizedBox(height: 6),
+                        _buildMentionCard(context),
                       ],
                     ],
                   ),
@@ -896,6 +914,8 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
         return l10n.repliedToYourPost;
       case 'mention':
         return l10n.mentionedYou;
+      case 'quote':
+        return l10n.quotedYourPost;
       case 'zap':
         return l10n.zappedYou;
       default:
@@ -925,8 +945,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
   }
 
   void _onTap() {
-    final targetEventId =
-        widget.notification['targetEventId'] as String? ?? '';
+    final targetEventId = widget.notification['targetEventId'] as String? ?? '';
     if (targetEventId.isEmpty) return;
     if (!mounted) return;
 
@@ -944,8 +963,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
   }
 
   Widget _buildTargetNote(BuildContext context) {
-    final targetEventId =
-        widget.notification['targetEventId'] as String? ?? '';
+    final targetEventId = widget.notification['targetEventId'] as String? ?? '';
     if (targetEventId.isEmpty) return const SizedBox.shrink();
 
     try {
@@ -1048,8 +1066,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
     ));
 
     if (type == 'zap') {
-      final totalZapAmount =
-          widget.notification['totalZapAmount'] as int? ?? 0;
+      final totalZapAmount = widget.notification['totalZapAmount'] as int? ?? 0;
       if (totalZapAmount > 0) {
         spans.add(TextSpan(
           text: ' ${l10n.notificationZapSatsCount(totalZapAmount)}',

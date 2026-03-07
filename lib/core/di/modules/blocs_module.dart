@@ -19,6 +19,7 @@ import '../../../presentation/blocs/note_statistics/note_statistics_bloc.dart';
 import '../../../presentation/blocs/edit_new_account_profile/edit_new_account_profile_bloc.dart';
 import '../../../presentation/blocs/user_tile/user_tile_bloc.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
+import '../../../presentation/blocs/article_quote_widget/article_quote_widget_bloc.dart';
 import '../../../presentation/blocs/note_content/note_content_bloc.dart';
 import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
@@ -185,6 +186,11 @@ class BlocsModule extends DIModule {
           syncService: AppDI.get<SyncService>(),
           authService: AppDI.get<AuthService>(),
           userPubkeyHex: '',
+        ));
+
+    AppDI.registerFactory<ArticleQuoteWidgetBloc>(() => ArticleQuoteWidgetBloc(
+          articleRepository: AppDI.get<ArticleRepository>(),
+          syncService: AppDI.get<SyncService>(),
         ));
 
     AppDI.registerFactory<ArticleBloc>(() => ArticleBloc(

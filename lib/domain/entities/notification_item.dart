@@ -1,6 +1,7 @@
 enum NotificationType {
   reply,
   mention,
+  quote,
   reaction,
   repost,
   zap,
@@ -33,6 +34,7 @@ class NotificationItem {
     final typeStr = map['type'] as String? ?? 'mention';
     final type = switch (typeStr) {
       'reply' => NotificationType.reply,
+      'quote' => NotificationType.quote,
       'reaction' => NotificationType.reaction,
       'repost' => NotificationType.repost,
       'zap' => NotificationType.zap,

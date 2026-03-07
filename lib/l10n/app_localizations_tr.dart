@@ -1068,6 +1068,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get mentionedYou => 'sizi bahsetti';
 
   @override
+  String get quotedYourPost => 'gönderinizi alıntıladı';
+
+  @override
   String get zappedYou => 'size zap gönderdi';
 
   @override
@@ -1105,6 +1108,11 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String notificationMentionCount(int count) {
     return '$count bahsetme';
+  }
+
+  @override
+  String notificationQuoteCount(int count) {
+    return '$count alıntı';
   }
 
   @override

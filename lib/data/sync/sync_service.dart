@@ -47,6 +47,10 @@ class SyncService {
   Timer? _refFetchTimer;
   final _pendingProfilePubkeys = <String>{};
   Timer? _profileSyncTimer;
+  final _pendingQuoteIds = <String>{};
+  Timer? _quotePrefetchTimer;
+  final _pendingNaddrPubkeys = <String>{};
+  Timer? _naddrPrefetchTimer;
 
   Stream<SyncOperationStatus> get syncStatus => _syncStatusController.stream;
 
@@ -660,6 +664,9 @@ class SyncService {
             if (muteService.shouldFilterEvent(eventData)) return;
             _notifyDbChanged();
             _syncMissingProfilesInBackground([eventData]);
+            if (kind == 6) {
+              _fetchReferencedNoteForRepost(eventData);
+            }
           } catch (_) {}
         },
         onError: (_) {
@@ -715,11 +722,51 @@ class SyncService {
           {String blossomUrl = 'https://blossom.primal.net'}) =>
       _publisher.uploadMedia(filePath, blossomUrl: blossomUrl);
 
+  void prefetchQuotedNotes(List<String> eventIds) {
+    if (eventIds.isEmpty) return;
+    _pendingQuoteIds.addAll(eventIds);
+    _quotePrefetchTimer?.cancel();
+    _quotePrefetchTimer = Timer(const Duration(milliseconds: 800), () {
+      _processPendingQuotes();
+    });
+  }
+
+  Future<void> _processPendingQuotes() async {
+    var ids = _pendingQuoteIds.toList();
+    _pendingQuoteIds.clear();
+    if (ids.isEmpty) return;
+    if (ids.length > 50) ids = ids.sublist(0, 50);
+    try {
+      final fetched = await _relayService.fetchMissingReferences(ids);
+      if (fetched > 0) _notifyDbChanged();
+    } catch (_) {}
+  }
+
+  void prefetchArticlesByAuthors(List<String> pubkeys) {
+    if (pubkeys.isEmpty) return;
+    _pendingNaddrPubkeys.addAll(pubkeys);
+    _naddrPrefetchTimer?.cancel();
+    _naddrPrefetchTimer = Timer(const Duration(milliseconds: 800), () {
+      _processPendingNaddrAuthors();
+    });
+  }
+
+  Future<void> _processPendingNaddrAuthors() async {
+    final pubkeys = _pendingNaddrPubkeys.toList();
+    _pendingNaddrPubkeys.clear();
+    if (pubkeys.isEmpty) return;
+    try {
+      await syncArticles(authors: pubkeys, limit: 20);
+    } catch (_) {}
+  }
+
   void dispose() {
     stopPeriodicSync();
     stopRealtimeSubscriptions();
     _refFetchTimer?.cancel();
     _profileSyncTimer?.cancel();
+    _quotePrefetchTimer?.cancel();
+    _naddrPrefetchTimer?.cancel();
     _syncStatusController.close();
   }
 
@@ -860,6 +907,23 @@ class SyncService {
     _notifyDbChanged();
     _syncMissingProfilesInBackground(events);
     _fetchReferencedEventsInBackground(events);
+  }
+
+  void _fetchReferencedNoteForRepost(Map<String, dynamic> repostEvent) {
+    final tags = repostEvent['tags'] as List<dynamic>? ?? [];
+    for (final tag in tags) {
+      if (tag is List && tag.length > 1 && tag[0] == 'e') {
+        final originalId = tag[1] as String?;
+        if (originalId != null && originalId.isNotEmpty) {
+          _pendingRefIds.add(originalId);
+          _refFetchTimer?.cancel();
+          _refFetchTimer = Timer(const Duration(seconds: 2), () {
+            _processPendingRefs();
+          });
+          return;
+        }
+      }
+    }
   }
 
   void _fetchReferencedEventsInBackground(List<Map<String, dynamic>> events) {

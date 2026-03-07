@@ -9,6 +9,8 @@ class FeedNote {
   final String? repostedBy;
   final int? repostCreatedAt;
   final bool isReply;
+  final bool isQuote;
+  final String? quotedNoteId;
   final String? rootId;
   final String? parentId;
   final String? authorName;
@@ -33,6 +35,8 @@ class FeedNote {
     this.repostedBy,
     this.repostCreatedAt,
     this.isReply = false,
+    this.isQuote = false,
+    this.quotedNoteId,
     this.rootId,
     this.parentId,
     this.authorName,
@@ -65,6 +69,8 @@ class FeedNote {
       repostedBy: map['repostedBy'] as String?,
       repostCreatedAt: map['repostCreatedAt'] as int?,
       isReply: map['isReply'] as bool? ?? false,
+      isQuote: map['isQuote'] as bool? ?? false,
+      quotedNoteId: map['quotedNoteId'] as String?,
       rootId: map['rootId'] as String?,
       parentId: map['parentId'] as String?,
       authorName: map['authorName'] as String?,
@@ -91,6 +97,8 @@ class FeedNote {
     String? repostedBy,
     int? repostCreatedAt,
     bool? isReply,
+    bool? isQuote,
+    String? quotedNoteId,
     String? rootId,
     String? parentId,
     String? authorName,
@@ -115,6 +123,8 @@ class FeedNote {
       repostedBy: repostedBy ?? this.repostedBy,
       repostCreatedAt: repostCreatedAt ?? this.repostCreatedAt,
       isReply: isReply ?? this.isReply,
+      isQuote: isQuote ?? this.isQuote,
+      quotedNoteId: quotedNoteId ?? this.quotedNoteId,
       rootId: rootId ?? this.rootId,
       parentId: parentId ?? this.parentId,
       authorName: authorName ?? this.authorName,
@@ -167,6 +177,8 @@ class FeedNote {
       'repostedBy': repostedBy,
       'repostCreatedAt': repostCreatedAt,
       'isReply': isReply,
+      'isQuote': isQuote,
+      'quotedNoteId': quotedNoteId,
       'rootId': rootId,
       'parentId': parentId,
       'authorName': authorName,

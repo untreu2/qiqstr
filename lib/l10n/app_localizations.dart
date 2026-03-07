@@ -2104,6 +2104,12 @@ abstract class AppLocalizations {
   /// **'mentioned you'**
   String get mentionedYou;
 
+  /// No description provided for @quotedYourPost.
+  ///
+  /// In en, this message translates to:
+  /// **'quoted your post'**
+  String get quotedYourPost;
+
   /// No description provided for @zappedYou.
   ///
   /// In en, this message translates to:
@@ -2163,6 +2169,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 mention} other{{count} mentions}}'**
   String notificationMentionCount(int count);
+
+  /// No description provided for @notificationQuoteCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 quote} other{{count} quotes}}'**
+  String notificationQuoteCount(int count);
 
   /// No description provided for @notificationZapCount.
   ///

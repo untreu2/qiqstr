@@ -49,6 +49,7 @@ class _NoteWidgetState extends State<NoteWidget> {
   late final String? _reposterId;
   late final String? _parentId;
   late final bool _isReply;
+  late final bool _isQuote;
   late final bool _isRepost;
   late final DateTime _timestamp;
   late final String _widgetKey;
@@ -92,6 +93,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
     final explicitIsReply = widget.note['isReply'] as bool?;
     _isReply = explicitIsReply ?? (_parentId != null && _parentId.isNotEmpty);
+    _isQuote = widget.note['isQuote'] as bool? ?? false;
 
     _isRepost = widget.note['isRepost'] as bool? ?? false;
     final createdAt = widget.note['created_at'];
@@ -153,7 +155,8 @@ class _NoteWidgetState extends State<NoteWidget> {
         };
       }
 
-      final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
+      final replyText =
+          _isReply && !_isQuote && _parentId != null ? 'Reply to...' : null;
 
       final newState = _NoteState(
         authorUser: authorUser,
@@ -198,12 +201,11 @@ class _NoteWidgetState extends State<NoteWidget> {
     }
   }
 
-  Future<void> _loadAndSyncProfile(
-      ProfileRepository profileRepo, SyncService syncService, String pubkey) async {
+  Future<void> _loadAndSyncProfile(ProfileRepository profileRepo,
+      SyncService syncService, String pubkey) async {
     if (_isDisposed || !mounted) return;
 
-    final current =
-        widget.profiles[pubkey] ?? _locallyLoadedProfiles[pubkey];
+    final current = widget.profiles[pubkey] ?? _locallyLoadedProfiles[pubkey];
     final hasName = (current?['name'] as String? ?? '').isNotEmpty &&
         (current?['name'] as String? ?? '') !=
             pubkey.substring(0, pubkey.length > 8 ? 8 : pubkey.length);
@@ -301,9 +303,11 @@ class _NoteWidgetState extends State<NoteWidget> {
       bool hasRelevantChange = notes.any((note) {
         final noteId = note['id'] as String? ?? '';
         final rootId = widget.note['rootId'] as String?;
+        final quotedNoteId = widget.note['quotedNoteId'] as String?;
         return noteId == _noteId ||
             (_isRepost && noteId == rootId) ||
-            (_isReply && noteId == _parentId);
+            (_isReply && noteId == _parentId) ||
+            (_isQuote && noteId == quotedNoteId);
       });
 
       if (hasRelevantChange) {
@@ -355,7 +359,8 @@ class _NoteWidgetState extends State<NoteWidget> {
         };
       }
 
-      final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
+      final replyText =
+          _isReply && !_isQuote && _parentId != null ? 'Reply to...' : null;
 
       final newState = _NoteState(
         authorUser: authorUser,
@@ -893,8 +898,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                       },
                     ),
                     Padding(
-                      padding:
-                          EdgeInsets.only(top: (_isRepost || _isReply) ? 8 : 4),
+                      padding: EdgeInsets.only(
+                          top: (_isRepost || _isReply || _isQuote) ? 8 : 4),
                       child: _SafeProfileSection(
                         stateNotifier: _stateNotifier,
                         isRepost: _isRepost,

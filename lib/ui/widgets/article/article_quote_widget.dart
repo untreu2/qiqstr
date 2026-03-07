@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
-import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/article_repository.dart';
-import '../../../data/repositories/profile_repository.dart';
-import '../../../data/sync/sync_service.dart';
+import '../../../presentation/blocs/article_quote_widget/article_quote_widget_bloc.dart';
+import '../../../presentation/blocs/article_quote_widget/article_quote_widget_event.dart';
+import '../../../presentation/blocs/article_quote_widget/article_quote_widget_state.dart';
+import '../../../domain/entities/article.dart';
+import '../../theme/theme_manager.dart';
 import '../../../l10n/app_localizations.dart';
 
-
-class ArticleQuoteWidget extends StatefulWidget {
+class ArticleQuoteWidget extends StatelessWidget {
   final String naddr;
 
   const ArticleQuoteWidget({
@@ -19,181 +19,84 @@ class ArticleQuoteWidget extends StatefulWidget {
   });
 
   @override
-  State<ArticleQuoteWidget> createState() => _ArticleQuoteWidgetState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => AppDI.get<ArticleQuoteWidgetBloc>()
+        ..add(ArticleQuoteWidgetLoadRequested(naddr: naddr)),
+      child: BlocBuilder<ArticleQuoteWidgetBloc, ArticleQuoteWidgetState>(
+        builder: (context, state) {
+          if (state is ArticleQuoteWidgetLoaded) {
+            return _ArticleQuoteCard(article: state.article, naddr: naddr);
+          }
+          if (state is ArticleQuoteWidgetError) {
+            return _ArticleQuoteError();
+          }
+          return _ArticleQuoteLoading();
+        },
+      ),
+    );
+  }
 }
 
-class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
-  Map<String, dynamic>? _article;
-  Map<String, dynamic>? _author;
-  bool _isLoading = true;
-  bool _hasError = false;
-
+class _ArticleQuoteLoading extends StatelessWidget {
   @override
-  void initState() {
-    super.initState();
-    _loadArticle();
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.border, width: 1),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
   }
+}
 
-  Future<void> _loadArticle() async {
-    try {
-      final decoded = _decodeNaddr(widget.naddr);
-      if (decoded == null) {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final kind = decoded['kind'] as int?;
-      final pubkey = decoded['pubkey'] as String?;
-      final identifier = decoded['identifier'] as String?;
-
-      if (kind != null && kind != 30023) {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-        });
-        return;
-      }
-
-      if (pubkey == null && identifier == null) {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final articleRepo = AppDI.get<ArticleRepository>();
-      var articles = await articleRepo.getArticles(limit: 100);
-
-      Map<String, dynamic>? foundArticle =
-          _findArticle(articles, pubkey, identifier);
-
-      if (foundArticle == null && pubkey != null) {
-        final syncService = AppDI.get<SyncService>();
-        await syncService.syncArticles(authors: [pubkey], limit: 20);
-
-        articles = await articleRepo.getArticles(limit: 100);
-        foundArticle = _findArticle(articles, pubkey, identifier);
-      }
-
-      if (foundArticle != null) {
-        setState(() {
-          _article = foundArticle;
-          _isLoading = false;
-        });
-        _loadAuthorProfile(foundArticle['pubkey'] as String);
-      } else {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
-    }
+class _ArticleQuoteError extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final l10n = AppLocalizations.of(context)!;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.border, width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.article_outlined, size: 16, color: colors.textSecondary),
+          const SizedBox(width: 8),
+          Text(
+            l10n.articleNotFound,
+            style: TextStyle(fontSize: 14, color: colors.textSecondary),
+          ),
+        ],
+      ),
+    );
   }
+}
 
-  Map<String, dynamic>? _findArticle(
-      List articles, String? pubkey, String? identifier) {
-    for (final article in articles) {
-      final articleDTag = article.dTag;
-      final articlePubkey = article.pubkey;
+class _ArticleQuoteCard extends StatelessWidget {
+  final Article article;
+  final String naddr;
 
-      bool matches = false;
-      if (pubkey != null && identifier != null) {
-        matches = articlePubkey == pubkey && articleDTag == identifier;
-      } else if (pubkey != null) {
-        matches = articlePubkey == pubkey;
-      } else if (identifier != null) {
-        matches = articleDTag == identifier;
-      }
+  const _ArticleQuoteCard({required this.article, required this.naddr});
 
-      if (matches) {
-        return {
-          'id': article.id,
-          'dTag': article.dTag,
-          'title': article.title,
-          'summary': article.summary,
-          'image': article.image,
-          'content': article.content,
-          'pubkey': article.pubkey,
-          'author': article.authorName,
-          'authorImage': article.authorImage,
-          'timestamp': article.createdAt,
-        };
-      }
-    }
-    return null;
-  }
-
-  Map<String, dynamic>? _decodeNaddr(String naddr) {
-    try {
-      final cleanNaddr =
-          naddr.startsWith('nostr:') ? naddr.substring(6) : naddr;
-
-      final result = decodeTlvBech32Full(cleanNaddr);
-      final identifier = result['identifier'] as String?;
-      final pubkey = result['pubkey'] as String?;
-      final kindValue = result['kind'];
-      int? kind;
-      if (kindValue is int) {
-        kind = kindValue;
-      } else if (kindValue is String) {
-        kind = int.tryParse(kindValue);
-      }
-
-      return {
-        'kind': kind,
-        'pubkey': pubkey,
-        'identifier': identifier,
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<void> _loadAuthorProfile(String pubkeyHex) async {
-    try {
-      final profileRepo = AppDI.get<ProfileRepository>();
-      var profile = await profileRepo.getProfile(pubkeyHex);
-
-      if (profile == null ||
-          (profile.name ?? '').isEmpty && (profile.picture ?? '').isEmpty) {
-        final syncService = AppDI.get<SyncService>();
-        await syncService.syncProfile(pubkeyHex);
-        if (!mounted) return;
-        profile = await profileRepo.getProfile(pubkeyHex);
-      }
-
-      if (profile != null && mounted) {
-        setState(() {
-          _author = {
-            'pubkeyHex': profile!.pubkey,
-            'name': profile.name ?? '',
-            'about': profile.about ?? '',
-            'profileImage': profile.picture ?? '',
-            'banner': profile.banner ?? '',
-            'website': profile.website ?? '',
-            'nip05': profile.nip05 ?? '',
-            'lud16': profile.lud16 ?? '',
-          };
-        });
-      }
-    } catch (_) {}
-  }
-
-  void _navigateToArticle() {
-    if (_article == null) return;
-
-    final articleId = _article!['id'] as String? ?? '';
+  void _navigate(BuildContext context) {
+    final articleId = article.id;
     final currentLocation = GoRouterState.of(context).matchedLocation;
-
     if (currentLocation.startsWith('/home/feed')) {
       context.push(
           '/home/feed/article?articleId=${Uri.encodeComponent(articleId)}');
@@ -207,67 +110,19 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
     final colors = context.colors;
     final l10n = AppLocalizations.of(context)!;
 
-    if (_isLoading) {
-      return Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colors.border, width: 1),
-        ),
-        child: const Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
-    if (_hasError || _article == null) {
-      return Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colors.border, width: 1),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.article_outlined,
-              size: 16,
-              color: colors.textSecondary,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              l10n.articleNotFound,
-              style: TextStyle(
-                fontSize: 14,
-                color: colors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     final title =
-        _article!['title'] as String? ?? l10n.untitledArticle;
-    final summary = _article!['summary'] as String? ?? '';
-    final imageUrl = _article!['image'] as String? ?? '';
-    final authorName = _author?['name'] as String? ?? '';
-    final authorImage = _author?['profileImage'] as String? ?? '';
-    final authorId = _article!['author'] as String? ?? '';
+        article.title.isNotEmpty ? article.title : l10n.untitledArticle;
+    final summary = article.summary ?? '';
+    final imageUrl = article.image ?? '';
+    final authorName = article.authorName ?? '';
+    final authorImage = article.authorImage ?? '';
+    final pubkey = article.pubkey;
     final displayName = authorName.isNotEmpty
         ? authorName
-        : (authorId.length > 8 ? '${authorId.substring(0, 8)}...' : authorId);
+        : (pubkey.length > 8 ? '${pubkey.substring(0, 8)}...' : pubkey);
 
     return GestureDetector(
-      onTap: _navigateToArticle,
+      onTap: () => _navigate(context),
       child: Container(
         margin: const EdgeInsets.only(top: 8, bottom: 0),
         decoration: BoxDecoration(
@@ -302,11 +157,8 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.article_outlined,
-                        size: 14,
-                        color: colors.accent,
-                      ),
+                      Icon(Icons.article_outlined,
+                          size: 14, color: colors.accent),
                       const SizedBox(width: 6),
                       Text(
                         l10n.article,
@@ -354,11 +206,8 @@ class _ArticleQuoteWidgetState extends State<ArticleQuoteWidget> {
                             ? CachedNetworkImageProvider(authorImage)
                             : null,
                         child: authorImage.isEmpty
-                            ? Icon(
-                                Icons.person,
-                                size: 12,
-                                color: colors.textSecondary,
-                              )
+                            ? Icon(Icons.person,
+                                size: 12, color: colors.textSecondary)
                             : null,
                       ),
                       const SizedBox(width: 6),

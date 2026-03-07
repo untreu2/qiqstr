@@ -476,6 +476,7 @@
   "repostedYourPost": "reposted your post",
   "repliedToYourPost": "replied to your post",
   "mentionedYou": "mentioned you",
+  "quotedYourPost": "quoted your post",
   "zappedYou": "zapped you",
   "interactedWithYou": "interacted with you",
   "andCountOthers": "and {count} others",
@@ -508,6 +509,12 @@
   },
   "notificationMentionCount": "{count, plural, =1{1 mention} other{{count} mentions}}",
   "@notificationMentionCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationQuoteCount": "{count, plural, =1{1 quote} other{{count} quotes}}",
+  "@notificationQuoteCount": {
     "placeholders": {
       "count": {"type": "int"}
     }

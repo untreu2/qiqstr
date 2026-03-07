@@ -6,6 +6,8 @@ import '../../../data/sync/sync_service.dart';
 import '../../../domain/entities/feed_note.dart';
 import '../../../data/services/follow_set_service.dart';
 import '../../../data/services/interaction_service.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../utils/string_optimizer.dart';
 import 'feed_event.dart' as feed_event;
 import 'feed_state.dart';
 
@@ -166,6 +168,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       _bufferedNotes = [];
       emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
       _loadProfilesForNotes(sortedNotes);
+      _prefetchEmbeddedContent(sortedNotes);
       return;
     }
 
@@ -212,6 +215,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
     }
     _loadProfilesForNotes(sortedNotes);
+    _prefetchEmbeddedContent(sortedNotes);
   }
 
   void _onFeedNewNotesAccepted(
@@ -528,6 +532,59 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           }
         }
       } catch (_) {}
+    });
+  }
+
+  void _prefetchEmbeddedContent(List<Map<String, dynamic>> notes) {
+    Future.microtask(() async {
+      if (isClosed) return;
+
+      final quoteEventIds = <String>{};
+      final articleAuthorPubkeys = <String>{};
+
+      for (final note in notes) {
+        final content = note['content'] as String? ?? '';
+        if (content.isEmpty) continue;
+
+        final parsed = stringOptimizer.parseContentOptimized(content);
+
+        final quoteIds = parsed['quoteIds'] as List? ?? [];
+        for (final bech32 in quoteIds) {
+          try {
+            String? eventId;
+            final b = bech32 as String;
+            if (b.startsWith('note1')) {
+              eventId = decodeBasicBech32(b, 'note');
+            } else if (b.startsWith('nevent1')) {
+              final result = decodeTlvBech32Full(b);
+              eventId = result['id'] as String?;
+            }
+            if (eventId != null && eventId.isNotEmpty) {
+              quoteEventIds.add(eventId);
+            }
+          } catch (_) {}
+        }
+
+        final articleIds = parsed['articleIds'] as List? ?? [];
+        for (final bech32 in articleIds) {
+          try {
+            final b = bech32 as String;
+            final result = decodeTlvBech32Full(
+                b.startsWith('nostr:') ? b.substring(6) : b);
+            final pubkey = result['pubkey'] as String?;
+            if (pubkey != null && pubkey.isNotEmpty) {
+              articleAuthorPubkeys.add(pubkey);
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (quoteEventIds.isNotEmpty) {
+        _syncService.prefetchQuotedNotes(quoteEventIds.toList());
+      }
+      if (articleAuthorPubkeys.isNotEmpty) {
+        _syncService.prefetchArticlesByAuthors(articleAuthorPubkeys.toList());
+      }
     });
   }
 

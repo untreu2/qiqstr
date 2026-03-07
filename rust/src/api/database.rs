@@ -1185,12 +1185,16 @@ async fn hydrate_notes(
         let mut root_id: Option<String> = None;
         let mut parent_id: Option<String> = None;
         let mut is_quote = false;
+        let mut quoted_note_id: Option<String> = None;
         let mut e_tags: Vec<String> = Vec::new();
 
         for tag in tags.iter() {
             if tag.len() < 2 { continue; }
             if tag[0] == "q" {
                 is_quote = true;
+                if quoted_note_id.is_none() {
+                    quoted_note_id = Some(tag[1].clone());
+                }
                 continue;
             }
             if tag[0] == "e" {
@@ -1227,6 +1231,12 @@ async fn hydrate_notes(
             reposted_by = Some(pubkey.clone());
             repost_created_at = Some(created_at);
 
+            root_id = None;
+            parent_id = None;
+            is_reply = false;
+            is_quote = false;
+            quoted_note_id = None;
+
             for tag in tags.iter() {
                 if !tag.is_empty() && tag[0] == "e" && tag.len() > 1 {
                     id = tag[1].clone();
@@ -1241,53 +1251,81 @@ async fn hydrate_notes(
                 }
             }
 
-            if !content.is_empty() {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(c) = parsed["content"].as_str() {
-                        content = c.to_string();
-                    }
-                    if let Some(p) = parsed["pubkey"].as_str() {
-                        pubkey = p.to_string();
-                    }
-                    if let Some(ca) = parsed["created_at"].as_u64() {
-                        created_at = ca;
-                    }
+            let embedded_json: Option<serde_json::Value> = if !content.is_empty() {
+                serde_json::from_str(&content).ok()
+            } else if let Ok(reposted_id) = EventId::from_hex(&id) {
+                let lookup_filter = Filter::new().id(reposted_id).kind(Kind::TextNote).limit(1);
+                if let Ok(found) = client.database().query(lookup_filter).await {
+                    found.into_iter().next().map(|ev| {
+                        let ev_tags: Vec<serde_json::Value> = ev.tags.iter()
+                            .map(|t| serde_json::Value::Array(
+                                t.clone().to_vec().iter().map(|s| serde_json::json!(s)).collect()
+                            ))
+                            .collect();
+                        serde_json::json!({
+                            "content": ev.content,
+                            "pubkey": ev.pubkey.to_hex(),
+                            "created_at": ev.created_at.as_secs(),
+                            "tags": ev_tags,
+                        })
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
 
-                    if let Some(parsed_tags) = parsed["tags"].as_array() {
-                        root_id = None;
-                        parent_id = None;
-                        let mut repost_e_tags: Vec<String> = Vec::new();
+            if let Some(parsed) = embedded_json {
+                if let Some(c) = parsed["content"].as_str() {
+                    content = c.to_string();
+                }
+                if let Some(p) = parsed["pubkey"].as_str() {
+                    pubkey = p.to_string();
+                }
+                if let Some(ca) = parsed["created_at"].as_u64() {
+                    created_at = ca;
+                }
 
-                        for tag in parsed_tags {
-                            if let Some(arr) = tag.as_array() {
-                                if arr.len() >= 2 && arr[0].as_str() == Some("e") {
-                                    if let Some(ref_id) = arr[1].as_str() {
-                                        repost_e_tags.push(ref_id.to_string());
-                                        if arr.len() >= 4 {
-                                            match arr[3].as_str() {
-                                                Some("root") => root_id = Some(ref_id.to_string()),
-                                                Some("reply") => parent_id = Some(ref_id.to_string()),
-                                                _ => {}
-                                            }
+                if let Some(parsed_tags) = parsed["tags"].as_array() {
+                    let mut repost_e_tags: Vec<String> = Vec::new();
+
+                    for tag in parsed_tags {
+                        if let Some(arr) = tag.as_array() {
+                            if arr.len() < 2 { continue; }
+                            if arr[0].as_str() == Some("q") {
+                                is_quote = true;
+                                if quoted_note_id.is_none() {
+                                    quoted_note_id = arr[1].as_str().map(|s| s.to_string());
+                                }
+                            } else if arr[0].as_str() == Some("e") {
+                                if let Some(ref_id) = arr[1].as_str() {
+                                    repost_e_tags.push(ref_id.to_string());
+                                    if arr.len() >= 4 {
+                                        match arr[3].as_str() {
+                                            Some("root") => root_id = Some(ref_id.to_string()),
+                                            Some("reply") => parent_id = Some(ref_id.to_string()),
+                                            Some("mention") => {}
+                                            _ => {}
                                         }
                                     }
                                 }
                             }
                         }
-
-                        if root_id.is_none() && parent_id.is_none() && !repost_e_tags.is_empty() {
-                            if repost_e_tags.len() == 1 {
-                                root_id = Some(repost_e_tags[0].clone());
-                                parent_id = Some(repost_e_tags[0].clone());
-                            } else {
-                                root_id = Some(repost_e_tags.first().unwrap().clone());
-                                parent_id = Some(repost_e_tags.last().unwrap().clone());
-                            }
-                        } else if root_id.is_some() && parent_id.is_none() {
-                            parent_id = root_id.clone();
-                        }
-                        is_reply = root_id.is_some() || parent_id.is_some();
                     }
+
+                    if root_id.is_none() && parent_id.is_none() && !repost_e_tags.is_empty() && !is_quote {
+                        if repost_e_tags.len() == 1 {
+                            root_id = Some(repost_e_tags[0].clone());
+                            parent_id = Some(repost_e_tags[0].clone());
+                        } else {
+                            root_id = Some(repost_e_tags.first().unwrap().clone());
+                            parent_id = Some(repost_e_tags.last().unwrap().clone());
+                        }
+                    } else if root_id.is_some() && parent_id.is_none() && !is_quote {
+                        parent_id = root_id.clone();
+                    }
+                    is_reply = (root_id.is_some() || parent_id.is_some()) && !is_quote;
                 }
             }
         }
@@ -1321,6 +1359,8 @@ async fn hydrate_notes(
             "repostedBy": reposted_by,
             "repostCreatedAt": repost_created_at,
             "isReply": is_reply,
+            "isQuote": is_quote,
+            "quotedNoteId": quoted_note_id,
             "rootId": root_id,
             "parentId": parent_id,
             "authorName": serde_json::Value::Null,
@@ -1617,27 +1657,42 @@ async fn hydrate_notification_events(
             .map(|tag| tag.clone().to_vec())
             .collect();
 
-        let mut notification_type: &str;
+        let notification_type: &str;
         let mut target_note_id: Option<String> = None;
         let mut zap_amount: Option<u64> = None;
         let mut from_pubkey = pubkey.clone();
 
         match kind_num {
             1 => {
-                let mut has_mention = false;
-                notification_type = "reply";
+                let mut has_q_tag = false;
+                let mut q_target_id: Option<String> = None;
+                let mut has_reply_marker = false;
+                let mut first_e_id: Option<String> = None;
+
                 for tag in &tags {
-                    if tag.len() >= 2 && tag[0] == "e" {
-                        target_note_id = Some(tag[1].clone());
-                        if tag.len() >= 4 && (tag[3] == "reply" || tag[3] == "root") {
-                            notification_type = "reply";
-                            has_mention = false;
-                            break;
+                    if tag.len() >= 2 && tag[0] == "q" {
+                        has_q_tag = true;
+                        q_target_id = Some(tag[1].clone());
+                    } else if tag.len() >= 2 && tag[0] == "e" {
+                        if first_e_id.is_none() {
+                            first_e_id = Some(tag[1].clone());
                         }
-                        has_mention = true;
+                        if tag.len() >= 4 && (tag[3] == "reply" || tag[3] == "root") {
+                            has_reply_marker = true;
+                            target_note_id = Some(tag[1].clone());
+                        }
                     }
                 }
-                if has_mention {
+
+                if has_q_tag && !has_reply_marker {
+                    notification_type = "quote";
+                    target_note_id = q_target_id;
+                } else if has_reply_marker {
+                    notification_type = "reply";
+                } else if first_e_id.is_some() {
+                    notification_type = "mention";
+                    target_note_id = first_e_id;
+                } else {
                     notification_type = "mention";
                 }
             }

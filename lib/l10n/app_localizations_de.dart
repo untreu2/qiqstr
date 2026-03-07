@@ -1087,6 +1087,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get mentionedYou => 'hat dich erwähnt';
 
   @override
+  String get quotedYourPost => 'hat deinen Beitrag zitiert';
+
+  @override
   String get zappedYou => 'hat dir gezappt';
 
   @override
@@ -1146,6 +1149,17 @@ class AppLocalizationsDe extends AppLocalizations {
       locale: localeName,
       other: '$count Erwähnungen',
       one: '1 Erwähnung',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String notificationQuoteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Zitate',
+      one: '1 Zitat',
     );
     return '$_temp0';
   }
