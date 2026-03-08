@@ -342,6 +342,76 @@ pub async fn get_relay_status() -> Result<String> {
     Ok(result.to_string())
 }
 
+#[frb]
+pub async fn stream_relay_status(sink: StreamSink<String>) -> Result<()> {
+    let mut interval = tokio::time::interval(Duration::from_millis(800));
+    loop {
+        interval.tick().await;
+        let Ok(client) = get_client().await else {
+            break;
+        };
+        let relays = client.relays().await;
+        let mut relay_list = Vec::new();
+        for (url, relay) in relays.iter() {
+            let status = relay.status();
+            let stats = relay.stats();
+            let flags = relay.flags();
+            let is_discovery = flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
+                && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
+                && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All);
+
+            let status_str = match status {
+                RelayStatus::Initialized => "initialized",
+                RelayStatus::Pending => "pending",
+                RelayStatus::Connecting => "connecting",
+                RelayStatus::Connected => "connected",
+                RelayStatus::Disconnected => "disconnected",
+                RelayStatus::Terminated => "terminated",
+                RelayStatus::Banned => "banned",
+                RelayStatus::Sleeping => "sleeping",
+            };
+
+            let latency_ms: u64 = relay
+                .stats()
+                .latency()
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+
+            let relay_info = serde_json::json!({
+                "url": url.to_string(),
+                "status": status_str,
+                "isDiscovery": is_discovery,
+                "attempts": stats.attempts(),
+                "success": stats.success(),
+                "bytesSent": stats.bytes_sent(),
+                "bytesReceived": stats.bytes_received(),
+                "connectedAt": stats.connected_at().as_secs(),
+                "latencyMs": latency_ms,
+            });
+            relay_list.push(relay_info);
+        }
+
+        let total = relay_list.iter().filter(|r| r["isDiscovery"] == false).count();
+        let connected = relay_list
+            .iter()
+            .filter(|r| r["status"] == "connected" && r["isDiscovery"] == false)
+            .count();
+
+        let result = serde_json::json!({
+            "summary": {
+                "totalRelays": total,
+                "connectedRelays": connected,
+            },
+            "relays": relay_list,
+        });
+
+        if sink.add(result.to_string()).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
 pub async fn discover_and_connect_outbox_relays(
     pubkeys_hex: Vec<String>,
     max_outbox_relays: usize,
@@ -1017,6 +1087,85 @@ pub async fn broadcast_events(
     Ok(result.to_string())
 }
 
+#[frb]
+pub async fn stream_broadcast_events(
+    events_json: String,
+    relay_urls: Option<Vec<String>>,
+    sink: StreamSink<String>,
+) -> Result<()> {
+    let client = get_client().await?;
+    let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
+    let total = events.len() as u32;
+
+    let target_urls: Option<Vec<RelayUrl>> = relay_urls.map(|urls| {
+        urls.iter()
+            .filter_map(|u| RelayUrl::parse(u).ok())
+            .collect()
+    });
+
+    if let Some(ref urls) = target_urls {
+        let add_futures: Vec<_> = urls.iter().map(|url| client.add_relay(url.as_str())).collect();
+        futures::future::join_all(add_futures).await;
+        client.connect().await;
+    }
+
+    let mut sent = 0u32;
+    let mut failed = 0u32;
+
+    const BATCH_SIZE: usize = 50;
+
+    for chunk in events.chunks(BATCH_SIZE) {
+        let futures: Vec<_> = chunk
+            .iter()
+            .map(|event_val| {
+                let client = client.clone();
+                let target_urls = target_urls.clone();
+                let event_str = event_val.to_string();
+                async move {
+                    let Ok(event) = Event::from_json(&event_str) else {
+                        return false;
+                    };
+                    let result = if let Some(ref urls) = target_urls {
+                        client.send_event_to(urls.clone(), &event).await
+                    } else {
+                        client.send_event(&event).await
+                    };
+                    match result {
+                        Ok(output) => !output.success.is_empty(),
+                        Err(_) => false,
+                    }
+                }
+            })
+            .collect();
+
+        let results = futures::future::join_all(futures).await;
+
+        for ok in results {
+            if ok { sent += 1; } else { failed += 1; }
+        }
+
+        let progress = serde_json::json!({
+            "sent": sent,
+            "failed": failed,
+            "total": total,
+            "done": false,
+        });
+        if sink.add(progress.to_string()).is_err() {
+            return Ok(());
+        }
+    }
+
+    let done = serde_json::json!({
+        "sent": sent,
+        "failed": failed,
+        "total": total,
+        "done": true,
+    });
+    let _ = sink.add(done.to_string());
+
+    Ok(())
+}
+
 pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Result<String> {
     let client = get_client().await?;
     
@@ -1095,6 +1244,126 @@ pub async fn delete_events(event_ids: Vec<String>, reason: String) -> Result<Str
     });
 
     Ok(result.to_string())
+}
+
+#[frb]
+pub async fn fetch_all_events_for_author(
+    author_hex: String,
+    sink: StreamSink<String>,
+) -> Result<()> {
+    let client = get_client().await?;
+    let pubkey = PublicKey::from_hex(&author_hex)?;
+
+    const PAGE_SIZE: usize = 500;
+    let mut seen: HashSet<String> = HashSet::new();
+
+    // Collect read-capable relay URLs
+    let relay_urls: Vec<RelayUrl> = {
+        let relays = client.relays().await;
+        relays
+            .iter()
+            .filter(|(_, r)| {
+                let flags = r.flags();
+                !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
+                    && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
+                    && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
+            })
+            .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
+            .collect()
+    };
+
+    if relay_urls.is_empty() {
+        return Ok(());
+    }
+
+    // Per-relay `until` cursor (unix secs). None = start from now.
+    let mut cursors: HashMap<String, u64> = HashMap::new();
+    // Relays that returned 0 new events on the last page are done.
+    let mut exhausted: HashSet<String> = HashSet::new();
+
+    loop {
+        let active: Vec<&RelayUrl> = relay_urls
+            .iter()
+            .filter(|u| !exhausted.contains(u.as_str()))
+            .collect();
+
+        if active.is_empty() {
+            break;
+        }
+
+        // Query each active relay individually so we can track per-relay cursors.
+        for relay_url in active {
+            let key = relay_url.to_string();
+            let until_ts = cursors.get(&key).copied();
+
+            let mut filter = Filter::new()
+                .author(pubkey)
+                .limit(PAGE_SIZE);
+            if let Some(ts) = until_ts {
+                filter = filter.until(Timestamp::from(ts));
+            }
+
+            // fetch_events_from hits the relay directly (no LMDB merge).
+            // It closes automatically on EOSE, returning exactly what that
+            // relay has for this filter page.
+            let events = match client
+                .fetch_events_from(
+                    vec![relay_url.clone()],
+                    filter,
+                    Duration::from_secs(15),
+                )
+                .await
+            {
+                Ok(e) => e,
+                Err(_) => {
+                    exhausted.insert(key);
+                    continue;
+                }
+            };
+
+            let mut new_count = 0usize;
+            let mut oldest_ts: Option<u64> = None;
+
+            for event in events.into_iter() {
+                let id_hex = event.id.to_hex();
+                if seen.contains(&id_hex) {
+                    continue;
+                }
+                seen.insert(id_hex);
+                new_count += 1;
+
+                let ts = event.created_at.as_u64();
+                oldest_ts = Some(match oldest_ts {
+                    None => ts,
+                    Some(prev) => prev.min(ts),
+                });
+
+                let json = match serde_json::from_str::<serde_json::Value>(&event.as_json()) {
+                    Ok(v) => serde_json::to_string(&v).unwrap_or_default(),
+                    Err(_) => continue,
+                };
+                if sink.add(json).is_err() {
+                    return Ok(());
+                }
+            }
+
+            if new_count == 0 {
+                // Relay truly has nothing older — done with this relay.
+                exhausted.insert(key);
+            } else if let Some(oldest) = oldest_ts {
+                if oldest == 0 {
+                    exhausted.insert(key);
+                } else {
+                    // Advance the cursor back one second and fetch the next page.
+                    cursors.insert(key, oldest - 1);
+                }
+            } else {
+                exhausted.insert(key);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[frb]

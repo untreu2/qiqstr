@@ -55,6 +55,9 @@ Future<int> getConnectedRelayCount() =>
 Future<String> getRelayStatus() =>
     RustLib.instance.api.crateApiRelayGetRelayStatus();
 
+Stream<String> streamRelayStatus() =>
+    RustLib.instance.api.crateApiRelayStreamRelayStatus();
+
 Future<String> discoverAndConnectOutboxRelays(
         {required List<String> pubkeysHex,
         required BigInt maxOutboxRelays,
@@ -100,6 +103,11 @@ Future<String> broadcastEvents(
     RustLib.instance.api.crateApiRelayBroadcastEvents(
         eventsJson: eventsJson, relayUrls: relayUrls);
 
+Stream<String> streamBroadcastEvents(
+        {required String eventsJson, List<String>? relayUrls}) =>
+    RustLib.instance.api.crateApiRelayStreamBroadcastEvents(
+        eventsJson: eventsJson, relayUrls: relayUrls);
+
 Future<String> requestToVanish(
         {required List<String> relayUrls, required String reason}) =>
     RustLib.instance.api
@@ -109,6 +117,10 @@ Future<String> deleteEvents(
         {required List<String> eventIds, required String reason}) =>
     RustLib.instance.api
         .crateApiRelayDeleteEvents(eventIds: eventIds, reason: reason);
+
+Stream<String> fetchAllEventsForAuthor({required String authorHex}) =>
+    RustLib.instance.api
+        .crateApiRelayFetchAllEventsForAuthor(authorHex: authorHex);
 
 Stream<String> subscribeToEvents({required String filterJson}) =>
     RustLib.instance.api.crateApiRelaySubscribeToEvents(filterJson: filterJson);

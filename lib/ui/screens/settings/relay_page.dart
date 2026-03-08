@@ -45,6 +45,7 @@ class _RelayPageState extends State<RelayPage> {
   int _totalBytesSent = 0;
   int _totalBytesReceived = 0;
   final Map<String, Map<String, dynamic>> _relayStats = {};
+  StreamSubscription<Map<String, dynamic>>? _statusSubscription;
   late ScrollController _scrollController;
   final ValueNotifier<bool> _showTitleBubble = ValueNotifier(false);
 
@@ -53,11 +54,10 @@ class _RelayPageState extends State<RelayPage> {
   @override
   void initState() {
     super.initState();
-    _initializeServices();
     _scrollController = ScrollController()..addListener(_scrollListener);
-    _loadRelays();
-    _loadRelayStats();
-    _startStatsRefresh();
+    _loadRelays().then((_) {
+      _startStatusStream();
+    });
   }
 
   void _scrollListener() {
@@ -72,55 +72,47 @@ class _RelayPageState extends State<RelayPage> {
   @override
   void dispose() {
     _disposed = true;
+    _statusSubscription?.cancel();
     _scrollController.dispose();
     _showTitleBubble.dispose();
     _addRelayController.dispose();
     super.dispose();
   }
 
-  void _initializeServices() {}
-
-  void _startStatsRefresh() {
-    Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (_disposed) {
-        timer.cancel();
-        return;
-      }
-      _loadRelayStats();
-    });
+  void _startStatusStream() {
+    _statusSubscription?.cancel();
+    _statusSubscription = RustRelayService.instance.streamRelayStatus().listen(
+          _applyRelayStatus,
+          onError: (_) {},
+        );
   }
 
-  void _loadRelayStats() async {
-    if (_disposed) return;
-    try {
-      final status = await RustRelayService.instance.getRelayStatus();
-      if (_disposed || !mounted) return;
+  void _applyRelayStatus(Map<String, dynamic> status) {
+    if (_disposed || !mounted) return;
+    final summary = status['summary'] as Map<String, dynamic>?;
+    final relays = status['relays'] as List<dynamic>? ?? [];
+    final newStats = <String, Map<String, dynamic>>{};
+    int bytesSent = 0;
+    int bytesReceived = 0;
 
-      final summary = status['summary'] as Map<String, dynamic>?;
-      final relays = status['relays'] as List<dynamic>? ?? [];
-      final newStats = <String, Map<String, dynamic>>{};
-      int bytesSent = 0;
-      int bytesReceived = 0;
-
-      for (final relay in relays) {
-        final r = relay as Map<String, dynamic>;
-        final url = r['url'] as String? ?? '';
-        if (url.isNotEmpty) {
-          newStats[url] = r;
-          bytesSent += (r['bytesSent'] as int? ?? 0);
-          bytesReceived += (r['bytesReceived'] as int? ?? 0);
-        }
+    for (final relay in relays) {
+      final r = relay as Map<String, dynamic>;
+      final url = r['url'] as String? ?? '';
+      if (url.isNotEmpty) {
+        newStats[url] = r;
+        bytesSent += (r['bytesSent'] as int? ?? 0);
+        bytesReceived += (r['bytesReceived'] as int? ?? 0);
       }
+    }
 
-      setState(() {
-        _relayStats.clear();
-        _relayStats.addAll(newStats);
-        _connectedRelayCount = summary?['connectedRelays'] as int? ?? 0;
-        _totalRelayCount = summary?['totalRelays'] as int? ?? 0;
-        _totalBytesSent = bytesSent;
-        _totalBytesReceived = bytesReceived;
-      });
-    } catch (_) {}
+    setState(() {
+      _relayStats.clear();
+      _relayStats.addAll(newStats);
+      _connectedRelayCount = summary?['connectedRelays'] as int? ?? 0;
+      _totalRelayCount = summary?['totalRelays'] as int? ?? 0;
+      _totalBytesSent = bytesSent;
+      _totalBytesReceived = bytesReceived;
+    });
   }
 
   Future<void> _loadRelays() async {
@@ -133,8 +125,9 @@ class _RelayPageState extends State<RelayPage> {
       final userRelaysJson = prefs.getString('user_relays');
       final flagsJson = prefs.getString('relay_flags');
       _gossipModelEnabled = prefs.getBool('gossip_model_enabled') ?? false;
-      _gossipMode =
-          gossipModeFromString(prefs.getString('gossip_mode') ?? 'normal');
+      _gossipMode = gossipModeFromString(
+        prefs.getString('gossip_mode') ?? 'normal',
+      );
 
       if (userRelaysJson != null) {
         final List<dynamic> decoded = jsonDecode(userRelaysJson);
@@ -176,7 +169,9 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, '${l10n.errorLoadingRelays}: ${e.toString()}');
+          context,
+          '${l10n.errorLoadingRelays}: ${e.toString()}',
+        );
       }
     }
   }
@@ -239,8 +234,10 @@ class _RelayPageState extends State<RelayPage> {
 
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
-        AppSnackbar.success(context,
-            '${l10n.relayListPublishedSuccessfully} (${relayConfigs.length} relays in list)');
+        AppSnackbar.success(
+          context,
+          '${l10n.relayListPublishedSuccessfully} (${relayConfigs.length} relays in list)',
+        );
       }
 
       if (kDebugMode) {
@@ -253,7 +250,9 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, '${l10n.errorPublishingRelayList}: ${e.toString()}');
+          context,
+          '${l10n.errorPublishingRelayList}: ${e.toString()}',
+        );
       }
     } finally {
       if (mounted) {
@@ -305,8 +304,10 @@ class _RelayPageState extends State<RelayPage> {
 
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
-          AppSnackbar.success(context,
-              '${l10n.relayListFetchedSuccessfully} (${_userRelays.length} relays)');
+          AppSnackbar.success(
+            context,
+            '${l10n.relayListFetchedSuccessfully} (${_userRelays.length} relays)',
+          );
         }
       } else {
         if (mounted) {
@@ -318,7 +319,9 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, '${l10n.errorFetchingRelayList}: ${e.toString()}');
+          context,
+          '${l10n.errorFetchingRelayList}: ${e.toString()}',
+        );
       }
     } finally {
       setState(() {
@@ -328,7 +331,8 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchRelayListMetadata(
-      String npub) async {
+    String npub,
+  ) async {
     final List<Map<String, dynamic>> relayList = [];
 
     try {
@@ -340,8 +344,10 @@ class _RelayPageState extends State<RelayPage> {
         'limit': 1,
       };
 
-      final events =
-          await RustRelayService.instance.fetchEvents(filter, timeoutSecs: 10);
+      final events = await RustRelayService.instance.fetchEvents(
+        filter,
+        timeoutSecs: 10,
+      );
 
       if (events.isNotEmpty) {
         final eventData = events.first;
@@ -363,10 +369,7 @@ class _RelayPageState extends State<RelayPage> {
               marker = 'read,write';
             }
 
-            relayList.add({
-              'url': relayUrl,
-              'marker': marker,
-            });
+            relayList.add({'url': relayUrl, 'marker': marker});
           }
         }
       }
@@ -417,12 +420,15 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setBool('using_user_relays', true);
 
       if (mounted) {
-        AppSnackbar.success(context,
-            'Now using your personal relays (${newRelays.length} main relays)');
+        AppSnackbar.success(
+          context,
+          AppLocalizations.of(context)!.usingPersonalRelays(newRelays.length),
+        );
 
         final newRelayUrls = newRelays
             .where(
-                (relay) => !previousRelays.contains(_normalizeRelayUrl(relay)))
+              (relay) => !previousRelays.contains(_normalizeRelayUrl(relay)),
+            )
             .toList();
 
         if (newRelayUrls.isNotEmpty && mounted) {
@@ -441,7 +447,9 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, '${l10n.errorSavingRelays}: ${e.toString()}');
+          context,
+          '${l10n.errorSavingRelays}: ${e.toString()}',
+        );
       }
     }
   }
@@ -465,7 +473,9 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, '${l10n.errorSavingRelays}: ${e.toString()}');
+          context,
+          '${l10n.errorSavingRelays}: ${e.toString()}',
+        );
       }
     }
   }
@@ -505,8 +515,9 @@ class _RelayPageState extends State<RelayPage> {
     final targetList = _relays;
     final normalizedUrl = _normalizeRelayUrl(url);
 
-    if (targetList
-        .any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
+    if (targetList.any(
+      (existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl),
+    )) {
       final l10n = AppLocalizations.of(context)!;
       AppSnackbar.error(context, l10n.relayAlreadyExistsInCategory);
       return;
@@ -558,8 +569,9 @@ class _RelayPageState extends State<RelayPage> {
     AppSnackbar.info(context, l10n.fetchingYourEvents);
 
     try {
-      final result =
-          await EventCountsService.instance.fetchAllEventsForUser(null);
+      final result = await EventCountsService.instance.fetchAllEventsForUser(
+        null,
+      );
 
       if (!mounted) return;
 
@@ -568,8 +580,10 @@ class _RelayPageState extends State<RelayPage> {
         return;
       }
 
-      AppSnackbar.info(context,
-          l10n.broadcastingEvents(result.allEvents.length, relayUrls.length));
+      AppSnackbar.info(
+        context,
+        l10n.broadcastingEvents(result.allEvents.length, relayUrls.length),
+      );
 
       final success = await EventCountsService.instance.rebroadcastEvents(
         result.allEvents,
@@ -582,7 +596,9 @@ class _RelayPageState extends State<RelayPage> {
         AppSnackbar.success(
           context,
           l10n.eventsSuccessfullyBroadcast(
-              result.allEvents.length, relayUrls.length),
+            result.allEvents.length,
+            relayUrls.length,
+          ),
         );
       } else {
         AppSnackbar.error(context, l10n.errorBroadcastingEvents);
@@ -591,7 +607,9 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         AppSnackbar.error(
-            context, '${l10n.errorBroadcastingEvents}: ${e.toString()}');
+          context,
+          '${l10n.errorBroadcastingEvents}: ${e.toString()}',
+        );
       }
     }
   }
@@ -614,8 +632,9 @@ class _RelayPageState extends State<RelayPage> {
     await showResetRelaysDialog(
       context: context,
       onConfirm: () async {
-        final previousRelays =
-            Set<String>.from(_relays.map(_normalizeRelayUrl));
+        final previousRelays = Set<String>.from(
+          _relays.map(_normalizeRelayUrl),
+        );
 
         final defaultFlags = <String, Map<String, bool>>{};
         for (final relay in relaySetMainSockets) {
@@ -633,8 +652,9 @@ class _RelayPageState extends State<RelayPage> {
           AppSnackbar.success(context, l10n.relaysResetToDefaults);
 
           final newRelayUrls = _relays
-              .where((relay) =>
-                  !previousRelays.contains(_normalizeRelayUrl(relay)))
+              .where(
+                (relay) => !previousRelays.contains(_normalizeRelayUrl(relay)),
+              )
               .toList();
 
           if (newRelayUrls.isNotEmpty && mounted) {
@@ -757,8 +777,9 @@ class _RelayPageState extends State<RelayPage> {
                   activeThumbColor: context.colors.switchActive,
                   inactiveThumbColor: context.colors.textSecondary,
                   inactiveTrackColor: context.colors.border,
-                  activeTrackColor:
-                      context.colors.switchActive.withValues(alpha: 0.3),
+                  activeTrackColor: context.colors.switchActive.withValues(
+                    alpha: 0.3,
+                  ),
                 ),
               ],
             ),
@@ -898,16 +919,26 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Widget _buildRelayTile(
-      String relay, bool isMainRelay, AppLocalizations l10n) {
+    String relay,
+    bool isMainRelay,
+    AppLocalizations l10n,
+  ) {
     final stats = _relayStats[relay];
     final relayStatus = stats?['status'] as String? ?? 'disconnected';
     final isConnected = relayStatus == 'connected';
     final isConnecting =
         relayStatus == 'connecting' || relayStatus == 'pending';
 
+    final latencyMs = stats?['latencyMs'] as int? ?? 0;
+    final bytesReceived = stats?['bytesReceived'] as int? ?? 0;
+    final attempts = stats?['attempts'] as int? ?? 0;
+    final success = stats?['success'] as int? ?? 0;
+
+    final hasStats = stats != null && (bytesReceived > 0 || latencyMs > 0);
+
     return RepaintBoundary(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
           borderRadius: BorderRadius.circular(16),
@@ -928,15 +959,77 @@ class _RelayPageState extends State<RelayPage> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                relay,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.textPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    relay,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  if (hasStats) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (latencyMs > 0) ...[
+                          Icon(
+                            Icons.speed,
+                            size: 11,
+                            color: _latencyColor(latencyMs),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${latencyMs}ms',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _latencyColor(latencyMs),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        if (bytesReceived > 0) ...[
+                          Icon(
+                            Icons.download,
+                            size: 11,
+                            color: context.colors.textTertiary,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            _formatBytes(bytesReceived),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.colors.textTertiary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        if (attempts > 0)
+                          Text(
+                            '$success/$attempts ok',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.colors.textTertiary,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ] else if (isConnecting)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        relayStatus,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.colors.textTertiary,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 8),
@@ -954,6 +1047,12 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
+  Color _latencyColor(int ms) {
+    if (ms < 150) return Colors.green;
+    if (ms < 400) return Colors.orange;
+    return Colors.red;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -968,10 +1067,12 @@ class _RelayPageState extends State<RelayPage> {
 
     final relayWidgets = <Widget>[];
     for (int i = 0; i < _relays.length; i++) {
-      relayWidgets.add(Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: _buildRelayTile(_relays[i], true, l10n),
-      ));
+      relayWidgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _buildRelayTile(_relays[i], true, l10n),
+        ),
+      );
     }
 
     return Scaffold(
@@ -982,28 +1083,21 @@ class _RelayPageState extends State<RelayPage> {
             controller: _scrollController,
             slivers: [
               SliverToBoxAdapter(
-                child:
-                    SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                child: SizedBox(
+                  height: MediaQuery.of(context).padding.top + 60,
+                ),
               ),
-              SliverToBoxAdapter(
-                child: _buildHeader(context),
-              ),
-              SliverToBoxAdapter(
-                child: _buildRelayStatsSection(context),
-              ),
-              SliverToBoxAdapter(
-                child: _buildActionButtons(context, l10n),
-              ),
-              SliverToBoxAdapter(
-                child: _buildGossipModelToggle(context),
-              ),
+              SliverToBoxAdapter(child: _buildHeader(context)),
+              SliverToBoxAdapter(child: _buildRelayStatsSection(context)),
+              SliverToBoxAdapter(child: _buildActionButtons(context, l10n)),
+              SliverToBoxAdapter(child: _buildGossipModelToggle(context)),
               if (_relays.isEmpty)
                 SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 32),
                       child: Text(
-                        'No relays in this category',
+                        l10n.noRelaysInCategory,
                         style: TextStyle(color: context.colors.textTertiary),
                       ),
                     ),
@@ -1026,7 +1120,7 @@ class _RelayPageState extends State<RelayPage> {
           TopActionBarWidget(
             onBackPressed: () => context.pop(),
             centerBubble: Text(
-              'Relays',
+              l10n.relays,
               style: TextStyle(
                 color: context.colors.background,
                 fontSize: 16,

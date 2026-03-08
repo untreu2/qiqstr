@@ -179,7 +179,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get delete => 'Löschen';
 
   @override
-  String get noEventsFoundToDelete => 'Keine Ereignisse zum Löschen gefunden';
+  String get noEventsFoundToDelete => 'Keine zu löschenden Ereignisse gefunden';
 
   @override
   String get noValidEventIdsFound => 'Keine gültigen Ereignis-IDs gefunden';
@@ -1880,4 +1880,147 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get dmEncryptionNotice =>
       'Ihre Nachrichten sind Ende-zu-Ende-verschlüsselt. Niemand kann sehen, mit wem Sie sprechen oder was Sie schreiben.';
+
+  @override
+  String broadcastedEvents(int sent) {
+    return '$sent Ereignisse gesendet';
+  }
+
+  @override
+  String broadcastedEventsWithFailed(int sent, int failed) {
+    return '$sent Ereignisse gesendet, $failed fehlgeschlagen';
+  }
+
+  @override
+  String errorRebroadcastingEventsDetail(String error) {
+    return 'Fehler beim erneuten Senden: $error';
+  }
+
+  @override
+  String get noEventsToExport => 'Noch keine Ereignisse zum Exportieren';
+
+  @override
+  String get exportData => 'Daten exportieren';
+
+  @override
+  String get exporting => 'Wird exportiert…';
+
+  @override
+  String exportFailed(String error) {
+    return 'Export fehlgeschlagen: $error';
+  }
+
+  @override
+  String get deleteAccountTitle => 'Konto löschen?';
+
+  @override
+  String get deleteAccountConfirmation =>
+      'Dadurch werden Löschanfragen für alle Ihre Ereignisse gesendet und alle Relays gebeten, Ihre Daten zu löschen. Diese Aktion kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get noValidEventIds => 'Keine gültigen Ereignis-IDs gefunden';
+
+  @override
+  String deletionRequestSent(int count, int relays) {
+    return 'Löschanfrage für $count Ereignisse an $relays Relay gesendet';
+  }
+
+  @override
+  String deletionRequestSentPlural(int count, int relays) {
+    return 'Löschanfrage für $count Ereignisse an $relays Relays gesendet';
+  }
+
+  @override
+  String accountDeletionRequestSent(int relays) {
+    return 'Kontolöschanfrage an $relays Relay gesendet';
+  }
+
+  @override
+  String accountDeletionRequestSentPlural(int relays) {
+    return 'Kontolöschanfrage an $relays Relays gesendet';
+  }
+
+  @override
+  String vanishRequestFailed(int relays) {
+    return 'Verschwinde-Anfrage fehlgeschlagen. $relays Relay gescheitert';
+  }
+
+  @override
+  String vanishRequestFailedPlural(int relays) {
+    return 'Verschwinde-Anfrage fehlgeschlagen. $relays Relays gescheitert';
+  }
+
+  @override
+  String errorDeletingAccount(String error) {
+    return 'Fehler beim Löschen des Kontos: $error';
+  }
+
+  @override
+  String get kindProfileMetadata => 'Profilmetadaten';
+
+  @override
+  String get kindTextNote => 'Textnotiz';
+
+  @override
+  String get kindFollows => 'Folgt';
+
+  @override
+  String get kindEncryptedDM => 'Verschlüsselte Direktnachricht';
+
+  @override
+  String get kindEventDeletion => 'Ereignislöschung';
+
+  @override
+  String get kindRepost => 'Repost';
+
+  @override
+  String get kindReaction => 'Reaktion';
+
+  @override
+  String get kindZap => 'Zap';
+
+  @override
+  String get kindMuteList => 'Stummschaltliste';
+
+  @override
+  String get kindRelayList => 'Relaisliste';
+
+  @override
+  String kindList(int kind) {
+    return 'Liste (Art $kind)';
+  }
+
+  @override
+  String kindUnknown(int kind) {
+    return 'Art $kind';
+  }
+
+  @override
+  String scanningEventsFound(String count) {
+    return 'Scannt… $count gefunden';
+  }
+
+  @override
+  String eventsOnRelays(String count) {
+    return '$count Ereignisse auf Relays';
+  }
+
+  @override
+  String broadcastProgress(int sent, int total) {
+    return '$sent / $total gesendet';
+  }
+
+  @override
+  String get deepScan => 'Tiefensuche';
+
+  @override
+  String get scanning => 'Wird gescannt…';
+
+  @override
+  String get noRelaysInCategory => 'Keine Relays in dieser Kategorie';
+
+  @override
+  String usingPersonalRelays(int count) {
+    return 'Verwende jetzt persönliche Relays ($count Haupt-Relays)';
+  }
 }

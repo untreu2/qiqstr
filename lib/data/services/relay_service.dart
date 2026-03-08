@@ -40,10 +40,7 @@ class RustRelayService {
     }
   }
 
-  Future<void> init({
-    List<String>? relayUrls,
-    String? privateKeyHex,
-  }) async {
+  Future<void> init({List<String>? relayUrls, String? privateKeyHex}) async {
     try {
       if (kDebugMode) {
         print('[RustRelayService] Starting initialization...');
@@ -60,7 +57,8 @@ class RustRelayService {
 
       if (kDebugMode) {
         print(
-            '[RustRelayService] Calling Rust initClient with dbPath: $dbPath');
+          '[RustRelayService] Calling Rust initClient with dbPath: $dbPath',
+        );
       }
 
       await rust_relay.initClient(
@@ -74,7 +72,8 @@ class RustRelayService {
 
       if (kDebugMode) {
         print(
-            '[RustRelayService] Initialized successfully with ${urls.length} relays');
+          '[RustRelayService] Initialized successfully with ${urls.length} relays',
+        );
       }
 
       rust_relay.connectRelays().catchError((e) {
@@ -103,10 +102,7 @@ class RustRelayService {
     }
   }
 
-  Future<void> reinit({
-    List<String>? relayUrls,
-    String? privateKeyHex,
-  }) async {
+  Future<void> reinit({List<String>? relayUrls, String? privateKeyHex}) async {
     _initialized = false;
     await init(relayUrls: relayUrls, privateKeyHex: privateKeyHex);
   }
@@ -142,10 +138,16 @@ class RustRelayService {
     return added;
   }
 
-  Future<bool> addRelayWithFlags(String url,
-      {required bool read, required bool write}) async {
-    final added =
-        await rust_relay.addRelayWithFlags(url: url, read: read, write: write);
+  Future<bool> addRelayWithFlags(
+    String url, {
+    required bool read,
+    required bool write,
+  }) async {
+    final added = await rust_relay.addRelayWithFlags(
+      url: url,
+      read: read,
+      write: write,
+    );
     if (added && !_currentRelayUrls.contains(url)) {
       _currentRelayUrls.add(url);
     }
@@ -244,6 +246,16 @@ class RustRelayService {
     return jsonDecode(result) as Map<String, dynamic>;
   }
 
+  Stream<Map<String, dynamic>> streamBroadcastEvents(
+    List<Map<String, dynamic>> events, {
+    List<String>? relayUrls,
+  }) {
+    final eventsJson = jsonEncode(events);
+    return rust_relay
+        .streamBroadcastEvents(eventsJson: eventsJson, relayUrls: relayUrls)
+        .map((json) => jsonDecode(json) as Map<String, dynamic>);
+  }
+
   Future<bool> sendMessage(String relayUrl, String serializedEvent) async {
     try {
       final decoded = jsonDecode(serializedEvent) as List<dynamic>;
@@ -266,7 +278,8 @@ class RustRelayService {
   }
 
   Future<Map<String, dynamic>> discoverAndConnectOutboxRelays(
-      List<String> pubkeysHex) async {
+    List<String> pubkeysHex,
+  ) async {
     try {
       final mode = await getGossipMode();
       final maxRelays = gossipMaxOutboxRelays[mode]!;
@@ -278,10 +291,12 @@ class RustRelayService {
       );
       final result = jsonDecode(resultJson) as Map<String, dynamic>;
       if (kDebugMode) {
-        print('[RustRelayService] Outbox discovery: '
-            'discovered=${result['discoveredRelays']}, '
-            'added=${result['addedRelays']}, '
-            'totalConnected=${result['totalConnected']}');
+        print(
+          '[RustRelayService] Outbox discovery: '
+          'discovered=${result['discoveredRelays']}, '
+          'added=${result['addedRelays']}, '
+          'totalConnected=${result['totalConnected']}',
+        );
       }
       return result;
     } catch (e) {
@@ -292,9 +307,19 @@ class RustRelayService {
     }
   }
 
-  Stream<Map<String, dynamic>> subscribeToEvents(
-    Map<String, dynamic> filter,
-  ) {
+  Stream<Map<String, dynamic>> fetchAllEventsForAuthor(String authorHex) {
+    return rust_relay
+        .fetchAllEventsForAuthor(authorHex: authorHex)
+        .map((json) => jsonDecode(json) as Map<String, dynamic>);
+  }
+
+  Stream<Map<String, dynamic>> streamRelayStatus() {
+    return rust_relay.streamRelayStatus().map(
+          (json) => jsonDecode(json) as Map<String, dynamic>,
+        );
+  }
+
+  Stream<Map<String, dynamic>> subscribeToEvents(Map<String, dynamic> filter) {
     final filterJson = jsonEncode(filter);
     return rust_relay
         .subscribeToEvents(filterJson: filterJson)
@@ -368,8 +393,13 @@ class RustRelayService {
           final isRead = flags['read'] ?? true;
           final isWrite = flags['write'] ?? true;
           if (!isRead || !isWrite) {
-            flagFutures.add(rust_relay.addRelayWithFlags(
-                url: url, read: isRead, write: isWrite));
+            flagFutures.add(
+              rust_relay.addRelayWithFlags(
+                url: url,
+                read: isRead,
+                write: isWrite,
+              ),
+            );
           }
         }
       }

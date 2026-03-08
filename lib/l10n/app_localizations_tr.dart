@@ -1801,4 +1801,147 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get dmEncryptionNotice =>
       'Mesajlarınız uçtan uca şifrelidir. Kimle konuştuğunuzu veya ne yazdığınızı kimse göremez.';
+
+  @override
+  String broadcastedEvents(int sent) {
+    return '$sent etkinlik yayınlandı';
+  }
+
+  @override
+  String broadcastedEventsWithFailed(int sent, int failed) {
+    return '$sent etkinlik yayınlandı, $failed başarısız';
+  }
+
+  @override
+  String errorRebroadcastingEventsDetail(String error) {
+    return 'Etkinlikler yeniden yayınlanırken hata oluştu: $error';
+  }
+
+  @override
+  String get noEventsToExport => 'Henüz dışa aktarılacak etkinlik yok';
+
+  @override
+  String get exportData => 'Veriyi Dışa Aktar';
+
+  @override
+  String get exporting => 'Dışa aktarılıyor…';
+
+  @override
+  String exportFailed(String error) {
+    return 'Dışa aktarma başarısız: $error';
+  }
+
+  @override
+  String get deleteAccountTitle => 'Hesap Silinsin mi?';
+
+  @override
+  String get deleteAccountConfirmation =>
+      'Bu işlem tüm etkinlikleriniz için silme istekleri gönderecek ve tüm rölelerin verilerinizi silmesini talep edecek. Bu işlem geri alınamaz.';
+
+  @override
+  String get noValidEventIds => 'Geçerli etkinlik kimliği bulunamadı';
+
+  @override
+  String deletionRequestSent(int count, int relays) {
+    return '$count etkinlik için $relays röleye silme isteği gönderildi';
+  }
+
+  @override
+  String deletionRequestSentPlural(int count, int relays) {
+    return '$count etkinlik için $relays röleye silme isteği gönderildi';
+  }
+
+  @override
+  String accountDeletionRequestSent(int relays) {
+    return 'Hesap silme isteği $relays röleye gönderildi';
+  }
+
+  @override
+  String accountDeletionRequestSentPlural(int relays) {
+    return 'Hesap silme isteği $relays röleye gönderildi';
+  }
+
+  @override
+  String vanishRequestFailed(int relays) {
+    return 'Kaybolma isteği gönderilemedi. $relays röle başarısız';
+  }
+
+  @override
+  String vanishRequestFailedPlural(int relays) {
+    return 'Kaybolma isteği gönderilemedi. $relays röle başarısız';
+  }
+
+  @override
+  String errorDeletingAccount(String error) {
+    return 'Hesap silinirken hata oluştu: $error';
+  }
+
+  @override
+  String get kindProfileMetadata => 'Profil Meta Verisi';
+
+  @override
+  String get kindTextNote => 'Metin Notu';
+
+  @override
+  String get kindFollows => 'Takip Edilenler';
+
+  @override
+  String get kindEncryptedDM => 'Şifreli Doğrudan Mesaj';
+
+  @override
+  String get kindEventDeletion => 'Etkinlik Silme';
+
+  @override
+  String get kindRepost => 'Yeniden Gönderi';
+
+  @override
+  String get kindReaction => 'Tepki';
+
+  @override
+  String get kindZap => 'Zap';
+
+  @override
+  String get kindMuteList => 'Sessiz Listesi';
+
+  @override
+  String get kindRelayList => 'Röle Listesi';
+
+  @override
+  String kindList(int kind) {
+    return 'Liste (tür $kind)';
+  }
+
+  @override
+  String kindUnknown(int kind) {
+    return 'Tür $kind';
+  }
+
+  @override
+  String scanningEventsFound(String count) {
+    return 'Taranıyor… $count bulundu';
+  }
+
+  @override
+  String eventsOnRelays(String count) {
+    return '$count etkinlik rölelerde';
+  }
+
+  @override
+  String broadcastProgress(int sent, int total) {
+    return '$sent / $total gönderildi';
+  }
+
+  @override
+  String get deepScan => 'Derin Tarama';
+
+  @override
+  String get scanning => 'Taranıyor…';
+
+  @override
+  String get noRelaysInCategory => 'Bu kategoride röle yok';
+
+  @override
+  String usingPersonalRelays(int count) {
+    return 'Artık kişisel rölelerinizi kullanıyorsunuz ($count ana röle)';
+  }
 }

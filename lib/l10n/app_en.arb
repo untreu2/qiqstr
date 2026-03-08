@@ -872,5 +872,135 @@
   "dmTabFollowing": "Following",
   "dmTabOther": "Other",
 
-  "dmEncryptionNotice": "Your messages are end-to-end encrypted. No one can see who you talk to or what you write."
+  "dmEncryptionNotice": "Your messages are end-to-end encrypted. No one can see who you talk to or what you write.",
+
+  "noEventsToRebroadcast": "No events to rebroadcast",
+  "broadcastedEvents": "Broadcasted {sent} events",
+  "@broadcastedEvents": {
+    "placeholders": {
+      "sent": { "type": "int" }
+    }
+  },
+  "broadcastedEventsWithFailed": "Broadcasted {sent} events, {failed} failed",
+  "@broadcastedEventsWithFailed": {
+    "placeholders": {
+      "sent": { "type": "int" },
+      "failed": { "type": "int" }
+    }
+  },
+  "errorRebroadcastingEventsDetail": "Error rebroadcasting events: {error}",
+  "@errorRebroadcastingEventsDetail": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "noEventsToExport": "No events to export yet",
+  "exportData": "Export Data",
+  "exporting": "Exporting…",
+  "exportFailed": "Export failed: {error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "deleteAccountTitle": "Delete Account?",
+  "deleteAccountConfirmation": "This will send deletion requests for all your events and request all relays to delete your data. This action cannot be undone.",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "noEventsFoundToDelete": "No events found to delete",
+  "noValidEventIds": "No valid event IDs found",
+  "deletionRequestSent": "Deletion request sent for {count} events to {relays} relay",
+  "@deletionRequestSent": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "relays": { "type": "int" }
+    }
+  },
+  "deletionRequestSentPlural": "Deletion request sent for {count} events to {relays} relays",
+  "@deletionRequestSentPlural": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "relays": { "type": "int" }
+    }
+  },
+  "accountDeletionRequestSent": "Account deletion request sent to {relays} relay",
+  "@accountDeletionRequestSent": {
+    "placeholders": {
+      "relays": { "type": "int" }
+    }
+  },
+  "accountDeletionRequestSentPlural": "Account deletion request sent to {relays} relays",
+  "@accountDeletionRequestSentPlural": {
+    "placeholders": {
+      "relays": { "type": "int" }
+    }
+  },
+  "vanishRequestFailed": "Failed to send vanish request. {relays} relay failed",
+  "@vanishRequestFailed": {
+    "placeholders": {
+      "relays": { "type": "int" }
+    }
+  },
+  "vanishRequestFailedPlural": "Failed to send vanish request. {relays} relays failed",
+  "@vanishRequestFailedPlural": {
+    "placeholders": {
+      "relays": { "type": "int" }
+    }
+  },
+  "errorDeletingAccount": "Error deleting account: {error}",
+  "@errorDeletingAccount": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "kindProfileMetadata": "Profile Metadata",
+  "kindTextNote": "Text Note",
+  "kindFollows": "Follows",
+  "kindEncryptedDM": "Encrypted Direct Message",
+  "kindEventDeletion": "Event Deletion",
+  "kindRepost": "Repost",
+  "kindReaction": "Reaction",
+  "kindZap": "Zap",
+  "kindMuteList": "Mute List",
+  "kindRelayList": "Relay List",
+  "kindList": "List (kind {kind})",
+  "@kindList": {
+    "placeholders": {
+      "kind": { "type": "int" }
+    }
+  },
+  "kindUnknown": "Kind {kind}",
+  "@kindUnknown": {
+    "placeholders": {
+      "kind": { "type": "int" }
+    }
+  },
+  "scanningEventsFound": "Scanning… {count} found",
+  "@scanningEventsFound": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "eventsOnRelays": "{count} events on relays",
+  "@eventsOnRelays": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "broadcastProgress": "{sent} / {total} sent",
+  "@broadcastProgress": {
+    "placeholders": {
+      "sent": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "deepScan": "Deep Scan",
+  "scanning": "Scanning…",
+  "noRelaysInCategory": "No relays in this category",
+  "usingPersonalRelays": "Now using your personal relays ({count} main relays)",
+  "@usingPersonalRelays": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  }
 }

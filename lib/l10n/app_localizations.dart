@@ -3381,6 +3381,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your messages are end-to-end encrypted. No one can see who you talk to or what you write.'**
   String get dmEncryptionNotice;
+
+  /// No description provided for @broadcastedEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcasted {sent} events'**
+  String broadcastedEvents(int sent);
+
+  /// No description provided for @broadcastedEventsWithFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcasted {sent} events, {failed} failed'**
+  String broadcastedEventsWithFailed(int sent, int failed);
+
+  /// No description provided for @errorRebroadcastingEventsDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Error rebroadcasting events: {error}'**
+  String errorRebroadcastingEventsDetail(String error);
+
+  /// No description provided for @noEventsToExport.
+  ///
+  /// In en, this message translates to:
+  /// **'No events to export yet'**
+  String get noEventsToExport;
+
+  /// No description provided for @exportData.
+  ///
+  /// In en, this message translates to:
+  /// **'Export Data'**
+  String get exportData;
+
+  /// No description provided for @exporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting…'**
+  String get exporting;
+
+  /// No description provided for @exportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String exportFailed(String error);
+
+  /// No description provided for @deleteAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Account?'**
+  String get deleteAccountTitle;
+
+  /// No description provided for @deleteAccountConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'This will send deletion requests for all your events and request all relays to delete your data. This action cannot be undone.'**
+  String get deleteAccountConfirmation;
+
+  /// No description provided for @noValidEventIds.
+  ///
+  /// In en, this message translates to:
+  /// **'No valid event IDs found'**
+  String get noValidEventIds;
+
+  /// No description provided for @deletionRequestSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion request sent for {count} events to {relays} relay'**
+  String deletionRequestSent(int count, int relays);
+
+  /// No description provided for @deletionRequestSentPlural.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion request sent for {count} events to {relays} relays'**
+  String deletionRequestSentPlural(int count, int relays);
+
+  /// No description provided for @accountDeletionRequestSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion request sent to {relays} relay'**
+  String accountDeletionRequestSent(int relays);
+
+  /// No description provided for @accountDeletionRequestSentPlural.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion request sent to {relays} relays'**
+  String accountDeletionRequestSentPlural(int relays);
+
+  /// No description provided for @vanishRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to send vanish request. {relays} relay failed'**
+  String vanishRequestFailed(int relays);
+
+  /// No description provided for @vanishRequestFailedPlural.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to send vanish request. {relays} relays failed'**
+  String vanishRequestFailedPlural(int relays);
+
+  /// No description provided for @errorDeletingAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Error deleting account: {error}'**
+  String errorDeletingAccount(String error);
+
+  /// No description provided for @kindProfileMetadata.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile Metadata'**
+  String get kindProfileMetadata;
+
+  /// No description provided for @kindTextNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Text Note'**
+  String get kindTextNote;
+
+  /// No description provided for @kindFollows.
+  ///
+  /// In en, this message translates to:
+  /// **'Follows'**
+  String get kindFollows;
+
+  /// No description provided for @kindEncryptedDM.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted Direct Message'**
+  String get kindEncryptedDM;
+
+  /// No description provided for @kindEventDeletion.
+  ///
+  /// In en, this message translates to:
+  /// **'Event Deletion'**
+  String get kindEventDeletion;
+
+  /// No description provided for @kindRepost.
+  ///
+  /// In en, this message translates to:
+  /// **'Repost'**
+  String get kindRepost;
+
+  /// No description provided for @kindReaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Reaction'**
+  String get kindReaction;
+
+  /// No description provided for @kindZap.
+  ///
+  /// In en, this message translates to:
+  /// **'Zap'**
+  String get kindZap;
+
+  /// No description provided for @kindMuteList.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute List'**
+  String get kindMuteList;
+
+  /// No description provided for @kindRelayList.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay List'**
+  String get kindRelayList;
+
+  /// No description provided for @kindList.
+  ///
+  /// In en, this message translates to:
+  /// **'List (kind {kind})'**
+  String kindList(int kind);
+
+  /// No description provided for @kindUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Kind {kind}'**
+  String kindUnknown(int kind);
+
+  /// No description provided for @scanningEventsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning… {count} found'**
+  String scanningEventsFound(String count);
+
+  /// No description provided for @eventsOnRelays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} events on relays'**
+  String eventsOnRelays(String count);
+
+  /// No description provided for @broadcastProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{sent} / {total} sent'**
+  String broadcastProgress(int sent, int total);
+
+  /// No description provided for @deepScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Deep Scan'**
+  String get deepScan;
+
+  /// No description provided for @scanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning…'**
+  String get scanning;
+
+  /// No description provided for @noRelaysInCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'No relays in this category'**
+  String get noRelaysInCategory;
+
+  /// No description provided for @usingPersonalRelays.
+  ///
+  /// In en, this message translates to:
+  /// **'Now using your personal relays ({count} main relays)'**
+  String usingPersonalRelays(int count);
 }
 
 class _AppLocalizationsDelegate

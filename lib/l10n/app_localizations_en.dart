@@ -1847,4 +1847,147 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get dmEncryptionNotice =>
       'Your messages are end-to-end encrypted. No one can see who you talk to or what you write.';
+
+  @override
+  String broadcastedEvents(int sent) {
+    return 'Broadcasted $sent events';
+  }
+
+  @override
+  String broadcastedEventsWithFailed(int sent, int failed) {
+    return 'Broadcasted $sent events, $failed failed';
+  }
+
+  @override
+  String errorRebroadcastingEventsDetail(String error) {
+    return 'Error rebroadcasting events: $error';
+  }
+
+  @override
+  String get noEventsToExport => 'No events to export yet';
+
+  @override
+  String get exportData => 'Export Data';
+
+  @override
+  String get exporting => 'Exporting…';
+
+  @override
+  String exportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get deleteAccountTitle => 'Delete Account?';
+
+  @override
+  String get deleteAccountConfirmation =>
+      'This will send deletion requests for all your events and request all relays to delete your data. This action cannot be undone.';
+
+  @override
+  String get noValidEventIds => 'No valid event IDs found';
+
+  @override
+  String deletionRequestSent(int count, int relays) {
+    return 'Deletion request sent for $count events to $relays relay';
+  }
+
+  @override
+  String deletionRequestSentPlural(int count, int relays) {
+    return 'Deletion request sent for $count events to $relays relays';
+  }
+
+  @override
+  String accountDeletionRequestSent(int relays) {
+    return 'Account deletion request sent to $relays relay';
+  }
+
+  @override
+  String accountDeletionRequestSentPlural(int relays) {
+    return 'Account deletion request sent to $relays relays';
+  }
+
+  @override
+  String vanishRequestFailed(int relays) {
+    return 'Failed to send vanish request. $relays relay failed';
+  }
+
+  @override
+  String vanishRequestFailedPlural(int relays) {
+    return 'Failed to send vanish request. $relays relays failed';
+  }
+
+  @override
+  String errorDeletingAccount(String error) {
+    return 'Error deleting account: $error';
+  }
+
+  @override
+  String get kindProfileMetadata => 'Profile Metadata';
+
+  @override
+  String get kindTextNote => 'Text Note';
+
+  @override
+  String get kindFollows => 'Follows';
+
+  @override
+  String get kindEncryptedDM => 'Encrypted Direct Message';
+
+  @override
+  String get kindEventDeletion => 'Event Deletion';
+
+  @override
+  String get kindRepost => 'Repost';
+
+  @override
+  String get kindReaction => 'Reaction';
+
+  @override
+  String get kindZap => 'Zap';
+
+  @override
+  String get kindMuteList => 'Mute List';
+
+  @override
+  String get kindRelayList => 'Relay List';
+
+  @override
+  String kindList(int kind) {
+    return 'List (kind $kind)';
+  }
+
+  @override
+  String kindUnknown(int kind) {
+    return 'Kind $kind';
+  }
+
+  @override
+  String scanningEventsFound(String count) {
+    return 'Scanning… $count found';
+  }
+
+  @override
+  String eventsOnRelays(String count) {
+    return '$count events on relays';
+  }
+
+  @override
+  String broadcastProgress(int sent, int total) {
+    return '$sent / $total sent';
+  }
+
+  @override
+  String get deepScan => 'Deep Scan';
+
+  @override
+  String get scanning => 'Scanning…';
+
+  @override
+  String get noRelaysInCategory => 'No relays in this category';
+
+  @override
+  String usingPersonalRelays(int count) {
+    return 'Now using your personal relays ($count main relays)';
+  }
 }
