@@ -149,6 +149,7 @@ class BlocsModule extends DIModule {
     AppDI.registerFactory<UserSearchBloc>(() => UserSearchBloc(
           profileRepository: AppDI.get<ProfileRepository>(),
           authService: AppDI.get<AuthService>(),
+          syncService: AppDI.get<SyncService>(),
         ));
 
     AppDI.registerFactory<NoteStatisticsBloc>(() => NoteStatisticsBloc(

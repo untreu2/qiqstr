@@ -34,6 +34,7 @@ import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 import '../../widgets/common/snackbar_widget.dart';
+import '../../widgets/qr_scanner_widget.dart';
 import '../../../data/services/favorite_lists_service.dart';
 import '../../../data/services/follow_set_service.dart';
 
@@ -424,6 +425,34 @@ class FeedPageState extends State<FeedPage> {
                         ),
                         child: Icon(
                           Icons.content_paste,
+                          size: 20,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context, rootNavigator: true).push(
+                          MaterialPageRoute(
+                            builder: (_) => QrScannerWidget(
+                              onScanComplete: (value) {
+                                _searchController.text = value;
+                                _onSearchChanged(value);
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colors.overlayLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.qr_code_scanner,
                           size: 20,
                           color: colors.textPrimary,
                         ),

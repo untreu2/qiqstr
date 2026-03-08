@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/rust_database_service.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../utils/string_optimizer.dart';
 import 'user_search_event.dart';
 import 'user_search_state.dart';
@@ -10,13 +11,16 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
   final ProfileRepository _profileRepository;
   final AuthService _authService;
   final RustDatabaseService _db;
+  final SyncService _syncService;
 
   UserSearchBloc({
     required ProfileRepository profileRepository,
     required AuthService authService,
+    required SyncService syncService,
     RustDatabaseService? db,
   })  : _profileRepository = profileRepository,
         _authService = authService,
+        _syncService = syncService,
         _db = db ?? RustDatabaseService.instance,
         super(const UserSearchLoaded(filteredUsers: [])) {
     on<UserSearchQueryChanged>(_onUserSearchQueryChanged);
@@ -41,6 +45,48 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
     }
 
     try {
+      final isNpub = query.startsWith('npub1');
+      final isHex = RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(query);
+
+      if (isNpub || isHex) {
+        final pubkeyHex = isNpub ? _authService.npubToHex(query) : query;
+        if (pubkeyHex == null) {
+          emit(const UserSearchLoaded(filteredUsers: [], isSearching: false));
+          return;
+        }
+
+        await _syncService.syncProfile(pubkeyHex);
+        final profile = await _profileRepository.getProfile(pubkeyHex);
+
+        if (profile == null) {
+          emit(const UserSearchLoaded(filteredUsers: [], isSearching: false));
+          return;
+        }
+
+        final user = <String, dynamic>{
+          'pubkeyHex': pubkeyHex,
+          'npub': _authService.hexToNpub(pubkeyHex) ?? pubkeyHex,
+          'name': profile.name ?? '',
+          'about': profile.about ?? '',
+          'profileImage': profile.picture ?? '',
+          'banner': profile.banner ?? '',
+          'website': profile.website ?? '',
+          'nip05': profile.nip05 ?? '',
+          'lud16': profile.lud16 ?? '',
+          'updatedAt': DateTime.now(),
+          'nip05Verified': false,
+          'followerCount': 0,
+        };
+
+        emit(UserSearchLoaded(
+          filteredUsers: [user],
+          filteredNotes: const [],
+          noteProfiles: const {},
+          isSearching: false,
+        ));
+        return;
+      }
+
       final userResultsFuture = _profileRepository.searchProfiles(query);
       final noteResultsFuture = _db.searchNotes(query, limit: 30);
 
