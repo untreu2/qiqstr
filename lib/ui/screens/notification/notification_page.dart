@@ -279,10 +279,6 @@ class _NotificationPageState extends State<NotificationPage> {
       segments.add(_BarSegment(
           counts.quotes, context.colors.textSecondary.withValues(alpha: 0.3)));
     }
-    if (counts.mentions > 0) {
-      segments.add(_BarSegment(counts.mentions,
-          context.colors.textSecondary.withValues(alpha: 0.5)));
-    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(3),
@@ -806,7 +802,9 @@ class _NotificationTileState extends State<_NotificationTile> {
                           ),
                         ],
                       ),
-                      if (type == 'mention' || type == 'quote') ...[
+                      if (type == 'mention' ||
+                          type == 'quote' ||
+                          type == 'reply') ...[
                         const SizedBox(height: 6),
                         _buildMentionCard(context),
                       ],

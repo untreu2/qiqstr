@@ -1650,8 +1650,20 @@ async fn hydrate_notification_events(
         return Ok("[]".to_string());
     }
 
-    let mut items: Vec<serde_json::Value> = Vec::new();
+    struct PendingItem {
+        event_id: String,
+        notification_type: String,
+        from_pubkey: String,
+        target_note_id: Option<String>,
+        content: String,
+        created_at: u64,
+        zap_amount: Option<u64>,
+        needs_author_check: bool,
+    }
+
+    let mut pending: Vec<PendingItem> = Vec::new();
     let mut pubkeys_needed: HashSet<String> = HashSet::new();
+    let mut target_ids_to_check: HashSet<String> = HashSet::new();
 
     for event in events {
         if event.pubkey.to_hex() == user_pubkey_hex {
@@ -1668,10 +1680,11 @@ async fn hydrate_notification_events(
             .map(|tag| tag.clone().to_vec())
             .collect();
 
-        let notification_type: &str;
+        let notification_type;
         let mut target_note_id: Option<String> = None;
         let mut zap_amount: Option<u64> = None;
         let mut from_pubkey = pubkey.clone();
+        let mut needs_author_check = false;
 
         match kind_num {
             1 => {
@@ -1696,37 +1709,49 @@ async fn hydrate_notification_events(
                 }
 
                 if has_q_tag && !has_reply_marker {
-                    notification_type = "quote";
+                    notification_type = "quote".to_string();
                     target_note_id = q_target_id;
                 } else if has_reply_marker {
-                    notification_type = "reply";
+                    notification_type = "reply".to_string();
+                    needs_author_check = true;
+                    if let Some(ref tid) = target_note_id {
+                        target_ids_to_check.insert(tid.clone());
+                    }
                 } else if first_e_id.is_some() {
-                    notification_type = "mention";
+                    notification_type = "mention".to_string();
                     target_note_id = first_e_id;
                 } else {
-                    notification_type = "mention";
+                    notification_type = "mention".to_string();
                 }
             }
             6 => {
-                notification_type = "repost";
+                notification_type = "repost".to_string();
                 for tag in &tags {
                     if tag.len() >= 2 && tag[0] == "e" {
                         target_note_id = Some(tag[1].clone());
                         break;
                     }
+                }
+                needs_author_check = true;
+                if let Some(ref tid) = target_note_id {
+                    target_ids_to_check.insert(tid.clone());
                 }
             }
             7 => {
-                notification_type = "reaction";
+                notification_type = "reaction".to_string();
                 for tag in &tags {
                     if tag.len() >= 2 && tag[0] == "e" {
                         target_note_id = Some(tag[1].clone());
                         break;
                     }
                 }
+                needs_author_check = true;
+                if let Some(ref tid) = target_note_id {
+                    target_ids_to_check.insert(tid.clone());
+                }
             }
             9735 => {
-                notification_type = "zap";
+                notification_type = "zap".to_string();
                 let sats = extract_zap_amount_sats(event);
                 if sats > 0 {
                     zap_amount = Some(sats);
@@ -1742,22 +1767,61 @@ async fn hydrate_notification_events(
                 }
             }
             _ => {
-                notification_type = "mention";
+                notification_type = "mention".to_string();
             }
         }
 
         pubkeys_needed.insert(from_pubkey.clone());
 
+        pending.push(PendingItem {
+            event_id,
+            notification_type,
+            from_pubkey,
+            target_note_id,
+            content,
+            created_at,
+            zap_amount,
+            needs_author_check,
+        });
+    }
+
+    let mut target_note_authors: HashMap<String, String> = HashMap::new();
+    if !target_ids_to_check.is_empty() {
+        let ids: Vec<EventId> = target_ids_to_check
+            .iter()
+            .filter_map(|id| EventId::from_hex(id).ok())
+            .collect();
+        if !ids.is_empty() {
+            let filter = Filter::new().ids(ids).kind(Kind::TextNote);
+            let target_events = client.database().query(filter).await?;
+            for te in target_events {
+                target_note_authors.insert(te.id.to_hex(), te.pubkey.to_hex());
+            }
+        }
+    }
+
+    let mut items: Vec<serde_json::Value> = Vec::new();
+
+    for mut item in pending {
+        if item.needs_author_check {
+            if let Some(ref tid) = item.target_note_id {
+                let author = target_note_authors.get(tid).map(|s| s.as_str()).unwrap_or("");
+                if author != user_pubkey_hex {
+                    item.notification_type = "mention".to_string();
+                }
+            }
+        }
+
         items.push(serde_json::json!({
-            "id": event_id,
-            "type": notification_type,
-            "fromPubkey": from_pubkey,
-            "targetNoteId": target_note_id,
-            "content": content,
-            "createdAt": created_at,
+            "id": item.event_id,
+            "type": item.notification_type,
+            "fromPubkey": item.from_pubkey,
+            "targetNoteId": item.target_note_id,
+            "content": item.content,
+            "createdAt": item.created_at,
             "fromName": serde_json::Value::Null,
             "fromImage": serde_json::Value::Null,
-            "zapAmount": zap_amount,
+            "zapAmount": item.zap_amount,
         }));
     }
 
