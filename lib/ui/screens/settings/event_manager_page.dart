@@ -10,7 +10,6 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
-import '../../../data/services/event_counts_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/relay_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
@@ -36,7 +35,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
   int _broadcastTotal = 0;
   StreamSubscription<Map<String, dynamic>>? _broadcastSubscription;
   int _totalEventCount = 0;
-  Map<int, int> _eventCountsByKind = {};
+  final Map<int, int> _eventCountsByKind = {};
   final List<Map<String, dynamic>> _allEvents = [];
   final Set<String> _seenEventIds = {};
   StreamSubscription<Map<String, dynamic>>? _scanSubscription;

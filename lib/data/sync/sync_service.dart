@@ -10,6 +10,7 @@ import '../services/encrypted_bookmark_service.dart';
 import '../services/pinned_notes_service.dart';
 import '../services/follow_set_service.dart';
 import 'publishers/event_publisher.dart';
+import '../../domain/entities/article.dart';
 
 final _relayService = RustRelayService.instance;
 
@@ -423,6 +424,90 @@ class SyncService {
       _notifyDbChanged();
       _markSynced(key);
     });
+  }
+
+  Future<Article?> fetchArticleByNaddr({
+    required String pubkey,
+    required String identifier,
+  }) async {
+    try {
+      final filter = <String, dynamic>{
+        'kinds': [30023],
+        'authors': [pubkey],
+        '#d': [identifier],
+        'limit': 1,
+      };
+      final fetched = await _relayService.fetchEvents(filter, timeoutSecs: 10);
+      if (fetched.isEmpty) return null;
+      await _db.saveEvents(fetched);
+      _notifyDbChanged();
+
+      var profile = await _db.getUserProfile(pubkey);
+      if (profile == null) {
+        final profileFilter = NostrService.createProfileFilter(
+          authors: [pubkey],
+          limit: 1,
+        );
+        final profileEvents =
+            await _relayService.fetchEvents(profileFilter, timeoutSecs: 8);
+        if (profileEvents.isNotEmpty) {
+          await _db.saveEvents(profileEvents);
+          profile = await _db.getUserProfile(pubkey);
+        }
+      }
+
+      final article = _articleFromRawEvent(fetched.first);
+      return article.copyWith(
+        authorName: profile?['name'] ?? profile?['displayName'],
+        authorImage: profile?['picture'] ?? profile?['profileImage'],
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Article _articleFromRawEvent(Map<String, dynamic> event) {
+    final tags = event['tags'] as List<dynamic>? ?? [];
+    String title = '';
+    String? image;
+    String? summary;
+    String dTag = '';
+    int? publishedAt;
+    final hashtags = <String>[];
+
+    for (final tag in tags) {
+      if (tag is! List || tag.isEmpty) continue;
+      final name = tag[0] as String?;
+      final value = tag.length > 1 ? tag[1] as String? ?? '' : '';
+      switch (name) {
+        case 'd':
+          dTag = value;
+        case 'title':
+          title = value;
+        case 'image':
+          image = value.isNotEmpty ? value : null;
+        case 'summary':
+          summary = value.isNotEmpty ? value : null;
+        case 'published_at':
+          publishedAt = int.tryParse(value);
+        case 't':
+          if (value.isNotEmpty) hashtags.add(value);
+      }
+    }
+
+    final createdAt = (event['created_at'] as num?)?.toInt() ?? 0;
+    return Article(
+      id: event['id'] as String? ?? '',
+      pubkey: event['pubkey'] as String? ?? '',
+      title: title,
+      content: event['content'] as String? ?? '',
+      image: image,
+      summary: summary,
+      dTag: dTag,
+      publishedAt: publishedAt ?? createdAt,
+      createdAt: createdAt,
+      hashtags: hashtags,
+    );
   }
 
   Future<void> syncHashtag(String hashtag, {bool force = false}) async {

@@ -50,17 +50,11 @@ class ArticleQuoteWidgetBloc
             )
           : null;
 
-      if (article == null && pubkey != null) {
-        await _syncService.syncArticles(
-            authors: [pubkey], limit: 20).timeout(const Duration(seconds: 8));
+      if (article == null && pubkey != null && identifier != null) {
+        article = await _syncService
+            .fetchArticleByNaddr(pubkey: pubkey, identifier: identifier)
+            .timeout(const Duration(seconds: 10));
         if (isClosed) return;
-
-        if (identifier != null) {
-          article = await _articleRepository.getArticleByNaddr(
-            pubkeyHex: pubkey,
-            identifier: identifier,
-          );
-        }
       }
 
       if (isClosed) return;
