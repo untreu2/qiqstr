@@ -108,6 +108,7 @@ class SyncService {
 
       await _db.processDeletionEvents();
       _notifyDbChanged();
+      _queueMissingRepostOriginals(since);
       _markSynced(key);
     });
   }
@@ -126,6 +127,7 @@ class SyncService {
       await _fetchAndStore(notesFilter);
       await _db.processDeletionEvents();
       _notifyDbChanged();
+      _queueMissingRepostOriginals(since);
       _markSynced(key);
     });
   }
@@ -927,16 +929,38 @@ class SyncService {
   }
 
   void _fetchReferencedEventsInBackground(List<Map<String, dynamic>> events) {
-    final eventIds = events
-        .map((e) => e['id'] as String? ?? '')
-        .where((id) => id.isNotEmpty)
-        .toList();
-    if (eventIds.isEmpty) return;
-    _pendingRefIds.addAll(eventIds);
+    final repostOriginalIds = <String>{};
+    for (final event in events) {
+      final kind = (event['kind'] as num?)?.toInt();
+      if (kind != 6) continue;
+      final tags = event['tags'] as List<dynamic>? ?? [];
+      for (final tag in tags) {
+        if (tag is List && tag.length > 1 && tag[0] == 'e') {
+          final id = tag[1] as String?;
+          if (id != null && id.isNotEmpty) {
+            repostOriginalIds.add(id);
+            break;
+          }
+        }
+      }
+    }
+    if (repostOriginalIds.isEmpty) return;
+    _pendingRefIds.addAll(repostOriginalIds);
     _refFetchTimer?.cancel();
-    _refFetchTimer = Timer(const Duration(seconds: 5), () {
+    _refFetchTimer = Timer(const Duration(seconds: 2), () {
       _processPendingRefs();
     });
+  }
+
+  Future<void> _queueMissingRepostOriginals(int sinceTimestamp) async {
+    try {
+      final filterJson = jsonEncode({
+        'kinds': [6],
+        'since': sinceTimestamp,
+      });
+      final repostEvents = await _db.queryEvents(filterJson, limit: 100);
+      _fetchReferencedEventsInBackground(repostEvents);
+    } catch (_) {}
   }
 
   Future<void> _processPendingRefs() async {
@@ -947,8 +971,15 @@ class SyncService {
       ids = ids.sublist(0, 50);
     }
     try {
-      final fetched = await _relayService.fetchMissingReferences(ids);
-      if (fetched > 0) {
+      final fetched = await _relayService.fetchEvents(
+        {
+          'ids': ids,
+          'kinds': [1],
+          'limit': ids.length
+        },
+        timeoutSecs: 8,
+      );
+      if (fetched.isNotEmpty) {
         _notifyDbChanged();
       }
     } catch (_) {}

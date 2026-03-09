@@ -1251,8 +1251,19 @@ async fn hydrate_notes(
                 }
             }
 
-            let embedded_json: Option<serde_json::Value> = if !content.is_empty() {
-                serde_json::from_str(&content).ok()
+            let embedded_json: Option<serde_json::Value> =
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if parsed.get("content").is_some() && parsed.get("pubkey").is_some() {
+                        Some(parsed)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+            let embedded_json: Option<serde_json::Value> = if embedded_json.is_some() {
+                embedded_json
             } else if let Ok(reposted_id) = EventId::from_hex(&id) {
                 let lookup_filter = Filter::new().id(reposted_id).kind(Kind::TextNote).limit(1);
                 if let Ok(found) = client.database().query(lookup_filter).await {
