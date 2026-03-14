@@ -1730,7 +1730,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get welcomeTitle => 'Willkommen!';
+  String get welcomeTitle => 'qiqstr';
 
   @override
   String get welcomeSubtitle =>

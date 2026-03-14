@@ -1664,7 +1664,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get welcomeTitle => 'Hoş Geldiniz!';
+  String get welcomeTitle => 'qiqstr';
 
   @override
   String get welcomeSubtitle =>
