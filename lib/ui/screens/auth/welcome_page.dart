@@ -135,10 +135,10 @@ class _WelcomePageState extends State<WelcomePage> {
           Text(
             l10n.welcomeTitle,
             style: GoogleFonts.poppins(
-              fontSize: 32,
+              fontSize: 52,
               fontWeight: FontWeight.w700,
               color: context.colors.textPrimary,
-              letterSpacing: -0.5,
+              letterSpacing: -1.5,
             ),
           ),
           const SizedBox(height: 4),

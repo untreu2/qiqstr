@@ -1699,7 +1699,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get welcomeTitle => 'Welcome!';
+  String get welcomeTitle => 'qiqstr';
 
   @override
   String get welcomeSubtitle =>

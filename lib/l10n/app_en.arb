@@ -810,7 +810,7 @@
       }
     }
   },
-  "welcomeTitle": "Welcome!",
+  "welcomeTitle": "qiqstr",
   "welcomeSubtitle": "A decentralized social network built on Nostr. Fully open source.",
   "welcomeFeatureDecentralized": "No central servers, no CEOs. Nobody can ban you.",
   "welcomeFeatureKeys": "Own your identity with your own keys.",

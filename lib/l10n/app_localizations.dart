@@ -3145,7 +3145,7 @@ abstract class AppLocalizations {
   /// No description provided for @welcomeTitle.
   ///
   /// In en, this message translates to:
-  /// **'Welcome!'**
+  /// **'qiqstr'**
   String get welcomeTitle;
 
   /// No description provided for @welcomeSubtitle.
