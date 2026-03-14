@@ -107,6 +107,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       if (cachedProfile != null) {
         final userMap = cachedProfile.toMap();
         userMap['pubkeyHex'] = targetHex;
+        userMap['npub'] = _authService.hexToNpub(targetHex) ?? targetHex;
 
         bool isFollowing = false;
         if (!isCurrentUser && currentUserHex.isNotEmpty) {
@@ -131,6 +132,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       } else {
         final placeholderUser = <String, dynamic>{
           'pubkeyHex': targetHex,
+          'npub': _authService.hexToNpub(targetHex) ?? targetHex,
           'name': targetHex.length > 8 ? targetHex.substring(0, 8) : targetHex,
           'about': '',
           'profileImage': '',
@@ -172,6 +174,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
               value?.toString() ?? '';
         });
         userMap['pubkeyHex'] = pubkey;
+        userMap['npub'] = _authService.hexToNpub(pubkey) ?? pubkey;
         add(ProfileUserUpdated(userMap));
       } catch (_) {}
     });
@@ -189,6 +192,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         if (freshProfile != null && !isClosed && state is ProfileLoaded) {
           final userMap = freshProfile.toMap();
           userMap['pubkeyHex'] = targetHex;
+          userMap['npub'] = _authService.hexToNpub(targetHex) ?? targetHex;
           add(ProfileUserUpdated(userMap));
         }
       } catch (_) {}
