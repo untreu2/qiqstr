@@ -9,6 +9,9 @@ class AppLocalizationsDe extends AppLocalizations {
   AppLocalizationsDe([String locale = 'de']) : super(locale);
 
   @override
+  String get shareProfile => 'Profil teilen';
+
+  @override
   String get settings => 'Einstellungen';
 
   @override

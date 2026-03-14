@@ -7,6 +7,7 @@ import 'package:carbon_icons/carbon_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/theme_manager.dart';
+import '../../screens/profile/share_profile_screen.dart';
 import '../media/photo_viewer_widget.dart';
 import '../note/note_content_widget.dart';
 import '../common/snackbar_widget.dart';
@@ -189,7 +190,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       const SizedBox(height: 2),
                       _buildNameRow(context, user),
                       if ((user['about'] as String? ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 10),
                         _buildBioContent(user),
                         const SizedBox(height: 4),
                       ],
@@ -325,41 +326,107 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final name = user['name'] as String? ?? '';
     final nip05 = user['nip05'] as String? ?? '';
     final nip05Verified = user['nip05Verified'] as bool? ?? false;
-    return Row(
+    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    final rawNpub = user['npub'] as String? ?? '';
+    final npub = rawNpub.isNotEmpty
+        ? rawNpub
+        : (pubkeyHex.isNotEmpty
+            ? (AppDI.get<AuthService>().hexToNpub(pubkeyHex) ?? '')
+            : '');
+    final displayNpub = npub.length > 16
+        ? '${npub.substring(0, 10)}...${npub.substring(npub.length - 6)}'
+        : npub;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Flexible(
-          child: Row(
+        Row(
+          children: [
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      name.isNotEmpty
+                          ? name
+                          : (nip05.isNotEmpty
+                              ? nip05.split('@').first
+                              : 'Anonymous'),
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: context.colors.textPrimary,
+                        height: 1.0,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (nip05.isNotEmpty && nip05Verified) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _showVerificationTooltip(context, nip05),
+                      child: Icon(
+                        Icons.verified,
+                        size: 22,
+                        color: context.colors.accent,
+                      ),
+                    ),
+                  ],
+                  if (npub.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ShareProfileScreen(
+                              user: user,
+                              npub: npub,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Icon(
+                        Icons.qr_code,
+                        size: 20,
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (npub.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                child: Text(
-                  name.isNotEmpty
-                      ? name
-                      : (nip05.isNotEmpty
-                          ? nip05.split('@').first
-                          : 'Anonymous'),
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: context.colors.textPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                displayNpub,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  color: context.colors.textSecondary,
+                  letterSpacing: 0.3,
+                  height: 1.0,
                 ),
               ),
-              if (nip05.isNotEmpty && nip05Verified) ...[
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _showVerificationTooltip(context, nip05),
-                  child: Icon(
-                    Icons.verified,
-                    size: 22,
-                    color: context.colors.accent,
-                  ),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: npub));
+                  AppSnackbar.info(context, 'Copied npub');
+                },
+                child: Icon(
+                  Icons.copy,
+                  size: 14,
+                  color: context.colors.textSecondary,
                 ),
-              ],
+              ),
             ],
           ),
-        ),
+        ],
       ],
     );
   }
@@ -507,9 +574,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       ),
       AppPopupMenuItem(
         value: 'mute',
-        icon: isMuted
-            ? CarbonIcons.notification_off
-            : CarbonIcons.notification,
+        icon: isMuted ? CarbonIcons.notification_off : CarbonIcons.notification,
         label: isMuted ? l10n.unmute : l10n.mute,
       ),
       AppPopupMenuItem(
@@ -762,8 +827,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return count.toString();
   }
 
-  Widget _buildFollowScoreRow(
-      BuildContext context, ProfileInfoLoaded state) {
+  Widget _buildFollowScoreRow(BuildContext context, ProfileInfoLoaded state) {
     final l10n = AppLocalizations.of(context)!;
     final avatars = state.followScoreAvatars;
     final count = state.followScoreCount!;
@@ -865,8 +929,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     GoRouterState.of(context).matchedLocation;
                 if (currentLocation.startsWith('/home/feed')) {
                   context.push('/home/feed/following', extra: state.user);
-                } else if (currentLocation
-                    .startsWith('/home/notifications')) {
+                } else if (currentLocation.startsWith('/home/notifications')) {
                   context.push('/home/notifications/following',
                       extra: state.user);
                 } else {

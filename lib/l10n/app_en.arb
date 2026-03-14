@@ -1,5 +1,6 @@
 {
   "@@locale": "en",
+  "shareProfile": "Share Profile",
   "settings": "Settings",
   "settingsSubtitle": "Manage your app preferences.",
   "relays": "Relays",

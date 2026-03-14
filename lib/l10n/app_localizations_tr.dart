@@ -9,6 +9,9 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String get shareProfile => 'Profili Paylaş';
+
+  @override
   String get settings => 'Ayarlar';
 
   @override

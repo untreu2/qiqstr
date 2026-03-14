@@ -100,6 +100,12 @@ abstract class AppLocalizations {
     Locale('tr')
   ];
 
+  /// No description provided for @shareProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Profile'**
+  String get shareProfile;
+
   /// No description provided for @settings.
   ///
   /// In en, this message translates to:
