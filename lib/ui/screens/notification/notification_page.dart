@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -742,7 +742,7 @@ class _NotificationTileState extends State<_NotificationTile> {
                     radius: 22,
                     backgroundColor: context.colors.avatarPlaceholder,
                     backgroundImage: image.isNotEmpty
-                        ? CachedNetworkImageProvider(image)
+                        ? appImageProvider(image)
                         : null,
                     child: image.isEmpty
                         ? Icon(Icons.person,
@@ -1009,7 +1009,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
                   radius: radius - 2,
                   backgroundColor: context.colors.avatarPlaceholder,
                   backgroundImage: image.isNotEmpty
-                      ? CachedNetworkImageProvider(image)
+                      ? appImageProvider(image)
                       : null,
                   child: image.isEmpty
                       ? Icon(Icons.person,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/feed_repository.dart';
@@ -271,7 +271,7 @@ class _QuoteContent extends StatelessWidget {
                     ? context.colors.surfaceTransparent
                     : context.colors.secondary,
                 backgroundImage: userProfileImage.isNotEmpty
-                    ? CachedNetworkImageProvider(userProfileImage)
+                    ? appImageProvider(userProfileImage)
                     : null,
                 child: userProfileImage.isEmpty
                     ? Icon(

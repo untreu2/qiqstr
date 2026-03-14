@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/note/note_widget.dart';
@@ -497,7 +497,7 @@ class FeedPageState extends State<FeedPage> {
                                         image: userProfileImage.isNotEmpty
                                             ? DecorationImage(
                                                 image:
-                                                    CachedNetworkImageProvider(
+                                                    appImageProvider(
                                                         userProfileImage),
                                                 fit: BoxFit.cover,
                                               )
@@ -1594,15 +1594,13 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
         width: 48,
         height: 48,
         color: Colors.transparent,
-        child: CachedNetworkImage(
-          imageUrl: imageUrl,
+        child: AppImage(
+          url: imageUrl,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          fadeInDuration: Duration.zero,
-          fadeOutDuration: Duration.zero,
           memCacheWidth: 192,
-          placeholder: (context, url) => Container(
+          placeholder: (context) => Container(
             color: Colors.grey.shade800,
             child: Icon(
               Icons.person,
@@ -1610,7 +1608,7 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
               color: context.colors.textSecondary,
             ),
           ),
-          errorWidget: (context, url, error) => Container(
+          errorWidget: (context) => Container(
             color: Colors.grey.shade800,
             child: Icon(
               Icons.person,

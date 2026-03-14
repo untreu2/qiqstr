@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:gallery_saver_plus/gallery_saver.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
@@ -42,7 +42,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
     super.didChangeDependencies();
     if (!_didPrecacheImages) {
       for (var imageUrl in widget.imageUrls) {
-        precacheImage(CachedNetworkImageProvider(imageUrl), context);
+        precacheImage(appImageProvider(imageUrl), context);
       }
       _didPrecacheImages = true;
     }
@@ -127,7 +127,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                 builder: (context, index) {
                   final imageUrl = widget.imageUrls[index];
                   return PhotoViewGalleryPageOptions(
-                    imageProvider: CachedNetworkImageProvider(imageUrl),
+                    imageProvider: appImageProvider(imageUrl),
                     minScale: PhotoViewComputedScale.contained,
                     maxScale: PhotoViewComputedScale.covered * 2,
                     heroAttributes: PhotoViewHeroAttributes(tag: imageUrl),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
@@ -502,12 +502,12 @@ class _FollowSetCard extends StatelessWidget {
                   if (authorName != null) ...[
                     ClipOval(
                       child: (authorPicture ?? '').isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: authorPicture!,
+                          ? AppImage(
+                              url: authorPicture!,
                               width: 20,
                               height: 20,
                               fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
+                              placeholder: (context) => Container(
                                 width: 20,
                                 height: 20,
                                 color: context.colors.avatarPlaceholder,
@@ -517,7 +517,7 @@ class _FollowSetCard extends StatelessWidget {
                                   color: context.colors.textSecondary,
                                 ),
                               ),
-                              errorWidget: (context, url, error) => Container(
+                              errorWidget: (context) => Container(
                                 width: 20,
                                 height: 20,
                                 color: context.colors.avatarPlaceholder,
@@ -629,12 +629,12 @@ class _FollowSetCard extends StatelessWidget {
                 left: index * (avatarSize - overlap),
                 child: ClipOval(
                   child: picture.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: picture,
+                      ? AppImage(
+                          url: picture,
                           width: avatarSize,
                           height: avatarSize,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
+                          placeholder: (context) => Container(
                             color: context.colors.avatarPlaceholder,
                             child: Icon(
                               CarbonIcons.user,
@@ -642,7 +642,7 @@ class _FollowSetCard extends StatelessWidget {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          errorWidget: (context, url, error) => Container(
+                          errorWidget: (context) => Container(
                             color: context.colors.avatarPlaceholder,
                             child: Icon(
                               CarbonIcons.user,

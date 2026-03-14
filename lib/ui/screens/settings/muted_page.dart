@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/muted/muted_bloc.dart';
@@ -258,12 +258,12 @@ class MutedPage extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: profileImage.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: profileImage,
+                ? AppImage(
+                    url: profileImage,
                     width: 40,
                     height: 40,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
+                    placeholder: (context) => Container(
                       width: 40,
                       height: 40,
                       color: context.colors.avatarPlaceholder,
@@ -273,7 +273,7 @@ class MutedPage extends StatelessWidget {
                         color: context.colors.textSecondary,
                       ),
                     ),
-                    errorWidget: (context, url, error) => Container(
+                    errorWidget: (context) => Container(
                       width: 40,
                       height: 40,
                       color: context.colors.avatarPlaceholder,

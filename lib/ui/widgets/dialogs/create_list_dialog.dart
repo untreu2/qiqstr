@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
+import '../common/app_image.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
 import '../user/user_tile_widget.dart';
@@ -152,10 +153,8 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
                         itemCount: state.filteredUsers.length,
                         itemBuilder: (context, index) {
                           final user = state.filteredUsers[index];
-                          final pubkey =
-                              user['pubkeyHex'] as String? ?? '';
-                          final isSelected =
-                              _selectedUsers.containsKey(pubkey);
+                          final pubkey = user['pubkeyHex'] as String? ?? '';
+                          final isSelected = _selectedUsers.containsKey(pubkey);
 
                           return UserTile(
                             user: user,
@@ -233,7 +232,7 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
                   if (picture.isNotEmpty)
                     CircleAvatar(
                       radius: 12,
-                      backgroundImage: NetworkImage(picture),
+                      backgroundImage: appImageProvider(picture),
                       backgroundColor: Colors.grey.shade800,
                     )
                   else

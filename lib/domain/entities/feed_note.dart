@@ -16,6 +16,10 @@ class FeedNote {
   final String? authorName;
   final String? authorImage;
   final String? authorNip05;
+  final String? reposterName;
+  final String? reposterImage;
+  final String? formattedTimestamp;
+  final Map<String, dynamic>? parsedContent;
   final int reactionCount;
   final int repostCount;
   final int replyCount;
@@ -42,6 +46,10 @@ class FeedNote {
     this.authorName,
     this.authorImage,
     this.authorNip05,
+    this.reposterName,
+    this.reposterImage,
+    this.formattedTimestamp,
+    this.parsedContent,
     this.reactionCount = 0,
     this.repostCount = 0,
     this.replyCount = 0,
@@ -57,6 +65,9 @@ class FeedNote {
       if (tag is List) return tag.map((t) => t.toString()).toList();
       return <String>[];
     }).toList();
+
+    final rawParsed = map['parsedContent'];
+    final parsedContent = rawParsed is Map<String, dynamic> ? rawParsed : null;
 
     return FeedNote(
       id: map['id'] as String? ?? '',
@@ -76,6 +87,10 @@ class FeedNote {
       authorName: map['authorName'] as String?,
       authorImage: map['authorImage'] as String?,
       authorNip05: map['authorNip05'] as String?,
+      reposterName: map['reposterName'] as String?,
+      reposterImage: map['reposterImage'] as String?,
+      formattedTimestamp: map['formattedTimestamp'] as String?,
+      parsedContent: parsedContent,
       reactionCount: map['reactionCount'] as int? ?? 0,
       repostCount: map['repostCount'] as int? ?? 0,
       replyCount: map['replyCount'] as int? ?? 0,
@@ -104,6 +119,10 @@ class FeedNote {
     String? authorName,
     String? authorImage,
     String? authorNip05,
+    String? reposterName,
+    String? reposterImage,
+    String? formattedTimestamp,
+    Map<String, dynamic>? parsedContent,
     int? reactionCount,
     int? repostCount,
     int? replyCount,
@@ -130,6 +149,10 @@ class FeedNote {
       authorName: authorName ?? this.authorName,
       authorImage: authorImage ?? this.authorImage,
       authorNip05: authorNip05 ?? this.authorNip05,
+      reposterName: reposterName ?? this.reposterName,
+      reposterImage: reposterImage ?? this.reposterImage,
+      formattedTimestamp: formattedTimestamp ?? this.formattedTimestamp,
+      parsedContent: parsedContent ?? this.parsedContent,
       reactionCount: reactionCount ?? this.reactionCount,
       repostCount: repostCount ?? this.repostCount,
       replyCount: replyCount ?? this.replyCount,
@@ -184,6 +207,10 @@ class FeedNote {
       'authorName': authorName,
       'authorImage': authorImage,
       'authorNip05': authorNip05,
+      'reposterName': reposterName,
+      'reposterImage': reposterImage,
+      'formattedTimestamp': formattedTimestamp,
+      'parsedContent': parsedContent,
       'reactionCount': reactionCount,
       'repostCount': repostCount,
       'replyCount': replyCount,

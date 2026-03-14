@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/article_quote_widget/article_quote_widget_bloc.dart';
 import '../../../presentation/blocs/article_quote_widget/article_quote_widget_event.dart';
@@ -138,16 +138,16 @@ class _ArticleQuoteCard extends StatelessWidget {
               ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(11)),
-                child: CachedNetworkImage(
-                  imageUrl: imageUrl,
+                child: AppImage(
+                  url: imageUrl,
                   width: double.infinity,
                   height: 120,
                   fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
+                  placeholder: (context) => Container(
                     height: 120,
                     color: colors.overlayLight,
                   ),
-                  errorWidget: (context, url, error) => const SizedBox.shrink(),
+                  errorWidget: (context) => const SizedBox.shrink(),
                 ),
               ),
             Padding(
@@ -203,7 +203,7 @@ class _ArticleQuoteCard extends StatelessWidget {
                         radius: 10,
                         backgroundColor: colors.overlayLight,
                         backgroundImage: authorImage.isNotEmpty
-                            ? CachedNetworkImageProvider(authorImage)
+                            ? appImageProvider(authorImage)
                             : null,
                         child: authorImage.isEmpty
                             ? Icon(Icons.person,

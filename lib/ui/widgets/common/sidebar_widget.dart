@@ -8,6 +8,7 @@ import '../../../core/di/app_di.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/sidebar/sidebar_bloc.dart';
 import '../../../presentation/blocs/sidebar/sidebar_event.dart';
+import 'app_image.dart';
 import '../../../presentation/blocs/sidebar/sidebar_state.dart';
 import '../../../l10n/app_localizations.dart';
 import '../dialogs/switch_account_dialog.dart';
@@ -164,7 +165,7 @@ class _UserProfileHeader extends StatelessWidget {
                     final profileImage = user['profileImage'] as String? ?? '';
                     return profileImage.isNotEmpty
                         ? DecorationImage(
-                            image: NetworkImage(profileImage),
+                            image: appImageProvider(profileImage),
                             fit: BoxFit.cover,
                           )
                         : null;

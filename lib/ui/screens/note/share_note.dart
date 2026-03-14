@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:giphy_get/giphy_get.dart';
 
 import '../../../core/di/app_di.dart';
@@ -299,11 +299,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     try {
       final state = _noteBloc.state;
-      
+
       if (state is! NoteComposeState) {
         return;
       }
-      
+
       if (state.isUploadingMedia) {
         return;
       }
@@ -711,7 +711,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
                             size: 16, color: context.colors.textPrimary),
                       const SizedBox(width: 6),
                       Text(
-                        isUploading ? l10n.uploadingDotDotDot : l10n.addMediaText,
+                        isUploading
+                            ? l10n.uploadingDotDotDot
+                            : l10n.addMediaText,
                         style: TextStyle(
                           color: context.colors.textPrimary,
                           fontSize: _smallFontSize,
@@ -882,9 +884,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
         final profileImage = user?['profileImage'] as String? ?? '';
         return CircleAvatar(
           radius: _avatarRadius,
-          backgroundImage: profileImage.isNotEmpty
-              ? CachedNetworkImageProvider(profileImage)
-              : null,
+          backgroundImage:
+              profileImage.isNotEmpty ? appImageProvider(profileImage) : null,
           backgroundColor: context.colors.surfaceTransparent,
           child: profileImage.isEmpty
               ? Icon(Icons.person, color: context.colors.textPrimary, size: 20)
@@ -986,12 +987,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildImagePreview(String url) {
-    return Image.network(
-      url,
+    return AppImage(
+      url: url,
       width: _mediaItemSize,
       height: _mediaItemSize,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
+      errorWidget: (_) => Container(
         width: _mediaItemSize,
         height: _mediaItemSize,
         color: context.colors.surface,
@@ -1109,7 +1110,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
               CircleAvatar(
                 radius: 16,
                 backgroundImage: userProfileImage.isNotEmpty
-                    ? CachedNetworkImageProvider(userProfileImage)
+                    ? appImageProvider(userProfileImage)
                     : null,
                 backgroundColor: context.colors.surfaceTransparent,
                 child: userProfileImage.isEmpty

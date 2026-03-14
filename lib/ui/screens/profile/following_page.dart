@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/services/auth_service.dart';
@@ -269,15 +269,13 @@ class _FollowingPageState extends State<FollowingPage> {
         width: 48,
         height: 48,
         color: Colors.transparent,
-        child: CachedNetworkImage(
-          imageUrl: imageUrl,
+        child: AppImage(
+          url: imageUrl,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          fadeInDuration: Duration.zero,
-          fadeOutDuration: Duration.zero,
           memCacheWidth: 192,
-          placeholder: (context, url) => Container(
+          placeholder: (context) => Container(
             color: Colors.grey.shade800,
             child: Icon(
               Icons.person,
@@ -285,7 +283,7 @@ class _FollowingPageState extends State<FollowingPage> {
               color: context.colors.textSecondary,
             ),
           ),
-          errorWidget: (context, url, error) => Container(
+          errorWidget: (context) => Container(
             color: Colors.grey.shade800,
             child: Icon(
               Icons.person,

@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
@@ -346,7 +346,7 @@ class _DmChatPageState extends State<DmChatPage> {
                         ? (otherUser['profileImage'] as String? ?? '')
                                 .isNotEmpty
                             ? DecorationImage(
-                                image: CachedNetworkImageProvider(
+                                image: appImageProvider(
                                     otherUser['profileImage'] as String),
                                 fit: BoxFit.cover,
                               )
@@ -666,19 +666,19 @@ class _DmChatPageState extends State<DmChatPage> {
                       bottomLeft: !isFromMe ? const Radius.circular(4) : null,
                     ),
                     child: isImage
-                        ? CachedNetworkImage(
+                        ? AppImage(
                             key: ValueKey(mediaUrl),
-                            imageUrl: mediaUrl,
+                            url: mediaUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
-                            placeholder: (_, __) => Container(
+                            placeholder: (_) => Container(
                               height: 200,
                               color: colors.overlayLight,
                               child: const Center(
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
-                            errorWidget: (_, __, ___) => Container(
+                            errorWidget: (_) => Container(
                               height: 100,
                               color: colors.overlayLight,
                               child: Icon(CarbonIcons.image,

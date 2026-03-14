@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/ui/widgets/note/note_widget.dart';
@@ -294,16 +294,11 @@ class _ThreadPageState extends State<ThreadPage> {
                       final profileImage =
                           currentUser?['profileImage'] as String? ?? '';
                       return profileImage.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: profileImage,
+                          ? AppImage(
+                              url: profileImage,
                               fit: BoxFit.cover,
-                              fadeInDuration: Duration.zero,
-                              fadeOutDuration: Duration.zero,
-                              maxHeightDiskCache: 80,
-                              maxWidthDiskCache: 80,
                               memCacheWidth: 80,
-                              memCacheHeight: 80,
-                              errorWidget: (context, url, error) {
+                              errorWidget: (context) {
                                 return Icon(
                                   Icons.person,
                                   size: 24,

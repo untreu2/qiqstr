@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../utils/string_optimizer.dart';
@@ -509,19 +509,17 @@ class _FocusedProfileSection extends StatelessWidget {
           radius: radius,
           backgroundColor: colors.surfaceTransparent,
           child: ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
+            child: AppImage(
+              url: imageUrl,
               width: radius * 2,
               height: radius * 2,
               fit: BoxFit.cover,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              placeholder: (context, url) => Icon(
+              placeholder: (context) => Icon(
                 Icons.person,
                 size: radius * 0.8,
                 color: colors.textSecondary,
               ),
-              errorWidget: (context, url, error) => Icon(
+              errorWidget: (context) => Icon(
                 Icons.person,
                 size: radius * 0.8,
                 color: colors.textSecondary,

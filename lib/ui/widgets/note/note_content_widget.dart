@@ -381,7 +381,10 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (_textParts.isNotEmpty)
+                if (_textParts.isNotEmpty &&
+                    _textParts.any((p) =>
+                        (p['text'] as String? ?? '').trim().isNotEmpty ||
+                        p['type'] != 'text'))
                   RepaintBoundary(
                     child: widget.isSelectable
                         ? SelectableText.rich(

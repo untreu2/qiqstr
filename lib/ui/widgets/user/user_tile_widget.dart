@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
@@ -294,16 +294,14 @@ class _UserAvatar extends StatelessWidget {
           width: 40,
           height: 40,
           color: Colors.transparent,
-          child: CachedNetworkImage(
+          child: AppImage(
             key: ValueKey('user_avatar_${imageUrl.hashCode}'),
-            imageUrl: imageUrl,
+            url: imageUrl,
             width: 40,
             height: 40,
             fit: BoxFit.cover,
-            fadeInDuration: Duration.zero,
-            fadeOutDuration: Duration.zero,
             memCacheWidth: 160,
-            placeholder: (context, url) => Container(
+            placeholder: (context) => Container(
               color: Colors.grey.shade800,
               child: Icon(
                 Icons.person,
@@ -311,7 +309,7 @@ class _UserAvatar extends StatelessWidget {
                 color: colors.textSecondary,
               ),
             ),
-            errorWidget: (context, url, error) => Container(
+            errorWidget: (context) => Container(
               color: Colors.grey.shade800,
               child: Icon(
                 Icons.person,

@@ -7,7 +7,6 @@ import '../../../domain/entities/feed_note.dart';
 import '../../../data/services/follow_set_service.dart';
 import '../../../data/services/interaction_service.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
-import '../../../utils/string_optimizer.dart';
 import 'feed_event.dart' as feed_event;
 import 'feed_state.dart';
 
@@ -543,10 +542,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       final articleAuthorPubkeys = <String>{};
 
       for (final note in notes) {
-        final content = note['content'] as String? ?? '';
-        if (content.isEmpty) continue;
-
-        final parsed = stringOptimizer.parseContentOptimized(content);
+        final parsed = note['parsedContent'] as Map<String, dynamic>?;
+        if (parsed == null) continue;
 
         final quoteIds = parsed['quoteIds'] as List? ?? [];
         for (final bech32 in quoteIds) {

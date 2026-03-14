@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `is_future_dated`, `metadata_to_flat_json`
+// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `format_relative_timestamp`, `hydrate_article_events`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `is_future_dated`, `metadata_to_flat_json`, `parse_note_content`
 
 Future<String?> dbGetProfile({required String pubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbGetProfile(pubkeyHex: pubkeyHex);

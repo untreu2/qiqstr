@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -329,11 +329,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
+                  child: AppImage(
+                    url: imageUrl,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
+                    placeholder: (context) => Container(
                       height: 220,
                       color: colors.overlayLight,
                       child: Center(
@@ -343,7 +343,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                         ),
                       ),
                     ),
-                    errorWidget: (context, url, error) => const SizedBox.shrink(),
+                    errorWidget: (context) => const SizedBox.shrink(),
                   ),
                 ),
               ),
@@ -436,10 +436,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
-                        imageUrl: uri.toString(),
+                      child: AppImage(
+                        url: uri.toString(),
                         fit: BoxFit.contain,
-                        placeholder: (context, url) => Container(
+                        placeholder: (context) => Container(
                           height: 150,
                           color: colors.overlayLight,
                           child: Center(
@@ -449,7 +449,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                             ),
                           ),
                         ),
-                        errorWidget: (context, url, error) =>
+                        errorWidget: (context) =>
                             const SizedBox.shrink(),
                       ),
                     ),
@@ -474,19 +474,17 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         height: 40,
         color: colors.avatarPlaceholder,
         child: imageUrl.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: imageUrl,
+            ? AppImage(
+                url: imageUrl,
                 width: 40,
                 height: 40,
                 fit: BoxFit.cover,
-                fadeInDuration: Duration.zero,
-                fadeOutDuration: Duration.zero,
-                placeholder: (context, url) => Icon(
+                placeholder: (context) => Icon(
                   Icons.person,
                   size: 20,
                   color: colors.textSecondary,
                 ),
-                errorWidget: (context, url, error) => Icon(
+                errorWidget: (context) => Icon(
                   Icons.person,
                   size: 20,
                   color: colors.textSecondary,

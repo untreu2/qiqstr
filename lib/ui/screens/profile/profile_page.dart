@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/article/article_widget.dart';
@@ -150,7 +150,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 currentUser['profileImage'] as String? ?? '';
                             return profileImage.isNotEmpty
                                 ? DecorationImage(
-                                    image: CachedNetworkImageProvider(
+                                    image: appImageProvider(
                                         profileImage),
                                     fit: BoxFit.cover,
                                   )

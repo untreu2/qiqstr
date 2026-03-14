@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
@@ -133,16 +133,12 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                     const BorderRadius.vertical(top: Radius.circular(16)),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: CachedNetworkImage(
-                    imageUrl: _imageUrl!,
+                  child: AppImage(
+                    url: _imageUrl!,
                     fit: BoxFit.cover,
                     width: double.infinity,
-                    fadeInDuration: Duration.zero,
-                    fadeOutDuration: Duration.zero,
-                    maxHeightDiskCache: 800,
-                    maxWidthDiskCache: 800,
                     memCacheWidth: 800,
-                    placeholder: (context, url) => AspectRatio(
+                    placeholder: (context) => AspectRatio(
                       aspectRatio: 16 / 9,
                       child: Container(
                         color: context.colors.overlayLight,
@@ -154,7 +150,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                         ),
                       ),
                     ),
-                    errorWidget: (_, __, ___) {
+                    errorWidget: (_) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (mounted) {
                           setState(() {

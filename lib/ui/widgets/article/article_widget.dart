@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../theme/theme_manager.dart';
@@ -185,12 +185,12 @@ class _ArticleWidgetState extends State<ArticleWidget> {
               ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(16)),
-                child: CachedNetworkImage(
-                  imageUrl: _imageUrl,
+                child: AppImage(
+                  url: _imageUrl,
                   width: double.infinity,
                   height: 180,
                   fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
+                  placeholder: (context) => Container(
                     height: 180,
                     color: colors.overlayLight,
                     child: Center(
@@ -200,7 +200,7 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                       ),
                     ),
                   ),
-                  errorWidget: (context, url, error) => Container(
+                  errorWidget: (context) => Container(
                     height: 180,
                     color: colors.overlayLight,
                     child: Icon(
@@ -247,12 +247,12 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                       children: [
                         ClipOval(
                           child: authorImage.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: authorImage,
+                              ? AppImage(
+                                  url: authorImage,
                                   width: 28,
                                   height: 28,
                                   fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(
+                                  placeholder: (context) => Container(
                                     width: 28,
                                     height: 28,
                                     color: colors.overlayLight,
@@ -262,7 +262,7 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                                       color: colors.textSecondary,
                                     ),
                                   ),
-                                  errorWidget: (context, url, error) =>
+                                  errorWidget: (context) =>
                                       Container(
                                     width: 28,
                                     height: 28,

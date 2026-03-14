@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
@@ -162,17 +162,17 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                     ),
                   )
                 : bannerUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: bannerUrl,
+                    ? AppImage(
+                        url: bannerUrl,
                         width: screenWidth,
                         height: bannerHeight,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
+                        placeholder: (_) => Container(
                           height: bannerHeight,
                           width: screenWidth,
                           color: context.colors.grey700,
                         ),
-                        errorWidget: (_, __, ___) => Container(
+                        errorWidget: (_) => Container(
                           height: bannerHeight,
                           width: screenWidth,
                           color: context.colors.background,
@@ -248,7 +248,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                   radius: avatarRadius,
                   backgroundColor: context.colors.surfaceTransparent,
                   backgroundImage: pictureUrl.isNotEmpty && !isUploading
-                      ? CachedNetworkImageProvider(pictureUrl)
+                      ? appImageProvider(pictureUrl)
                       : null,
                   child: isUploading
                       ? CircularProgressIndicator(

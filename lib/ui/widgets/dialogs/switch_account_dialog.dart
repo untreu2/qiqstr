@@ -3,6 +3,7 @@ import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../l10n/app_localizations.dart';
+import '../common/app_image.dart';
 
 Future<void> showSwitchAccountDialog({
   required BuildContext context,
@@ -97,7 +98,7 @@ Future<void> showSwitchAccountDialog({
                           color: colors.avatarPlaceholder,
                           image: profileImage != null && profileImage.isNotEmpty
                               ? DecorationImage(
-                                  image: NetworkImage(profileImage),
+                                  image: appImageProvider(profileImage),
                                   fit: BoxFit.cover,
                                 )
                               : null,

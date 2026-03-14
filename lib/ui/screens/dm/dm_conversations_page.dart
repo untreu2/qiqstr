@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -265,7 +265,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                 backgroundColor: context.colors.border,
                 backgroundImage: otherUserProfileImage != null &&
                         otherUserProfileImage.isNotEmpty
-                    ? CachedNetworkImageProvider(otherUserProfileImage)
+                    ? appImageProvider(otherUserProfileImage)
                     : null,
                 child: otherUserProfileImage == null ||
                         otherUserProfileImage.isEmpty

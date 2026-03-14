@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -267,22 +267,18 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       radius: radius,
       backgroundColor: context.colors.surfaceTransparent,
       child: ClipOval(
-        child: CachedNetworkImage(
-          imageUrl: imageUrl,
+        child: AppImage(
+          url: imageUrl,
           width: radius * 2,
           height: radius * 2,
           fit: BoxFit.cover,
-          fadeInDuration: Duration.zero,
-          fadeOutDuration: Duration.zero,
           memCacheWidth: (radius * 5).toInt(),
-          maxHeightDiskCache: (radius * 5).toInt(),
-          maxWidthDiskCache: (radius * 5).toInt(),
-          placeholder: (context, url) => Icon(
+          placeholder: (context) => Icon(
             Icons.person,
             size: radius,
             color: context.colors.textSecondary,
           ),
-          errorWidget: (context, url, error) => Icon(
+          errorWidget: (context) => Icon(
             Icons.person,
             size: radius,
             color: context.colors.textSecondary,
@@ -390,22 +386,18 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         }
       },
       child: banner.isNotEmpty
-          ? CachedNetworkImage(
+          ? AppImage(
               key: ValueKey('banner_image_${pubkeyHex}_${banner.hashCode}'),
-              imageUrl: banner,
+              url: banner,
               width: screenWidth,
               height: bannerHeight,
               fit: BoxFit.cover,
-              fadeInDuration: Duration.zero,
-              placeholderFadeInDuration: Duration.zero,
-              memCacheHeight: (bannerHeight * 2).round(),
-              maxHeightDiskCache: (bannerHeight * 3).round(),
-              placeholder: (_, __) => Container(
+              placeholder: (_) => Container(
                 height: bannerHeight,
                 width: screenWidth,
                 color: context.colors.grey700,
               ),
-              errorWidget: (_, __, ___) => Container(
+              errorWidget: (_) => Container(
                 height: bannerHeight,
                 width: screenWidth,
                 color: context.colors.background,
@@ -804,14 +796,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       ),
                     ),
                     child: ClipOval(
-                      child: CachedNetworkImage(
-                        imageUrl: url,
+                      child: AppImage(
+                        url: url,
                         width: avatarSize,
                         height: avatarSize,
                         fit: BoxFit.cover,
-                        fadeInDuration: Duration.zero,
-                        fadeOutDuration: Duration.zero,
-                        placeholder: (context, url) => Container(
+                        placeholder: (context) => Container(
                           color: context.colors.surfaceTransparent,
                           child: Icon(
                             Icons.person,
@@ -819,7 +809,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                             color: context.colors.textSecondary,
                           ),
                         ),
-                        errorWidget: (context, url, error) => Container(
+                        errorWidget: (context) => Container(
                           color: context.colors.surfaceTransparent,
                           child: Icon(
                             Icons.person,

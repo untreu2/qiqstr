@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
@@ -176,12 +176,12 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                                 ClipOval(
                                   child: (authorInfo['picture'] ?? '')
                                           .isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: authorInfo['picture']!,
+                                      ? AppImage(
+                                          url: authorInfo['picture']!,
                                           width: 24,
                                           height: 24,
                                           fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
+                                          placeholder: (context) =>
                                               Container(
                                             width: 24,
                                             height: 24,
@@ -194,7 +194,7 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                                                   context.colors.textSecondary,
                                             ),
                                           ),
-                                          errorWidget: (context, url, error) =>
+                                          errorWidget: (context) =>
                                               Container(
                                             width: 24,
                                             height: 24,

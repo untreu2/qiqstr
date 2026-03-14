@@ -15,6 +15,7 @@ import 'presentation/blocs/locale/locale_bloc.dart';
 import 'presentation/blocs/locale/locale_event.dart';
 import 'presentation/blocs/locale/locale_state.dart';
 
+import 'data/services/image_cache_service.dart';
 import 'data/services/logging_service.dart';
 import 'data/services/relay_service.dart';
 import 'data/services/auth_service.dart';
@@ -79,12 +80,13 @@ void main() {
 
     await _sanitizeLmdbBeforeRust();
     await RustLib.init();
+    await ImageCacheService.instance.initialize();
     try {
       await dotenv.load(fileName: '.env');
     } catch (_) {}
 
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
-    PaintingBinding.instance.imageCache.maximumSize = 600;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
+    PaintingBinding.instance.imageCache.maximumSize = 200;
 
     debugProfileBuildsEnabled = false;
     debugPrintRebuildDirtyWidgets = false;

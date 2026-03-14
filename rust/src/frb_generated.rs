@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -931006946;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1913783452;
 
 // Section: executor
 
@@ -3402,6 +3402,43 @@ fn wire__crate__api__nip19__encode_basic_bech32_impl(
         },
     )
 }
+fn wire__crate__api__image_cache__evict_image_cache_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "evict_image_cache",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_max_age_secs = <u64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::image_cache::evict_image_cache(api_max_age_secs).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__relay__fetch_all_events_for_author_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -3438,6 +3475,43 @@ fn wire__crate__api__relay__fetch_all_events_for_author_impl(
                             api_sink,
                         )
                         .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__image_cache__fetch_and_cache_image_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "fetch_and_cache_image",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_url = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::image_cache::fetch_and_cache_image(api_url).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -3720,6 +3794,43 @@ fn wire__crate__api__crypto__generate_mnemonic_impl(
         },
     )
 }
+fn wire__crate__api__image_cache__get_cached_image_path_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_cached_image_path",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_url = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::image_cache::get_cached_image_path(api_url).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__relay__get_connected_relay_count_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -3782,6 +3893,41 @@ fn wire__crate__api__relay__get_database_size_mb_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
                         let output_ok = crate::api::relay::get_database_size_mb().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__image_cache__get_image_cache_size_mb_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_image_cache_size_mb",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::image_cache::get_image_cache_size_mb().await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -3937,6 +4083,77 @@ fn wire__crate__api__relay__init_client_impl(
         },
     )
 }
+fn wire__crate__api__image_cache__init_image_cache_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "init_image_cache",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_cache_dir = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::image_cache::init_image_cache(api_cache_dir).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__image_cache__is_cached_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "is_cached",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_url = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::image_cache::is_cached(&api_url))?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__relay__is_client_initialized_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4001,6 +4218,40 @@ fn wire__crate__api__nip17__is_gift_wrap_impl(
                     Result::<_, ()>::Ok(crate::api::nip17::is_gift_wrap(api_event_json))?;
                 Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__image_cache__is_video_url_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "is_video_url",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_url = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::image_cache::is_video_url(&api_url))?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -4502,6 +4753,80 @@ fn wire__crate__api__nwc__parse_nwc_uri_impl(
                     Ok(output_ok)
                 })(),
             )
+        },
+    )
+}
+fn wire__crate__api__image_cache__prefetch_images_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "prefetch_images",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_urls = <Vec<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::image_cache::prefetch_images(api_urls).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__image_cache__prefetch_note_images_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "prefetch_note_images",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_urls = <Vec<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, ()>(
+                    (move || async move {
+                        let output_ok = Result::<_, ()>::Ok({
+                            crate::api::image_cache::prefetch_note_images(api_urls).await;
+                        })?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
         },
     )
 }
@@ -5312,6 +5637,13 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5680,75 +6012,110 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        86 => wire__crate__api__relay__fetch_all_events_for_author_impl(
+        86 => {
+            wire__crate__api__image_cache__evict_image_cache_impl(port, ptr, rust_vec_len, data_len)
+        }
+        87 => wire__crate__api__relay__fetch_all_events_for_author_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        87 => wire__crate__api__relay__fetch_counts_from_relays_impl(
+        88 => wire__crate__api__image_cache__fetch_and_cache_image_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        88 => wire__crate__api__relay__fetch_event_by_id_impl(port, ptr, rust_vec_len, data_len),
-        89 => wire__crate__api__relay__fetch_events_impl(port, ptr, rust_vec_len, data_len),
-        90 => wire__crate__api__relay__fetch_missing_references_impl(
+        89 => wire__crate__api__relay__fetch_counts_from_relays_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        95 => wire__crate__api__relay__get_connected_relay_count_impl(
+        90 => wire__crate__api__relay__fetch_event_by_id_impl(port, ptr, rust_vec_len, data_len),
+        91 => wire__crate__api__relay__fetch_events_impl(port, ptr, rust_vec_len, data_len),
+        92 => wire__crate__api__relay__fetch_missing_references_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        96 => wire__crate__api__relay__get_database_size_mb_impl(port, ptr, rust_vec_len, data_len),
-        98 => wire__crate__api__relay__get_relay_list_impl(port, ptr, rust_vec_len, data_len),
-        99 => wire__crate__api__relay__get_relay_status_impl(port, ptr, rust_vec_len, data_len),
-        100 => wire__crate__api__relay__init_client_impl(port, ptr, rust_vec_len, data_len),
-        101 => {
+        97 => wire__crate__api__image_cache__get_cached_image_path_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        98 => wire__crate__api__relay__get_connected_relay_count_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        99 => wire__crate__api__relay__get_database_size_mb_impl(port, ptr, rust_vec_len, data_len),
+        100 => wire__crate__api__image_cache__get_image_cache_size_mb_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        102 => wire__crate__api__relay__get_relay_list_impl(port, ptr, rust_vec_len, data_len),
+        103 => wire__crate__api__relay__get_relay_status_impl(port, ptr, rust_vec_len, data_len),
+        104 => wire__crate__api__relay__init_client_impl(port, ptr, rust_vec_len, data_len),
+        105 => {
+            wire__crate__api__image_cache__init_image_cache_impl(port, ptr, rust_vec_len, data_len)
+        }
+        106 => wire__crate__api__image_cache__is_cached_impl(port, ptr, rust_vec_len, data_len),
+        107 => {
             wire__crate__api__relay__is_client_initialized_impl(port, ptr, rust_vec_len, data_len)
         }
-        103 => {
+        109 => wire__crate__api__image_cache__is_video_url_impl(port, ptr, rust_vec_len, data_len),
+        110 => {
             wire__crate__api__relay__merge_and_sort_notes_impl(port, ptr, rust_vec_len, data_len)
         }
-        112 => wire__crate__api__nwc__nwc_get_balance_impl(port, ptr, rust_vec_len, data_len),
-        113 => wire__crate__api__nwc__nwc_list_transactions_impl(port, ptr, rust_vec_len, data_len),
-        114 => wire__crate__api__nwc__nwc_make_invoice_impl(port, ptr, rust_vec_len, data_len),
-        115 => wire__crate__api__nwc__nwc_pay_invoice_impl(port, ptr, rust_vec_len, data_len),
-        117 => wire__crate__api__relay__remove_relay_impl(port, ptr, rust_vec_len, data_len),
-        118 => wire__crate__api__relay__request_to_vanish_impl(port, ptr, rust_vec_len, data_len),
-        119 => wire__crate__api__relay__resolve_thread_root_impl(port, ptr, rust_vec_len, data_len),
-        120 => wire__crate__api__relay__send_event_impl(port, ptr, rust_vec_len, data_len),
-        121 => wire__crate__api__relay__send_event_to_impl(port, ptr, rust_vec_len, data_len),
+        119 => wire__crate__api__nwc__nwc_get_balance_impl(port, ptr, rust_vec_len, data_len),
+        120 => wire__crate__api__nwc__nwc_list_transactions_impl(port, ptr, rust_vec_len, data_len),
+        121 => wire__crate__api__nwc__nwc_make_invoice_impl(port, ptr, rust_vec_len, data_len),
+        122 => wire__crate__api__nwc__nwc_pay_invoice_impl(port, ptr, rust_vec_len, data_len),
         124 => {
+            wire__crate__api__image_cache__prefetch_images_impl(port, ptr, rust_vec_len, data_len)
+        }
+        125 => wire__crate__api__image_cache__prefetch_note_images_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        126 => wire__crate__api__relay__remove_relay_impl(port, ptr, rust_vec_len, data_len),
+        127 => wire__crate__api__relay__request_to_vanish_impl(port, ptr, rust_vec_len, data_len),
+        128 => wire__crate__api__relay__resolve_thread_root_impl(port, ptr, rust_vec_len, data_len),
+        129 => wire__crate__api__relay__send_event_impl(port, ptr, rust_vec_len, data_len),
+        130 => wire__crate__api__relay__send_event_to_impl(port, ptr, rust_vec_len, data_len),
+        133 => {
             wire__crate__api__relay__stream_broadcast_events_impl(port, ptr, rust_vec_len, data_len)
         }
-        125 => wire__crate__api__relay__stream_interaction_counts_impl(
+        134 => wire__crate__api__relay__stream_interaction_counts_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        126 => wire__crate__api__relay__stream_relay_status_impl(port, ptr, rust_vec_len, data_len),
-        127 => wire__crate__api__relay__subscribe_to_events_impl(port, ptr, rust_vec_len, data_len),
-        128 => wire__crate__api__relay__sync_events_impl(port, ptr, rust_vec_len, data_len),
-        129 => {
+        135 => wire__crate__api__relay__stream_relay_status_impl(port, ptr, rust_vec_len, data_len),
+        136 => wire__crate__api__relay__subscribe_to_events_impl(port, ptr, rust_vec_len, data_len),
+        137 => wire__crate__api__relay__sync_events_impl(port, ptr, rust_vec_len, data_len),
+        138 => {
             wire__crate__api__relay__sync_replies_recursive_impl(port, ptr, rust_vec_len, data_len)
         }
-        131 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
-        135 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
-        136 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
+        140 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
+        144 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
+        145 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        137 => wire__crate__api__relay__wait_for_ready_impl(port, ptr, rust_vec_len, data_len),
+        146 => wire__crate__api__relay__wait_for_ready_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5797,27 +6164,27 @@ fn pde_ffi_dispatcher_sync_impl(
         25 => wire__crate__api__events__create_signed_event_impl(ptr, rust_vec_len, data_len),
         26 => wire__crate__api__events__create_zap_request_event_impl(ptr, rust_vec_len, data_len),
         85 => wire__crate__api__nip19__encode_basic_bech32_impl(ptr, rust_vec_len, data_len),
-        91 => wire__crate__api__crypto__generate_aes_key_impl(ptr, rust_vec_len, data_len),
-        92 => wire__crate__api__crypto__generate_aes_nonce_impl(ptr, rust_vec_len, data_len),
-        93 => wire__crate__api__crypto__generate_keypair_impl(ptr, rust_vec_len, data_len),
-        94 => wire__crate__api__crypto__generate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        97 => wire__crate__api__crypto__get_public_key_impl(ptr, rust_vec_len, data_len),
-        102 => wire__crate__api__nip17__is_gift_wrap_impl(ptr, rust_vec_len, data_len),
-        104 => wire__crate__api__crypto__mnemonic_to_private_key_impl(ptr, rust_vec_len, data_len),
-        105 => wire__crate__api__nip19__nip19_decode_impl(ptr, rust_vec_len, data_len),
-        106 => wire__crate__api__nip19__nip19_decode_tlv_impl(ptr, rust_vec_len, data_len),
-        107 => wire__crate__api__nip19__nip19_encode_note_impl(ptr, rust_vec_len, data_len),
-        108 => wire__crate__api__nip19__nip19_encode_privkey_impl(ptr, rust_vec_len, data_len),
-        109 => wire__crate__api__nip19__nip19_encode_pubkey_impl(ptr, rust_vec_len, data_len),
-        110 => wire__crate__api__nip17__nip44_decrypt_impl(ptr, rust_vec_len, data_len),
-        111 => wire__crate__api__nip17__nip44_encrypt_impl(ptr, rust_vec_len, data_len),
-        116 => wire__crate__api__nwc__parse_nwc_uri_impl(ptr, rust_vec_len, data_len),
-        122 => wire__crate__api__crypto__sha256_hash_impl(ptr, rust_vec_len, data_len),
-        123 => wire__crate__api__crypto__sign_event_id_impl(ptr, rust_vec_len, data_len),
-        130 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
-        132 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        133 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
-        134 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
+        93 => wire__crate__api__crypto__generate_aes_key_impl(ptr, rust_vec_len, data_len),
+        94 => wire__crate__api__crypto__generate_aes_nonce_impl(ptr, rust_vec_len, data_len),
+        95 => wire__crate__api__crypto__generate_keypair_impl(ptr, rust_vec_len, data_len),
+        96 => wire__crate__api__crypto__generate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        101 => wire__crate__api__crypto__get_public_key_impl(ptr, rust_vec_len, data_len),
+        108 => wire__crate__api__nip17__is_gift_wrap_impl(ptr, rust_vec_len, data_len),
+        111 => wire__crate__api__crypto__mnemonic_to_private_key_impl(ptr, rust_vec_len, data_len),
+        112 => wire__crate__api__nip19__nip19_decode_impl(ptr, rust_vec_len, data_len),
+        113 => wire__crate__api__nip19__nip19_decode_tlv_impl(ptr, rust_vec_len, data_len),
+        114 => wire__crate__api__nip19__nip19_encode_note_impl(ptr, rust_vec_len, data_len),
+        115 => wire__crate__api__nip19__nip19_encode_privkey_impl(ptr, rust_vec_len, data_len),
+        116 => wire__crate__api__nip19__nip19_encode_pubkey_impl(ptr, rust_vec_len, data_len),
+        117 => wire__crate__api__nip17__nip44_decrypt_impl(ptr, rust_vec_len, data_len),
+        118 => wire__crate__api__nip17__nip44_encrypt_impl(ptr, rust_vec_len, data_len),
+        123 => wire__crate__api__nwc__parse_nwc_uri_impl(ptr, rust_vec_len, data_len),
+        131 => wire__crate__api__crypto__sha256_hash_impl(ptr, rust_vec_len, data_len),
+        132 => wire__crate__api__crypto__sign_event_id_impl(ptr, rust_vec_len, data_len),
+        139 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
+        141 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        142 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
+        143 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5849,6 +6216,13 @@ impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
     }
 }
 

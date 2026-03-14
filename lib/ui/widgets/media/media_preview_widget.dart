@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'photo_viewer_widget.dart';
 import 'video_preview.dart';
 
@@ -244,16 +244,12 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
     bool useAspectRatio = true,
     bool limitResolution = true,
   }) {
-    Widget image = CachedNetworkImage(
+    Widget image = AppImage(
       key: ValueKey('media_${url.hashCode}_$index'),
-      imageUrl: url,
+      url: url,
       fit: fit,
-      fadeInDuration: Duration.zero,
-      fadeOutDuration: Duration.zero,
-      maxHeightDiskCache: limitResolution ? 1500 : null,
-      maxWidthDiskCache: limitResolution ? 1500 : null,
       memCacheWidth: limitResolution ? 1500 : null,
-      placeholder: (context, url) => AspectRatio(
+      placeholder: (context) => AspectRatio(
         aspectRatio: aspectRatio ?? 1.0,
         child: Container(
           color: context.colors.surfaceTransparent,
@@ -266,7 +262,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
           ),
         ),
       ),
-      errorWidget: (context, url, error) => Container(
+      errorWidget: (context) => Container(
         color: context.colors.surfaceTransparent,
         child: Icon(Icons.broken_image, color: context.colors.textSecondary),
       ),

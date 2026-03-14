@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
@@ -324,7 +324,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                 backgroundColor: context.colors.border,
                 backgroundImage: otherUserProfileImage != null &&
                         otherUserProfileImage.isNotEmpty
-                    ? CachedNetworkImageProvider(otherUserProfileImage)
+                    ? appImageProvider(otherUserProfileImage)
                     : null,
                 child: otherUserProfileImage == null ||
                         otherUserProfileImage.isEmpty
@@ -442,7 +442,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                     color: context.colors.avatarPlaceholder,
                     image: otherUserProfileImage.isNotEmpty
                         ? DecorationImage(
-                            image: CachedNetworkImageProvider(
+                            image: appImageProvider(
                                 otherUserProfileImage),
                             fit: BoxFit.cover,
                           )

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/common/app_image.dart';
 import '../../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
@@ -129,17 +129,13 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
             if (_imageUrl != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
-                  imageUrl: _imageUrl!,
+                child: AppImage(
+                  url: _imageUrl!,
                   width: 48,
                   height: 48,
                   fit: BoxFit.cover,
-                  fadeInDuration: Duration.zero,
-                  fadeOutDuration: Duration.zero,
-                  maxHeightDiskCache: 120,
-                  maxWidthDiskCache: 120,
                   memCacheWidth: 120,
-                  errorWidget: (_, __, ___) => Container(
+                  errorWidget: (_) => Container(
                     width: 48,
                     height: 48,
                     color: context.colors.grey800,

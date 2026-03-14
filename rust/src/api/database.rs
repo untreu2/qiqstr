@@ -1153,6 +1153,239 @@ pub async fn db_get_database_stats() -> Result<String> {
     Ok(stats.to_string())
 }
 
+fn format_relative_timestamp(created_at: u64) -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if now <= created_at {
+        return "now".to_string();
+    }
+    let diff = now - created_at;
+    if diff < 5 {
+        "now".to_string()
+    } else if diff < 60 {
+        format!("{}s", diff)
+    } else if diff < 3600 {
+        format!("{}m", diff / 60)
+    } else if diff < 86400 {
+        format!("{}h", diff / 3600)
+    } else if diff < 604800 {
+        format!("{}d", diff / 86400)
+    } else if diff < 2592000 {
+        format!("{}w", diff / 604800)
+    } else if diff < 31536000 {
+        format!("{}mo", diff / 2592000)
+    } else {
+        format!("{}y", diff / 31536000)
+    }
+}
+
+fn parse_note_content(content: &str) -> serde_json::Value {
+    let media_exts = ["jpg", "jpeg", "png", "webp", "gif", "mp4", "mov"];
+
+    struct Token {
+        raw: String,
+        kind: TokenKind,
+    }
+    enum TokenKind {
+        Text,
+        Url,
+        MediaUrl,
+        QuoteId,
+        ArticleId,
+        MentionId,
+    }
+
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut pos = 0usize;
+    let chars: Vec<char> = content.chars().collect();
+    let byte_positions: Vec<usize> = {
+        let mut bp = Vec::with_capacity(chars.len() + 1);
+        let mut b = 0usize;
+        for c in &chars {
+            bp.push(b);
+            b += c.len_utf8();
+        }
+        bp.push(b);
+        bp
+    };
+
+    let mut current_text = String::new();
+
+    while pos < chars.len() {
+        if chars[pos].is_whitespace() {
+            current_text.push(chars[pos]);
+            pos += 1;
+            continue;
+        }
+
+        let byte_start = byte_positions[pos];
+        let rest = &content[byte_start..];
+
+        let lower_prefix: String = rest.chars().take(20).collect::<String>().to_lowercase();
+
+        let is_http = lower_prefix.starts_with("http://") || lower_prefix.starts_with("https://");
+        let is_nostr_note = lower_prefix.starts_with("nostr:note1") || lower_prefix.starts_with("note1");
+        let is_nostr_nevent = lower_prefix.starts_with("nostr:nevent1") || lower_prefix.starts_with("nevent1");
+        let is_nostr_naddr = lower_prefix.starts_with("nostr:naddr1") || lower_prefix.starts_with("naddr1");
+        let is_nostr_npub = lower_prefix.starts_with("nostr:npub1");
+        let is_nostr_nprofile = lower_prefix.starts_with("nostr:nprofile1");
+
+        if is_http || is_nostr_note || is_nostr_nevent || is_nostr_naddr || is_nostr_npub || is_nostr_nprofile {
+            if !current_text.trim().is_empty() || !current_text.is_empty() {
+                tokens.push(Token { raw: std::mem::take(&mut current_text), kind: TokenKind::Text });
+            } else {
+                current_text.clear();
+            }
+
+            let end_pos = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
+            let word = &rest[..end_pos];
+            let word_lower = word.to_lowercase();
+
+            if is_http {
+                let path_no_query = word_lower.split('?').next().unwrap_or(&word_lower);
+                let is_media = media_exts.iter().any(|ext| path_no_query.ends_with(&format!(".{}", ext)));
+                if is_media {
+                    tokens.push(Token { raw: word.to_string(), kind: TokenKind::MediaUrl });
+                } else {
+                    tokens.push(Token { raw: word.to_string(), kind: TokenKind::Url });
+                }
+            } else if is_nostr_npub || is_nostr_nprofile {
+                let id = if word_lower.starts_with("nostr:") { &word[6..] } else { word };
+                tokens.push(Token { raw: id.to_string(), kind: TokenKind::MentionId });
+            } else if is_nostr_note || is_nostr_nevent {
+                let id = if word_lower.starts_with("nostr:") { &word[6..] } else { word };
+                tokens.push(Token { raw: id.to_string(), kind: TokenKind::QuoteId });
+            } else if is_nostr_naddr {
+                let id = if word_lower.starts_with("nostr:") { &word[6..] } else { word };
+                tokens.push(Token { raw: id.to_string(), kind: TokenKind::ArticleId });
+            }
+
+            let char_count = word.chars().count();
+            pos += char_count;
+        } else {
+            current_text.push(chars[pos]);
+            pos += 1;
+        }
+    }
+
+    if !current_text.is_empty() {
+        tokens.push(Token { raw: current_text, kind: TokenKind::Text });
+    }
+
+    let mut media_urls: Vec<String> = Vec::new();
+    let mut link_urls: Vec<String> = Vec::new();
+    let mut quote_ids: Vec<String> = Vec::new();
+    let mut article_ids: Vec<String> = Vec::new();
+    let mut text_parts: Vec<serde_json::Value> = Vec::new();
+
+    for token in tokens {
+        match token.kind {
+            TokenKind::MediaUrl => {
+                if !media_urls.contains(&token.raw) {
+                    media_urls.push(token.raw);
+                }
+            }
+            TokenKind::Url => {
+                if !link_urls.contains(&token.raw) {
+                    link_urls.push(token.raw);
+                }
+            }
+            TokenKind::QuoteId => {
+                if !quote_ids.contains(&token.raw) {
+                    quote_ids.push(token.raw);
+                }
+            }
+            TokenKind::ArticleId => {
+                if !article_ids.contains(&token.raw) {
+                    article_ids.push(token.raw);
+                }
+            }
+            TokenKind::MentionId => {
+                text_parts.push(serde_json::json!({
+                    "type": "mention",
+                    "id": token.raw,
+                }));
+            }
+            TokenKind::Text => {
+                let trimmed = token.raw.trim_matches('\n');
+                if !trimmed.is_empty() {
+                    text_parts.push(serde_json::json!({
+                        "type": "text",
+                        "text": trimmed,
+                    }));
+                }
+            }
+        }
+    }
+
+    const CHAR_LIMIT: usize = 280;
+    let mut estimated_len: usize = 0;
+    let mut should_truncate = false;
+    for part in &text_parts {
+        if part["type"].as_str() == Some("text") {
+            estimated_len += part["text"].as_str().unwrap_or("").len();
+        } else if part["type"].as_str() == Some("mention") {
+            estimated_len += 8;
+        }
+        if estimated_len > CHAR_LIMIT {
+            should_truncate = true;
+            break;
+        }
+    }
+
+    let truncated_parts: Vec<serde_json::Value> = if should_truncate {
+        let mut out: Vec<serde_json::Value> = Vec::new();
+        let mut current_len = 0usize;
+        let mut done = false;
+        for part in &text_parts {
+            if done { break; }
+            if part["type"].as_str() == Some("text") {
+                let t = part["text"].as_str().unwrap_or("");
+                if current_len + t.len() <= CHAR_LIMIT {
+                    out.push(part.clone());
+                    current_len += t.len();
+                } else {
+                    let remaining_chars = CHAR_LIMIT - current_len;
+                    if remaining_chars > 0 {
+                        let cut: String = t.chars().take(remaining_chars).collect();
+                        out.push(serde_json::json!({
+                            "type": "text",
+                            "text": format!("{}... ", cut),
+                        }));
+                    }
+                    done = true;
+                }
+            } else if part["type"].as_str() == Some("mention") {
+                if current_len + 8 <= CHAR_LIMIT {
+                    out.push(part.clone());
+                    current_len += 8;
+                } else {
+                    done = true;
+                }
+            }
+        }
+        out.push(serde_json::json!({
+            "type": "show_more",
+            "text": "Show more...",
+        }));
+        out
+    } else {
+        Vec::new()
+    };
+
+    serde_json::json!({
+        "textParts": text_parts,
+        "mediaUrls": media_urls,
+        "linkUrls": link_urls,
+        "quoteIds": quote_ids,
+        "articleIds": article_ids,
+        "shouldTruncate": should_truncate,
+        "truncatedParts": truncated_parts,
+    })
+}
+
 async fn hydrate_notes(
     client: &Client,
     events: &[Event],
@@ -1165,6 +1398,7 @@ async fn hydrate_notes(
 
     let mut notes: Vec<serde_json::Value> = Vec::new();
     let mut pubkeys_needed: HashSet<String> = HashSet::new();
+    let mut reposter_pubkeys_needed: HashSet<String> = HashSet::new();
     let mut note_ids: Vec<String> = Vec::new();
 
     for event in events {
@@ -1348,6 +1582,11 @@ async fn hydrate_notes(
         if !pubkey.is_empty() {
             pubkeys_needed.insert(pubkey.clone());
         }
+        if let Some(ref rb) = reposted_by {
+            if !rb.is_empty() {
+                reposter_pubkeys_needed.insert(rb.clone());
+            }
+        }
         if !id.is_empty() {
             note_ids.push(id.clone());
         }
@@ -1357,6 +1596,10 @@ async fn hydrate_notes(
                 t.iter().map(|s| serde_json::json!(s)).collect()
             ))
             .collect();
+
+        let sort_ts = repost_created_at.unwrap_or(created_at);
+        let formatted_ts = format_relative_timestamp(sort_ts);
+        let parsed_content = parse_note_content(&content);
 
         notes.push(serde_json::json!({
             "id": id,
@@ -1377,6 +1620,10 @@ async fn hydrate_notes(
             "authorName": serde_json::Value::Null,
             "authorImage": serde_json::Value::Null,
             "authorNip05": serde_json::Value::Null,
+            "reposterName": serde_json::Value::Null,
+            "reposterImage": serde_json::Value::Null,
+            "formattedTimestamp": formatted_ts,
+            "parsedContent": parsed_content,
             "reactionCount": 0,
             "repostCount": 0,
             "replyCount": 0,
@@ -1391,14 +1638,15 @@ async fn hydrate_notes(
         return Ok("[]".to_string());
     }
 
-    let authors: Vec<PublicKey> = pubkeys_needed.iter()
+    let all_profile_pubkeys: HashSet<String> = pubkeys_needed.union(&reposter_pubkeys_needed).cloned().collect();
+    let authors: Vec<PublicKey> = all_profile_pubkeys.iter()
         .filter_map(|h| PublicKey::from_hex(h).ok())
         .collect();
 
+    let mut profiles: HashMap<String, (String, String, String)> = HashMap::new();
     if !authors.is_empty() {
         let filter = Filter::new().authors(authors).kind(Kind::Metadata);
         let profile_events = client.database().query(filter).await?;
-        let mut profiles: HashMap<String, (String, String, String)> = HashMap::new();
 
         for pe in profile_events {
             if let Ok(m) = Metadata::from_json(&pe.content) {
@@ -1412,11 +1660,17 @@ async fn hydrate_notes(
         }
 
         for note in notes.iter_mut() {
-            if let Some(pk) = note["pubkey"].as_str() {
-                if let Some((name, picture, nip05)) = profiles.get(pk) {
+            if let Some(pk) = note["pubkey"].as_str().map(|s| s.to_string()) {
+                if let Some((name, picture, nip05)) = profiles.get(&pk) {
                     note["authorName"] = serde_json::json!(name);
                     note["authorImage"] = serde_json::json!(picture);
                     note["authorNip05"] = serde_json::json!(nip05);
+                }
+            }
+            if let Some(rb) = note["repostedBy"].as_str().map(|s| s.to_string()) {
+                if let Some((name, picture, _)) = profiles.get(&rb) {
+                    note["reposterName"] = serde_json::json!(name);
+                    note["reposterImage"] = serde_json::json!(picture);
                 }
             }
         }
@@ -1520,6 +1774,30 @@ async fn hydrate_notes(
             }
         }
     }
+
+    let mut images_to_prefetch: Vec<String> = Vec::new();
+    for note in &notes {
+        let push = |v: &serde_json::Value, out: &mut Vec<String>| {
+            if let Some(s) = v.as_str() {
+                if !s.is_empty() { out.push(s.to_string()); }
+            }
+        };
+        push(&note["authorImage"], &mut images_to_prefetch);
+        push(&note["reposterImage"], &mut images_to_prefetch);
+        if let Some(parsed) = note["parsedContent"].as_object() {
+            if let Some(media) = parsed.get("mediaUrls").and_then(|v| v.as_array()) {
+                for url in media {
+                    if let Some(s) = url.as_str() {
+                        if !s.is_empty() {
+                            images_to_prefetch.push(s.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    images_to_prefetch.dedup();
+    super::image_cache::prefetch_note_images(images_to_prefetch).await;
 
     Ok(serde_json::to_string(&notes)?)
 }
