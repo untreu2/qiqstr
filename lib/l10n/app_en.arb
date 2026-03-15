@@ -286,6 +286,7 @@
   "next": "Next",
   "skip": "Skip",
   "done": "Done",
+  "confirm": "Confirm",
   "save": "Save",
   "saving": "Saving...",
   "name": "Name",
@@ -1003,5 +1004,12 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "enterAmountToGenerateInvoice": "Enter an amount to generate an invoice",
+  "amountInSats": "Amount in sats",
+  "addAmount": "Add amount",
+  "editAmount": "Edit amount",
+  "lightningAddressOrInvoice": "Lightning address or invoice",
+  "resolvingAddress": "Resolving address…",
+  "resolveAddressFailed": "Could not resolve lightning address"
 }

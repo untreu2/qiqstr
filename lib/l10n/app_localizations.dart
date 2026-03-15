@@ -1378,6 +1378,12 @@ abstract class AppLocalizations {
   /// **'Done'**
   String get done;
 
+  /// No description provided for @confirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get confirm;
+
   /// No description provided for @save.
   ///
   /// In en, this message translates to:
@@ -3603,6 +3609,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Now using your personal relays ({count} main relays)'**
   String usingPersonalRelays(int count);
+
+  /// No description provided for @enterAmountToGenerateInvoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount to generate an invoice'**
+  String get enterAmountToGenerateInvoice;
+
+  /// No description provided for @amountInSats.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount in sats'**
+  String get amountInSats;
+
+  /// No description provided for @addAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Add amount'**
+  String get addAmount;
+
+  /// No description provided for @editAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit amount'**
+  String get editAmount;
+
+  /// No description provided for @lightningAddressOrInvoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightning address or invoice'**
+  String get lightningAddressOrInvoice;
+
+  /// No description provided for @resolvingAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolving address…'**
+  String get resolvingAddress;
+
+  /// No description provided for @resolveAddressFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not resolve lightning address'**
+  String get resolveAddressFailed;
 }
 
 class _AppLocalizationsDelegate

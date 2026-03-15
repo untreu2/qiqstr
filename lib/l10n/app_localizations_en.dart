@@ -679,6 +679,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get done => 'Done';
 
   @override
+  String get confirm => 'Confirm';
+
+  @override
   String get save => 'Save';
 
   @override
@@ -1993,4 +1996,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String usingPersonalRelays(int count) {
     return 'Now using your personal relays ($count main relays)';
   }
+
+  @override
+  String get enterAmountToGenerateInvoice =>
+      'Enter an amount to generate an invoice';
+
+  @override
+  String get amountInSats => 'Amount in sats';
+
+  @override
+  String get addAmount => 'Add amount';
+
+  @override
+  String get editAmount => 'Edit amount';
+
+  @override
+  String get lightningAddressOrInvoice => 'Lightning address or invoice';
+
+  @override
+  String get resolvingAddress => 'Resolving address…';
+
+  @override
+  String get resolveAddressFailed => 'Could not resolve lightning address';
 }

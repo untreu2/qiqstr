@@ -1,13 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+
 import '../../../core/di/app_di.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
-import '../../theme/theme_manager.dart';
-import '../common/common_buttons.dart';
-import '../common/custom_input_field.dart';
-import '../common/snackbar_widget.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../theme/theme_manager.dart';
+import '../common/snackbar_widget.dart';
 import '../qr_scanner_widget.dart';
 
 class SendDialog extends StatefulWidget {
@@ -23,30 +25,139 @@ class SendDialog extends StatefulWidget {
 }
 
 class _SendDialogState extends State<SendDialog> {
-  final TextEditingController _invoiceController = TextEditingController();
+  final TextEditingController _inputController = TextEditingController();
+  final TextEditingController _lnAmountController = TextEditingController();
   final CoinosService _coinosService = AppDI.get<CoinosService>();
 
   bool _isLoading = false;
+  bool _isResolvingAddress = false;
   int? _parsedSats;
+  _InputType _inputType = _InputType.unknown;
+  String? _lnAddressCallback;
+  int? _lnMinSendable;
+  int? _lnMaxSendable;
+  String? _resolveError;
 
   @override
   void initState() {
     super.initState();
-    _invoiceController.addListener(_onInvoiceChanged);
+    _inputController.addListener(_onInputChanged);
   }
 
   @override
   void dispose() {
-    _invoiceController.removeListener(_onInvoiceChanged);
-    _invoiceController.dispose();
+    _inputController.removeListener(_onInputChanged);
+    _inputController.dispose();
+    _lnAmountController.dispose();
     super.dispose();
   }
 
-  void _onInvoiceChanged() {
-    final sats = _parseBolt11Sats(_invoiceController.text.trim());
-    if (sats != _parsedSats) {
-      setState(() => _parsedSats = sats);
+  void _onInputChanged() {
+    final text = _inputController.text.trim();
+    final newType = _detectInputType(text);
+
+    if (newType != _inputType) {
+      setState(() {
+        _inputType = newType;
+        _parsedSats = null;
+        _lnAddressCallback = null;
+        _lnMinSendable = null;
+        _lnMaxSendable = null;
+        _resolveError = null;
+      });
     }
+
+    if (newType == _InputType.bolt11) {
+      final sats = _parseBolt11Sats(text);
+      if (sats != _parsedSats) {
+        setState(() => _parsedSats = sats);
+      }
+    } else if (newType == _InputType.lightningAddress) {
+      _resolveLightningAddress(text);
+    }
+  }
+
+  _InputType _detectInputType(String text) {
+    if (text.isEmpty) return _InputType.unknown;
+    final lower = text.toLowerCase();
+    if (lower.startsWith('lnbc') ||
+        lower.startsWith('lntb') ||
+        lower.startsWith('lnbcrt')) {
+      return _InputType.bolt11;
+    }
+    if (_isLightningAddress(text)) return _InputType.lightningAddress;
+    return _InputType.unknown;
+  }
+
+  bool _isLightningAddress(String text) {
+    final parts = text.split('@');
+    if (parts.length != 2) return false;
+    final user = parts[0];
+    final domain = parts[1];
+    return user.isNotEmpty &&
+        domain.contains('.') &&
+        !domain.startsWith('.') &&
+        !domain.endsWith('.');
+  }
+
+  Future<void> _resolveLightningAddress(String address) async {
+    final parts = address.split('@');
+    if (parts.length != 2) return;
+    final username = parts[0];
+    final domain = parts[1];
+
+    setState(() {
+      _isResolvingAddress = true;
+      _resolveError = null;
+      _lnAddressCallback = null;
+    });
+
+    try {
+      final url = Uri.parse('https://$domain/.well-known/lnurlp/$username');
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final callback = data['callback'] as String?;
+        final minSendable = (data['minSendable'] as num?)?.toInt();
+        final maxSendable = (data['maxSendable'] as num?)?.toInt();
+
+        setState(() {
+          _isResolvingAddress = false;
+          _lnAddressCallback = callback;
+          _lnMinSendable = minSendable != null ? minSendable ~/ 1000 : null;
+          _lnMaxSendable = maxSendable != null ? maxSendable ~/ 1000 : null;
+        });
+      } else {
+        setState(() {
+          _isResolvingAddress = false;
+          _resolveError = AppLocalizations.of(context)!.resolveAddressFailed;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isResolvingAddress = false;
+          _resolveError = AppLocalizations.of(context)!.resolveAddressFailed;
+        });
+      }
+    }
+  }
+
+  Future<String?> _fetchInvoiceFromCallback(int amountSats) async {
+    if (_lnAddressCallback == null) return null;
+    try {
+      final uri = Uri.parse(_lnAddressCallback!)
+          .replace(queryParameters: {'amount': '${amountSats * 1000}'});
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['pr'] as String?;
+      }
+    } catch (_) {}
+    return null;
   }
 
   int? _parseBolt11Sats(String bolt11) {
@@ -115,8 +226,11 @@ class _SendDialogState extends State<SendDialog> {
 
   Future<void> _pasteFromClipboard() async {
     final clipboardData = await Clipboard.getData('text/plain');
-    if (clipboardData != null && clipboardData.text != null) {
-      _invoiceController.text = clipboardData.text!;
+    if (clipboardData?.text != null) {
+      _inputController.text = clipboardData!.text!.trim();
+      _inputController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _inputController.text.length),
+      );
     }
   }
 
@@ -127,9 +241,10 @@ class _SendDialogState extends State<SendDialog> {
         builder: (_) => QrScannerWidget(
           onScanComplete: (scannedText) {
             if (mounted) {
-              setState(() {
-                _invoiceController.text = scannedText;
-              });
+              _inputController.text = scannedText.trim();
+              _inputController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _inputController.text.length),
+              );
             }
           },
         ),
@@ -139,23 +254,69 @@ class _SendDialogState extends State<SendDialog> {
 
   bool get _isNwcMode => AppDI.get<NwcService>().isActive;
 
-  Future<void> _payInvoice() async {
+  Future<void> _pay() async {
     final l10n = AppLocalizations.of(context)!;
-    final invoice = _invoiceController.text.trim();
+
+    if (_inputType == _InputType.lightningAddress) {
+      await _payLightningAddress(l10n);
+    } else {
+      await _payBolt11(l10n);
+    }
+  }
+
+  Future<void> _payLightningAddress(AppLocalizations l10n) async {
+    if (_lnAddressCallback == null) {
+      AppSnackbar.error(context, l10n.resolveAddressFailed);
+      return;
+    }
+
+    final amountText = _lnAmountController.text.trim();
+    final amountSats = int.tryParse(amountText);
+    if (amountSats == null || amountSats <= 0) {
+      AppSnackbar.error(context, l10n.enterValidAmount);
+      return;
+    }
+
+    if (_lnMinSendable != null && amountSats < _lnMinSendable!) {
+      AppSnackbar.error(
+          context, '${l10n.amount}: min ${_formatSats(_lnMinSendable!)} sats');
+      return;
+    }
+    if (_lnMaxSendable != null && amountSats > _lnMaxSendable!) {
+      AppSnackbar.error(
+          context, '${l10n.amount}: max ${_formatSats(_lnMaxSendable!)} sats');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final invoice = await _fetchInvoiceFromCallback(amountSats);
+    if (!mounted) return;
+
+    if (invoice == null) {
+      setState(() => _isLoading = false);
+      AppSnackbar.error(context, l10n.resolveAddressFailed);
+      return;
+    }
+
+    await _sendInvoice(invoice, l10n);
+  }
+
+  Future<void> _payBolt11(AppLocalizations l10n) async {
+    final invoice = _inputController.text.trim();
     if (invoice.isEmpty) {
       AppSnackbar.error(context, l10n.pleaseEnterInvoice);
       return;
     }
+    setState(() => _isLoading = true);
+    await _sendInvoice(invoice, l10n);
+  }
 
-    setState(() {
-      _isLoading = true;
-    });
-
+  Future<void> _sendInvoice(String invoice, AppLocalizations l10n) async {
     try {
       if (_isNwcMode) {
         final nwcService = AppDI.get<NwcService>();
         final result = await nwcService.payInvoice(invoice);
-
         if (mounted) {
           setState(() => _isLoading = false);
           result.fold(
@@ -170,7 +331,6 @@ class _SendDialogState extends State<SendDialog> {
         }
       } else {
         final result = await _coinosService.payInvoice(invoice);
-
         if (mounted) {
           setState(() => _isLoading = false);
           result.fold(
@@ -192,6 +352,16 @@ class _SendDialogState extends State<SendDialog> {
     }
   }
 
+  bool get _canPay {
+    if (_isLoading || _isResolvingAddress) return false;
+    if (_inputType == _InputType.bolt11) return true;
+    if (_inputType == _InputType.lightningAddress) {
+      return _lnAddressCallback != null &&
+          _lnAmountController.text.trim().isNotEmpty;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -208,107 +378,287 @@ class _SendDialogState extends State<SendDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.send,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colors.overlayLight,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.close,
-                    size: 20,
-                    color: colors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          _buildHeader(context, colors, l10n),
           const SizedBox(height: 16),
-          CustomInputField(
-            controller: _invoiceController,
-            enabled: !_isLoading,
-            hintText: l10n.pasteInvoiceHere,
-            suffixIcon: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: _scanQrCode,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: colors.background,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.qr_code_scanner,
-                        color: colors.textPrimary,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _pasteFromClipboard,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: colors.background,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.content_paste,
-                        color: colors.textPrimary,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
+          _buildInputField(context, colors, l10n),
+          _buildInputStatus(context, colors, l10n),
+          if (_inputType == _InputType.lightningAddress &&
+              _lnAddressCallback != null)
+            _buildLnAmountField(context, colors, l10n),
+          const SizedBox(height: 20),
+          _buildPayButton(context, colors, l10n),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(
+      BuildContext context, dynamic colors, AppLocalizations l10n) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            l10n.send,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: colors.overlayLight,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.close, size: 20, color: colors.textPrimary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInputField(
+      BuildContext context, dynamic colors, AppLocalizations l10n) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.overlayLight,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _inputController,
+              enabled: !_isLoading,
+              style: TextStyle(color: colors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: l10n.lightningAddressOrInvoice,
+                hintStyle: TextStyle(
+                  color: colors.textSecondary.withValues(alpha: 0.5),
+                  fontSize: 14,
+                ),
+                border: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
-          if (_parsedSats != null) ...[
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                '${_formatSats(_parsedSats!)} sats',
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildIconButton(
+                  icon: Icons.qr_code_scanner,
+                  colors: colors,
+                  onTap: _scanQrCode,
                 ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: SecondaryButton(
-              label: l10n.payInvoice,
-              onPressed: _isLoading ? null : _payInvoice,
-              isLoading: _isLoading,
-              size: ButtonSize.large,
+                const SizedBox(width: 6),
+                _buildIconButton(
+                  icon: Icons.content_paste,
+                  colors: colors,
+                  onTap: _pasteFromClipboard,
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildIconButton({
+    required IconData icon,
+    required dynamic colors,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: colors.background,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: colors.textPrimary, size: 18),
+      ),
+    );
+  }
+
+  Widget _buildInputStatus(
+      BuildContext context, dynamic colors, AppLocalizations l10n) {
+    if (_isResolvingAddress) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colors.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              l10n.resolvingAddress,
+              style: TextStyle(color: colors.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_resolveError != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(
+          _resolveError!,
+          style: TextStyle(color: colors.error, fontSize: 13),
+        ),
+      );
+    }
+
+    if (_inputType == _InputType.bolt11 && _parsedSats != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Center(
+          child: Text(
+            '${_formatSats(_parsedSats!)} sats',
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_inputType == _InputType.lightningAddress &&
+        _lnAddressCallback != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle, size: 14, color: colors.success),
+            const SizedBox(width: 6),
+            Text(
+              _inputController.text.trim(),
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            if (_lnMinSendable != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                '(min ${_formatSats(_lnMinSendable!)} sats)',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildLnAmountField(
+      BuildContext context, dynamic colors, AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.overlayLight,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _lnAmountController,
+                keyboardType: TextInputType.number,
+                enabled: !_isLoading,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  hintText: l10n.amountInSats,
+                  hintStyle: TextStyle(
+                    color: colors.textSecondary.withValues(alpha: 0.5),
+                    fontSize: 16,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Text(
+                'sats',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPayButton(
+      BuildContext context, dynamic colors, AppLocalizations l10n) {
+    return SizedBox(
+      width: double.infinity,
+      child: GestureDetector(
+        onTap: _canPay ? _pay : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _canPay
+                ? colors.textPrimary
+                : colors.textPrimary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: _isLoading
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.background,
+                  ),
+                )
+              : Text(
+                  l10n.payInvoice,
+                  style: TextStyle(
+                    color: colors.background,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
 }
+
+enum _InputType { unknown, bolt11, lightningAddress }

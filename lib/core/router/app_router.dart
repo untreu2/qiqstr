@@ -27,6 +27,7 @@ import '../../ui/screens/settings/event_manager_page.dart';
 import '../../ui/screens/dm/dm_conversations_page.dart';
 import '../../ui/screens/dm/dm_chat_page.dart';
 import '../../ui/screens/wallet/wallet_page.dart';
+import '../../ui/screens/wallet/receive_page.dart';
 import '../../ui/screens/notification/notification_page.dart';
 import '../../ui/screens/explore/explore_page.dart';
 import '../../ui/screens/article/article_detail_page.dart';
@@ -192,7 +193,8 @@ class AppRouter {
                           state.uri.queryParameters['pubkeyHex'] ?? '';
                       String pubkeyHex =
                           pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
-                      if (pubkeyHex.isEmpty && state.extra is Map<String, dynamic>) {
+                      if (pubkeyHex.isEmpty &&
+                          state.extra is Map<String, dynamic>) {
                         final extra = state.extra as Map<String, dynamic>;
                         pubkeyHex = extra['pubkeyHex'] as String? ?? '';
                       }
@@ -270,6 +272,16 @@ class AppRouter {
                 path: '/home/wallet',
                 name: 'wallet',
                 builder: (context, state) => const WalletPage(),
+                routes: [
+                  GoRoute(
+                    path: 'receive',
+                    name: 'wallet-receive',
+                    builder: (context, state) {
+                      final lud16 = state.uri.queryParameters['lud16'];
+                      return ReceivePage(lud16: lud16);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -357,7 +369,8 @@ class AppRouter {
                           state.uri.queryParameters['pubkeyHex'] ?? '';
                       String pubkeyHex =
                           pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
-                      if (pubkeyHex.isEmpty && state.extra is Map<String, dynamic>) {
+                      if (pubkeyHex.isEmpty &&
+                          state.extra is Map<String, dynamic>) {
                         final extra = state.extra as Map<String, dynamic>;
                         pubkeyHex = extra['pubkeyHex'] as String? ?? '';
                       }

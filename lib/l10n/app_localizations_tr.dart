@@ -686,6 +686,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get done => 'Tamam';
 
   @override
+  String get confirm => 'Onayla';
+
+  @override
   String get save => 'Kaydet';
 
   @override
@@ -1947,4 +1950,26 @@ class AppLocalizationsTr extends AppLocalizations {
   String usingPersonalRelays(int count) {
     return 'Artık kişisel rölelerinizi kullanıyorsunuz ($count ana röle)';
   }
+
+  @override
+  String get enterAmountToGenerateInvoice =>
+      'Fatura oluşturmak için miktar girin';
+
+  @override
+  String get amountInSats => 'Miktar (sat)';
+
+  @override
+  String get addAmount => 'Miktar ekle';
+
+  @override
+  String get editAmount => 'Miktarı düzenle';
+
+  @override
+  String get lightningAddressOrInvoice => 'Lightning adresi veya fatura';
+
+  @override
+  String get resolvingAddress => 'Adres çözümleniyor…';
+
+  @override
+  String get resolveAddressFailed => 'Lightning adresi çözümlenemedi';
 }

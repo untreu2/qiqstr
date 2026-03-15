@@ -251,6 +251,7 @@
   "next": "İleri",
   "skip": "Atla",
   "done": "Tamam",
+  "confirm": "Onayla",
   "save": "Kaydet",
   "saving": "Kaydediliyor...",
   "name": "İsim",
@@ -847,5 +848,12 @@
   "deepScan": "Derin Tarama",
   "scanning": "Taranıyor…",
   "noRelaysInCategory": "Bu kategoride röle yok",
-  "usingPersonalRelays": "Artık kişisel rölelerinizi kullanıyorsunuz ({count} ana röle)"
+  "usingPersonalRelays": "Artık kişisel rölelerinizi kullanıyorsunuz ({count} ana röle)",
+  "enterAmountToGenerateInvoice": "Fatura oluşturmak için miktar girin",
+  "amountInSats": "Miktar (sat)",
+  "addAmount": "Miktar ekle",
+  "editAmount": "Miktarı düzenle",
+  "lightningAddressOrInvoice": "Lightning adresi veya fatura",
+  "resolvingAddress": "Adres çözümleniyor…",
+  "resolveAddressFailed": "Lightning adresi çözümlenemedi"
 }

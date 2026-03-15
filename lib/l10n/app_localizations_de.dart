@@ -702,6 +702,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get done => 'Fertig';
 
   @override
+  String get confirm => 'Bestätigen';
+
+  @override
   String get save => 'Speichern';
 
   @override
@@ -2026,4 +2029,27 @@ class AppLocalizationsDe extends AppLocalizations {
   String usingPersonalRelays(int count) {
     return 'Verwende jetzt persönliche Relays ($count Haupt-Relays)';
   }
+
+  @override
+  String get enterAmountToGenerateInvoice =>
+      'Betrag eingeben, um eine Rechnung zu erstellen';
+
+  @override
+  String get amountInSats => 'Betrag in Sats';
+
+  @override
+  String get addAmount => 'Betrag hinzufügen';
+
+  @override
+  String get editAmount => 'Betrag bearbeiten';
+
+  @override
+  String get lightningAddressOrInvoice => 'Lightning-Adresse oder Rechnung';
+
+  @override
+  String get resolvingAddress => 'Adresse wird aufgelöst…';
+
+  @override
+  String get resolveAddressFailed =>
+      'Lightning-Adresse konnte nicht aufgelöst werden';
 }

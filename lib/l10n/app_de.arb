@@ -251,6 +251,7 @@
   "next": "Weiter",
   "skip": "Überspringen",
   "done": "Fertig",
+  "confirm": "Bestätigen",
   "save": "Speichern",
   "saving": "Wird gespeichert...",
   "name": "Name",
@@ -847,5 +848,12 @@
   "deepScan": "Tiefensuche",
   "scanning": "Wird gescannt…",
   "noRelaysInCategory": "Keine Relays in dieser Kategorie",
-  "usingPersonalRelays": "Verwende jetzt persönliche Relays ({count} Haupt-Relays)"
+  "usingPersonalRelays": "Verwende jetzt persönliche Relays ({count} Haupt-Relays)",
+  "enterAmountToGenerateInvoice": "Betrag eingeben, um eine Rechnung zu erstellen",
+  "amountInSats": "Betrag in Sats",
+  "addAmount": "Betrag hinzufügen",
+  "editAmount": "Betrag bearbeiten",
+  "lightningAddressOrInvoice": "Lightning-Adresse oder Rechnung",
+  "resolvingAddress": "Adresse wird aufgelöst…",
+  "resolveAddressFailed": "Lightning-Adresse konnte nicht aufgelöst werden"
 }

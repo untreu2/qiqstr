@@ -1332,7 +1332,7 @@ pub async fn fetch_all_events_for_author(
                 seen.insert(id_hex);
                 new_count += 1;
 
-                let ts = event.created_at.as_u64();
+                let ts = event.created_at.as_secs();
                 oldest_ts = Some(match oldest_ts {
                     None => ts,
                     Some(prev) => prev.min(ts),

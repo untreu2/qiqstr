@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/wallet/wallet_bloc.dart';
@@ -10,7 +11,6 @@ import '../../../presentation/blocs/wallet/wallet_state.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/snackbar_widget.dart';
-import '../../widgets/dialogs/receive_dialog.dart';
 import '../../widgets/dialogs/send_dialog.dart';
 import '../../widgets/wallet/recaptcha_widget.dart';
 
@@ -470,24 +470,16 @@ class _WalletPageState extends State<WalletPage>
   }
 
   void _showReceiveDialog(BuildContext context, WalletLoaded state) {
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: context.colors.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        if (state.isNwcMode) {
-          return const ReceiveDialog();
-        }
-        final username =
-            (state.user?['username'] as String? ?? '').replaceAll(' ', '');
-        final lud16 = username.isNotEmpty ? '$username@coinos.io' : '';
-        return ReceiveDialog(lud16: lud16);
-      },
-    );
+    String? lud16;
+    if (!state.isNwcMode) {
+      final username =
+          (state.user?['username'] as String? ?? '').replaceAll(' ', '');
+      if (username.isNotEmpty) lud16 = '$username@coinos.io';
+    }
+    final path = lud16 != null
+        ? '/home/wallet/receive?lud16=${Uri.encodeComponent(lud16)}'
+        : '/home/wallet/receive';
+    context.push(path);
   }
 
   void _showSendDialog(BuildContext context, WalletLoaded state) {
