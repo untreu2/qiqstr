@@ -85,7 +85,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   Widget _buildHeader(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 100, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 100, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -139,36 +139,68 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   Widget _buildTabBar(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: context.colors.divider.withValues(alpha: 0.2),
-            width: 0.5,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) {
+          final selected = _tabController.index;
+          return Container(
+            height: 52,
+            decoration: BoxDecoration(
+              color: context.colors.cardBackground,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                _buildPillTab(
+                  context,
+                  label: l10n.dmTabFollowing,
+                  index: 0,
+                  selected: selected == 0,
+                ),
+                _buildPillTab(
+                  context,
+                  label: l10n.dmTabOther,
+                  index: 1,
+                  selected: selected == 1,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPillTab(
+    BuildContext context, {
+    required String label,
+    required int index,
+    required bool selected,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _tabController.animateTo(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: selected ? context.colors.textPrimary : Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected
+                  ? context.colors.background
+                  : context.colors.textSecondary,
+            ),
           ),
         ),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        labelColor: context.colors.textPrimary,
-        unselectedLabelColor: context.colors.textSecondary,
-        indicatorColor: context.colors.textPrimary,
-        indicatorWeight: 2,
-        indicatorSize: TabBarIndicatorSize.label,
-        dividerHeight: 0,
-        labelStyle: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w400,
-        ),
-        tabs: [
-          Tab(text: l10n.dmTabFollowing),
-          Tab(text: l10n.dmTabOther),
-        ],
       ),
     );
   }
@@ -213,16 +245,17 @@ class _DmConversationsPageState extends State<DmConversationsPage>
             .add(const dm_events.DmConversationsLoadRequested());
       },
       color: context.colors.textPrimary,
-      child: ListView.separated(
+      child: ListView.builder(
         padding: EdgeInsets.only(
-          top: 8,
+          top: 4,
+          left: 16,
+          right: 16,
           bottom: MediaQuery.of(context).padding.bottom + 100,
         ),
         itemCount: conversations.length,
         itemBuilder: (context, index) {
           return _buildConversationTile(context, conversations[index]);
         },
-        separatorBuilder: (_, __) => const _ConversationSeparator(),
       ),
     );
   }
@@ -244,88 +277,110 @@ class _DmConversationsPageState extends State<DmConversationsPage>
     final lastMessageTime = conversation['lastMessageTime'] as DateTime?;
     final lastMessage = conversation['lastMessage'] as Map<String, dynamic>?;
     final lastMessageContent = lastMessage?['content'] as String? ?? '';
+    final isFromCurrentUser = lastMessage?['isFromCurrentUser'] == true;
 
     return RepaintBoundary(
-      child: InkWell(
-        onTap: () {
-          if (otherUserPubkeyHex.isNotEmpty) {
-            context.push(
-                '/home/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: context.colors.background,
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: context.colors.border,
-                backgroundImage: otherUserProfileImage != null &&
-                        otherUserProfileImage.isNotEmpty
-                    ? CachedNetworkImageProvider(otherUserProfileImage)
-                    : null,
-                child: otherUserProfileImage == null ||
-                        otherUserProfileImage.isEmpty
-                    ? Icon(
-                        CarbonIcons.user,
-                        color: context.colors.textSecondary,
-                        size: 24,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Material(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              if (otherUserPubkeyHex.isNotEmpty) {
+                context.push(
+                    '/home/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundColor: context.colors.border,
+                    backgroundImage: otherUserProfileImage != null &&
+                            otherUserProfileImage.isNotEmpty
+                        ? CachedNetworkImageProvider(otherUserProfileImage)
+                        : null,
+                    child: otherUserProfileImage == null ||
+                            otherUserProfileImage.isEmpty
+                        ? Icon(
+                            CarbonIcons.user,
+                            color: context.colors.textSecondary,
+                            size: 24,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: Text(
-                            displayName,
-                            style: TextStyle(
-                              color: context.colors.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              height: 2.0,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (lastMessageTime != null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: Text(
-                              _formatTime(lastMessageTime),
-                              style: TextStyle(
-                                color: context.colors.textSecondary,
-                                fontSize: 12,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                displayName,
+                                style: TextStyle(
+                                  color: context.colors.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.6,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            if (lastMessageTime != null) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                _formatTime(lastMessageTime),
+                                style: TextStyle(
+                                  color: context.colors.textSecondary,
+                                  fontSize: 12,
+                                  height: 1.6,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (lastMessageContent.isNotEmpty) ...[
+                          const SizedBox(height: 1),
+                          Row(
+                            children: [
+                              if (isFromCurrentUser) ...[
+                                Icon(
+                                  Icons.person,
+                                  size: 14,
+                                  color: context.colors.textSecondary,
+                                ),
+                                const SizedBox(width: 3),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  lastMessageContent,
+                                  style: TextStyle(
+                                    color: context.colors.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                    height: 1.6,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
+                        ],
                       ],
                     ),
-                    if (lastMessageContent.isNotEmpty) ...[
-                      Text(
-                        lastMessageContent,
-                        style: TextStyle(
-                          color: context.colors.textSecondary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          height: 2.0,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -420,22 +475,6 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                 '/home/dm/chat?pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
           }
         },
-      ),
-    );
-  }
-}
-
-class _ConversationSeparator extends StatelessWidget {
-  const _ConversationSeparator();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Divider(
-        height: 1,
-        thickness: 0.6,
-        color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
       ),
     );
   }

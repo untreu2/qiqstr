@@ -20,6 +20,7 @@ import '../../presentation/blocs/dm_indicator/dm_indicator_bloc.dart';
 import '../../presentation/blocs/dm_indicator/dm_indicator_event.dart';
 import '../../presentation/blocs/dm_indicator/dm_indicator_state.dart';
 import '../../data/services/coinos_service.dart';
+import '../../core/scroll_to_top_notifier.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -388,8 +389,7 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
     if (originalIndex == 0) {
       if (widget.navigationShell.currentIndex == pageViewIndex) {
-        final npub = widget.npub;
-        context.go('/home/feed?npub=${Uri.encodeComponent(npub)}');
+        ScrollToTopNotifier.triggerFeed();
       } else {
         if (mounted) {
           _iconAnimationController.reset();

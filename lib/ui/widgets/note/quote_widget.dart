@@ -123,26 +123,8 @@ class _QuoteContent extends StatelessWidget {
   });
 
   void _navigateToThread(BuildContext context) {
-    final noteId = note['id'] as String? ?? '';
-    final isReply = note['isReply'] as bool? ?? false;
-    final rootId = note['rootId'] as String?;
-    final parentId = note['parentId'] as String?;
-
-    final chain = <String>[];
-    if (isReply && rootId != null && rootId.isNotEmpty) {
-      chain.add(rootId);
-      if (parentId != null &&
-          parentId.isNotEmpty &&
-          parentId != rootId &&
-          parentId != noteId) {
-        chain.add(parentId);
-      }
-      chain.add(noteId);
-    } else {
-      chain.add(noteId);
-    }
-
-    final chainStr = ThreadChain.build(chain);
+    final chainStr = ThreadChain.buildFromNote(note);
+    if (chainStr.isEmpty) return;
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
       context.push('/home/feed/thread/$chainStr');
@@ -265,22 +247,45 @@ class _QuoteContent extends StatelessWidget {
           onTap: () => _navigateToProfile(context),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: userProfileImage.isNotEmpty
-                    ? context.colors.surfaceTransparent
-                    : context.colors.secondary,
-                backgroundImage: userProfileImage.isNotEmpty
-                    ? CachedNetworkImageProvider(userProfileImage)
-                    : null,
-                child: userProfileImage.isEmpty
-                    ? Icon(
+              if (userProfileImage.isNotEmpty)
+                ClipOval(
+                  child: CachedNetworkImage(
+                    imageUrl: userProfileImage,
+                    width: 28,
+                    height: 28,
+                    fit: BoxFit.cover,
+                    fadeInDuration: Duration.zero,
+                    fadeOutDuration: Duration.zero,
+                    placeholder: (_, __) => CircleAvatar(
+                      radius: 14,
+                      backgroundColor: context.colors.surfaceTransparent,
+                      child: Icon(
                         Icons.person,
                         size: 14,
-                        color: context.colors.textPrimary,
-                      )
-                    : null,
-              ),
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => CircleAvatar(
+                      radius: 14,
+                      backgroundColor: context.colors.surfaceTransparent,
+                      child: Icon(
+                        Icons.person,
+                        size: 14,
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: context.colors.surfaceTransparent,
+                  child: Icon(
+                    Icons.person,
+                    size: 14,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
               const SizedBox(width: 8),
               Text(
                 userName.length > 25

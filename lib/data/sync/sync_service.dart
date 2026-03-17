@@ -46,6 +46,8 @@ class SyncService {
 
   final _pendingRefIds = <String>{};
   Timer? _refFetchTimer;
+  final _pendingAncestorIds = <String>{};
+  Timer? _ancestorFetchTimer;
   final _pendingProfilePubkeys = <String>{};
   Timer? _profileSyncTimer;
   final _pendingQuoteIds = <String>{};
@@ -554,6 +556,14 @@ class SyncService {
     });
   }
 
+  Future<void> fetchThreadAncestors(List<String> noteIds) async {
+    if (noteIds.isEmpty) return;
+    try {
+      final fetched = await _relayService.fetchThreadAncestors(noteIds);
+      if (fetched > 0) _notifyDbChanged();
+    } catch (_) {}
+  }
+
   Future<void> syncReplies(String noteId) async {
     await _sync('replies', () async {
       await _relayService.syncRepliesRecursive(noteId, maxDepth: 3);
@@ -851,6 +861,7 @@ class SyncService {
     stopPeriodicSync();
     stopRealtimeSubscriptions();
     _refFetchTimer?.cancel();
+    _ancestorFetchTimer?.cancel();
     _profileSyncTimer?.cancel();
     _quotePrefetchTimer?.cancel();
     _naddrPrefetchTimer?.cancel();
@@ -994,6 +1005,48 @@ class SyncService {
     _notifyDbChanged();
     _syncMissingProfilesInBackground(events);
     _fetchReferencedEventsInBackground(events);
+    _fetchThreadAncestorsInBackground(events);
+  }
+
+  void _fetchThreadAncestorsInBackground(List<Map<String, dynamic>> events) {
+    final replyEventIds = <String>[];
+    for (final event in events) {
+      final kind = (event['kind'] as num?)?.toInt() ?? 1;
+      if (kind != 1) continue;
+      final tags = event['tags'] as List<dynamic>? ?? [];
+      var hasParent = false;
+      for (final tag in tags) {
+        if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+          final marker = tag.length >= 4 ? tag[3] as String? : null;
+          if (marker == 'root' || marker == 'reply' || marker == null) {
+            hasParent = true;
+            break;
+          }
+        }
+      }
+      if (hasParent) {
+        final id = event['id'] as String? ?? '';
+        if (id.isNotEmpty) replyEventIds.add(id);
+      }
+    }
+    if (replyEventIds.isEmpty) return;
+
+    _pendingAncestorIds.addAll(replyEventIds);
+    _ancestorFetchTimer?.cancel();
+    _ancestorFetchTimer = Timer(const Duration(milliseconds: 400), () {
+      _processPendingAncestors();
+    });
+  }
+
+  Future<void> _processPendingAncestors() async {
+    var ids = _pendingAncestorIds.toList();
+    _pendingAncestorIds.clear();
+    if (ids.isEmpty) return;
+    if (ids.length > 40) ids = ids.sublist(0, 40);
+    try {
+      final fetched = await _relayService.fetchThreadAncestors(ids);
+      if (fetched > 0) _notifyDbChanged();
+    } catch (_) {}
   }
 
   void _fetchReferencedNoteForRepost(Map<String, dynamic> repostEvent) {

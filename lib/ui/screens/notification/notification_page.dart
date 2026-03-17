@@ -629,46 +629,29 @@ class _NotificationTileState extends State<_NotificationTile> {
         _navigateToProfile(author);
       }
     } else if (targetEventId.isNotEmpty) {
-      final chain = <String>[];
+      String chainStr;
 
       if (type == 'reply' && notificationEventId.isNotEmpty) {
         try {
           final feedRepo = AppDI.get<FeedRepository>();
           final replyNote = await feedRepo.getNoteRaw(notificationEventId);
-
           if (replyNote != null) {
-            final replyRootId = replyNote['rootId'] as String?;
-            final parentId = replyNote['parentId'] as String?;
-
-            if (replyRootId != null && replyRootId.isNotEmpty) {
-              chain.add(replyRootId);
-              if (parentId != null &&
-                  parentId.isNotEmpty &&
-                  parentId != replyRootId &&
-                  parentId != notificationEventId) {
-                chain.add(parentId);
-              }
-              chain.add(notificationEventId);
-            } else {
-              chain.add(targetEventId);
-              if (notificationEventId != targetEventId) {
-                chain.add(notificationEventId);
-              }
-            }
+            chainStr = ThreadChain.buildFromNote(replyNote);
           } else {
-            chain.add(targetEventId);
+            final fallbackChain = notificationEventId != targetEventId
+                ? [targetEventId, notificationEventId]
+                : [targetEventId];
+            chainStr = ThreadChain.build(fallbackChain);
           }
         } catch (e) {
           debugPrint('[NotificationTile] Error resolving thread: $e');
-          chain.add(targetEventId);
+          chainStr = ThreadChain.build([targetEventId]);
         }
       } else {
-        chain.add(targetEventId);
+        chainStr = ThreadChain.build([targetEventId]);
       }
 
       if (!mounted) return;
-
-      final chainStr = ThreadChain.build(chain);
       context.push('/home/notifications/thread/$chainStr');
     }
   }

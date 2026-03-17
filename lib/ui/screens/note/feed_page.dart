@@ -13,6 +13,7 @@ import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
+import '../../../core/scroll_to_top_notifier.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/feed/feed_event.dart';
@@ -79,6 +80,7 @@ class FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
+    ScrollToTopNotifier.feed.addListener(_onScrollToTopNotified);
     _searchController
         .addListener(() => _onSearchChanged(_searchController.text));
 
@@ -279,8 +281,13 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
+  void _onScrollToTopNotified() {
+    scrollToTop();
+  }
+
   @override
   void dispose() {
+    ScrollToTopNotifier.feed.removeListener(_onScrollToTopNotified);
     _relayCountTimer?.cancel();
     _searchDebounceTimer?.cancel();
     _scrollController.removeListener(_scrollListener);

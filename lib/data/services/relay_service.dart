@@ -354,6 +354,11 @@ class RustRelayService {
     return count;
   }
 
+  Future<int> fetchThreadAncestors(List<String> eventIds) async {
+    final count = await rust_relay.fetchThreadAncestors(eventIds: eventIds);
+    return count;
+  }
+
   Future<List<Map<String, dynamic>>> mergeAndSortNotes(
     List<Map<String, dynamic>> existing,
     List<Map<String, dynamic>> incoming,

@@ -187,10 +187,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildAvatarAndActionsRow(context, loadedState),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 8),
                       _buildNameRow(context, user),
                       if ((user['about'] as String? ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 14),
                         _buildBioContent(user),
                         const SizedBox(height: 4),
                       ],

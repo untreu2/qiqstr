@@ -368,7 +368,7 @@ class RustDatabaseService {
   Stream<List<Map<String, dynamic>>> watchHydratedReplies(String noteId,
       {int limit = 100}) {
     return _changeController.stream
-        .debounceTime(const Duration(milliseconds: 500))
+        .debounceTime(const Duration(milliseconds: 200))
         .startWith(null)
         .asyncMap((_) => getHydratedReplies(noteId, limit: limit));
   }

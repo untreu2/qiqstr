@@ -531,36 +531,19 @@ class _NoteWidgetState extends State<NoteWidget> {
     try {
       if (!mounted || _isDisposed || !_isInitialized) return;
 
-      var noteRootId = widget.note['rootId'] as String?;
-      if ((noteRootId == null || noteRootId.isEmpty) && _isReply) {
-        noteRootId = _resolveRootFromTags(widget.note);
-      }
-
       if (widget.onNoteTap != null) {
-        widget.onNoteTap!(_noteId, noteRootId);
+        var rootId = widget.note['rootId'] as String?;
+        if (rootId == null || rootId.isEmpty) {
+          final resolved =
+              ThreadChain.resolveRootAndParentFromNote(widget.note);
+          rootId = resolved.$1;
+        }
+        widget.onNoteTap!(_noteId, rootId);
         return;
       }
 
-      final chain = <String>[];
-      final hasRoot = noteRootId != null && noteRootId.isNotEmpty;
-
-      if (hasRoot) {
-        chain.add(noteRootId);
-        final parentId = widget.note['parentId'] as String?;
-        if (parentId != null &&
-            parentId.isNotEmpty &&
-            parentId != noteRootId &&
-            parentId != _noteId) {
-          chain.add(parentId);
-        }
-        if (_noteId != noteRootId) {
-          chain.add(_noteId);
-        }
-      } else {
-        chain.add(_noteId);
-      }
-
-      final chainStr = ThreadChain.build(chain);
+      final chainStr = ThreadChain.buildFromNote(widget.note);
+      if (chainStr.isEmpty) return;
       final noteData = Map<String, dynamic>.from(widget.note);
       final currentLocation = GoRouterState.of(context).matchedLocation;
       if (currentLocation.startsWith('/home/feed')) {
@@ -573,19 +556,6 @@ class _NoteWidgetState extends State<NoteWidget> {
     } catch (e) {
       debugPrint('[NoteWidget] Navigate to thread error: $e');
     }
-  }
-
-  String? _resolveRootFromTags(Map<String, dynamic> note) {
-    final tags = note['tags'] as List<dynamic>? ?? [];
-    String? firstE;
-    for (final tag in tags) {
-      if (tag is List && tag.length > 1 && tag[0] == 'e') {
-        final marker = tag.length >= 4 ? tag[3] as String? : null;
-        if (marker == 'root') return tag[1] as String;
-        firstE ??= tag[1] as String;
-      }
-    }
-    return firstE;
   }
 
   String _getInteractionNoteId() {

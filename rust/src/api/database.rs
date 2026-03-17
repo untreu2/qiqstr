@@ -1237,10 +1237,36 @@ async fn hydrate_notes(
             is_quote = false;
             quoted_note_id = None;
 
+            // Extract original note ID from the first `e` tag.
+            // Also collect any additional `e` tags that may carry
+            // root/reply markers copied from the original note by
+            // some clients (NIP-18 allows this).
+            let mut repost_original_id: Option<String> = None;
+            let mut repost_extra_e_tags: Vec<(String, Option<String>)> = Vec::new();
             for tag in tags.iter() {
-                if !tag.is_empty() && tag[0] == "e" && tag.len() > 1 {
-                    id = tag[1].clone();
-                    break;
+                if tag.is_empty() || tag[0] != "e" || tag.len() < 2 {
+                    continue;
+                }
+                if repost_original_id.is_none() {
+                    repost_original_id = Some(tag[1].clone());
+                } else {
+                    let marker = tag.get(3).map(|s| s.as_str()).and_then(|m| {
+                        if m == "root" || m == "reply" { Some(m.to_string()) } else { None }
+                    });
+                    repost_extra_e_tags.push((tag[1].clone(), marker));
+                }
+            }
+
+            if let Some(orig_id) = repost_original_id {
+                id = orig_id;
+            }
+
+            // Apply any root/reply markers from the repost's own tags.
+            for (ref_id, marker) in &repost_extra_e_tags {
+                match marker.as_deref() {
+                    Some("root") => { root_id = Some(ref_id.clone()); }
+                    Some("reply") => { parent_id = Some(ref_id.clone()); }
+                    _ => {}
                 }
             }
 

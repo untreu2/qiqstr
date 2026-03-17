@@ -1662,6 +1662,115 @@ pub async fn build_thread_structure(
     Ok(serde_json::to_string(&result)?)
 }
 
+pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
+    let client = get_client().await?;
+    let mut total_fetched: u32 = 0;
+    let mut processed: HashSet<String> = HashSet::new();
+    let mut queue: Vec<String> = event_ids;
+
+    while !queue.is_empty() && processed.len() < 50 {
+        let mut ancestor_ids: HashSet<String> = HashSet::new();
+
+        for id_hex in &queue {
+            if processed.contains(id_hex) {
+                continue;
+            }
+            processed.insert(id_hex.clone());
+
+            let eid = match EventId::from_hex(id_hex) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            let event = client.database().event_by_id(&eid).await.ok().flatten();
+            let event = match event {
+                Some(e) => e,
+                None => {
+                    let f = Filter::new().id(eid).limit(1);
+                    let fetched = client.fetch_events(f, Duration::from_secs(5)).await.unwrap_or_default();
+                    total_fetched += fetched.len() as u32;
+                    match fetched.into_iter().next() {
+                        Some(e) => e,
+                        None => continue,
+                    }
+                }
+            };
+
+            for tag in event.tags.iter() {
+                let tag_vec: Vec<String> =
+                    tag.as_slice().iter().map(|s| s.to_string()).collect();
+                if tag_vec.first().map(|s| s.as_str()) != Some("e") {
+                    continue;
+                }
+                let ref_id = match tag_vec.get(1) {
+                    Some(id) if !id.is_empty() => id.clone(),
+                    _ => continue,
+                };
+                if processed.contains(&ref_id) {
+                    continue;
+                }
+                let marker = tag_vec.get(3).map(|s| s.as_str());
+                if matches!(marker, Some("root") | Some("reply") | None) {
+                    if let Ok(ref_eid) = EventId::from_hex(&ref_id) {
+                        let status = client.database().check_id(&ref_eid).await;
+                        if !matches!(status, Ok(DatabaseEventStatus::Saved)) {
+                            ancestor_ids.insert(ref_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        if ancestor_ids.is_empty() {
+            break;
+        }
+
+        let missing_eids: Vec<EventId> = ancestor_ids
+            .iter()
+            .filter_map(|id| EventId::from_hex(id).ok())
+            .collect();
+
+        let filter = Filter::new()
+            .ids(missing_eids)
+            .kind(Kind::TextNote)
+            .limit(ancestor_ids.len());
+        let fetched = client
+            .fetch_events(filter, Duration::from_secs(6))
+            .await
+            .unwrap_or_default();
+
+        total_fetched += fetched.len() as u32;
+
+        let mut new_pubkeys: HashSet<PublicKey> = HashSet::new();
+        for ev in fetched.iter() {
+            new_pubkeys.insert(ev.pubkey);
+        }
+        if !new_pubkeys.is_empty() {
+            let existing_filter = Filter::new()
+                .authors(new_pubkeys.iter().cloned().collect::<Vec<_>>())
+                .kind(Kind::Metadata)
+                .limit(new_pubkeys.len());
+            let existing = client.database().query(existing_filter).await.unwrap_or_default();
+            let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
+            let missing_pks: Vec<PublicKey> = new_pubkeys
+                .into_iter()
+                .filter(|pk| !existing_pks.contains(pk))
+                .collect();
+            if !missing_pks.is_empty() {
+                let pf = Filter::new()
+                    .authors(missing_pks)
+                    .kind(Kind::Metadata)
+                    .limit(50);
+                let _ = client.fetch_events(pf, Duration::from_secs(4)).await;
+            }
+        }
+
+        queue = ancestor_ids.into_iter().collect();
+    }
+
+    Ok(total_fetched)
+}
+
 pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
     let client = get_client().await?;
 
@@ -1691,10 +1800,7 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
                     ref_ids.insert(ref_id);
                 }
                 Some("e") => {
-                    let marker = tag_vec.get(3).map(|s| s.as_str());
-                    if marker == Some("mention") || marker.is_none() {
-                        ref_ids.insert(ref_id);
-                    }
+                    ref_ids.insert(ref_id);
                 }
                 _ => {}
             }

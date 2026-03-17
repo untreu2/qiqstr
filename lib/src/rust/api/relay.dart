@@ -138,6 +138,9 @@ Future<String> buildThreadStructure(
     RustLib.instance.api.crateApiRelayBuildThreadStructure(
         rootNoteJson: rootNoteJson, repliesJson: repliesJson);
 
+Future<int> fetchThreadAncestors({required List<String> eventIds}) =>
+    RustLib.instance.api.crateApiRelayFetchThreadAncestors(eventIds: eventIds);
+
 Future<int> fetchMissingReferences({required List<String> eventIds}) =>
     RustLib.instance.api
         .crateApiRelayFetchMissingReferences(eventIds: eventIds);

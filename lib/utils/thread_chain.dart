@@ -15,11 +15,44 @@ class ThreadChain {
 
   static String build(List<String> noteIds) {
     if (noteIds.isEmpty) return '';
-    return noteIds
-        .asMap()
-        .entries
-        .map((e) => 'd${e.key}=${e.value}')
-        .join('-');
+    return noteIds.asMap().entries.map((e) => 'd${e.key}=${e.value}').join('-');
+  }
+
+  /// Builds a chain string from a hydrated note map.
+  ///
+  /// Resolves root and parent from stored fields first, then falls back to
+  /// parsing raw `e` tags — covering cases where the DB hydration left
+  /// rootId/parentId empty (e.g. a repost whose original was not yet cached).
+  static String buildFromNote(Map<String, dynamic> note) {
+    final noteId = note['id'] as String? ?? '';
+    if (noteId.isEmpty) return '';
+
+    var rootId = note['rootId'] as String?;
+    var parentId = note['parentId'] as String?;
+
+    if (rootId == null || rootId.isEmpty) {
+      final resolved = _resolveFromTags(note);
+      rootId = resolved.$1;
+      parentId ??= resolved.$2;
+    }
+
+    final hasRoot = rootId != null && rootId.isNotEmpty && rootId != noteId;
+
+    final chain = <String>[];
+    if (hasRoot) {
+      chain.add(rootId);
+      if (parentId != null &&
+          parentId.isNotEmpty &&
+          parentId != rootId &&
+          parentId != noteId) {
+        chain.add(parentId);
+      }
+      chain.add(noteId);
+    } else {
+      chain.add(noteId);
+    }
+
+    return build(_deduplicated(chain));
   }
 
   static List<String> buildChainToNote(
@@ -40,16 +73,20 @@ class ThreadChain {
       final note = getNote(currentId);
       if (note == null) break;
 
-      final parentId = note['parentId'] as String?;
+      var parentId = note['parentId'] as String?;
+      if (parentId == null || parentId.isEmpty) {
+        parentId = note['rootId'] as String?;
+      }
       if (parentId != null && parentId.isNotEmpty) {
         currentId = parentId;
       } else {
-        final noteRootId = note['rootId'] as String?;
-        if (noteRootId != null &&
-            noteRootId.isNotEmpty &&
-            noteRootId != currentId &&
-            !chain.contains(noteRootId)) {
-          chain.insert(0, noteRootId);
+        final resolved = _resolveFromTags(note);
+        final tagRoot = resolved.$1;
+        if (tagRoot != null &&
+            tagRoot.isNotEmpty &&
+            tagRoot != currentId &&
+            !chain.contains(tagRoot)) {
+          chain.insert(0, tagRoot);
         }
         break;
       }
@@ -59,9 +96,51 @@ class ThreadChain {
       chain.insert(0, rootNoteId);
     }
 
-    final seen = <String>{};
-    chain.removeWhere((id) => !seen.add(id));
+    return _deduplicated(chain);
+  }
 
-    return chain;
+  /// Public accessor for resolving root and parent from a note map.
+  static (String?, String?) resolveRootAndParentFromNote(
+          Map<String, dynamic> note) =>
+      _resolveFromTags(note);
+
+  /// Extracts (rootId, parentId) from raw `e` tags of a note map.
+  ///
+  /// Priority: explicit `root` marker → explicit `reply` marker → positional
+  /// (first e-tag = root, last e-tag = parent per deprecated NIP-10 convention).
+  static (String?, String?) _resolveFromTags(Map<String, dynamic> note) {
+    final tags = note['tags'] as List<dynamic>? ?? [];
+    String? rootId;
+    String? replyId;
+    final allE = <String>[];
+
+    for (final tag in tags) {
+      if (tag is! List || tag.length < 2 || tag[0] != 'e') continue;
+      final refId = tag[1] as String? ?? '';
+      if (refId.isEmpty) continue;
+      final marker = tag.length >= 4 ? tag[3] as String? : null;
+      switch (marker) {
+        case 'root':
+          rootId = refId;
+        case 'reply':
+          replyId = refId;
+        case 'mention':
+          break;
+        default:
+          allE.add(refId);
+      }
+    }
+
+    if (rootId == null && allE.isNotEmpty) {
+      rootId = allE.first;
+      if (allE.length > 1) replyId = allE.last;
+    }
+
+    return (rootId, replyId);
+  }
+
+  static List<String> _deduplicated(List<String> ids) {
+    final seen = <String>{};
+    return ids.where(seen.add).toList();
   }
 }

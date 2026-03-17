@@ -70,6 +70,10 @@ class DmIndicatorBloc extends Bloc<DmIndicatorEvent, DmIndicatorState> {
     if (conversations.isEmpty) return 0;
     int latest = 0;
     for (final conv in conversations) {
+      final lastMessage = conv['lastMessage'] as Map<String, dynamic>?;
+      if (lastMessage == null) continue;
+      if (lastMessage['isFromCurrentUser'] == true) continue;
+
       final lastMessageTime = conv['lastMessageTime'];
       int ts = 0;
       if (lastMessageTime is DateTime) {

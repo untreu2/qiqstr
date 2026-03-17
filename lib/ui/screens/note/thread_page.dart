@@ -89,11 +89,17 @@ class _ThreadPageState extends State<ThreadPage> {
         },
         buildWhen: (previous, current) {
           if (previous is ThreadLoaded && current is ThreadLoaded) {
-            return previous.replies.length != current.replies.length ||
-                previous.rootNoteId != current.rootNoteId ||
-                previous.chainNotes.length != current.chainNotes.length ||
-                previous.userProfiles.length != current.userProfiles.length ||
-                previous.repliesSynced != current.repliesSynced;
+            if (previous.replies.length != current.replies.length) return true;
+            if (previous.rootNoteId != current.rootNoteId) return true;
+            if (previous.chainNotes.length != current.chainNotes.length) {
+              return true;
+            }
+            if (previous.repliesSynced != current.repliesSynced) return true;
+            if (previous.currentUser != current.currentUser) return true;
+            if (previous.userProfiles.length != current.userProfiles.length) {
+              return true;
+            }
+            return false;
           }
           return previous.runtimeType != current.runtimeType;
         },
@@ -149,19 +155,21 @@ class _ThreadPageState extends State<ThreadPage> {
     if (state is ThreadInitial &&
         widget.initialNoteData != null &&
         _parsedChain.isNotEmpty) {
-      final rootNote = _stripRepostDataForPlaceholder(
-          widget.initialNoteData!, _parsedChain.first);
+      // initialNoteData is the focused/tapped note which is always chain.last.
+      final focusedId = _parsedChain.last;
+      final focusedNote =
+          _stripRepostDataForPlaceholder(widget.initialNoteData!, focusedId);
       final structure = ThreadStructure(
-        rootNote: rootNote,
+        rootNote: focusedNote,
         childrenMap: const {},
-        notesMap: {_parsedChain.first: rootNote},
+        notesMap: {focusedId: focusedNote},
         totalReplies: 0,
       );
       final placeholderState = ThreadLoaded(
-        rootNote: rootNote,
+        rootNote: focusedNote,
         replies: const [],
         threadStructure: structure,
-        chainNotes: [rootNote],
+        chainNotes: [focusedNote],
         chain: _parsedChain,
         userProfiles: const {},
         currentUserHex: '',
@@ -701,27 +709,7 @@ class _ThreadPageState extends State<ThreadPage> {
     if (note != null) {
       final isRepost = note['isRepost'] as bool? ?? false;
       if (isRepost) {
-        final originalRootId = note['rootId'] as String?;
-        final originalParentId = note['parentId'] as String?;
-        final originalNoteId = note['id'] as String? ?? noteId;
-
-        final chain = <String>[];
-        if (originalRootId != null && originalRootId.isNotEmpty) {
-          chain.add(originalRootId);
-          if (originalParentId != null &&
-              originalParentId.isNotEmpty &&
-              originalParentId != originalRootId &&
-              originalParentId != originalNoteId) {
-            chain.add(originalParentId);
-          }
-          if (originalNoteId != originalRootId) {
-            chain.add(originalNoteId);
-          }
-        } else {
-          chain.add(originalNoteId);
-        }
-
-        _navigateToThread(ThreadChain.build(chain));
+        _navigateToThread(ThreadChain.buildFromNote(note));
         return;
       }
     }
