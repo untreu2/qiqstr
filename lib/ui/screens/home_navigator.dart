@@ -389,7 +389,14 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
     if (originalIndex == 0) {
       if (widget.navigationShell.currentIndex == pageViewIndex) {
-        ScrollToTopNotifier.triggerFeed();
+        final location = GoRouterState.of(context).uri.toString();
+        final isAtFeedRoot = location.startsWith('/home/feed') &&
+            !location.startsWith('/home/feed/');
+        if (isAtFeedRoot) {
+          ScrollToTopNotifier.triggerFeed();
+        } else {
+          widget.navigationShell.goBranch(pageViewIndex, initialLocation: true);
+        }
       } else {
         if (mounted) {
           _iconAnimationController.reset();

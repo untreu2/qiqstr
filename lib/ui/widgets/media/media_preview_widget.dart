@@ -6,11 +6,13 @@ import 'video_preview.dart';
 
 class MediaPreviewWidget extends StatefulWidget {
   final List<String> mediaUrls;
+  final Map<String, String> mediaDimensions;
   final String? authorProfileImageUrl;
 
   const MediaPreviewWidget({
     super.key,
     required this.mediaUrls,
+    this.mediaDimensions = const {},
     this.authorProfileImageUrl,
   });
 
@@ -69,8 +71,20 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
     return _buildMediaGrid(context, _imageUrls);
   }
 
+  double? _aspectRatioForUrl(String url) {
+    final dim = widget.mediaDimensions[url];
+    if (dim == null) return null;
+    final parts = dim.split('x');
+    if (parts.length != 2) return null;
+    final w = int.tryParse(parts[0]);
+    final h = int.tryParse(parts[1]);
+    if (w == null || h == null || h == 0) return null;
+    return (w / h).clamp(0.4, 2.5);
+  }
+
   Widget _buildMediaGrid(BuildContext context, List<String> imageUrls) {
     if (imageUrls.length == 1) {
+      final knownRatio = _aspectRatioForUrl(imageUrls[0]);
       return ClipRRect(
         borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
         child: _buildImage(
@@ -79,6 +93,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
           0,
           imageUrls,
           fit: BoxFit.cover,
+          aspectRatio: knownRatio,
         ),
       );
     } else if (imageUrls.length == 2) {

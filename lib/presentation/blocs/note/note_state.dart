@@ -30,6 +30,7 @@ class NoteComposeState extends NoteState {
   final String? parentAuthor;
   final String? quoteEventId;
   final List<String> mediaUrls;
+  final Map<String, String> mediaDimensions;
   final bool isUploadingMedia;
   final bool isSearchingUsers;
   final List<Map<String, dynamic>> userSuggestions;
@@ -44,6 +45,7 @@ class NoteComposeState extends NoteState {
     this.parentAuthor,
     this.quoteEventId,
     this.mediaUrls = const [],
+    this.mediaDimensions = const {},
     this.isUploadingMedia = false,
     this.isSearchingUsers = false,
     this.userSuggestions = const [],
@@ -60,6 +62,7 @@ class NoteComposeState extends NoteState {
         parentAuthor,
         quoteEventId,
         mediaUrls,
+        mediaDimensions,
         isUploadingMedia,
         isSearchingUsers,
         userSuggestions,
@@ -75,6 +78,7 @@ class NoteComposeState extends NoteState {
     String? parentAuthor,
     String? quoteEventId,
     List<String>? mediaUrls,
+    Map<String, String>? mediaDimensions,
     bool? isUploadingMedia,
     bool? isSearchingUsers,
     List<Map<String, dynamic>>? userSuggestions,
@@ -89,6 +93,7 @@ class NoteComposeState extends NoteState {
       parentAuthor: parentAuthor ?? this.parentAuthor,
       quoteEventId: quoteEventId ?? this.quoteEventId,
       mediaUrls: mediaUrls ?? this.mediaUrls,
+      mediaDimensions: mediaDimensions ?? this.mediaDimensions,
       isUploadingMedia: isUploadingMedia ?? this.isUploadingMedia,
       isSearchingUsers: isSearchingUsers ?? this.isSearchingUsers,
       userSuggestions: userSuggestions ?? this.userSuggestions,

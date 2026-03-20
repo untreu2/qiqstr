@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
@@ -129,21 +132,35 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     emit(currentState.copyWith(isUploadingMedia: true));
 
     final List<String> uploadedUrls = [...directUrls];
+    final Map<String, String> newDimensions = {};
 
     for (final filePath in pathsToUpload) {
+      String? dim;
+      if (_isImageFile(filePath)) {
+        dim = await _getImageDimensions(filePath);
+      }
+
       final url = await _syncService.uploadMedia(filePath);
       if (url != null) {
         uploadedUrls.add(url);
+        if (dim != null) {
+          newDimensions[url] = dim;
+        }
       }
     }
 
     if (uploadedUrls.isNotEmpty) {
       final updatedMediaUrls = [...currentState.mediaUrls, ...uploadedUrls];
+      final updatedDimensions = {
+        ...currentState.mediaDimensions,
+        ...newDimensions,
+      };
       final latestState = state is NoteComposeState
           ? (state as NoteComposeState)
           : currentState;
       emit(latestState.copyWith(
         mediaUrls: updatedMediaUrls,
+        mediaDimensions: updatedDimensions,
         isUploadingMedia: false,
         canPost: true,
       ));
@@ -162,9 +179,16 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         : const NoteComposeState(content: '');
     final updatedMediaUrls =
         currentState.mediaUrls.where((url) => url != event.url).toList();
+    final updatedDimensions =
+        Map<String, String>.from(currentState.mediaDimensions)
+          ..remove(event.url);
     final trimmedContent = currentState.content.trim();
     final canPost = trimmedContent.isNotEmpty || updatedMediaUrls.isNotEmpty;
-    emit(currentState.copyWith(mediaUrls: updatedMediaUrls, canPost: canPost));
+    emit(currentState.copyWith(
+      mediaUrls: updatedMediaUrls,
+      mediaDimensions: updatedDimensions,
+      canPost: canPost,
+    ));
   }
 
   void _onNoteMentionAdded(
@@ -280,5 +304,34 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
 
   String _buildQuoteContent(String content, String quoteEventId) {
     return '$content\nnostr:$quoteEventId';
+  }
+
+  static const _imageExtensions = [
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+    '.gif',
+    '.heic',
+    '.heif',
+  ];
+
+  bool _isImageFile(String path) {
+    final lower = path.toLowerCase();
+    return _imageExtensions.any(lower.endsWith);
+  }
+
+  Future<String?> _getImageDimensions(String filePath) async {
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final dim = '${frame.image.width}x${frame.image.height}';
+      frame.image.dispose();
+      codec.dispose();
+      return dim;
+    } catch (_) {
+      return null;
+    }
   }
 }

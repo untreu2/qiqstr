@@ -61,6 +61,7 @@ class NoteContentWidget extends StatefulWidget {
 class _NoteContentWidgetState extends State<NoteContentWidget> {
   late final List<dynamic> _textParts;
   late final List<String> _mediaUrls;
+  late final Map<String, String> _mediaDimensions;
   late final List<String> _linkUrls;
   late final List<String> _quoteIds;
   late final List<String> _articleIds;
@@ -93,6 +94,10 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     _mediaUrls =
         (widget.parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ??
             [];
+    _mediaDimensions =
+        (widget.parsedContent['mediaDimensions'] as Map<String, dynamic>?)
+                ?.cast<String, String>() ??
+            {};
     _linkUrls =
         (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ??
             [];
@@ -455,6 +460,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                         key: ValueKey(
                             'media_${widget.noteId}_${_mediaUrls.length}'),
                         mediaUrls: _mediaUrls,
+                        mediaDimensions: _mediaDimensions,
                         authorProfileImageUrl: widget.authorProfileImageUrl,
                       ),
                     ),

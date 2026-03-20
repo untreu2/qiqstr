@@ -86,6 +86,11 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
     try {
       _parsedContent = stringOptimizer.parseContentOptimized(_content);
+      final tags = widget.note['tags'] as List<dynamic>? ?? [];
+      final mediaDimensions = _extractImetaDimensions(tags);
+      if (mediaDimensions.isNotEmpty) {
+        _parsedContent['mediaDimensions'] = mediaDimensions;
+      }
     } catch (e) {
       debugPrint('[FocusedNoteWidget] ParseContent error: $e');
       _parsedContent = {
@@ -100,6 +105,29 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
     }
 
     _isInitialized = true;
+  }
+
+  static Map<String, String> _extractImetaDimensions(List<dynamic> tags) {
+    final dimensions = <String, String>{};
+    for (final tag in tags) {
+      if (tag is! List || tag.isEmpty) continue;
+      if (tag[0].toString() != 'imeta') continue;
+
+      String? url;
+      String? dim;
+      for (int i = 1; i < tag.length; i++) {
+        final entry = tag[i].toString();
+        if (entry.startsWith('url ')) {
+          url = entry.substring(4);
+        } else if (entry.startsWith('dim ')) {
+          dim = entry.substring(4);
+        }
+      }
+      if (url != null && dim != null) {
+        dimensions[url] = dim;
+      }
+    }
+    return dimensions;
   }
 
   void _initializeAsync() {

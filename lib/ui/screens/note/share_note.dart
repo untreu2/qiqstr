@@ -408,6 +408,16 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final state = _noteBloc.state;
     if (state is! NoteComposeState) return;
 
+    for (final url in state.mediaUrls) {
+      if (_isVideoFile(url)) continue;
+      final imetaEntries = ['imeta', 'url $url'];
+      final dim = state.mediaDimensions[url];
+      if (dim != null) {
+        imetaEntries.add('dim $dim');
+      }
+      additionalTags.add(imetaEntries);
+    }
+
     final mentions = _mentionMap.values.toList();
     _noteBloc.add(NoteComposed(
       content: content,

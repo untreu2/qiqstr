@@ -108,6 +108,13 @@ class _NoteWidgetState extends State<NoteWidget> {
 
     final noteContent = widget.note['content'] as String? ?? '';
     _parsedContent = stringOptimizer.parseContentOptimized(noteContent);
+
+    final tags = widget.note['tags'] as List<dynamic>? ?? [];
+    final mediaDimensions = _extractImetaDimensions(tags);
+    if (mediaDimensions.isNotEmpty) {
+      _parsedContent['mediaDimensions'] = mediaDimensions;
+    }
+
     _shouldTruncate = _calculateTruncation(_parsedContent);
     _truncatedContent = _shouldTruncate ? _createTruncatedContent() : null;
 
@@ -393,6 +400,29 @@ class _NoteWidgetState extends State<NoteWidget> {
     }
   }
 
+  static Map<String, String> _extractImetaDimensions(List<dynamic> tags) {
+    final dimensions = <String, String>{};
+    for (final tag in tags) {
+      if (tag is! List || tag.isEmpty) continue;
+      if (tag[0].toString() != 'imeta') continue;
+
+      String? url;
+      String? dim;
+      for (int i = 1; i < tag.length; i++) {
+        final entry = tag[i].toString();
+        if (entry.startsWith('url ')) {
+          url = entry.substring(4);
+        } else if (entry.startsWith('dim ')) {
+          dim = entry.substring(4);
+        }
+      }
+      if (url != null && dim != null) {
+        dimensions[url] = dim;
+      }
+    }
+    return dimensions;
+  }
+
   bool _calculateTruncation(Map<String, dynamic> parsed) {
     try {
       const int characterLimit = 280;
@@ -463,6 +493,8 @@ class _NoteWidgetState extends State<NoteWidget> {
         'linkUrls': _parsedContent['linkUrls'] ?? [],
         'quoteIds': _parsedContent['quoteIds'] ?? [],
         'articleIds': _parsedContent['articleIds'] ?? [],
+        if (_parsedContent.containsKey('mediaDimensions'))
+          'mediaDimensions': _parsedContent['mediaDimensions'],
       };
     } catch (e) {
       debugPrint('[NoteWidget] Create truncated content error: $e');
