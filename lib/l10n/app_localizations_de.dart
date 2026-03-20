@@ -2052,4 +2052,7 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get resolveAddressFailed =>
       'Lightning-Adresse konnte nicht aufgelöst werden';
+
+  @override
+  String get dmYouPrefix => 'Du: ';
 }

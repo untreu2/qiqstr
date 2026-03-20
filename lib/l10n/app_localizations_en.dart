@@ -2018,4 +2018,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resolveAddressFailed => 'Could not resolve lightning address';
+
+  @override
+  String get dmYouPrefix => 'You: ';
 }

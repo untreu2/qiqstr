@@ -1011,5 +1011,7 @@
   "editAmount": "Edit amount",
   "lightningAddressOrInvoice": "Lightning address or invoice",
   "resolvingAddress": "Resolving address…",
-  "resolveAddressFailed": "Could not resolve lightning address"
+  "resolveAddressFailed": "Could not resolve lightning address",
+
+  "dmYouPrefix": "You: "
 }

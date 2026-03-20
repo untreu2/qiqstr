@@ -1972,4 +1972,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get resolveAddressFailed => 'Lightning adresi çözümlenemedi';
+
+  @override
+  String get dmYouPrefix => 'Sen: ';
 }

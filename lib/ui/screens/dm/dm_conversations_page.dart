@@ -349,30 +349,32 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                         ),
                         if (lastMessageContent.isNotEmpty) ...[
                           const SizedBox(height: 1),
-                          Row(
-                            children: [
-                              if (isFromCurrentUser) ...[
-                                Icon(
-                                  Icons.person,
-                                  size: 14,
-                                  color: context.colors.textSecondary,
-                                ),
-                                const SizedBox(width: 3),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  lastMessageContent,
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                if (isFromCurrentUser)
+                                  TextSpan(
+                                    text: AppLocalizations.of(context)!.dmYouPrefix,
+                                    style: TextStyle(
+                                      color: context.colors.textSecondary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.6,
+                                    ),
+                                  ),
+                                TextSpan(
+                                  text: lastMessageContent,
                                   style: TextStyle(
                                     color: context.colors.textSecondary,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w400,
                                     height: 1.6,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ],

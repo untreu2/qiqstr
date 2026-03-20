@@ -3651,6 +3651,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not resolve lightning address'**
   String get resolveAddressFailed;
+
+  /// No description provided for @dmYouPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'You: '**
+  String get dmYouPrefix;
 }
 
 class _AppLocalizationsDelegate

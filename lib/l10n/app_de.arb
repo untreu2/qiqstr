@@ -855,5 +855,7 @@
   "editAmount": "Betrag bearbeiten",
   "lightningAddressOrInvoice": "Lightning-Adresse oder Rechnung",
   "resolvingAddress": "Adresse wird aufgelöst…",
-  "resolveAddressFailed": "Lightning-Adresse konnte nicht aufgelöst werden"
+  "resolveAddressFailed": "Lightning-Adresse konnte nicht aufgelöst werden",
+
+  "dmYouPrefix": "Du: "
 }

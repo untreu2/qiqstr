@@ -855,5 +855,7 @@
   "editAmount": "Miktarı düzenle",
   "lightningAddressOrInvoice": "Lightning adresi veya fatura",
   "resolvingAddress": "Adres çözümleniyor…",
-  "resolveAddressFailed": "Lightning adresi çözümlenemedi"
+  "resolveAddressFailed": "Lightning adresi çözümlenemedi",
+
+  "dmYouPrefix": "Sen: "
 }
