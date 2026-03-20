@@ -10,6 +10,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_event.dart';
 import '../../../presentation/blocs/quote_widget/quote_widget_state.dart';
+import '../../../utils/string_optimizer.dart';
 import '../../../utils/thread_chain.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'note_content_widget.dart';
@@ -17,15 +18,21 @@ import 'note_content_widget.dart';
 class QuoteWidget extends StatelessWidget {
   final String bech32;
   final bool shortMode;
+  final Map<String, dynamic>? preloadedNote;
 
   const QuoteWidget({
     super.key,
     required this.bech32,
     this.shortMode = false,
+    this.preloadedNote,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (preloadedNote != null) {
+      return _buildFromPreloaded(context, preloadedNote!);
+    }
+
     return BlocProvider<QuoteWidgetBloc>(
       create: (context) {
         final bloc = QuoteWidgetBloc(
@@ -102,6 +109,56 @@ class QuoteWidget extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Widget _buildFromPreloaded(
+      BuildContext context, Map<String, dynamic> noteData) {
+    final noteContent = noteData['content'] as String? ?? '';
+    final noteAuthor = noteData['pubkey'] as String? ?? '';
+    final noteTimestamp = noteData['created_at'] as int? ?? 0;
+
+    final user = <String, dynamic>{
+      'pubkeyHex': noteAuthor,
+      'npub': noteAuthor,
+      'name': noteData['authorName'] as String? ?? '',
+      'profileImage': noteData['authorImage'] as String? ?? '',
+      'picture': noteData['authorImage'] as String? ?? '',
+      'nip05': noteData['authorNip05'] as String? ?? '',
+    };
+
+    final formattedTime = _formatTime(noteTimestamp);
+    final parsedContent = stringOptimizer.parseContentOptimized(noteContent);
+    final shouldTruncate = _checkTruncation(parsedContent);
+
+    return _QuoteContent(
+      note: noteData,
+      user: user,
+      formattedTime: formattedTime,
+      parsedContent: parsedContent,
+      shouldTruncate: shouldTruncate,
+      shortMode: shortMode,
+    );
+  }
+
+  static String _formatTime(int timestamp) {
+    if (timestamp <= 0) return '';
+    final noteTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    final difference = DateTime.now().difference(noteTime);
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m';
+    if (difference.inHours < 24) return '${difference.inHours}h';
+    if (difference.inDays < 7) return '${difference.inDays}d';
+    return '${(difference.inDays / 7).floor()}w';
+  }
+
+  static bool _checkTruncation(Map<String, dynamic> parsed) {
+    final textParts = parsed['textParts'] as List? ?? [];
+    int totalLength = 0;
+    for (final part in textParts) {
+      if (part is Map && part['type'] == 'text') {
+        totalLength += (part['text'] as String? ?? '').length;
+      }
+    }
+    return totalLength > 140;
   }
 }
 

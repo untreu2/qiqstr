@@ -12,14 +12,20 @@ import '../../../l10n/app_localizations.dart';
 
 class ArticleQuoteWidget extends StatelessWidget {
   final String naddr;
+  final Article? preloadedArticle;
 
   const ArticleQuoteWidget({
     super.key,
     required this.naddr,
+    this.preloadedArticle,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (preloadedArticle != null) {
+      return _ArticleQuoteCard(article: preloadedArticle!, naddr: naddr);
+    }
+
     return BlocProvider(
       create: (_) => AppDI.get<ArticleQuoteWidgetBloc>()
         ..add(ArticleQuoteWidgetLoadRequested(naddr: naddr)),

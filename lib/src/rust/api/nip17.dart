@@ -73,6 +73,15 @@ String unwrapGiftWrap(
         receiverPrivateKeyHex: receiverPrivateKeyHex,
         giftWrapJson: giftWrapJson);
 
+String unwrapGiftWrapDm(
+        {required String receiverPrivateKeyHex,
+        required String giftWrapJson,
+        required String currentUserPubkeyHex}) =>
+    RustLib.instance.api.crateApiNip17UnwrapGiftWrapDm(
+        receiverPrivateKeyHex: receiverPrivateKeyHex,
+        giftWrapJson: giftWrapJson,
+        currentUserPubkeyHex: currentUserPubkeyHex);
+
 bool isGiftWrap({required String eventJson}) =>
     RustLib.instance.api.crateApiNip17IsGiftWrap(eventJson: eventJson);
 

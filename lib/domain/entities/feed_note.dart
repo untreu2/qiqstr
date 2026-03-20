@@ -23,6 +23,9 @@ class FeedNote {
   final bool hasReacted;
   final bool hasReposted;
   final bool hasZapped;
+  final Map<String, dynamic>? quotedNote;
+  final Map<String, dynamic>? embeddedNotes;
+  final Map<String, dynamic>? embeddedArticles;
 
   const FeedNote({
     required this.id,
@@ -49,6 +52,9 @@ class FeedNote {
     this.hasReacted = false,
     this.hasReposted = false,
     this.hasZapped = false,
+    this.quotedNote,
+    this.embeddedNotes,
+    this.embeddedArticles,
   });
 
   factory FeedNote.fromMap(Map<String, dynamic> map) {
@@ -83,6 +89,9 @@ class FeedNote {
       hasReacted: map['hasReacted'] as bool? ?? false,
       hasReposted: map['hasReposted'] as bool? ?? false,
       hasZapped: map['hasZapped'] as bool? ?? false,
+      quotedNote: map['quotedNote'] as Map<String, dynamic>?,
+      embeddedNotes: map['embeddedNotes'] as Map<String, dynamic>?,
+      embeddedArticles: map['embeddedArticles'] as Map<String, dynamic>?,
     );
   }
 
@@ -111,6 +120,9 @@ class FeedNote {
     bool? hasReacted,
     bool? hasReposted,
     bool? hasZapped,
+    Map<String, dynamic>? quotedNote,
+    Map<String, dynamic>? embeddedNotes,
+    Map<String, dynamic>? embeddedArticles,
   }) {
     return FeedNote(
       id: id ?? this.id,
@@ -137,6 +149,9 @@ class FeedNote {
       hasReacted: hasReacted ?? this.hasReacted,
       hasReposted: hasReposted ?? this.hasReposted,
       hasZapped: hasZapped ?? this.hasZapped,
+      quotedNote: quotedNote ?? this.quotedNote,
+      embeddedNotes: embeddedNotes ?? this.embeddedNotes,
+      embeddedArticles: embeddedArticles ?? this.embeddedArticles,
     );
   }
 
@@ -191,6 +206,9 @@ class FeedNote {
       'hasReacted': hasReacted,
       'hasReposted': hasReposted,
       'hasZapped': hasZapped,
+      if (quotedNote != null) 'quotedNote': quotedNote,
+      if (embeddedNotes != null) 'embeddedNotes': embeddedNotes,
+      if (embeddedArticles != null) 'embeddedArticles': embeddedArticles,
     };
   }
 }

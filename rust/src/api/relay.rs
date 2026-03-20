@@ -989,6 +989,74 @@ pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Op
     }
 }
 
+pub async fn fetch_events_by_ids(event_ids: Vec<String>, timeout_secs: u32) -> Result<String> {
+    let client = get_client().await?;
+    let ids: Vec<EventId> = event_ids
+        .iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .collect();
+
+    if ids.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let filter = Filter::new().ids(ids);
+    let timeout = Duration::from_secs(timeout_secs as u64);
+    let events: Events = client
+        .fetch_events(filter, timeout)
+        .await
+        .unwrap_or_default();
+
+    let events_json: Vec<serde_json::Value> = events
+        .into_iter()
+        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .collect();
+
+    Ok(serde_json::to_string(&events_json)?)
+}
+
+pub async fn fetch_events_multi_filter(filters_json: String, timeout_secs: u32) -> Result<String> {
+    let client = get_client().await?;
+    let filters_raw: Vec<serde_json::Value> = serde_json::from_str(&filters_json)?;
+
+    let filters: Vec<Filter> = filters_raw
+        .iter()
+        .filter_map(|raw| Filter::from_json(&raw.to_string()).ok())
+        .collect();
+
+    if filters.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let timeout = Duration::from_secs(timeout_secs as u64);
+
+    let mut handles = Vec::with_capacity(filters.len());
+    for filter in filters {
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            c.fetch_events(filter, timeout).await.unwrap_or_default()
+        }));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let mut events_json: Vec<serde_json::Value> = Vec::new();
+
+    for handle in handles {
+        if let Ok(events) = handle.await {
+            for e in events.into_iter() {
+                let id = e.id.to_hex();
+                if seen.insert(id) {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&e.as_json()) {
+                        events_json.push(val);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::to_string(&events_json)?)
+}
+
 pub async fn send_event(event_json: String) -> Result<String> {
     let client = get_client().await?;
     let event = Event::from_json(&event_json)?;
@@ -1410,7 +1478,11 @@ pub async fn subscribe_to_events(
 
 pub async fn resolve_thread_root(note_id: String) -> Result<String> {
     let client = get_client().await?;
-    let mut current_id = note_id.clone();
+    resolve_thread_root_internal(&client, &note_id).await
+}
+
+async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<String> {
+    let mut current_id = note_id.to_string();
     let mut visited: HashSet<String> = HashSet::new();
 
     for _ in 0..15 {
@@ -1432,43 +1504,12 @@ pub async fn resolve_thread_root(note_id: String) -> Result<String> {
         }
 
         let ev = event.unwrap();
-        let mut root_id: Option<String> = None;
-        let mut parent_id: Option<String> = None;
+        let tags = super::database::tags_from_event(&ev);
+        let refs = super::database::extract_note_references(&tags);
 
-        for tag in ev.tags.iter() {
-            let tag_kind = tag.kind();
-            if !matches!(
-                tag_kind,
-                TagKind::SingleLetter(SingleLetterTag {
-                    character: Alphabet::E,
-                    ..
-                })
-            ) {
-                continue;
-            }
-            if let Some(ref_id) = tag.content() {
-                let tag_vec: Vec<String> =
-                    tag.as_slice().iter().map(|s| s.to_string()).collect();
-                let marker = tag_vec.get(3).map(|s| s.as_str());
-                match marker {
-                    Some("root") => {
-                        root_id = Some(ref_id.to_string());
-                        break;
-                    }
-                    Some("reply") => {
-                        parent_id = Some(ref_id.to_string());
-                    }
-                    None if parent_id.is_none() => {
-                        parent_id = Some(ref_id.to_string());
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        if let Some(rid) = root_id {
+        if let Some(ref rid) = refs.root_id {
             if !rid.is_empty() {
-                let root_eid = EventId::from_hex(&rid)?;
+                let root_eid = EventId::from_hex(rid)?;
                 if client
                     .database()
                     .event_by_id(&root_eid)
@@ -1480,13 +1521,13 @@ pub async fn resolve_thread_root(note_id: String) -> Result<String> {
                     let f = Filter::new().id(root_eid).limit(1);
                     let _ = client.fetch_events(f, Duration::from_secs(5)).await;
                 }
-                return Ok(rid);
+                return Ok(rid.clone());
             }
         }
 
-        if let Some(pid) = parent_id {
-            if !pid.is_empty() && pid != current_id {
-                current_id = pid;
+        if let Some(ref pid) = refs.parent_id {
+            if !pid.is_empty() && *pid != current_id {
+                current_id = pid.clone();
                 continue;
             }
         }
@@ -1696,26 +1737,20 @@ pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
                 }
             };
 
-            for tag in event.tags.iter() {
-                let tag_vec: Vec<String> =
-                    tag.as_slice().iter().map(|s| s.to_string()).collect();
-                if tag_vec.first().map(|s| s.as_str()) != Some("e") {
-                    continue;
-                }
-                let ref_id = match tag_vec.get(1) {
-                    Some(id) if !id.is_empty() => id.clone(),
-                    _ => continue,
-                };
-                if processed.contains(&ref_id) {
-                    continue;
-                }
-                let marker = tag_vec.get(3).map(|s| s.as_str());
-                if matches!(marker, Some("root") | Some("reply") | None) {
-                    if let Ok(ref_eid) = EventId::from_hex(&ref_id) {
-                        let status = client.database().check_id(&ref_eid).await;
-                        if !matches!(status, Ok(DatabaseEventStatus::Saved)) {
-                            ancestor_ids.insert(ref_id);
-                        }
+            let tags = super::database::tags_from_event(&event);
+            let refs = super::database::extract_note_references(&tags);
+
+            let ref_ids: Vec<String> = [refs.root_id, refs.parent_id]
+                .into_iter()
+                .flatten()
+                .filter(|id| !id.is_empty() && !processed.contains(id))
+                .collect();
+
+            for ref_id in ref_ids {
+                if let Ok(ref_eid) = EventId::from_hex(&ref_id) {
+                    let status = client.database().check_id(&ref_eid).await;
+                    if !matches!(status, Ok(DatabaseEventStatus::Saved)) {
+                        ancestor_ids.insert(ref_id);
                     }
                 }
             }
@@ -1787,22 +1822,24 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
             _ => continue,
         };
 
-        for tag in event.tags.iter() {
-            let tag_vec: Vec<String> =
-                tag.as_slice().iter().map(|s| s.to_string()).collect();
-            let tag_type = tag_vec.first().map(|s| s.as_str());
-            let ref_id = tag_vec.get(1).cloned().unwrap_or_default();
-            if ref_id.is_empty() || own_ids.contains(&ref_id) {
-                continue;
+        let tags = super::database::tags_from_event(&event);
+        let refs = super::database::extract_note_references(&tags);
+
+        for ref_id in [refs.root_id, refs.parent_id, refs.quoted_note_id]
+            .into_iter()
+            .flatten()
+        {
+            if !ref_id.is_empty() && !own_ids.contains(&ref_id) {
+                ref_ids.insert(ref_id);
             }
-            match tag_type {
-                Some("q") => {
-                    ref_ids.insert(ref_id);
+        }
+
+        for tag in &tags {
+            if tag.len() >= 2 && (tag[0] == "e" || tag[0] == "q") {
+                let ref_id = &tag[1];
+                if !ref_id.is_empty() && !own_ids.contains(ref_id) {
+                    ref_ids.insert(ref_id.clone());
                 }
-                Some("e") => {
-                    ref_ids.insert(ref_id);
-                }
-                _ => {}
             }
         }
     }
@@ -1895,6 +1932,275 @@ pub async fn merge_and_sort_notes(
     });
 
     Ok(serde_json::to_string(&merged)?)
+}
+
+pub async fn fetch_full_thread(
+    note_id: String,
+    current_user_pubkey_hex: Option<String>,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<String> {
+    let client = get_client().await?;
+
+    let root_id = resolve_thread_root_internal(&client, &note_id).await?;
+
+    let mut all_thread_ids: HashSet<String> = HashSet::new();
+    all_thread_ids.insert(root_id.clone());
+
+    {
+        let root_eid = EventId::from_hex(&root_id)?;
+        let mut processed_ids: HashSet<String> = HashSet::new();
+        processed_ids.insert(root_id.clone());
+        let mut pending_ids: Vec<EventId> = vec![root_eid];
+        let mut total_fetched: u32 = 0;
+
+        for _ in 0..3u32 {
+            if pending_ids.is_empty() {
+                break;
+            }
+
+            let filter = Filter::new()
+                .kind(Kind::TextNote)
+                .events(pending_ids.clone())
+                .limit(200);
+            let events = client
+                .fetch_events(filter, Duration::from_secs(8))
+                .await?;
+
+            let mut new_ids: Vec<EventId> = Vec::new();
+            for event in events.iter() {
+                let eid_hex = event.id.to_hex();
+                if !processed_ids.contains(&eid_hex) {
+                    processed_ids.insert(eid_hex.clone());
+                    all_thread_ids.insert(eid_hex);
+                    new_ids.push(event.id);
+                    total_fetched += 1;
+                }
+            }
+
+            pending_ids = new_ids;
+            if total_fetched > 500 {
+                break;
+            }
+        }
+    }
+
+    let all_eids: Vec<EventId> = all_thread_ids
+        .iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .collect();
+
+    {
+        let reply_filter = Filter::new()
+            .kind(Kind::TextNote)
+            .events(all_eids.clone())
+            .limit(500);
+        let all_reply_events = client.database().query(reply_filter).await?;
+
+        let mut all_pubkeys: HashSet<PublicKey> = HashSet::new();
+        let root_eid = EventId::from_hex(&root_id)?;
+        if let Ok(Some(root_ev)) = client.database().event_by_id(&root_eid).await {
+            all_pubkeys.insert(root_ev.pubkey);
+        }
+        for ev in all_reply_events.iter() {
+            all_pubkeys.insert(ev.pubkey);
+        }
+
+        if !all_pubkeys.is_empty() {
+            let existing_filter = Filter::new()
+                .authors(all_pubkeys.iter().cloned().collect::<Vec<_>>())
+                .kind(Kind::Metadata)
+                .limit(all_pubkeys.len());
+            let existing = client
+                .database()
+                .query(existing_filter)
+                .await
+                .unwrap_or_default();
+            let existing_pks: HashSet<PublicKey> =
+                existing.iter().map(|e| e.pubkey).collect();
+            let missing: Vec<PublicKey> = all_pubkeys
+                .into_iter()
+                .filter(|pk| !existing_pks.contains(pk))
+                .collect();
+
+            if !missing.is_empty() {
+                let profile_filter = Filter::new()
+                    .authors(missing)
+                    .kind(Kind::Metadata)
+                    .limit(200);
+                let _ = client
+                    .fetch_events(profile_filter, Duration::from_secs(5))
+                    .await;
+            }
+        }
+    }
+
+    let root_eid = EventId::from_hex(&root_id)?;
+    let root_event = match client.database().event_by_id(&root_eid).await? {
+        Some(e) => e,
+        None => return Err(anyhow!("Root note not found")),
+    };
+
+    let reply_filter = Filter::new()
+        .kind(Kind::TextNote)
+        .events(all_eids)
+        .limit(500);
+    let reply_events = client.database().query(reply_filter).await?;
+
+    let mut all_events: Vec<Event> = Vec::with_capacity(1 + reply_events.len());
+    all_events.push(root_event);
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    seen_ids.insert(root_id.clone());
+    for ev in reply_events {
+        let eid = ev.id.to_hex();
+        if !seen_ids.insert(eid) {
+            continue;
+        }
+        if !super::database::is_event_muted(&ev, &muted_pubkeys, &muted_words) {
+            all_events.push(ev);
+        }
+    }
+
+    let hydrated_json = super::database::hydrate_notes_pub(
+        &client,
+        &all_events,
+        false,
+        current_user_pubkey_hex,
+    )
+    .await?;
+
+    let hydrated_notes: Vec<serde_json::Value> = serde_json::from_str(&hydrated_json)?;
+
+    let root_note = hydrated_notes
+        .iter()
+        .find(|n| n["id"].as_str() == Some(&root_id))
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    let replies: Vec<serde_json::Value> = hydrated_notes
+        .iter()
+        .filter(|n| n["id"].as_str() != Some(&root_id))
+        .cloned()
+        .collect();
+
+    let mut children_map: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+    let mut notes_map: HashMap<String, serde_json::Value> = HashMap::new();
+    let reply_ids: HashSet<String> = replies
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(|s| s.to_string()))
+        .collect();
+
+    notes_map.insert(root_id.clone(), root_note.clone());
+    for reply in &replies {
+        let rid = reply["id"].as_str().unwrap_or("").to_string();
+        if !rid.is_empty() {
+            notes_map.insert(rid, reply.clone());
+        }
+    }
+
+    for reply in &replies {
+        let reply_id = reply["id"].as_str().unwrap_or("").to_string();
+        if reply_id.is_empty() {
+            continue;
+        }
+
+        let mut parent = reply["parentId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let reply_root = reply["rootId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        if parent.is_none() {
+            if let Some(ref rr) = reply_root {
+                if *rr == root_id
+                    || reply_ids.contains(rr)
+                    || notes_map.contains_key(rr)
+                {
+                    parent = Some(rr.clone());
+                } else {
+                    parent = Some(root_id.clone());
+                }
+            }
+        }
+
+        let parent = parent.unwrap_or_else(|| root_id.clone());
+        let parent = if parent != root_id
+            && !reply_ids.contains(&parent)
+            && !notes_map.contains_key(&parent)
+        {
+            root_id.clone()
+        } else {
+            parent
+        };
+
+        children_map
+            .entry(parent)
+            .or_default()
+            .push(reply.clone());
+    }
+
+    for children in children_map.values_mut() {
+        children.sort_by(|a, b| {
+            let at = a["created_at"].as_i64().unwrap_or(0);
+            let bt = b["created_at"].as_i64().unwrap_or(0);
+            at.cmp(&bt)
+        });
+    }
+
+    let mut chain_notes: Vec<serde_json::Value> = Vec::new();
+    if note_id != root_id {
+        let mut chain_ids: Vec<String> = Vec::new();
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut current = note_id.clone();
+
+        while !current.is_empty() && !visited.contains(&current) {
+            visited.insert(current.clone());
+            chain_ids.push(current.clone());
+            if current == root_id {
+                break;
+            }
+
+            if let Some(note) = notes_map.get(&current) {
+                let pid = note["parentId"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| note["rootId"].as_str().filter(|s| !s.is_empty()));
+                current = pid.map(|s| s.to_string()).unwrap_or_default();
+            } else {
+                break;
+            }
+        }
+
+        chain_ids.reverse();
+        if chain_ids.first().map(|s| s.as_str()) != Some(&root_id) {
+            chain_ids.insert(0, root_id.clone());
+        }
+
+        let mut seen: HashSet<String> = HashSet::new();
+        for cid in &chain_ids {
+            if seen.insert(cid.clone()) {
+                if let Some(note) = notes_map.get(cid) {
+                    chain_notes.push(note.clone());
+                }
+            }
+        }
+    } else {
+        chain_notes.push(root_note.clone());
+    }
+
+    let result = serde_json::json!({
+        "rootNote": root_note,
+        "chainNotes": chain_notes,
+        "childrenMap": children_map,
+        "notesMap": notes_map,
+        "totalReplies": replies.len(),
+    });
+
+    Ok(serde_json::to_string(&result)?)
 }
 
 pub async fn get_database_size_mb() -> Result<u64> {

@@ -140,8 +140,6 @@ class BlocsModule extends DIModule {
         ));
 
     AppDI.registerFactory<BookmarkBloc>(() => BookmarkBloc(
-          feedRepository: AppDI.get<FeedRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
           syncService: AppDI.get<SyncService>(),
           authService: AppDI.get<AuthService>(),
         ));

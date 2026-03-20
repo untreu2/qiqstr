@@ -8,7 +8,6 @@ import '../../../data/services/nwc_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/rust_database_service.dart';
 import '../../../data/services/relay_service.dart';
-import '../../../domain/mappers/event_mapper.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/sync/publishers/event_publisher.dart';
 import '../../../data/services/favorite_lists_service.dart';
@@ -29,7 +28,6 @@ class ServicesModule extends DIModule {
     AppDI.registerLazySingleton<DmService>(() => DmService(
           authService: AppDI.get<AuthService>(),
         ));
-    AppDI.registerLazySingleton<EventMapper>(() => EventMapper());
     AppDI.registerLazySingleton<EventPublisher>(() => EventPublisher(
           authService: AppDI.get<AuthService>(),
         ));

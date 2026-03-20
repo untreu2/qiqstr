@@ -22,7 +22,6 @@ class ProfileRepositoryImpl extends BaseRepository
 
   ProfileRepositoryImpl({
     required super.db,
-    required super.mapper,
     PrimalCacheService? primalCacheService,
   }) : _primalCacheService = primalCacheService ?? PrimalCacheService.instance;
 

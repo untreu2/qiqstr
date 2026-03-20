@@ -359,6 +359,21 @@ class RustRelayService {
     return count;
   }
 
+  Future<Map<String, dynamic>> fetchFullThread(
+    String noteId, {
+    String? currentUserPubkeyHex,
+    List<String> mutedPubkeys = const [],
+    List<String> mutedWords = const [],
+  }) async {
+    final json = await rust_relay.fetchFullThread(
+      noteId: noteId,
+      currentUserPubkeyHex: currentUserPubkeyHex,
+      mutedPubkeys: mutedPubkeys,
+      mutedWords: mutedWords,
+    );
+    return jsonDecode(json) as Map<String, dynamic>;
+  }
+
   Future<List<Map<String, dynamic>>> mergeAndSortNotes(
     List<Map<String, dynamic>> existing,
     List<Map<String, dynamic>> incoming,

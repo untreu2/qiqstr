@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'base_repository.dart';
 import '../services/encrypted_mute_service.dart';
 import '../services/encrypted_bookmark_service.dart';
+import '../../src/rust/api/database.dart' as rust_db;
 
 abstract class FollowingRepository {
   Future<List<String>?> getFollowingList(String userPubkey);
@@ -27,7 +29,6 @@ class FollowingRepositoryImpl extends BaseRepository
     implements FollowingRepository {
   FollowingRepositoryImpl({
     required super.db,
-    required super.mapper,
   });
 
   @override
@@ -153,33 +154,21 @@ class FollowingRepositoryImpl extends BaseRepository
   @override
   Future<({int count, List<String> avatarUrls})?> calculateFollowScore(
       String currentUserPubkey, String targetPubkey) async {
-    final myFollows = await getFollowingList(currentUserPubkey);
-    if (myFollows == null || myFollows.isEmpty) return null;
-
-    final relevantFollows = myFollows
-        .where((p) => p != currentUserPubkey && p != targetPubkey)
-        .toList();
-    if (relevantFollows.isEmpty) return null;
-
-    final matchingPubkeys = <String>[];
-    for (final followPubkey in relevantFollows) {
-      final theirFollows = await db.getFollowingList(followPubkey);
-      if (theirFollows != null && theirFollows.contains(targetPubkey)) {
-        matchingPubkeys.add(followPubkey);
-      }
+    try {
+      final resultJson = await rust_db.dbCalculateFollowScore(
+        currentUserHex: currentUserPubkey,
+        targetHex: targetPubkey,
+      );
+      final result = jsonDecode(resultJson) as Map<String, dynamic>;
+      final count = result['count'] as int? ?? 0;
+      if (count == 0) return null;
+      final urls = (result['avatarUrls'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
+      return (count: count, avatarUrls: urls);
+    } catch (_) {
+      return null;
     }
-
-    if (matchingPubkeys.isEmpty) return null;
-
-    final avatarUrls = <String>[];
-    for (final pk in matchingPubkeys) {
-      final profile = await db.getUserProfile(pk);
-      final picture = profile?['picture'] ?? '';
-      if (picture.isNotEmpty) {
-        avatarUrls.add(picture);
-      }
-    }
-
-    return (count: matchingPubkeys.length, avatarUrls: avatarUrls);
   }
 }

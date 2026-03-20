@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/qr_scanner_widget.dart';
+import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../l10n/app_localizations.dart';
 
 class ShareProfileScreen extends StatefulWidget {
@@ -45,6 +47,50 @@ class _ShareProfileScreenState extends State<ShareProfileScreen> {
     _scrollController.dispose();
     _showTitleBubble.dispose();
     super.dispose();
+  }
+
+  void _navigateToScannedProfile(String scannedValue) {
+    String raw = scannedValue.trim();
+    if (raw.startsWith('nostr:')) raw = raw.substring(6);
+
+    String npub = '';
+    String pubkeyHex = '';
+
+    if (raw.startsWith('npub1')) {
+      npub = raw;
+      try {
+        pubkeyHex = decodeBasicBech32(raw, 'npub');
+      } catch (_) {
+        return;
+      }
+    } else if (raw.startsWith('nprofile1')) {
+      try {
+        final decoded = decodeTlvBech32Full(raw);
+        pubkeyHex = decoded['pubkey'] as String? ?? '';
+      } catch (_) {
+        return;
+      }
+    } else if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(raw)) {
+      pubkeyHex = raw;
+    } else {
+      return;
+    }
+
+    if (pubkeyHex.isEmpty) return;
+
+    final router = GoRouter.of(context);
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    final basePath = currentLocation.startsWith('/home/feed')
+        ? '/home/feed'
+        : currentLocation.startsWith('/home/notifications')
+            ? '/home/notifications'
+            : '';
+
+    final profileRoute =
+        '$basePath/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}';
+
+    Navigator.of(context).pop();
+    router.push(profileRoute);
   }
 
   @override
@@ -140,8 +186,7 @@ class _ShareProfileScreenState extends State<ShareProfileScreen> {
                                 MaterialPageRoute(
                                   builder: (_) => QrScannerWidget(
                                     onScanComplete: (value) {
-                                      Navigator.of(context, rootNavigator: true)
-                                          .pop();
+                                      _navigateToScannedProfile(value);
                                     },
                                   ),
                                 ),

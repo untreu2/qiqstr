@@ -27,7 +27,6 @@ abstract class FeedRepository {
 class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
   FeedRepositoryImpl({
     required super.db,
-    required super.mapper,
   });
 
   @override
@@ -115,84 +114,47 @@ class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
   @override
   Stream<List<FeedNote>> watchProfileReplies(String pubkey,
       {int limit = 50}) async* {
-    final initial = await db.getHydratedProfileNotes(pubkey,
-        limit: limit, filterReplies: false);
+    final initial = await db.getHydratedProfileReplies(pubkey, limit: limit);
     if (initial.isNotEmpty) {
-      final all = initial.map((m) => FeedNote.fromMap(m)).toList();
-      yield all.where((n) => n.isReply && !n.isRepost).toList();
+      yield initial.map((m) => FeedNote.fromMap(m)).toList();
     }
 
     yield* db
-        .watchHydratedProfileNotes(pubkey,
-            limit: limit, filterReplies: false)
-        .map((maps) {
-      final all = maps.map((m) => FeedNote.fromMap(m)).toList();
-      return all.where((n) => n.isReply && !n.isRepost).toList();
-    });
+        .watchHydratedProfileReplies(pubkey, limit: limit)
+        .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
   @override
   Future<List<FeedNote>> getProfileReplies(String pubkey,
       {int limit = 50}) async {
-    final maps = await db.getHydratedProfileNotes(pubkey,
-        limit: limit, filterReplies: false);
-    final all = maps.map((m) => FeedNote.fromMap(m)).toList();
-    return all.where((n) => n.isReply && !n.isRepost).toList();
+    final maps = await db.getHydratedProfileReplies(pubkey, limit: limit);
+    return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
   @override
   Stream<List<FeedNote>> watchProfileLikes(String pubkey,
       {int limit = 50}) async* {
-    final initial = await db.getProfileReactions(pubkey, limit: limit);
+    final initial =
+        await db.getHydratedReactionNotes(pubkey, limit: limit);
     if (initial.isNotEmpty) {
-      yield await _resolveReactionNotes(initial);
+      yield initial.map((m) => FeedNote.fromMap(m)).toList();
     }
 
     yield* db
         .watchProfileReactions(pubkey, limit: limit)
-        .asyncMap((events) async {
-      return await _resolveReactionNotes(events);
+        .asyncMap((_) async {
+      final maps =
+          await db.getHydratedReactionNotes(pubkey, limit: limit);
+      return maps.map((m) => FeedNote.fromMap(m)).toList();
     });
   }
 
   @override
   Future<List<FeedNote>> getProfileLikes(String pubkey,
       {int limit = 50}) async {
-    final events = await db.getProfileReactions(pubkey, limit: limit);
-    return await _resolveReactionNotes(events);
-  }
-
-  Future<List<FeedNote>> _resolveReactionNotes(
-      List<Map<String, dynamic>> reactionEvents) async {
-    if (reactionEvents.isEmpty) return [];
-
-    final noteIds = <String>[];
-    for (final event in reactionEvents) {
-      final tags = event['tags'] as List<dynamic>? ?? [];
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1) {
-          final noteId = tag[1] as String;
-          if (noteId.isNotEmpty) noteIds.add(noteId);
-          break;
-        }
-      }
-    }
-
-    final seen = <String>{};
-    final uniqueIds = <String>[];
-    for (final id in noteIds) {
-      if (seen.add(id)) uniqueIds.add(id);
-    }
-
-    final notes = <FeedNote>[];
-    for (final noteId in uniqueIds) {
-      final note = await getNote(noteId);
-      if (note != null) {
-        notes.add(note);
-      }
-    }
-
-    return notes;
+    final maps =
+        await db.getHydratedReactionNotes(pubkey, limit: limit);
+    return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
   @override

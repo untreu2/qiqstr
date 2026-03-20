@@ -186,6 +186,97 @@ pub fn unwrap_gift_wrap(
 }
 
 #[frb(sync)]
+pub fn unwrap_gift_wrap_dm(
+    receiver_private_key_hex: String,
+    gift_wrap_json: String,
+    current_user_pubkey_hex: String,
+) -> Result<String> {
+    let receiver_sk = SecretKey::parse(&receiver_private_key_hex)?;
+    let receiver_keys = Keys::new(receiver_sk);
+    let gift_wrap = Event::from_json(&gift_wrap_json)?;
+
+    let unwrapped: nip59::UnwrappedGift =
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                nip59::UnwrappedGift::from_gift_wrap(&receiver_keys, &gift_wrap).await
+            })?;
+
+    let sender = unwrapped.sender.to_hex();
+    let rumor_kind = unwrapped.rumor.kind.as_u16();
+
+    if rumor_kind != 14 && rumor_kind != 15 {
+        return Err(anyhow::anyhow!("Not a DM rumor kind: {}", rumor_kind));
+    }
+
+    let content = &unwrapped.rumor.content;
+    let created_at = unwrapped.rumor.created_at.as_secs();
+    let rumor_id = unwrapped
+        .rumor
+        .id
+        .map(|id| id.to_hex())
+        .unwrap_or_default();
+
+    let mut recipient_pubkey: Option<String> = None;
+    let mut mime_type: Option<String> = None;
+    let mut encryption_key: Option<String> = None;
+    let mut encryption_nonce: Option<String> = None;
+    let mut encrypted_hash: Option<String> = None;
+    let mut original_hash: Option<String> = None;
+    let mut file_size: Option<u64> = None;
+
+    for tag in unwrapped.rumor.tags.iter() {
+        let parts: Vec<String> = tag.as_slice().iter().map(|s| s.to_string()).collect();
+        if parts.len() < 2 {
+            continue;
+        }
+        match parts[0].as_str() {
+            "p" => recipient_pubkey = Some(parts[1].clone()),
+            "file-type" => mime_type = Some(parts[1].clone()),
+            "decryption-key" => encryption_key = Some(parts[1].clone()),
+            "decryption-nonce" => encryption_nonce = Some(parts[1].clone()),
+            "x" => encrypted_hash = Some(parts[1].clone()),
+            "ox" => original_hash = Some(parts[1].clone()),
+            "size" => file_size = parts[1].parse::<u64>().ok(),
+            _ => {}
+        }
+    }
+
+    let is_from_current_user = sender == current_user_pubkey_hex;
+    let other_user = if is_from_current_user {
+        recipient_pubkey.as_deref().unwrap_or("")
+    } else {
+        &sender
+    };
+
+    if other_user.is_empty() {
+        return Err(anyhow::anyhow!("Cannot determine other user"));
+    }
+
+    let mut msg = serde_json::json!({
+        "id": rumor_id,
+        "senderPubkeyHex": sender,
+        "recipientPubkeyHex": other_user,
+        "content": content,
+        "createdAt": created_at,
+        "isFromCurrentUser": is_from_current_user,
+        "kind": rumor_kind,
+    });
+
+    if rumor_kind == 15 {
+        if let Some(ref v) = mime_type { msg["mimeType"] = serde_json::json!(v); }
+        if let Some(ref v) = encryption_key { msg["encryptionKey"] = serde_json::json!(v); }
+        if let Some(ref v) = encryption_nonce { msg["encryptionNonce"] = serde_json::json!(v); }
+        if let Some(ref v) = encrypted_hash { msg["encryptedHash"] = serde_json::json!(v); }
+        if let Some(ref v) = original_hash { msg["originalHash"] = serde_json::json!(v); }
+        if let Some(v) = file_size { msg["fileSize"] = serde_json::json!(v); }
+    }
+
+    Ok(msg.to_string())
+}
+
+#[frb(sync)]
 pub fn is_gift_wrap(event_json: String) -> bool {
     match Event::from_json(&event_json) {
         Ok(event) => event.kind == Kind::GiftWrap,

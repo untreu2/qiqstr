@@ -3,6 +3,8 @@ import '../../domain/entities/follow_set.dart';
 import '../../src/rust/api/events.dart' as rust_events;
 import '../../src/rust/api/database.dart' as rust_db;
 
+const _hiddenDTagsList = ['mute', 'Chat-Friends'];
+
 class FollowSetService {
   static final FollowSetService _instance = FollowSetService._internal();
   static FollowSetService get instance => _instance;
@@ -48,15 +50,7 @@ class FollowSetService {
 
   Future<void> loadFromDatabase({required String userPubkeyHex}) async {
     try {
-      final filterJson = jsonEncode({
-        'kinds': [30000],
-        'authors': [userPubkeyHex],
-      });
-      final eventsJson =
-          await rust_db.dbQueryEvents(filterJson: filterJson, limit: 100);
-      final events = jsonDecode(eventsJson) as List<dynamic>;
-
-      _ownSets = _parseSets(events);
+      _ownSets = await _fetchFollowSets([userPubkeyHex], 100);
       _initialized = true;
     } catch (_) {
       _initialized = true;
@@ -67,43 +61,21 @@ class FollowSetService {
       {required List<String> followedPubkeys}) async {
     if (followedPubkeys.isEmpty) return;
     try {
-      final filterJson = jsonEncode({
-        'kinds': [30000],
-        'authors': followedPubkeys,
-      });
-      final eventsJson =
-          await rust_db.dbQueryEvents(filterJson: filterJson, limit: 500);
-      final events = jsonDecode(eventsJson) as List<dynamic>;
-
-      _followedUsersSets = _parseSets(events);
+      _followedUsersSets = await _fetchFollowSets(followedPubkeys, 500);
     } catch (_) {}
   }
 
-  static const _hiddenDTags = {'mute', 'Chat-Friends'};
-
-  List<FollowSet> _parseSets(List<dynamic> events) {
-    final sets = <FollowSet>[];
-    final seenKeys = <String>{};
-
-    final sortedEvents = List<Map<String, dynamic>>.from(
-      events.map((e) => e as Map<String, dynamic>),
-    )..sort((a, b) {
-        final aTime = a['created_at'] as int? ?? 0;
-        final bTime = b['created_at'] as int? ?? 0;
-        return bTime.compareTo(aTime);
-      });
-
-    for (final event in sortedEvents) {
-      final followSet = FollowSet.fromEvent(event);
-      if (_hiddenDTags.contains(followSet.dTag)) continue;
-      final uniqueKey = '${followSet.pubkey}:${followSet.dTag}';
-      if (followSet.dTag.isNotEmpty && !seenKeys.contains(uniqueKey)) {
-        seenKeys.add(uniqueKey);
-        sets.add(followSet);
-      }
-    }
-
-    return sets;
+  Future<List<FollowSet>> _fetchFollowSets(
+      List<String> authors, int limit) async {
+    final json = await rust_db.dbGetFollowSets(
+      authorsHex: authors,
+      limit: limit,
+      hiddenDTags: _hiddenDTagsList,
+    );
+    final decoded = jsonDecode(json) as List<dynamic>;
+    return decoded
+        .map((e) => FollowSet.fromMap(e as Map<String, dynamic>))
+        .toList();
   }
 
   Map<String, dynamic> createFollowSetEvent({

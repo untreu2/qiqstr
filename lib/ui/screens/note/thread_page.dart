@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/services/auth_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/note/focused_note_widget.dart';
@@ -152,10 +153,8 @@ class _ThreadPageState extends State<ThreadPage> {
       return _buildErrorState(context, state.message, l10n);
     }
 
-    if (state is ThreadInitial &&
-        widget.initialNoteData != null &&
-        _parsedChain.isNotEmpty) {
-      // initialNoteData is the focused/tapped note which is always chain.last.
+    if (widget.initialNoteData != null && _parsedChain.isNotEmpty &&
+        (state is ThreadInitial || state is ThreadLoading)) {
       final focusedId = _parsedChain.last;
       final focusedNote =
           _stripRepostDataForPlaceholder(widget.initialNoteData!, focusedId);
@@ -172,7 +171,7 @@ class _ThreadPageState extends State<ThreadPage> {
         chainNotes: [focusedNote],
         chain: _parsedChain,
         userProfiles: const {},
-        currentUserHex: '',
+        currentUserHex: AuthService.instance.currentUserPubkeyHex ?? '',
         currentUser: null,
       );
       return _buildThreadContent(context, placeholderState);

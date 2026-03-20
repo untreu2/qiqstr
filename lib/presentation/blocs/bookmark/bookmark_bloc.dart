@@ -1,7 +1,5 @@
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/repositories/feed_repository.dart';
-import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/encrypted_bookmark_service.dart';
@@ -11,19 +9,13 @@ import 'bookmark_event.dart';
 import 'bookmark_state.dart';
 
 class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
-  final FeedRepository _feedRepository;
-  final ProfileRepository _profileRepository;
   final SyncService _syncService;
   final AuthService _authService;
 
   BookmarkBloc({
-    required FeedRepository feedRepository,
-    required ProfileRepository profileRepository,
     required SyncService syncService,
     required AuthService authService,
-  })  : _feedRepository = feedRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
+  })  : _syncService = syncService,
         _authService = authService,
         super(const BookmarkInitial()) {
     on<BookmarkLoadRequested>(_onLoadRequested);
@@ -78,73 +70,38 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
 
   Future<List<Map<String, dynamic>>> _fetchBookmarkedNotes(
       List<String> eventIds) async {
-    final noteFutures =
-        eventIds.map((id) => _feedRepository.getNote(id)).toList();
-    final noteResults = await Future.wait(noteFutures);
+    final db = RustDatabaseService.instance;
+    final validNotes = await db.getHydratedNotesByIds(eventIds);
 
-    final authorHexes = <String>{};
-    final validNotes = <Map<String, dynamic>>[];
-    final missingIds = <String>[];
-
-    for (var i = 0; i < eventIds.length; i++) {
-      final note = noteResults[i];
-      if (note != null) {
-        final noteMap = note.toMap();
-        validNotes.add(noteMap);
-        final authorHex = noteMap['author'] as String? ?? '';
-        if (authorHex.isNotEmpty) authorHexes.add(authorHex);
-      } else {
-        missingIds.add(eventIds[i]);
-      }
+    final foundIds = <String>{};
+    for (final n in validNotes) {
+      final id = n['id'] as String? ?? '';
+      if (id.isNotEmpty) foundIds.add(id);
     }
+    final missingIds =
+        eventIds.where((id) => !foundIds.contains(id)).toList();
 
     if (missingIds.isNotEmpty) {
-      final fetchFutures = missingIds.map((id) async {
-        try {
-          final eventJson = await rust_relay.fetchEventById(
-            eventId: id,
-            timeoutSecs: 5,
-          );
-          if (eventJson == null) return null;
-
-          final eventData = jsonDecode(eventJson) as Map<String, dynamic>;
-          await RustDatabaseService.instance.saveEvents([eventData]);
-
-          return await _feedRepository.getNote(id);
-        } catch (_) {
-          return null;
+      try {
+        final batchJson = await rust_relay.fetchEventsByIds(
+          eventIds: missingIds,
+          timeoutSecs: 5,
+        );
+        final fetched = jsonDecode(batchJson) as List<dynamic>;
+        if (fetched.isNotEmpty) {
+          final events = fetched.cast<Map<String, dynamic>>();
+          await db.saveEvents(events);
         }
-      }).toList();
+      } catch (_) {}
 
-      final fetchedNotes = await Future.wait(fetchFutures);
-      for (final note in fetchedNotes) {
-        if (note == null) continue;
-        final noteMap = note.toMap();
-        validNotes.add(noteMap);
-        final authorHex = noteMap['author'] as String? ?? '';
-        if (authorHex.isNotEmpty) authorHexes.add(authorHex);
+      final refetched = await db.getHydratedNotesByIds(missingIds);
+      for (final n in refetched) {
+        final id = n['id'] as String? ?? '';
+        if (id.isNotEmpty && foundIds.add(id)) {
+          validNotes.add(n);
+        }
       }
     }
-
-    if (authorHexes.isEmpty) return validNotes;
-
-    final profiles =
-        await _profileRepository.getProfiles(authorHexes.toList());
-
-    for (final noteMap in validNotes) {
-      final authorHex = noteMap['author'] as String? ?? '';
-      final profile = profiles[authorHex];
-      if (profile != null) {
-        noteMap['authorName'] = profile.name ?? profile.displayName ?? '';
-        noteMap['authorPicture'] = profile.picture ?? '';
-      }
-    }
-
-    validNotes.sort((a, b) {
-      final aTime = (a['created_at'] as num?) ?? 0;
-      final bTime = (b['created_at'] as num?) ?? 0;
-      return bTime.compareTo(aTime);
-    });
 
     return validNotes;
   }
@@ -189,22 +146,11 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
 
     if (state is BookmarkLoaded) {
       final currentState = state as BookmarkLoaded;
-      final note = await _feedRepository.getNote(event.eventId);
-      if (note != null) {
-        final noteMap = note.toMap();
-        final authorHex = noteMap['author'] as String? ?? '';
-        if (authorHex.isNotEmpty) {
-          final profiles =
-              await _profileRepository.getProfiles([authorHex]);
-          final profile = profiles[authorHex];
-          if (profile != null) {
-            noteMap['authorName'] =
-                profile.name ?? profile.displayName ?? '';
-            noteMap['authorPicture'] = profile.picture ?? '';
-          }
-        }
+      final db = RustDatabaseService.instance;
+      final notes = await db.getHydratedNotesByIds([event.eventId]);
+      if (notes.isNotEmpty) {
         emit(currentState.copyWith(
-          bookmarkedNotes: [noteMap, ...currentState.bookmarkedNotes],
+          bookmarkedNotes: [notes.first, ...currentState.bookmarkedNotes],
         ));
       }
     }

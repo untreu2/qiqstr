@@ -608,6 +608,21 @@ class SyncService {
     }
   }
 
+  Future<Map<String, dynamic>> fetchFullThread(
+    String noteId, {
+    String? currentUserPubkeyHex,
+  }) async {
+    final mute = EncryptedMuteService.instance;
+    final result = await _relayService.fetchFullThread(
+      noteId,
+      currentUserPubkeyHex: currentUserPubkeyHex,
+      mutedPubkeys: mute.mutedPubkeys,
+      mutedWords: mute.mutedWords,
+    );
+    _notifyDbChanged();
+    return result;
+  }
+
   Future<Map<String, dynamic>> publishNote(
           {required String content, List<List<String>>? tags}) =>
       _publish(() => _publisher.createNote(content: content, tags: tags));

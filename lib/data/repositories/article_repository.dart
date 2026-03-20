@@ -16,7 +16,6 @@ class ArticleRepositoryImpl extends BaseRepository
     implements ArticleRepository {
   ArticleRepositoryImpl({
     required super.db,
-    required super.mapper,
   });
 
   @override

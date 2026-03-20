@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_counts_json`, `counting_client_lock`, `db_path_state`, `get_client_pub`, `get_client`, `open_or_recreate_lmdb`, `sanitize_lmdb_dir`, `state`, `try_open_lmdb`, `user_relays_state`, `wipe_db_directory`
+// These functions are ignored because they are not marked as `pub`: `build_counts_json`, `counting_client_lock`, `db_path_state`, `get_client_pub`, `get_client`, `open_or_recreate_lmdb`, `resolve_thread_root_internal`, `sanitize_lmdb_dir`, `state`, `try_open_lmdb`, `user_relays_state`, `wipe_db_directory`
 
 Future<void> initClient(
         {required List<String> relayUrls,
@@ -90,6 +90,16 @@ Future<String?> fetchEventById(
     RustLib.instance.api.crateApiRelayFetchEventById(
         eventId: eventId, timeoutSecs: timeoutSecs);
 
+Future<String> fetchEventsByIds(
+        {required List<String> eventIds, required int timeoutSecs}) =>
+    RustLib.instance.api.crateApiRelayFetchEventsByIds(
+        eventIds: eventIds, timeoutSecs: timeoutSecs);
+
+Future<String> fetchEventsMultiFilter(
+        {required String filtersJson, required int timeoutSecs}) =>
+    RustLib.instance.api.crateApiRelayFetchEventsMultiFilter(
+        filtersJson: filtersJson, timeoutSecs: timeoutSecs);
+
 Future<String> sendEvent({required String eventJson}) =>
     RustLib.instance.api.crateApiRelaySendEvent(eventJson: eventJson);
 
@@ -149,6 +159,17 @@ Future<String> mergeAndSortNotes(
         {required String existingJson, required String incomingJson}) =>
     RustLib.instance.api.crateApiRelayMergeAndSortNotes(
         existingJson: existingJson, incomingJson: incomingJson);
+
+Future<String> fetchFullThread(
+        {required String noteId,
+        String? currentUserPubkeyHex,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiRelayFetchFullThread(
+        noteId: noteId,
+        currentUserPubkeyHex: currentUserPubkeyHex,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<BigInt> getDatabaseSizeMb() =>
     RustLib.instance.api.crateApiRelayGetDatabaseSizeMb();

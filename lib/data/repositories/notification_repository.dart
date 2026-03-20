@@ -15,7 +15,6 @@ class NotificationRepositoryImpl extends BaseRepository
     implements NotificationRepository {
   NotificationRepositoryImpl({
     required super.db,
-    required super.mapper,
   });
 
   @override

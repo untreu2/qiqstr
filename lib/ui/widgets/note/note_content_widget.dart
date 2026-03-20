@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../domain/entities/article.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -33,6 +34,8 @@ class NoteContentWidget extends StatefulWidget {
   final Map<String, Map<String, dynamic>>? initialProfiles;
   final Color? textColor;
   final Color? linkColor;
+  final Map<String, dynamic>? embeddedNotes;
+  final Map<String, dynamic>? embeddedArticles;
 
   const NoteContentWidget({
     super.key,
@@ -47,6 +50,8 @@ class NoteContentWidget extends StatefulWidget {
     this.initialProfiles,
     this.textColor,
     this.linkColor,
+    this.embeddedNotes,
+    this.embeddedArticles,
   });
 
   @override
@@ -97,6 +102,43 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     _articleIds = (widget.parsedContent['articleIds'] as List<dynamic>?)
             ?.cast<String>() ??
         [];
+  }
+
+  Map<String, dynamic>? _resolveEmbeddedNote(String bech32) {
+    final embedded = widget.embeddedNotes;
+    if (embedded == null) return null;
+    try {
+      String? hexId;
+      if (bech32.startsWith('note1')) {
+        hexId = decodeBasicBech32(bech32, 'note');
+      } else if (bech32.startsWith('nevent1')) {
+        final result = decodeTlvBech32Full(bech32);
+        hexId = result['id'] as String?;
+      }
+      if (hexId != null && embedded.containsKey(hexId)) {
+        return embedded[hexId] as Map<String, dynamic>?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Article? _resolveEmbeddedArticle(String naddr) {
+    final embedded = widget.embeddedArticles;
+    if (embedded == null) return null;
+    try {
+      final clean = naddr.startsWith('nostr:') ? naddr.substring(6) : naddr;
+      final result = decodeTlvBech32Full(clean);
+      final pubkey = result['pubkey'] as String?;
+      final identifier = result['identifier'] as String?;
+      if (pubkey != null && identifier != null) {
+        final key = '$pubkey:$identifier';
+        if (embedded.containsKey(key)) {
+          final data = embedded[key] as Map<String, dynamic>?;
+          if (data != null) return Article.fromMap(data);
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   double _fontSize(BuildContext context) {
@@ -431,7 +473,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                     children: _quoteIds
                         .map((quoteId) => Padding(
                               padding: const EdgeInsets.only(top: 8, bottom: 2),
-                              child: QuoteWidget(bech32: quoteId),
+                              child: QuoteWidget(
+                                bech32: quoteId,
+                                preloadedNote:
+                                    _resolveEmbeddedNote(quoteId),
+                              ),
                             ))
                         .toList(),
                   ),
@@ -442,7 +488,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                     children: _articleIds
                         .map((articleId) => Padding(
                               padding: const EdgeInsets.only(top: 8, bottom: 2),
-                              child: ArticleQuoteWidget(naddr: articleId),
+                              child: ArticleQuoteWidget(
+                                naddr: articleId,
+                                preloadedArticle:
+                                    _resolveEmbeddedArticle(articleId),
+                              ),
                             ))
                         .toList(),
                   ),

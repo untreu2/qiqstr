@@ -90,8 +90,13 @@ class RustDatabaseService {
 
   Future<void> saveUserProfiles(
       Map<String, Map<String, String>> profiles) async {
-    for (final entry in profiles.entries) {
-      await saveUserProfile(entry.key, entry.value);
+    if (profiles.isEmpty) return;
+    try {
+      final batchJson = jsonEncode(profiles);
+      await rust_db.dbSaveProfilesBatch(profilesJson: batchJson);
+      notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] saveUserProfiles batch error: $e');
     }
   }
 
@@ -759,12 +764,12 @@ class RustDatabaseService {
     required String identifier,
   }) async {
     try {
-      final articles =
-          await getHydratedArticles(authors: [pubkeyHex], limit: 50);
-      for (final article in articles) {
-        if (article['dTag'] == identifier) return article;
-      }
-      return null;
+      final json = await rust_db.dbGetHydratedArticleByNaddr(
+        pubkeyHex: pubkeyHex,
+        dTag: identifier,
+      );
+      if (json == null) return null;
+      return jsonDecode(json) as Map<String, dynamic>;
     } catch (e) {
       if (kDebugMode) print('[RustDB] getHydratedArticleByNaddr error: $e');
       return null;
@@ -855,6 +860,80 @@ class RustDatabaseService {
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
       if (kDebugMode) print('[RustDB] getProfileReactions error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHydratedNotesByIds(
+      List<String> eventIds) async {
+    if (eventIds.isEmpty) return [];
+    try {
+      final mute = EncryptedMuteService.instance;
+      final pubResult = await AuthService.instance.getCurrentUserPublicKeyHex();
+      final currentUserHex = pubResult.isSuccess ? pubResult.data : null;
+      final json = await rust_db.dbGetHydratedNotesByIds(
+        eventIds: eventIds,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+        currentUserPubkeyHex: currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedNotesByIds error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHydratedProfileReplies(
+      String authorPubkey,
+      {int limit = 50}) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      final pubResult = await AuthService.instance.getCurrentUserPublicKeyHex();
+      final currentUserHex = pubResult.isSuccess ? pubResult.data : null;
+      final json = await rust_db.dbGetHydratedProfileReplies(
+        pubkeyHex: authorPubkey,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+        currentUserPubkeyHex: currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedProfileReplies error: $e');
+      return [];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchHydratedProfileReplies(String pubkey,
+      {int limit = 50}) {
+    return _changeController.stream
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap(
+            (_) => getHydratedProfileReplies(pubkey, limit: limit));
+  }
+
+  Future<List<Map<String, dynamic>>> getHydratedReactionNotes(
+      String authorPubkey,
+      {int limit = 50}) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      final pubResult = await AuthService.instance.getCurrentUserPublicKeyHex();
+      final currentUserHex = pubResult.isSuccess ? pubResult.data : null;
+      final json = await rust_db.dbGetHydratedReactionNotes(
+        pubkeyHex: authorPubkey,
+        limit: limit,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+        currentUserPubkeyHex: currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[RustDB] getHydratedReactionNotes error: $e');
       return [];
     }
   }

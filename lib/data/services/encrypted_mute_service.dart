@@ -11,6 +11,7 @@ class EncryptedMuteService {
   EncryptedMuteService._internal();
 
   List<String> _mutedPubkeys = [];
+  Set<String> _mutedPubkeySet = {};
   List<String> _mutedWords = [];
   bool _initialized = false;
 
@@ -18,13 +19,12 @@ class EncryptedMuteService {
   List<String> get mutedWords => List.unmodifiable(_mutedWords);
   bool get isInitialized => _initialized;
 
-  bool isUserMuted(String pubkey) => _mutedPubkeys.contains(pubkey);
+  bool isUserMuted(String pubkey) => _mutedPubkeySet.contains(pubkey);
 
   bool containsMutedWord(String content) {
     if (_mutedWords.isEmpty) return false;
     final lowerContent = content.toLowerCase();
-    return _mutedWords
-        .any((word) => lowerContent.contains(word.toLowerCase()));
+    return _mutedWords.any((word) => lowerContent.contains(word));
   }
 
   bool shouldFilterEvent(Map<String, dynamic> event) {
@@ -68,6 +68,7 @@ class EncryptedMuteService {
 
       if (events.isEmpty) {
         _mutedPubkeys = [];
+        _mutedPubkeySet = {};
         _mutedWords = [];
         _initialized = true;
         return;
@@ -90,6 +91,7 @@ class EncryptedMuteService {
           _extractFromPublicTags(event);
         }
       }
+      _mutedPubkeySet = _mutedPubkeys.toSet();
       _initialized = true;
     } catch (_) {
       _initialized = true;
@@ -106,7 +108,7 @@ class EncryptedMuteService {
     _mutedWords = tags
         .where((tag) =>
             tag is List && tag.isNotEmpty && tag[0] == 'word' && tag.length > 1)
-        .map((tag) => (tag as List)[1] as String)
+        .map((tag) => ((tag as List)[1] as String).toLowerCase())
         .toList();
   }
 
@@ -120,7 +122,7 @@ class EncryptedMuteService {
     _mutedWords = privateTags
         .where((tag) =>
             tag is List && tag.isNotEmpty && tag[0] == 'word' && tag.length > 1)
-        .map((tag) => (tag as List)[1] as String)
+        .map((tag) => ((tag as List)[1] as String).toLowerCase())
         .toList();
   }
 
@@ -150,6 +152,7 @@ class EncryptedMuteService {
     );
 
     _mutedPubkeys = List.from(mutedPubkeys);
+    _mutedPubkeySet = _mutedPubkeys.toSet();
     _mutedWords = List.from(mutedWords);
     _initialized = true;
 
@@ -157,13 +160,14 @@ class EncryptedMuteService {
   }
 
   void addMutedPubkey(String pubkey) {
-    if (!_mutedPubkeys.contains(pubkey)) {
+    if (_mutedPubkeySet.add(pubkey)) {
       _mutedPubkeys = [..._mutedPubkeys, pubkey];
     }
   }
 
   void removeMutedPubkey(String pubkey) {
     _mutedPubkeys = _mutedPubkeys.where((p) => p != pubkey).toList();
+    _mutedPubkeySet = _mutedPubkeys.toSet();
   }
 
   void addMutedWord(String word) {
@@ -182,13 +186,17 @@ class EncryptedMuteService {
     List<String>? pubkeys,
     List<String>? words,
   }) {
-    if (pubkeys != null) _mutedPubkeys = List.from(pubkeys);
+    if (pubkeys != null) {
+      _mutedPubkeys = List.from(pubkeys);
+      _mutedPubkeySet = _mutedPubkeys.toSet();
+    }
     if (words != null) _mutedWords = List.from(words);
     _initialized = true;
   }
 
   void clear() {
     _mutedPubkeys = [];
+    _mutedPubkeySet = {};
     _mutedWords = [];
     _initialized = false;
   }

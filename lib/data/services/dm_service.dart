@@ -5,6 +5,7 @@ import 'auth_service.dart';
 import 'relay_service.dart';
 import '../../src/rust/api/nip17.dart' as rust_nip17;
 import '../../src/rust/api/database.dart' as rust_db;
+import '../../src/rust/api/relay.dart' as rust_relay;
 
 class DmService {
   final AuthService _authService;
@@ -76,23 +77,17 @@ class DmService {
     required List<Map<String, dynamic>> filters,
     Duration timeout = const Duration(seconds: 10),
   }) async {
-    final events = <Map<String, dynamic>>[];
-    final seenIds = <String>{};
-
-    for (final filter in filters) {
-      final results = await RustRelayService.instance.fetchEvents(
-        filter,
+    try {
+      final filtersJson = jsonEncode(filters);
+      final resultJson = await rust_relay.fetchEventsMultiFilter(
+        filtersJson: filtersJson,
         timeoutSecs: timeout.inSeconds,
       );
-      for (final eventMap in results) {
-        final id = eventMap['id'] as String?;
-        if (id != null && seenIds.add(id)) {
-          events.add(eventMap);
-        }
-      }
+      final decoded = jsonDecode(resultJson) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
     }
-
-    return events;
   }
 
   Map<String, dynamic>? _unwrapGiftWrap(
@@ -107,78 +102,15 @@ class DmService {
 
     try {
       final giftWrapJson = jsonEncode(eventData);
-      final unwrappedJson = rust_nip17.unwrapGiftWrap(
+      final messageJson = rust_nip17.unwrapGiftWrapDm(
         receiverPrivateKeyHex: privateKey,
         giftWrapJson: giftWrapJson,
+        currentUserPubkeyHex: _currentUserPubkeyHex ?? '',
       );
-      final unwrapped = jsonDecode(unwrappedJson) as Map<String, dynamic>;
-      final sender = unwrapped['sender'] as String? ?? '';
-      final rumor = unwrapped['rumor'] as Map<String, dynamic>? ?? {};
-      final rumorKind = rumor['kind'] as int? ?? 0;
-
-      if (rumorKind != 14 && rumorKind != 15) return null;
-
-      final content = rumor['content'] as String? ?? '';
-      final rumorCreatedAt = rumor['created_at'] as int? ?? 0;
-      final rumorId = rumor['id'] as String? ?? eventId;
-      final tags = rumor['tags'] as List<dynamic>? ?? [];
-
-      String? recipientPubkey;
-      String? mimeType;
-      String? encryptionKey;
-      String? encryptionNonce;
-      String? encryptedHash;
-      String? originalHash;
-      int? fileSize;
-
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          final tagName = tag[0] as String?;
-          if (tagName == 'p' && tag.length > 1) {
-            recipientPubkey = tag[1] as String?;
-          } else if (tagName == 'file-type' && tag.length > 1) {
-            mimeType = tag[1] as String?;
-          } else if (tagName == 'decryption-key' && tag.length > 1) {
-            encryptionKey = tag[1] as String?;
-          } else if (tagName == 'decryption-nonce' && tag.length > 1) {
-            encryptionNonce = tag[1] as String?;
-          } else if (tagName == 'x' && tag.length > 1) {
-            encryptedHash = tag[1] as String?;
-          } else if (tagName == 'ox' && tag.length > 1) {
-            originalHash = tag[1] as String?;
-          } else if (tagName == 'size' && tag.length > 1) {
-            fileSize = int.tryParse(tag[1] as String? ?? '');
-          }
-        }
-      }
-
-      final isFromCurrentUser = sender == _currentUserPubkeyHex;
-      final otherUserPubkeyHex =
-          isFromCurrentUser ? (recipientPubkey ?? '') : sender;
-
-      if (otherUserPubkeyHex.isEmpty) return null;
-
-      final message = <String, dynamic>{
-        'id': rumorId,
-        'senderPubkeyHex': sender,
-        'recipientPubkeyHex': otherUserPubkeyHex,
-        'content': content,
-        'createdAt':
-            DateTime.fromMillisecondsSinceEpoch(rumorCreatedAt * 1000),
-        'isFromCurrentUser': isFromCurrentUser,
-        'kind': rumorKind,
-      };
-
-      if (rumorKind == 15) {
-        if (mimeType != null) message['mimeType'] = mimeType;
-        if (encryptionKey != null) message['encryptionKey'] = encryptionKey;
-        if (encryptionNonce != null) message['encryptionNonce'] = encryptionNonce;
-        if (encryptedHash != null) message['encryptedHash'] = encryptedHash;
-        if (originalHash != null) message['originalHash'] = originalHash;
-        if (fileSize != null) message['fileSize'] = fileSize;
-      }
-
-      return message;
+      final msg = jsonDecode(messageJson) as Map<String, dynamic>;
+      final createdAt = msg['createdAt'] as int? ?? 0;
+      msg['createdAt'] = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+      return msg;
     } catch (_) {
       if (eventId.isNotEmpty) _failedUnwrapIds.add(eventId);
       return null;

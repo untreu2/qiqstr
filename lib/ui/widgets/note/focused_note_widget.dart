@@ -397,6 +397,10 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
                         .value.authorUser?['profileImage'] as String?,
                     authorId: _authorId,
                     isSelectable: widget.isSelectable,
+                    embeddedNotes: widget.note['embeddedNotes']
+                        as Map<String, dynamic>?,
+                    embeddedArticles: widget.note['embeddedArticles']
+                        as Map<String, dynamic>?,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -638,6 +642,8 @@ class _FocusedContentSection extends StatelessWidget {
   final String? authorProfileImageUrl;
   final String authorId;
   final bool isSelectable;
+  final Map<String, dynamic>? embeddedNotes;
+  final Map<String, dynamic>? embeddedArticles;
 
   const _FocusedContentSection({
     required this.parsedContent,
@@ -647,6 +653,8 @@ class _FocusedContentSection extends StatelessWidget {
     this.authorProfileImageUrl,
     required this.authorId,
     this.isSelectable = false,
+    this.embeddedNotes,
+    this.embeddedArticles,
   });
 
   @override
@@ -659,6 +667,8 @@ class _FocusedContentSection extends StatelessWidget {
         size: NoteContentSize.big,
         authorProfileImageUrl: authorProfileImageUrl,
         isSelectable: isSelectable,
+        embeddedNotes: embeddedNotes,
+        embeddedArticles: embeddedArticles,
       );
     } catch (e) {
       debugPrint('[FocusedContentSection] Build error: $e');

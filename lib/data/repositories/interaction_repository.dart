@@ -14,7 +14,6 @@ class InteractionRepositoryImpl extends BaseRepository
     implements InteractionRepository {
   InteractionRepositoryImpl({
     required super.db,
-    required super.mapper,
   });
 
   @override

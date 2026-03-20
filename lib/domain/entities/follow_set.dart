@@ -56,6 +56,22 @@ class FollowSet extends Equatable {
     };
   }
 
+  factory FollowSet.fromMap(Map<String, dynamic> map) {
+    return FollowSet(
+      id: map['id'] as String? ?? '',
+      pubkey: map['pubkey'] as String? ?? '',
+      dTag: map['dTag'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      description: map['description'] as String? ?? '',
+      image: map['image'] as String? ?? '',
+      pubkeys: (map['pubkeys'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      createdAt: map['createdAt'] as int? ?? 0,
+    );
+  }
+
   factory FollowSet.fromEvent(Map<String, dynamic> event) {
     final tags = event['tags'] as List<dynamic>? ?? [];
     String dTag = '';

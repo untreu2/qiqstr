@@ -6,7 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `extract_bolt11_amount_sats`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `is_future_dated`, `metadata_to_flat_json`
+// These functions are ignored because they are not marked as `pub`: `content_article_re`, `content_link_re`, `content_media_re`, `content_mention_re`, `content_quote_re`, `extract_bolt11_amount_sats`, `extract_content_references`, `extract_note_references`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes_pub`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `is_future_dated`, `json_tags_to_vecs`, `metadata_to_flat_json`, `tags_from_event`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `NoteReferences`
 
 Future<String?> dbGetProfile({required String pubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbGetProfile(pubkeyHex: pubkeyHex);
@@ -191,6 +192,10 @@ Future<void> dbSaveProfile(
     RustLib.instance.api.crateApiDatabaseDbSaveProfile(
         pubkeyHex: pubkeyHex, profileJson: profileJson);
 
+Future<int> dbSaveProfilesBatch({required String profilesJson}) =>
+    RustLib.instance.api
+        .crateApiDatabaseDbSaveProfilesBatch(profilesJson: profilesJson);
+
 Future<int> dbCountEvents({required String filterJson}) =>
     RustLib.instance.api.crateApiDatabaseDbCountEvents(filterJson: filterJson);
 
@@ -273,6 +278,30 @@ Future<String> dbGetHydratedHashtagNotes(
         mutedWords: mutedWords,
         currentUserPubkeyHex: currentUserPubkeyHex);
 
+Future<String> dbGetHydratedNotesByIds(
+        {required List<String> eventIds,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords,
+        String? currentUserPubkeyHex}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedNotesByIds(
+        eventIds: eventIds,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords,
+        currentUserPubkeyHex: currentUserPubkeyHex);
+
+Future<String> dbGetHydratedProfileReplies(
+        {required String pubkeyHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords,
+        String? currentUserPubkeyHex}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedProfileReplies(
+        pubkeyHex: pubkeyHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords,
+        currentUserPubkeyHex: currentUserPubkeyHex);
+
 Future<String> dbGetHydratedReplies(
         {required String noteId,
         required int limit,
@@ -322,3 +351,40 @@ Future<String> dbGetHydratedArticlesByAuthors(
 
 Future<String?> dbGetHydratedArticle({required String eventId}) =>
     RustLib.instance.api.crateApiDatabaseDbGetHydratedArticle(eventId: eventId);
+
+Future<String?> dbGetHydratedArticleByNaddr(
+        {required String pubkeyHex, required String dTag}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedArticleByNaddr(
+        pubkeyHex: pubkeyHex, dTag: dTag);
+
+String parseNoteContent({required String content}) =>
+    RustLib.instance.api.crateApiDatabaseParseNoteContent(content: content);
+
+String extractEmbeddedIdsBatch({required List<String> contents}) =>
+    RustLib.instance.api
+        .crateApiDatabaseExtractEmbeddedIdsBatch(contents: contents);
+
+Future<String> dbGetHydratedReactionNotes(
+        {required String pubkeyHex,
+        required int limit,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords,
+        String? currentUserPubkeyHex}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedReactionNotes(
+        pubkeyHex: pubkeyHex,
+        limit: limit,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords,
+        currentUserPubkeyHex: currentUserPubkeyHex);
+
+Future<String> dbCalculateFollowScore(
+        {required String currentUserHex, required String targetHex}) =>
+    RustLib.instance.api.crateApiDatabaseDbCalculateFollowScore(
+        currentUserHex: currentUserHex, targetHex: targetHex);
+
+Future<String> dbGetFollowSets(
+        {required List<String> authorsHex,
+        required int limit,
+        required List<String> hiddenDTags}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetFollowSets(
+        authorsHex: authorsHex, limit: limit, hiddenDTags: hiddenDTags);

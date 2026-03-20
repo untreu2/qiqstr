@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../src/rust/api/database.dart' as rust_db;
+
 class StringOptimizer {
   static StringOptimizer? _instance;
   static StringOptimizer get instance => _instance ??= StringOptimizer._();
@@ -8,31 +10,6 @@ class StringOptimizer {
 
   static final Map<String, dynamic> _jsonCache = {};
   static const int _maxJsonCacheSize = 500;
-
-  static final RegExp _mediaUrlRegExp = RegExp(
-    r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))',
-    caseSensitive: false,
-  );
-
-  static final RegExp _linkRegExp = RegExp(
-    r'(https?:\/\/\S+)',
-    caseSensitive: false,
-  );
-
-  static final RegExp _quoteRegExp = RegExp(
-    r'(?:nostr:)?(note1[0-9a-z]+|nevent1[0-9a-z]+)',
-    caseSensitive: false,
-  );
-
-  static final RegExp _articleRegExp = RegExp(
-    r'(?:nostr:)?(naddr1[0-9a-z]+)',
-    caseSensitive: false,
-  );
-
-  static final RegExp _mentionRegExp = RegExp(
-    r'nostr:(npub1[0-9a-z]+|nprofile1[0-9a-z]+)',
-    caseSensitive: false,
-  );
 
   static final RegExp _hexRegExp = RegExp(r'^[0-9a-fA-F]+$');
 
@@ -70,64 +47,20 @@ class StringOptimizer {
   }
 
   Map<String, dynamic> parseContentOptimized(String content) {
-    final mediaMatches = _mediaUrlRegExp.allMatches(content);
-    final mediaUrls = mediaMatches.map((m) => m.group(0)!).toList();
-
-    final linkMatches = _linkRegExp.allMatches(content);
-    final linkUrls = linkMatches
-        .map((m) => m.group(0)!)
-        .where((u) =>
-            !mediaUrls.contains(u) &&
-            !u.toLowerCase().endsWith('.mp4') &&
-            !u.toLowerCase().endsWith('.mov'))
-        .toList();
-
-    final quoteMatches = _quoteRegExp.allMatches(content);
-    final quoteIds = quoteMatches.map((m) => m.group(1)!).toList();
-
-    final articleMatches = _articleRegExp.allMatches(content);
-    final articleIds = articleMatches.map((m) => m.group(1)!).toList();
-
-    String cleanedText = content;
-    for (final m in [...mediaMatches, ...quoteMatches, ...articleMatches]) {
-      cleanedText = cleanedText.replaceFirst(m.group(0)!, '');
+    try {
+      final json = rust_db.parseNoteContent(content: content);
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (_) {
+      return {
+        'textParts': [
+          {'type': 'text', 'text': content}
+        ],
+        'mediaUrls': <String>[],
+        'linkUrls': <String>[],
+        'quoteIds': <String>[],
+        'articleIds': <String>[],
+      };
     }
-    cleanedText = cleanedText.trim();
-
-    final mentionMatches = _mentionRegExp.allMatches(cleanedText);
-    final textParts = <Map<String, dynamic>>[];
-
-    int lastEnd = 0;
-    for (final m in mentionMatches) {
-      if (m.start > lastEnd) {
-        textParts.add({
-          'type': 'text',
-          'text': cleanedText.substring(lastEnd, m.start),
-        });
-      }
-
-      textParts.add({
-        'type': 'mention',
-        'id': m.group(1)!,
-      });
-
-      lastEnd = m.end;
-    }
-
-    if (lastEnd < cleanedText.length) {
-      textParts.add({
-        'type': 'text',
-        'text': cleanedText.substring(lastEnd),
-      });
-    }
-
-    return {
-      'textParts': textParts,
-      'mediaUrls': mediaUrls,
-      'linkUrls': linkUrls,
-      'quoteIds': quoteIds,
-      'articleIds': articleIds,
-    };
   }
 
   bool isValidHex(String value) {

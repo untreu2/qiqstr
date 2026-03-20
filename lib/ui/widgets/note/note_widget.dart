@@ -714,6 +714,11 @@ class _NoteWidgetState extends State<NoteWidget> {
                                     authorId: _authorId,
                                     isSelectable: widget.isSelectable,
                                     profiles: widget.profiles,
+                                    embeddedNotes: widget.note['embeddedNotes']
+                                        as Map<String, dynamic>?,
+                                    embeddedArticles:
+                                        widget.note['embeddedArticles']
+                                            as Map<String, dynamic>?,
                                   ),
                                 ),
                               ),
@@ -907,6 +912,10 @@ class _NoteWidgetState extends State<NoteWidget> {
                             authorId: _authorId,
                             isSelectable: widget.isSelectable,
                             profiles: widget.profiles,
+                            embeddedNotes: widget.note['embeddedNotes']
+                                as Map<String, dynamic>?,
+                            embeddedArticles: widget.note['embeddedArticles']
+                                as Map<String, dynamic>?,
                           ),
                         ),
                       ),
@@ -1254,6 +1263,8 @@ class _SafeContentSection extends StatelessWidget {
   final String authorId;
   final bool isSelectable;
   final Map<String, Map<String, dynamic>>? profiles;
+  final Map<String, dynamic>? embeddedNotes;
+  final Map<String, dynamic>? embeddedArticles;
 
   const _SafeContentSection({
     required this.parsedContent,
@@ -1265,6 +1276,8 @@ class _SafeContentSection extends StatelessWidget {
     required this.authorId,
     this.isSelectable = false,
     this.profiles,
+    this.embeddedNotes,
+    this.embeddedArticles,
   });
 
   @override
@@ -1278,6 +1291,8 @@ class _SafeContentSection extends StatelessWidget {
         authorProfileImageUrl: authorProfileImageUrl,
         isSelectable: isSelectable,
         initialProfiles: profiles,
+        embeddedNotes: embeddedNotes,
+        embeddedArticles: embeddedArticles,
       );
     } catch (e) {
       debugPrint('[ContentSection] Build error: $e');
