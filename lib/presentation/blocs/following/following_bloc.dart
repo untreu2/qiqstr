@@ -54,7 +54,7 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
   void _watchFollowing(String userHex) {
     _followingSubscription?.cancel();
     _followingSubscription =
-        _followingRepository.watchFollowingList(userHex).listen((pubkeys) {
+        _followingRepository.watchFollowing(userHex).listen((pubkeys) {
       if (isClosed) return;
       add(_FollowingListUpdated(pubkeys));
     });
@@ -107,7 +107,7 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
       if (isClosed) return;
       try {
         await _syncService.syncFollowingList(userHex);
-        final pubkeys = await _followingRepository.getFollowingList(userHex);
+        final pubkeys = await _followingRepository.getFollowing(userHex);
         if (pubkeys != null && pubkeys.isNotEmpty) {
           await _syncService.syncProfiles(pubkeys);
         }
@@ -131,13 +131,11 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
 
       final userWithNpub = <String, dynamic>{
         'pubkey': pubkey,
-        'pubkeyHex': pubkey,
         'npub': npub,
         'name': profile.name ?? profile.displayName,
         'display_name': profile.displayName,
         'about': profile.about ?? '',
         'picture': profile.picture ?? '',
-        'profileImage': profile.picture ?? '',
         'banner': profile.banner ?? '',
         'nip05': profile.nip05 ?? '',
         'lud16': profile.lud16 ?? '',

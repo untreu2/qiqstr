@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
-import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
 import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
@@ -15,11 +14,12 @@ import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../core/scroll_to_top_notifier.dart';
 import '../../../data/repositories/feed_repository.dart';
+import '../../../data/repositories/following_repository.dart';
 import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/feed/feed_event.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../presentation/blocs/feed/feed_state.dart';
-import '../../../data/services/relay_service.dart';
+import '../../../data/services/interaction_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_event.dart';
@@ -29,15 +29,14 @@ import '../../../presentation/blocs/user_tile/user_tile_event.dart';
 import '../../../presentation/blocs/user_tile/user_tile_state.dart';
 import '../../widgets/common/custom_input_field.dart';
 import 'package:flutter/services.dart';
-import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/qr_scanner_widget.dart';
-import '../../../data/services/favorite_lists_service.dart';
-import '../../../data/services/follow_set_service.dart';
+import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
+import '../../../presentation/blocs/follow_set/follow_set_state.dart';
 
 class FeedPage extends StatefulWidget {
   final String userHex;
@@ -87,6 +86,7 @@ class FeedPageState extends State<FeedPage> {
     if (widget.hashtag != null) {
       _feedBloc = FeedBloc(
         feedRepository: AppDI.get<FeedRepository>(),
+        followingRepository: AppDI.get<FollowingRepository>(),
         profileRepository: AppDI.get<ProfileRepository>(),
         syncService: AppDI.get<SyncService>(),
       );
@@ -140,12 +140,18 @@ class FeedPageState extends State<FeedPage> {
   }
 
   void _refreshFavoriteLists() {
-    final favService = FavoriteListsService.instance;
-    final setService = FollowSetService.instance;
-    final ids = favService.favoriteIds;
+    final followSetState = AppDI.get<FollowSetBloc>().state;
+    if (followSetState is! FollowSetLoaded) return;
+    final ids = followSetState.favoriteIds;
+    final allSets = [
+      ...followSetState.followSets,
+      ...followSetState.followedUsersSets,
+    ];
     final lists = <_FavoriteListInfo>[];
     for (final id in ids) {
-      final followSet = setService.getByListId(id);
+      final followSet = allSets
+          .where((s) => '${s.pubkey}:${s.dTag}' == id || s.dTag == id)
+          .firstOrNull;
       if (followSet != null) {
         lists.add(_FavoriteListInfo(
           listId: id,
@@ -238,7 +244,7 @@ class FeedPageState extends State<FeedPage> {
   void _updateRelayCount() async {
     if (!mounted) return;
     try {
-      final status = await RustRelayService.instance.getRelayStatus();
+      final status = await AppDI.get<SyncService>().getRelayStatus();
       if (!mounted) return;
       final summary = status['summary'] as Map<String, dynamic>? ?? {};
       final total = summary['totalRelays'] as int? ?? 0;
@@ -368,7 +374,7 @@ class FeedPageState extends State<FeedPage> {
     final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
-    final userProfileImage = user?['profileImage'] as String? ?? '';
+    final userProfileImage = user?['picture'] as String? ?? '';
 
     if (_isSearchMode) {
       return ClipRect(
@@ -939,6 +945,8 @@ class FeedPageState extends State<FeedPage> {
                           context.read<FeedBloc>().add(const FeedRefreshed());
                         },
                         scrollController: _scrollController,
+                        onNotesVisible: (ids) => InteractionService.instance
+                            .fetchCountsFromRelays(ids),
                       ),
                   ],
                 ),
@@ -1119,8 +1127,6 @@ class FeedPageState extends State<FeedPage> {
             ),
           UserSearchLoaded(
             :final filteredUsers,
-            :final filteredNotes,
-            :final noteProfiles,
             :final isSearching,
           ) =>
             isSearching
@@ -1144,7 +1150,7 @@ class FeedPageState extends State<FeedPage> {
                       ),
                     ),
                   )
-                : (filteredUsers.isEmpty && filteredNotes.isEmpty) &&
+                : filteredUsers.isEmpty &&
                         _searchController.text.trim().isNotEmpty
                     ? SliverToBoxAdapter(
                         child: Center(
@@ -1179,9 +1185,8 @@ class FeedPageState extends State<FeedPage> {
                           ),
                         ),
                       )
-                    : (filteredUsers.isNotEmpty || filteredNotes.isNotEmpty)
-                        ? _buildSearchResultsList(
-                            context, filteredUsers, filteredNotes, noteProfiles)
+                    : filteredUsers.isNotEmpty
+                        ? _buildSearchResultsList(context, filteredUsers)
                         : const SliverToBoxAdapter(child: SizedBox()),
           _ => const SliverToBoxAdapter(child: SizedBox()),
         };
@@ -1192,131 +1197,20 @@ class FeedPageState extends State<FeedPage> {
   Widget _buildSearchResultsList(
     BuildContext context,
     List<Map<String, dynamic>> users,
-    List<Map<String, dynamic>> notes,
-    Map<String, Map<String, dynamic>> noteProfiles,
   ) {
-    final l10n = AppLocalizations.of(context)!;
-    final colors = context.colors;
-    final items = <_SearchResultItem>[];
-
-    if (users.isNotEmpty) {
-      items.add(_SearchResultItem(
-          type: _SearchResultType.header, data: {'title': l10n.users}));
-      for (final user in users) {
-        items.add(_SearchResultItem(type: _SearchResultType.user, data: user));
-      }
-    }
-
-    if (notes.isNotEmpty) {
-      items.add(_SearchResultItem(
-          type: _SearchResultType.header, data: {'title': l10n.notes}));
-      for (final note in notes) {
-        items.add(_SearchResultItem(
-            type: _SearchResultType.note, data: note, profiles: noteProfiles));
-      }
-    }
-
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          final item = items[index];
-
-          switch (item.type) {
-            case _SearchResultType.header:
-              final isFirst = index == 0;
-              return Padding(
-                padding: EdgeInsets.fromLTRB(16, isFirst ? 4 : 16, 16, 8),
-                child: Text(
-                  item.data['title'] as String,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textSecondary,
-                  ),
-                ),
-              );
-            case _SearchResultType.user:
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _FeedUserItemWidget(user: item.data),
-                  const _FeedUserSeparator(),
-                ],
-              );
-            case _SearchResultType.note:
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _SearchNoteItemWidget(
-                    note: item.data,
-                    profiles: item.profiles ?? {},
-                    currentUserHex: widget.userHex,
-                  ),
-                  const _FeedUserSeparator(),
-                ],
-              );
-          }
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _FeedUserItemWidget(user: users[index]),
+              const _FeedUserSeparator(),
+            ],
+          );
         },
-        childCount: items.length,
+        childCount: users.length,
       ),
-    );
-  }
-}
-
-enum _SearchResultType { header, user, note }
-
-class _SearchResultItem {
-  final _SearchResultType type;
-  final Map<String, dynamic> data;
-  final Map<String, Map<String, dynamic>>? profiles;
-
-  _SearchResultItem({
-    required this.type,
-    required this.data,
-    this.profiles,
-  });
-}
-
-class _SearchNoteItemWidget extends StatefulWidget {
-  final Map<String, dynamic> note;
-  final Map<String, Map<String, dynamic>> profiles;
-  final String currentUserHex;
-
-  const _SearchNoteItemWidget({
-    required this.note,
-    required this.profiles,
-    required this.currentUserHex,
-  });
-
-  @override
-  State<_SearchNoteItemWidget> createState() => _SearchNoteItemWidgetState();
-}
-
-class _SearchNoteItemWidgetState extends State<_SearchNoteItemWidget> {
-  late final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier;
-
-  @override
-  void initState() {
-    super.initState();
-    _notesNotifier = ValueNotifier<List<Map<String, dynamic>>>([]);
-  }
-
-  @override
-  void dispose() {
-    _notesNotifier.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return NoteWidget(
-      note: widget.note,
-      currentUserHex: widget.currentUserHex,
-      notesNotifier: _notesNotifier,
-      profiles: widget.profiles,
-      containerColor: Colors.transparent,
-      isSmallView: true,
-      isVisible: true,
     );
   }
 }
@@ -1358,14 +1252,14 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
   }
 
   String get _displayImage {
-    final loaded = _loadedProfile?['profileImage'] as String? ?? '';
+    final loaded = _loadedProfile?['picture'] as String? ?? '';
     if (loaded.isNotEmpty) return loaded;
-    return widget.user['profileImage'] as String? ?? '';
+    return widget.user['picture'] as String? ?? '';
   }
 
   Future<void> _loadAndSyncProfile() async {
     if (!mounted) return;
-    final pubkey = widget.user['pubkeyHex'] as String? ??
+    final pubkey = widget.user['pubkey'] as String? ??
         widget.user['pubkey'] as String? ??
         '';
     if (pubkey.isEmpty) return;
@@ -1376,9 +1270,9 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
     if (profile != null && mounted) {
       setState(() {
         _loadedProfile = {
-          'pubkeyHex': profile.pubkey,
+          'pubkey': profile.pubkey,
           'name': profile.name ?? '',
-          'profileImage': profile.picture ?? '',
+          'picture': profile.picture ?? '',
           'about': profile.about ?? '',
           'banner': profile.banner ?? '',
           'nip05': profile.nip05 ?? '',
@@ -1400,9 +1294,9 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
         if (synced != null && mounted) {
           setState(() {
             _loadedProfile = {
-              'pubkeyHex': synced.pubkey,
+              'pubkey': synced.pubkey,
               'name': synced.name ?? '',
-              'profileImage': synced.picture ?? '',
+              'picture': synced.picture ?? '',
               'about': synced.about ?? '',
               'banner': synced.banner ?? '',
               'nip05': synced.nip05 ?? '',
@@ -1511,7 +1405,7 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
       },
       child: BlocBuilder<UserTileBloc, UserTileState>(
         builder: (context, state) {
-          final userPubkeyHex = widget.user['pubkeyHex'] as String? ??
+          final userPubkeyHex = widget.user['pubkey'] as String? ??
               widget.user['pubkey'] as String? ??
               '';
           final isCurrentUser =
@@ -1525,13 +1419,13 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
 
               if (currentLocation.startsWith('/home/feed')) {
                 context.push(
-                    '/home/feed/profile?pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                    '/home/feed/profile?pubkey=${Uri.encodeComponent(userPubkeyHex)}');
               } else if (currentLocation.startsWith('/home/notifications')) {
                 context.push(
-                    '/home/notifications/profile?pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                    '/home/notifications/profile?pubkey=${Uri.encodeComponent(userPubkeyHex)}');
               } else {
                 context.push(
-                    '/profile?pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                    '/profile?pubkey=${Uri.encodeComponent(userPubkeyHex)}');
               }
             },
             child: Padding(

@@ -5,8 +5,8 @@ import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/encrypted_mute_service.dart';
 import '../../../data/services/interaction_service.dart';
-import '../../../data/services/rust_database_service.dart';
 import '../../../domain/entities/feed_note.dart';
 import 'thread_event.dart';
 import 'thread_state.dart';
@@ -35,6 +35,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<ThreadProfilesUpdated>(_onThreadProfilesUpdated);
     on<_ThreadRepliesUpdated>(_onThreadRepliesUpdated);
     on<_ThreadCurrentUserLoaded>(_onThreadCurrentUserLoaded);
+    on<_ThreadNetworkDataLoaded>(_onThreadNetworkDataLoaded);
   }
 
   void _onThreadProfilesUpdated(
@@ -82,103 +83,241 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final currentUserHex = _authService.currentUserPubkeyHex ?? '';
       final focusedNoteId = chain.last;
 
-      emit(const ThreadLoading());
+      if (event.initialNoteData != null) {
+        final noteData = event.initialNoteData!;
+        final noteId = noteData['id'] as String? ?? focusedNoteId;
+        final structure = ThreadStructure(
+          rootNote: noteData,
+          childrenMap: const {},
+          notesMap: {noteId: noteData},
+          totalReplies: 0,
+        );
+        final userProfiles = <String, Map<String, dynamic>>{};
+        final pubkey = noteData['pubkey'] as String? ?? '';
+        final authorName = noteData['authorName'] as String?;
+        if (pubkey.isNotEmpty && authorName != null) {
+          userProfiles[pubkey] = {
+            'pubkey': pubkey,
+            'name': authorName,
+            'picture': noteData['authorImage'] as String? ?? '',
+            'nip05': noteData['authorNip05'] as String? ?? '',
+          };
+        }
+        emit(
+          ThreadLoaded(
+            rootNote: noteData,
+            replies: const [],
+            threadStructure: structure,
+            chainNotes: [noteData],
+            chain: chain,
+            userProfiles: userProfiles,
+            currentUserHex: currentUserHex,
+            currentUser: null,
+            repliesSynced: false,
+          ),
+        );
+      } else {
+        emit(const ThreadLoading());
+      }
 
-      final threadData = await _syncService.fetchFullThread(
+      final localThreadData = await _loadFromLocalDb(
         focusedNoteId,
-        currentUserPubkeyHex:
-            currentUserHex.isNotEmpty ? currentUserHex : null,
+        currentUserHex: currentUserHex.isNotEmpty ? currentUserHex : null,
       );
 
       if (isClosed) return;
 
-      final rootNote =
-          threadData['rootNote'] as Map<String, dynamic>? ?? <String, dynamic>{};
-      final rootNoteId = rootNote['id'] as String? ?? chain.first;
-      _currentRootNoteId = rootNoteId;
-
-      final rawChainNotes = threadData['chainNotes'] as List<dynamic>? ?? [];
-      final chainNotes = rawChainNotes.cast<Map<String, dynamic>>();
-      if (chainNotes.isEmpty) {
-        chainNotes.add(rootNote);
-      }
-
-      final rawChildrenMap =
-          threadData['childrenMap'] as Map<String, dynamic>? ?? {};
-      final childrenMap = rawChildrenMap.map(
-        (key, value) => MapEntry(
-            key, (value as List<dynamic>).cast<Map<String, dynamic>>()),
-      );
-
-      final rawNotesMap =
-          threadData['notesMap'] as Map<String, dynamic>? ?? {};
-      final notesMap = rawNotesMap.map(
-        (key, value) => MapEntry(key, value as Map<String, dynamic>),
-      );
-
-      final totalReplies = threadData['totalReplies'] as int? ?? 0;
-
-      final allReplies = <Map<String, dynamic>>[];
-      for (final entry in notesMap.entries) {
-        if (entry.key != rootNoteId) {
-          allReplies.add(entry.value);
+      if (localThreadData != null) {
+        final localState = _buildLoadedState(
+          localThreadData,
+          chain,
+          currentUserHex,
+          repliesSynced: false,
+        );
+        if (localState != null) {
+          emit(localState);
+          _currentRootNoteId = localState.rootNoteId;
+          _watchReplies(localState.rootNoteId);
+          _loadCurrentUserProfile(currentUserHex);
+          _loadAndSyncProfilesForNotes(
+            [...localState.chainNotes, ...localState.replies],
+          );
         }
       }
 
-      final structure = ThreadStructure(
-        rootNote: rootNote,
-        childrenMap: childrenMap,
-        notesMap: notesMap,
-        totalReplies: totalReplies,
-      );
-
-      final userProfiles = <String, Map<String, dynamic>>{};
-      for (final note in notesMap.values) {
-        final pubkey = note['pubkey'] as String? ?? '';
-        final authorName = note['authorName'] as String?;
-        if (pubkey.isNotEmpty && authorName != null) {
-          userProfiles[pubkey] = {
-            'pubkeyHex': pubkey,
-            'name': authorName,
-            'profileImage': note['authorImage'] as String? ?? '',
-            'picture': note['authorImage'] as String? ?? '',
-            'nip05': note['authorNip05'] as String? ?? '',
-          };
-        }
-      }
-
-      emit(
-        ThreadLoaded(
-          rootNote: rootNote,
-          replies: allReplies,
-          threadStructure: structure,
-          chainNotes: chainNotes,
-          chain: chain,
-          userProfiles: userProfiles,
-          currentUserHex: currentUserHex,
-          currentUser: null,
-          repliesSynced: true,
-        ),
-      );
-
-      _watchReplies(rootNoteId);
-
-      _loadCurrentUserProfile(currentUserHex);
-
-      final allIds = <String>[rootNoteId];
-      for (final r in allReplies) {
-        final id = r['id'] as String? ?? '';
-        if (id.isNotEmpty) allIds.add(id);
-      }
-      if (currentUserHex.isNotEmpty) {
-        InteractionService.instance.setCurrentUser(currentUserHex);
-      }
-      _loadInteractionCountsInBackground(allIds);
-
-      _loadAndSyncProfilesForNotes([...chainNotes, ...allReplies]);
+      _fetchNetworkThread(focusedNoteId, chain, currentUserHex);
     } catch (e) {
-      emit(ThreadError('Failed to load thread: ${e.toString()}'));
+      if (!isClosed && state is! ThreadLoaded) {
+        emit(ThreadError('Failed to load thread: ${e.toString()}'));
+      }
     }
+  }
+
+  Future<Map<String, dynamic>?> _loadFromLocalDb(
+    String noteId, {
+    String? currentUserHex,
+  }) async {
+    try {
+      final mute = EncryptedMuteService.instance;
+      return await _syncService.fetchFullThreadLocal(
+        noteId,
+        currentUserPubkeyHex: currentUserHex,
+        mutedPubkeys: mute.mutedPubkeys,
+        mutedWords: mute.mutedWords,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _fetchNetworkThread(
+    String focusedNoteId,
+    List<String> chain,
+    String currentUserHex,
+  ) {
+    Future.microtask(() async {
+      if (isClosed) return;
+      try {
+        final threadData = await _syncService.fetchFullThread(
+          focusedNoteId,
+          currentUserPubkeyHex:
+              currentUserHex.isNotEmpty ? currentUserHex : null,
+        );
+        if (isClosed) return;
+        add(_ThreadNetworkDataLoaded(threadData, chain, currentUserHex));
+      } catch (e) {
+        if (!isClosed && state is! ThreadLoaded) {
+          add(const _ThreadNetworkFailed());
+        }
+      }
+    });
+  }
+
+  void _onThreadNetworkDataLoaded(
+    _ThreadNetworkDataLoaded event,
+    Emitter<ThreadState> emit,
+  ) {
+    final newState = _buildLoadedState(
+      event.threadData,
+      event.chain,
+      event.currentUserHex,
+      repliesSynced: true,
+    );
+    if (newState == null) return;
+
+    _currentRootNoteId = newState.rootNoteId;
+
+    final mergedProfiles = <String, Map<String, dynamic>>{};
+    if (state is ThreadLoaded) {
+      mergedProfiles.addAll((state as ThreadLoaded).userProfiles);
+    }
+    mergedProfiles.addAll(newState.userProfiles);
+
+    emit(newState.copyWith(userProfiles: mergedProfiles));
+
+    _watchReplies(newState.rootNoteId);
+    _loadCurrentUserProfile(event.currentUserHex);
+
+    final allIds = <String>[newState.rootNoteId];
+    for (final r in newState.replies) {
+      final id = r['id'] as String? ?? '';
+      if (id.isNotEmpty) allIds.add(id);
+    }
+    if (event.currentUserHex.isNotEmpty) {
+      InteractionService.instance.setCurrentUser(event.currentUserHex);
+    }
+    _loadInteractionCountsInBackground(allIds);
+    _loadAndSyncProfilesForNotes([...newState.chainNotes, ...newState.replies]);
+  }
+
+  ThreadLoaded? _buildLoadedState(
+    Map<String, dynamic> threadData,
+    List<String> chain,
+    String currentUserHex, {
+    bool repliesSynced = false,
+  }) {
+    final rootNote =
+        threadData['rootNote'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final rootNoteId = rootNote['id'] as String? ?? chain.first;
+
+    final rawChainNotes = threadData['chainNotes'] as List<dynamic>? ?? [];
+    final chainNotes = rawChainNotes.cast<Map<String, dynamic>>();
+    if (chainNotes.isEmpty) {
+      chainNotes.add(rootNote);
+    }
+
+    final rawChildrenMap =
+        threadData['childrenMap'] as Map<String, dynamic>? ?? {};
+    final childrenMap = rawChildrenMap.map(
+      (key, value) =>
+          MapEntry(key, (value as List<dynamic>).cast<Map<String, dynamic>>()),
+    );
+
+    final rawNotesMap = threadData['notesMap'] as Map<String, dynamic>? ?? {};
+    final notesMap = rawNotesMap.map(
+      (key, value) => MapEntry(key, value as Map<String, dynamic>),
+    );
+
+    final totalReplies = threadData['totalReplies'] as int? ?? 0;
+
+    final allReplies = <Map<String, dynamic>>[];
+    int quoteCount = 0;
+    for (final entry in notesMap.entries) {
+      if (entry.key != rootNoteId) {
+        final note = entry.value;
+        if (_noteIsQuoteOf(note, rootNoteId)) {
+          quoteCount++;
+        } else {
+          allReplies.add(note);
+        }
+      }
+    }
+
+    final structure = ThreadStructure(
+      rootNote: rootNote,
+      childrenMap: childrenMap,
+      notesMap: notesMap,
+      totalReplies: totalReplies,
+    );
+
+    final userProfiles = <String, Map<String, dynamic>>{};
+    for (final note in notesMap.values) {
+      final pubkey = note['pubkey'] as String? ?? '';
+      final authorName = note['authorName'] as String?;
+      if (pubkey.isNotEmpty && authorName != null) {
+        userProfiles[pubkey] = {
+          'pubkey': pubkey,
+          'name': authorName,
+          'picture': note['authorImage'] as String? ?? '',
+          'nip05': note['authorNip05'] as String? ?? '',
+        };
+      }
+    }
+
+    return ThreadLoaded(
+      rootNote: rootNote,
+      replies: allReplies,
+      threadStructure: structure,
+      chainNotes: chainNotes,
+      chain: chain,
+      userProfiles: userProfiles,
+      currentUserHex: currentUserHex,
+      currentUser: null,
+      repliesSynced: repliesSynced,
+      quoteCount: quoteCount,
+    );
+  }
+
+  static bool _noteIsQuoteOf(Map<String, dynamic> note, String targetNoteId) {
+    final tags = note['tags'] as List<dynamic>? ?? [];
+    for (final tag in tags) {
+      if (tag is! List || tag.length < 2 || tag[0] != 'e') continue;
+      final refId = tag[1] as String? ?? '';
+      if (refId != targetNoteId) continue;
+      final marker = tag.length >= 4 ? tag[3] as String? : null;
+      if (marker == 'mention') return true;
+    }
+    return false;
   }
 
   void _loadCurrentUserProfile(String currentUserHex) {
@@ -198,9 +337,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   void _watchReplies(String rootNoteId) {
     _repliesSubscription?.cancel();
-    _repliesSubscription = _feedRepository.watchReplies(rootNoteId).listen((
-      replies,
-    ) {
+    _repliesSubscription =
+        _feedRepository.watchThreadReplies(rootNoteId).listen((replies) {
       if (isClosed) return;
       add(_ThreadRepliesUpdated(replies));
     });
@@ -213,9 +351,16 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (state is! ThreadLoaded) return;
     final currentState = state as ThreadLoaded;
 
-    final repliesMap = event.replies.map((r) => r.toMap()).toList();
+    final incomingIds = event.replies.map((r) => r.id).toSet();
+    final existingIds =
+        currentState.replies.map((r) => r['id'] as String? ?? '').toSet();
 
-    final replyIds = repliesMap.map((r) => r['id'] as String? ?? '').toSet();
+    final hasNewReplies = incomingIds.length != existingIds.length ||
+        incomingIds.any((id) => !existingIds.contains(id));
+    if (!hasNewReplies) return;
+
+    final repliesMap = event.replies.map((r) => r.toMap()).toList();
+    final replyIds = incomingIds;
     final rootNoteId = currentState.rootNoteId;
 
     for (final existing in currentState.replies) {
@@ -234,14 +379,6 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       }
     }
 
-    final existingIds =
-        currentState.replies.map((r) => r['id'] as String? ?? '').toSet();
-
-    final hasNewReplies = replyIds.length != existingIds.length ||
-        replyIds.any((id) => !existingIds.contains(id));
-
-    if (!hasNewReplies) return;
-
     final structure = await compute(_computeThreadStructure, {
       'rootNote': currentState.rootNote,
       'replies': repliesMap,
@@ -249,13 +386,11 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
     if (isClosed) return;
 
-    final childrenMap =
-        (structure['childrenMap'] as Map<String, dynamic>).map(
-      (key, value) => MapEntry(
-          key, (value as List<dynamic>).cast<Map<String, dynamic>>()),
+    final childrenMap = (structure['childrenMap'] as Map<String, dynamic>).map(
+      (key, value) =>
+          MapEntry(key, (value as List<dynamic>).cast<Map<String, dynamic>>()),
     );
-    final notesMap =
-        (structure['notesMap'] as Map<String, dynamic>).map(
+    final notesMap = (structure['notesMap'] as Map<String, dynamic>).map(
       (key, value) => MapEntry(key, value as Map<String, dynamic>),
     );
 
@@ -266,9 +401,18 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       totalReplies: repliesMap.length,
     );
 
+    final targetId = currentState.rootNoteId;
+    final filteredReplies =
+        repliesMap.where((r) => !_noteIsQuoteOf(r, targetId)).toList();
+    final newQuoteCount =
+        repliesMap.where((r) => _noteIsQuoteOf(r, targetId)).length;
+
     emit(
       currentState.copyWith(
-          replies: repliesMap, threadStructure: threadStructure),
+        replies: filteredReplies,
+        threadStructure: threadStructure,
+        quoteCount: newQuoteCount,
+      ),
     );
 
     final newNotes = repliesMap
@@ -278,72 +422,34 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       _loadAndSyncProfilesForNotes(newNotes);
     }
 
-    final newIds = newNotes
-        .map((r) => r['id'] as String? ?? '')
-        .where((id) => id.isNotEmpty)
-        .toList();
-    if (newIds.isNotEmpty) {
-      Future.microtask(() async {
-        if (isClosed) return;
-        await _preloadInteractionCounts(newIds);
-      });
+    if (newNotes.isNotEmpty) {
+      final newFeedNotes = event.replies
+          .where((n) => newNotes.any((m) => m['id'] == n.id))
+          .toList();
+      InteractionService.instance.populateFromNotes(newFeedNotes);
     }
   }
 
-  Future<void> _preloadInteractionCounts(List<String> noteIds) async {
-    if (noteIds.isEmpty) return;
-    final userHex = _authService.currentUserPubkeyHex ?? '';
-    if (userHex.isEmpty) return;
-
-    try {
-      final db = RustDatabaseService.instance;
-      final data = await db.getBatchInteractionData(noteIds, userHex);
-      if (isClosed) return;
-
-      final service = InteractionService.instance;
-      for (final noteId in noteIds) {
-        final d = data[noteId];
-        if (d == null) continue;
-        final counts = InteractionCounts(
-          reactions: (d['reactions'] as num?)?.toInt() ?? 0,
-          reposts: (d['reposts'] as num?)?.toInt() ?? 0,
-          replies: (d['replies'] as num?)?.toInt() ?? 0,
-          zapAmount: (d['zaps'] as num?)?.toInt() ?? 0,
-          hasReacted: d['hasReacted'] == true,
-          hasReposted: d['hasReposted'] == true,
-          hasZapped: d['hasZapped'] == true,
-        );
-        service.prePopulateCache(noteId, counts);
-      }
-      service.refreshAllActive();
-    } catch (_) {}
-  }
-
-  void _loadInteractionCountsInBackground(List<String> initialNoteIds) {
+  void _loadInteractionCountsInBackground(List<String> initialIds) {
     Future.microtask(() async {
       if (isClosed) return;
 
       if (state is ThreadLoaded) {
         final currentReplies = (state as ThreadLoaded).replies;
         final allIds = {
-          ...initialNoteIds,
+          ...initialIds,
           ...currentReplies
               .map((r) => r['id'] as String? ?? '')
               .where((id) => id.isNotEmpty),
         }.toList();
-
-        await _preloadInteractionCounts(allIds);
         if (isClosed) return;
         try {
           await InteractionService.instance.fetchCountsFromRelays(allIds);
         } catch (_) {}
       } else {
-        await _preloadInteractionCounts(initialNoteIds);
         if (isClosed) return;
         try {
-          await InteractionService.instance.fetchCountsFromRelays(
-            initialNoteIds,
-          );
+          await InteractionService.instance.fetchCountsFromRelays(initialIds);
         } catch (_) {}
       }
     });
@@ -355,7 +461,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
       final currentState = state as ThreadLoaded;
       final authorIds = notes
-          .map((n) => n['author'] as String? ?? n['pubkey'] as String? ?? '')
+          .map((n) => n['pubkey'] as String? ?? '')
           .where(
             (id) => id.isNotEmpty && !currentState.userProfiles.containsKey(id),
           )
@@ -365,7 +471,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       if (authorIds.isEmpty) return;
 
       try {
-        final profiles = await _profileRepository.getProfiles(authorIds);
+        final profilesFuture = _profileRepository.getProfiles(authorIds);
+        final syncFuture = _syncService.syncProfiles(authorIds);
+
+        final profiles = await profilesFuture;
         if (isClosed) return;
 
         final updatedProfiles = <String, Map<String, dynamic>>{};
@@ -390,10 +499,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           add(ThreadProfilesUpdated(updatedProfiles));
         }
 
-        if (missingPubkeys.isNotEmpty && !isClosed) {
-          await _syncService.syncProfiles(missingPubkeys);
-          if (isClosed) return;
+        await syncFuture;
+        if (isClosed) return;
 
+        if (missingPubkeys.isNotEmpty) {
           final synced = await _profileRepository.getProfiles(missingPubkeys);
           if (isClosed) return;
 
@@ -453,6 +562,25 @@ class _ThreadCurrentUserLoaded extends ThreadEvent {
 
   @override
   List<Object?> get props => [profileMap];
+}
+
+class _ThreadNetworkDataLoaded extends ThreadEvent {
+  final Map<String, dynamic> threadData;
+  final List<String> chain;
+  final String currentUserHex;
+
+  const _ThreadNetworkDataLoaded(
+      this.threadData, this.chain, this.currentUserHex);
+
+  @override
+  List<Object?> get props => [threadData, chain, currentUserHex];
+}
+
+class _ThreadNetworkFailed extends ThreadEvent {
+  const _ThreadNetworkFailed();
+
+  @override
+  List<Object?> get props => [];
 }
 
 Map<String, dynamic> _computeThreadStructure(Map<String, dynamic> args) {

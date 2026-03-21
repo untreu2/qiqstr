@@ -69,10 +69,10 @@ class _ArticleWidgetState extends State<ArticleWidget> {
     if (profile != null && mounted && !_isDisposed) {
       setState(() {
         _authorUser = {
-          'pubkeyHex': profile.pubkey,
+          'pubkey': profile.pubkey,
           'name': profile.name ?? '',
           'about': profile.about ?? '',
-          'profileImage': profile.picture ?? '',
+          'picture': profile.picture ?? '',
           'banner': profile.banner ?? '',
           'website': profile.website ?? '',
           'nip05': profile.nip05 ?? '',
@@ -137,10 +137,10 @@ class _ArticleWidgetState extends State<ArticleWidget> {
 
     if (currentLocation.startsWith('/home/feed')) {
       context.push(
-          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
     } else {
       context.push(
-          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
     }
   }
 
@@ -150,7 +150,7 @@ class _ArticleWidgetState extends State<ArticleWidget> {
     final authorNameFromUser = _authorUser?['name'] as String? ??
         _authorUser?['display_name'] as String? ??
         '';
-    final authorImageFromUser = _authorUser?['profileImage'] as String? ??
+    final authorImageFromUser = _authorUser?['picture'] as String? ??
         _authorUser?['picture'] as String? ??
         '';
 

@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/following_repository.dart';
@@ -32,6 +33,35 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     on<FollowSetUserAdded>(_onUserAdded);
     on<FollowSetUserRemoved>(_onUserRemoved);
     on<FollowSetRefreshed>(_onRefreshed);
+    on<FollowSetFavoriteToggled>(_onFavoriteToggled);
+  }
+
+  static const _favoritesKey = 'favorite_follow_set_ids';
+
+  Future<List<String>> _loadFavoriteIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_favoritesKey) ?? [];
+  }
+
+  Future<void> _saveFavoriteIds(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_favoritesKey, ids);
+  }
+
+  Future<void> _onFavoriteToggled(
+    FollowSetFavoriteToggled event,
+    Emitter<FollowSetState> emit,
+  ) async {
+    if (state is! FollowSetLoaded) return;
+    final current = state as FollowSetLoaded;
+    final ids = List<String>.from(current.favoriteIds);
+    if (ids.contains(event.listId)) {
+      ids.remove(event.listId);
+    } else {
+      ids.add(event.listId);
+    }
+    await _saveFavoriteIds(ids);
+    emit(current.copyWith(favoriteIds: ids));
   }
 
   Future<void> _onLoadRequested(
@@ -49,38 +79,44 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     if (!service.isInitialized) {
       await service.loadFromDatabase(userPubkeyHex: currentUserHex);
 
-      final follows =
-          await _followingRepository.getFollowingList(currentUserHex);
+      final follows = await _followingRepository.getFollowing(currentUserHex);
       if (follows != null && follows.isNotEmpty) {
         await service.loadFollowedUsersSets(followedPubkeys: follows);
       }
     }
+    final favoriteIds = await _loadFavoriteIds();
 
-    if (service.followSets.isNotEmpty ||
-        service.followedUsersSets.isNotEmpty) {
+    if (service.followSets.isNotEmpty || service.followedUsersSets.isNotEmpty) {
       final resolved = await _resolveProfiles(service.allSets);
       emit(FollowSetLoaded(
         followSets: service.followSets,
         followedUsersSets: service.followedUsersSets,
         resolvedProfiles: resolved.profiles,
         resolvedAuthors: resolved.authors,
+        favoriteIds: favoriteIds,
       ));
       _syncInBackground(currentUserHex, emit);
     } else {
-      emit(const FollowSetLoaded(followSets: []));
+      emit(FollowSetLoaded(followSets: const [], favoriteIds: favoriteIds));
       _syncInBackground(currentUserHex, emit);
     }
   }
 
-  Future<({Map<String, List<Map<String, dynamic>>> profiles, Map<String, Map<String, String>> authors})>
-      _resolveProfiles(List<FollowSet> sets) async {
+  Future<
+      ({
+        Map<String, List<Map<String, dynamic>>> profiles,
+        Map<String, Map<String, String>> authors
+      })> _resolveProfiles(List<FollowSet> sets) async {
     final allPubkeys = <String>{};
     for (final set in sets) {
       allPubkeys.addAll(set.pubkeys);
       allPubkeys.add(set.pubkey);
     }
     if (allPubkeys.isEmpty) {
-      return (profiles: <String, List<Map<String, dynamic>>>{}, authors: <String, Map<String, String>>{});
+      return (
+        profiles: <String, List<Map<String, dynamic>>>{},
+        authors: <String, Map<String, String>>{}
+      );
     }
 
     final profilesMap =
@@ -137,8 +173,7 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     return (profiles: result, authors: authors);
   }
 
-  void _syncInBackground(
-      String currentUserHex, Emitter<FollowSetState> emit) {
+  void _syncInBackground(String currentUserHex, Emitter<FollowSetState> emit) {
     _syncService.syncFollowSets(currentUserHex).then((_) async {
       final service = FollowSetService.instance;
 

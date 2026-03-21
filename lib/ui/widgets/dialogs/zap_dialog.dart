@@ -10,8 +10,8 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
 import '../../../data/services/nostr_service.dart';
-import '../../../data/services/relay_service.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/sync/sync_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
@@ -50,13 +50,16 @@ Future<bool> _payZapWithNwc(
     if (!hasConnection) {
       if (context.mounted) {
         AppSnackbar.warning(
-            context, l10n?.pleaseConnectWalletFirst ?? 'Please connect your wallet first');
+            context,
+            l10n?.pleaseConnectWalletFirst ??
+                'Please connect your wallet first');
       }
       return false;
     }
 
     if (context.mounted) {
-      AppSnackbar.info(context, l10n?.processingPayment ?? 'Processing payment...',
+      AppSnackbar.info(
+          context, l10n?.processingPayment ?? 'Processing payment...',
           duration: const Duration(seconds: 5));
     }
 
@@ -96,24 +99,16 @@ Future<bool> _payZapWithNwc(
 
     final lnurlBech32 = lnurlJson['lnurl'] ?? '';
     final amountMillisats = (sats * 1000).toString();
-    final relays = RustRelayService.instance.relayUrls;
+    final relays = AppDI.get<SyncService>().relayUrls;
 
     if (relays.isEmpty) {
       throw Exception('No relays available for zap.');
     }
 
-    final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-    String recipientPubkeyHex = userPubkeyHex;
-    if (userPubkeyHex.startsWith('npub1')) {
-      try {
-        final keyData = Nip19.decode(userPubkeyHex);
-        recipientPubkeyHex = keyData;
-      } catch (e) {
-        if (kDebugMode) {
-          print('[ZapDialog] Error converting npub to hex: $e');
-        }
-      }
-    }
+    final userPubkeyHex = user['pubkey'] as String? ?? '';
+    final String recipientPubkeyHex = userPubkeyHex.startsWith('npub1')
+        ? (AuthService.instance.npubToHex(userPubkeyHex) ?? userPubkeyHex)
+        : userPubkeyHex;
 
     final List<List<String>> tags = [
       ['relays', ...relays.map((e) => e.toString())],
@@ -153,7 +148,8 @@ Future<bool> _payZapWithNwc(
       throw Exception('Invoice not returned by zap server.');
     }
 
-    debugPrint('[ZapDialog] Paying invoice via NWC: ${invoice.substring(0, 20)}...');
+    debugPrint(
+        '[ZapDialog] Paying invoice via NWC: ${invoice.substring(0, 20)}...');
     final paymentResult = await nwcService.payInvoice(invoice);
 
     if (paymentResult.isError) {
@@ -207,13 +203,16 @@ Future<bool> _payZapWithCoinos(
     if (!isAuthResult.isSuccess || isAuthResult.data != true) {
       if (context.mounted) {
         AppSnackbar.warning(
-            context, l10n?.pleaseConnectWalletFirst ?? 'Please connect your wallet first');
+            context,
+            l10n?.pleaseConnectWalletFirst ??
+                'Please connect your wallet first');
       }
       return false;
     }
 
     if (context.mounted) {
-      AppSnackbar.info(context, l10n?.processingPayment ?? 'Processing payment...',
+      AppSnackbar.info(
+          context, l10n?.processingPayment ?? 'Processing payment...',
           duration: const Duration(seconds: 5));
     }
 
@@ -253,24 +252,16 @@ Future<bool> _payZapWithCoinos(
 
     final lnurlBech32 = lnurlJson['lnurl'] ?? '';
     final amountMillisats = (sats * 1000).toString();
-    final relays = RustRelayService.instance.relayUrls;
+    final relays = AppDI.get<SyncService>().relayUrls;
 
     if (relays.isEmpty) {
       throw Exception('No relays available for zap.');
     }
 
-    final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
-    String recipientPubkeyHex = userPubkeyHex;
-    if (userPubkeyHex.startsWith('npub1')) {
-      try {
-        final keyData = Nip19.decode(userPubkeyHex);
-        recipientPubkeyHex = keyData;
-      } catch (e) {
-        if (kDebugMode) {
-          print('[ZapDialog] Error converting npub to hex: $e');
-        }
-      }
-    }
+    final userPubkeyHex = user['pubkey'] as String? ?? '';
+    final String recipientPubkeyHex = userPubkeyHex.startsWith('npub1')
+        ? (AuthService.instance.npubToHex(userPubkeyHex) ?? userPubkeyHex)
+        : userPubkeyHex;
 
     final List<List<String>> tags = [
       ['relays', ...relays.map((e) => e.toString())],
@@ -371,7 +362,7 @@ Future<void> _publishZapEventsAsync(
   try {
     final noteId = note['id'] as String? ?? '';
 
-    await RustRelayService.instance.broadcastEvent(zapRequest);
+    await AppDI.get<SyncService>().broadcastEvent(zapRequest);
 
     if (kDebugMode) {
       print(
@@ -394,15 +385,15 @@ Future<bool> _processZapPayment(
   String comment,
 ) async {
   try {
-    final noteAuthor = note['author'] as String? ?? '';
+    final noteAuthor = note['pubkey'] as String? ?? '';
     final profileRepo = AppDI.get<ProfileRepository>();
     final profile = await profileRepo.getProfile(noteAuthor);
 
     if (profile == null) {
       if (context.mounted) {
         final l10n = AppLocalizations.of(context);
-        AppSnackbar.error(
-            context, l10n?.errorLoadingUserProfile ?? 'Error loading user profile',
+        AppSnackbar.error(context,
+            l10n?.errorLoadingUserProfile ?? 'Error loading user profile',
             duration: const Duration(seconds: 1));
       }
       return false;
@@ -422,7 +413,7 @@ Future<bool> _processZapPayment(
     }
 
     final user = {
-      'pubkeyHex': profile.pubkey,
+      'pubkey': profile.pubkey,
       'name': profile.name ?? '',
       'lud16': profile.lud16 ?? '',
     };
@@ -536,8 +527,7 @@ Future<Map<String, dynamic>> showZapDialog({
                   onPressed: () {
                     final sats = int.tryParse(amountController.text.trim());
                     if (sats == null || sats <= 0) {
-                      AppSnackbar.error(
-                          modalContext,
+                      AppSnackbar.error(modalContext,
                           l10n?.enterValidAmount ?? 'Enter a valid amount',
                           duration: const Duration(seconds: 1));
                       return;

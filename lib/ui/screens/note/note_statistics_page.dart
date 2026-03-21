@@ -62,7 +62,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
           ? userNpubValue
           : (userNpubValue?.toString() ?? npub);
 
-      final userPubkeyHexValue = user?['pubkeyHex'];
+      final userPubkeyHexValue = user?['pubkey'];
       final userPubkeyHex = userPubkeyHexValue is String
           ? userPubkeyHexValue
           : (userPubkeyHexValue?.toString() ?? '');
@@ -72,13 +72,13 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       final currentLocation = GoRouterState.of(context).matchedLocation;
       if (currentLocation.startsWith('/home/feed')) {
         context.push(
-            '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+            '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
       } else if (currentLocation.startsWith('/home/notifications')) {
         context.push(
-            '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+            '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
       } else {
         context.push(
-            '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+            '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
       }
     } catch (e) {
       debugPrint('[NoteStatisticsPage] Navigate to profile error: $e');
@@ -113,7 +113,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       );
     }
 
-    final userProfileImageValue = user['profileImage'];
+    final userProfileImageValue = user['picture'];
     final userProfileImage = userProfileImageValue is String
         ? userProfileImageValue
         : (userProfileImageValue?.toString() ?? '');

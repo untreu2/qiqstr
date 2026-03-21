@@ -4,8 +4,8 @@ import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/rust_database_service.dart';
 import '../../../data/services/encrypted_mute_service.dart';
+import '../../../domain/entities/user_profile.dart';
 import 'profile_info_event.dart';
 import 'profile_info_state.dart';
 
@@ -22,9 +22,8 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
   final AuthService _authService;
-  final RustDatabaseService _db;
   final String userPubkeyHex;
-  StreamSubscription<Map<String, dynamic>?>? _profileSubscription;
+  StreamSubscription<UserProfile?>? _profileSubscription;
   Timer? _followingPollTimer;
   Timer? _followsYouPollTimer;
 
@@ -34,12 +33,10 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     required SyncService syncService,
     required AuthService authService,
     required this.userPubkeyHex,
-    RustDatabaseService? db,
   })  : _followingRepository = followingRepository,
         _profileRepository = profileRepository,
         _syncService = syncService,
         _authService = authService,
-        _db = db ?? RustDatabaseService.instance,
         super(const ProfileInfoInitial()) {
     on<ProfileInfoInitialized>(_onProfileInfoInitialized);
     on<ProfileInfoUserUpdated>(_onProfileInfoUserUpdated);
@@ -68,8 +65,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
 
     int followingCount = 0;
     try {
-      final localFollows =
-          await _followingRepository.getFollowingList(targetHex);
+      final localFollows = await _followingRepository.getFollowing(targetHex);
       if (localFollows != null) followingCount = localFollows.length;
     } catch (_) {}
 
@@ -105,7 +101,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
         return;
       }
       try {
-        final follows = await _followingRepository.getFollowingList(pubkeyHex);
+        final follows = await _followingRepository.getFollowing(pubkeyHex);
         if (follows != null && follows.isNotEmpty) {
           timer.cancel();
           if (!isClosed && state is ProfileInfoLoaded) {
@@ -129,19 +125,20 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
 
   void _watchProfile(String pubkey) {
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(pubkey).listen((profileData) {
-      if (isClosed || profileData == null) return;
+    _profileSubscription =
+        _profileRepository.watchProfile(pubkey).listen((profile) {
+      if (isClosed || profile == null) return;
       final currentState = state;
       if (currentState is! ProfileInfoLoaded) return;
 
       final updatedUser = Map<String, dynamic>.from(currentState.user);
-      updatedUser['name'] = profileData['name'] ?? updatedUser['name'];
-      updatedUser['profileImage'] =
-          profileData['picture'] ?? updatedUser['profileImage'];
-      updatedUser['banner'] = profileData['banner'] ?? updatedUser['banner'];
-      updatedUser['about'] = profileData['about'] ?? updatedUser['about'];
-      updatedUser['nip05'] = profileData['nip05'] ?? updatedUser['nip05'];
-      updatedUser['website'] = profileData['website'] ?? updatedUser['website'];
+      updatedUser['name'] = profile.name ?? updatedUser['name'];
+      updatedUser['picture'] =
+          profile.picture ?? updatedUser['picture'];
+      updatedUser['banner'] = profile.banner ?? updatedUser['banner'];
+      updatedUser['about'] = profile.about ?? updatedUser['about'];
+      updatedUser['nip05'] = profile.nip05 ?? updatedUser['nip05'];
+      updatedUser['website'] = profile.website ?? updatedUser['website'];
 
       add(_InternalStateUpdate(currentState.copyWith(user: updatedUser)));
     });
@@ -171,7 +168,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   }
 
   void _syncCountsInBackground(ProfileInfoLoaded currentState) {
-    final pubkeyHex = currentState.user['pubkeyHex'] as String? ??
+    final pubkeyHex = currentState.user['pubkey'] as String? ??
         currentState.user['pubkey'] as String? ??
         userPubkeyHex;
     if (pubkeyHex.isEmpty) return;
@@ -193,7 +190,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       try {
         await _syncService.syncFollowingList(pubkeyHex);
         if (isClosed) return;
-        final follows = await _followingRepository.getFollowingList(pubkeyHex);
+        final follows = await _followingRepository.getFollowing(pubkeyHex);
         if (!isClosed && state is ProfileInfoLoaded) {
           add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
             followingCount: follows?.length ?? 0,
@@ -213,7 +210,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     Future.microtask(() async {
       if (isClosed) return;
       try {
-        final result = await _followingRepository.calculateFollowScore(
+        final result = await _followingRepository.getFollowScore(
             currentUserHex, targetHex);
         if (result != null && !isClosed && state is ProfileInfoLoaded) {
           add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
@@ -231,7 +228,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       if (isClosed) return;
       try {
         final targetFollows =
-            await _followingRepository.getFollowingList(targetHex);
+            await _followingRepository.getFollowing(targetHex);
         if (targetFollows != null && targetFollows.isNotEmpty) {
           final doesUserFollowMe = targetFollows
               .any((f) => f.toLowerCase() == currentUserHex.toLowerCase());
@@ -263,7 +260,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       }
       try {
         final targetFollows =
-            await _followingRepository.getFollowingList(targetHex);
+            await _followingRepository.getFollowing(targetHex);
         if (targetFollows != null && targetFollows.isNotEmpty) {
           timer.cancel();
           final doesUserFollowMe = targetFollows
@@ -313,7 +310,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       final targetHex = _authService.npubToHex(userPubkeyHex) ?? userPubkeyHex;
 
       final currentFollows =
-          await _followingRepository.getFollowingList(currentUserHex) ?? [];
+          await _followingRepository.getFollowing(currentUserHex) ?? [];
 
       List<String> updatedFollows;
       if (currentIsFollowing) {

@@ -10,19 +10,19 @@ import '../../../data/repositories/following_repository.dart';
 class RepositoriesModule extends DIModule {
   @override
   Future<void> register() async {
-    final db = AppDI.get<RustDatabaseService>();
+    final events = AppDI.get<RustDatabaseService>();
 
     AppDI.registerLazySingleton<FeedRepository>(
-        () => FeedRepositoryImpl(db: db));
+        () => FeedRepositoryImpl(events: events));
     AppDI.registerLazySingleton<ProfileRepository>(
-        () => ProfileRepositoryImpl(db: db));
+        () => ProfileRepositoryImpl(events: events));
     AppDI.registerLazySingleton<NotificationRepository>(
-        () => NotificationRepositoryImpl(db: db));
+        () => NotificationRepositoryImpl(events: events));
     AppDI.registerLazySingleton<ArticleRepository>(
-        () => ArticleRepositoryImpl(db: db));
+        () => ArticleRepositoryImpl(events: events));
     AppDI.registerLazySingleton<InteractionRepository>(
-        () => InteractionRepositoryImpl(db: db));
+        () => const InteractionRepositoryImpl());
     AppDI.registerLazySingleton<FollowingRepository>(
-        () => FollowingRepositoryImpl(db: db));
+        () => FollowingRepositoryImpl(events: events));
   }
 }

@@ -343,14 +343,14 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
   }
 
   String get _displayImage {
-    final loaded = _loadedProfile?['profileImage'] as String? ?? '';
+    final loaded = _loadedProfile?['picture'] as String? ?? '';
     if (loaded.isNotEmpty) return loaded;
-    return widget.user['profileImage'] as String? ?? '';
+    return widget.user['picture'] as String? ?? '';
   }
 
   Future<void> _loadAndSyncProfile() async {
     if (!mounted) return;
-    final pubkey = widget.user['pubkeyHex'] as String? ??
+    final pubkey = widget.user['pubkey'] as String? ??
         widget.user['pubkey'] as String? ??
         '';
     if (pubkey.isEmpty) return;
@@ -361,9 +361,9 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
     if (profile != null && mounted) {
       setState(() {
         _loadedProfile = {
-          'pubkeyHex': profile.pubkey,
+          'pubkey': profile.pubkey,
           'name': profile.name ?? '',
-          'profileImage': profile.picture ?? '',
+          'picture': profile.picture ?? '',
           'about': profile.about ?? '',
           'banner': profile.banner ?? '',
           'nip05': profile.nip05 ?? '',
@@ -385,9 +385,9 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
         if (synced != null && mounted) {
           setState(() {
             _loadedProfile = {
-              'pubkeyHex': synced.pubkey,
+              'pubkey': synced.pubkey,
               'name': synced.name ?? '',
-              'profileImage': synced.picture ?? '',
+              'picture': synced.picture ?? '',
               'about': synced.about ?? '',
               'banner': synced.banner ?? '',
               'nip05': synced.nip05 ?? '',
@@ -496,7 +496,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
       },
       child: BlocBuilder<UserTileBloc, UserTileState>(
         builder: (context, state) {
-          final userPubkeyHex = widget.user['pubkeyHex'] as String? ??
+          final userPubkeyHex = widget.user['pubkey'] as String? ??
               widget.user['pubkey'] as String? ??
               '';
           final isCurrentUser =
@@ -521,7 +521,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                           router.routerDelegate.currentConfiguration.uri.path;
                       final userNpub = widget.user['npub'] as String? ?? '';
                       final userPubkeyHex =
-                          widget.user['pubkeyHex'] as String? ?? '';
+                          widget.user['pubkey'] as String? ?? '';
                       if (userNpub.isEmpty && userPubkeyHex.isEmpty) return;
 
                       final npubParam =
@@ -531,14 +531,14 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
 
                       if (currentLocation.startsWith('/home/feed')) {
                         navContext.push(
-                            '/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                            '/home/feed/profile?npub=${Uri.encodeComponent(npubParam)}&pubkey=${Uri.encodeComponent(pubkeyHexParam)}');
                       } else if (currentLocation
                           .startsWith('/home/notifications')) {
                         navContext.push(
-                            '/home/notifications/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                            '/home/notifications/profile?npub=${Uri.encodeComponent(npubParam)}&pubkey=${Uri.encodeComponent(pubkeyHexParam)}');
                       } else {
                         navContext.push(
-                            '/profile?npub=${Uri.encodeComponent(npubParam)}&pubkeyHex=${Uri.encodeComponent(pubkeyHexParam)}');
+                            '/profile?npub=${Uri.encodeComponent(npubParam)}&pubkey=${Uri.encodeComponent(pubkeyHexParam)}');
                       }
                     } catch (e) {
                       debugPrint('[UserItemWidget] Navigation error: $e');

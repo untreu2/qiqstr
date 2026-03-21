@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_counts_json`, `counting_client_lock`, `db_path_state`, `get_client_pub`, `get_client`, `open_or_recreate_lmdb`, `resolve_thread_root_internal`, `sanitize_lmdb_dir`, `state`, `try_open_lmdb`, `user_relays_state`, `wipe_db_directory`
+// These functions are ignored because they are not marked as `pub`: `build_counts_json`, `build_thread_result_json`, `counting_client_lock`, `db_path_state`, `get_client_pub`, `get_client`, `open_or_recreate_lmdb`, `resolve_repost_to_original_local`, `resolve_repost_to_original`, `resolve_thread_root_internal`, `resolve_thread_root_local`, `sanitize_lmdb_dir`, `state`, `try_open_lmdb`, `user_relays_state`, `wipe_db_directory`
 
 Future<void> initClient(
         {required List<String> relayUrls,
@@ -159,6 +159,19 @@ Future<String> mergeAndSortNotes(
         {required String existingJson, required String incomingJson}) =>
     RustLib.instance.api.crateApiRelayMergeAndSortNotes(
         existingJson: existingJson, incomingJson: incomingJson);
+
+/// DB-only version of fetch_full_thread — no network calls, returns instantly
+/// from local LMDB. Returns None if the root note is not in the DB yet.
+Future<String?> fetchFullThreadLocal(
+        {required String noteId,
+        String? currentUserPubkeyHex,
+        required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiRelayFetchFullThreadLocal(
+        noteId: noteId,
+        currentUserPubkeyHex: currentUserPubkeyHex,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords);
 
 Future<String> fetchFullThread(
         {required String noteId,

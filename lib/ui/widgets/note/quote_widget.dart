@@ -118,10 +118,9 @@ class QuoteWidget extends StatelessWidget {
     final noteTimestamp = noteData['created_at'] as int? ?? 0;
 
     final user = <String, dynamic>{
-      'pubkeyHex': noteAuthor,
+      'pubkey': noteAuthor,
       'npub': noteAuthor,
       'name': noteData['authorName'] as String? ?? '',
-      'profileImage': noteData['authorImage'] as String? ?? '',
       'picture': noteData['authorImage'] as String? ?? '',
       'nip05': noteData['authorNip05'] as String? ?? '',
     };
@@ -196,17 +195,17 @@ class _QuoteContent extends StatelessWidget {
     if (user == null) return;
 
     final userNpub = user!['npub'] as String? ?? '';
-    final userPubkeyHex = user!['pubkeyHex'] as String? ?? '';
+    final userPubkeyHex = user!['pubkey'] as String? ?? '';
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
       context.push(
-          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
     } else if (currentLocation.startsWith('/home/notifications')) {
       context.push(
-          '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
     } else {
       context.push(
-          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
     }
   }
 
@@ -223,10 +222,10 @@ class _QuoteContent extends StatelessWidget {
   Map<String, dynamic> _createFallbackUser(String npub) {
     final shortName = npub.length > 8 ? npub.substring(0, 8) : npub;
     return {
-      'pubkeyHex': npub,
+      'pubkey': npub,
       'name': shortName,
       'about': '',
-      'profileImage': '',
+      'picture': '',
       'banner': '',
       'website': '',
       'nip05': '',
@@ -238,7 +237,7 @@ class _QuoteContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final noteAuthor = note['author'] as String? ?? '';
+    final noteAuthor = note['pubkey'] as String? ?? '';
     final noteContent = note['content'] as String? ?? '';
     final noteId = note['id'] as String? ?? '';
     final displayUser = user ?? _createFallbackUser(noteAuthor);
@@ -296,7 +295,7 @@ class _QuoteContent extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context, Map<String, dynamic> user) {
-    final userProfileImage = user['profileImage'] as String? ?? '';
+    final userProfileImage = user['picture'] as String? ?? '';
     final userName = user['name'] as String? ?? '';
     return Row(
       children: [

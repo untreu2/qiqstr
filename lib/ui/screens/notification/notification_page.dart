@@ -7,7 +7,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/list_separator_widget.dart';
 import '../../widgets/note/quote_widget.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../presentation/blocs/notification/notification_bloc.dart';
 import '../../../presentation/blocs/notification/notification_event.dart'
     as notification_events;
@@ -60,7 +59,7 @@ class _NotificationPageState extends State<NotificationPage> {
 
     if (state is NotificationsLoaded) {
       final notifications = state.notifications
-          .where((n) => n['author'] != state.currentUserHex)
+          .where((n) => n['fromPubkey'] != state.currentUserHex)
           .toList();
 
       if (notifications.isEmpty) {
@@ -461,14 +460,15 @@ List<Map<String, dynamic>> _groupNotifications(
       final seen = <String>{};
       final uniqueAuthors = <Map<String, dynamic>>[];
       for (final item in items) {
-        final author = item['author'] as String? ?? '';
+        final author =
+            item['fromPubkey'] as String? ?? item['author'] as String? ?? '';
         if (author.isNotEmpty && seen.add(author)) {
           uniqueAuthors.add({
-            'author': author,
+            'pubkey': author,
             'fromName': item['fromName'],
             'fromImage': item['fromImage'],
             'name': item['name'],
-            'profileImage': item['profileImage'],
+            'picture': item['picture'],
           });
         }
       }
@@ -523,14 +523,16 @@ class _NotificationTileState extends State<_NotificationTile> {
       setState(() {
         _profile = {
           'name': newName,
-          'profileImage': newImage,
+          'picture': newImage,
         };
       });
     }
   }
 
   Future<void> _loadProfile() async {
-    final author = widget.notification['author'] as String? ?? '';
+    final author = widget.notification['fromPubkey'] as String? ??
+        widget.notification['author'] as String? ??
+        '';
     if (author.isEmpty) return;
 
     final fromName = widget.notification['fromName'] as String? ?? '';
@@ -541,7 +543,7 @@ class _NotificationTileState extends State<_NotificationTile> {
         setState(() {
           _profile = {
             'name': fromName,
-            'profileImage': fromImage,
+            'picture': fromImage,
           };
         });
       }
@@ -555,7 +557,7 @@ class _NotificationTileState extends State<_NotificationTile> {
         setState(() {
           _profile = {
             'name': profile.name ?? profile.displayName ?? '',
-            'profileImage': profile.picture ?? '',
+            'picture': profile.picture ?? '',
           };
         });
         return;
@@ -568,7 +570,7 @@ class _NotificationTileState extends State<_NotificationTile> {
         setState(() {
           _profile = {
             'name': synced.name ?? synced.displayName ?? '',
-            'profileImage': synced.picture ?? '',
+            'picture': synced.picture ?? '',
           };
         });
       }
@@ -624,7 +626,9 @@ class _NotificationTileState extends State<_NotificationTile> {
     final notificationEventId = widget.notification['id'] as String? ?? '';
 
     if (type == 'follow' || type == 'unfollow') {
-      final author = widget.notification['author'] as String? ?? '';
+      final author = widget.notification['fromPubkey'] as String? ??
+          widget.notification['author'] as String? ??
+          '';
       if (author.isNotEmpty) {
         _navigateToProfile(author);
       }
@@ -634,9 +638,9 @@ class _NotificationTileState extends State<_NotificationTile> {
       if (type == 'reply' && notificationEventId.isNotEmpty) {
         try {
           final feedRepo = AppDI.get<FeedRepository>();
-          final replyNote = await feedRepo.getNoteRaw(notificationEventId);
+          final replyNote = await feedRepo.getNote(notificationEventId);
           if (replyNote != null) {
-            chainStr = ThreadChain.buildFromNote(replyNote);
+            chainStr = ThreadChain.buildFromNote(replyNote.toMap());
           } else {
             final fallbackChain = notificationEventId != targetEventId
                 ? [targetEventId, notificationEventId]
@@ -661,7 +665,7 @@ class _NotificationTileState extends State<_NotificationTile> {
       final authService = AppDI.get<AuthService>();
       final npub = authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
       context.push(
-          '/home/notifications/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+          '/home/notifications/profile?npub=${Uri.encodeComponent(npub)}&pubkey=${Uri.encodeComponent(pubkeyHex)}');
     } catch (e) {
       debugPrint('[NotificationTile] Error navigating to profile: $e');
     }
@@ -671,7 +675,7 @@ class _NotificationTileState extends State<_NotificationTile> {
     final notificationId = widget.notification['id'] as String? ?? '';
     if (notificationId.isEmpty) return const SizedBox.shrink();
     try {
-      final bech32 = encodeBasicBech32(notificationId, 'note');
+      final bech32 = AuthService.instance.encodeNoteId(notificationId);
       return GestureDetector(
         onTap: _onTap,
         child: QuoteWidget(bech32: bech32, shortMode: true),
@@ -686,7 +690,7 @@ class _NotificationTileState extends State<_NotificationTile> {
     if (targetEventId.isEmpty) return const SizedBox.shrink();
 
     try {
-      final noteBech32 = encodeBasicBech32(targetEventId, 'note');
+      final noteBech32 = AuthService.instance.encodeNoteId(targetEventId);
       return Padding(
         padding: const EdgeInsets.only(top: 6),
         child: QuoteWidget(bech32: noteBech32, shortMode: true),
@@ -699,11 +703,13 @@ class _NotificationTileState extends State<_NotificationTile> {
   @override
   Widget build(BuildContext context) {
     final type = widget.notification['type'] as String? ?? '';
-    final author = widget.notification['author'] as String? ?? '';
+    final author = widget.notification['fromPubkey'] as String? ??
+        widget.notification['author'] as String? ??
+        '';
     final createdAt = widget.notification['createdAt'] as int?;
 
     final name = _profile?['name'] as String? ?? '';
-    final image = _profile?['profileImage'] as String? ?? '';
+    final image = _profile?['picture'] as String? ?? '';
     final displayName = name.isNotEmpty
         ? name
         : (author.length > 8 ? '${author.substring(0, 8)}...' : author);
@@ -829,14 +835,14 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
 
   Future<void> _loadProfiles() async {
     for (final author in _authors) {
-      final pubkey = author['author'] as String? ?? '';
+      final pubkey = author['pubkey'] as String? ?? '';
       if (pubkey.isEmpty) continue;
 
       final name = author['fromName'] as String? ?? '';
       final image = author['fromImage'] as String? ?? '';
 
       if (name.isNotEmpty || image.isNotEmpty) {
-        _profiles[pubkey] = {'name': name, 'profileImage': image};
+        _profiles[pubkey] = {'name': name, 'picture': image};
         continue;
       }
 
@@ -846,7 +852,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
         if (profile != null && mounted) {
           _profiles[pubkey] = {
             'name': profile.name ?? profile.displayName ?? '',
-            'profileImage': profile.picture ?? '',
+            'picture': profile.picture ?? '',
           };
         } else {
           final syncService = AppDI.get<SyncService>();
@@ -855,7 +861,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
           if (synced != null && mounted) {
             _profiles[pubkey] = {
               'name': synced.name ?? synced.displayName ?? '',
-              'profileImage': synced.picture ?? '',
+              'picture': synced.picture ?? '',
             };
           }
         }
@@ -865,7 +871,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
   }
 
   String _displayName(Map<String, dynamic> author) {
-    final pubkey = author['author'] as String? ?? '';
+    final pubkey = author['pubkey'] as String? ?? '';
     final cached = _profiles[pubkey];
     final name = cached?['name'] as String? ??
         author['fromName'] as String? ??
@@ -876,11 +882,11 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
   }
 
   String _profileImage(Map<String, dynamic> author) {
-    final pubkey = author['author'] as String? ?? '';
+    final pubkey = author['pubkey'] as String? ?? '';
     final cached = _profiles[pubkey];
-    return cached?['profileImage'] as String? ??
+    return cached?['picture'] as String? ??
         author['fromImage'] as String? ??
-        author['profileImage'] as String? ??
+        author['picture'] as String? ??
         '';
   }
 
@@ -939,7 +945,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
       final authService = AppDI.get<AuthService>();
       final npub = authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
       context.push(
-          '/home/notifications/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+          '/home/notifications/profile?npub=${Uri.encodeComponent(npub)}&pubkey=${Uri.encodeComponent(pubkeyHex)}');
     } catch (_) {}
   }
 
@@ -948,7 +954,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
     if (targetEventId.isEmpty) return const SizedBox.shrink();
 
     try {
-      final noteBech32 = encodeBasicBech32(targetEventId, 'note');
+      final noteBech32 = AuthService.instance.encodeNoteId(targetEventId);
       return Padding(
         padding: const EdgeInsets.only(top: 6),
         child: QuoteWidget(bech32: noteBech32, shortMode: true),
@@ -967,7 +973,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
 
     return GestureDetector(
       onTap: () {
-        final firstAuthor = authors.first['author'] as String? ?? '';
+        final firstAuthor = authors.first['pubkey'] as String? ?? '';
         if (firstAuthor.isNotEmpty) _navigateToProfile(firstAuthor);
       },
       child: SizedBox(

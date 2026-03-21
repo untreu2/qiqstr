@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
+import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../domain/entities/feed_note.dart';
@@ -13,6 +14,7 @@ import 'feed_state.dart';
 
 class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   final FeedRepository _feedRepository;
+  final FollowingRepository _followingRepository;
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
 
@@ -26,9 +28,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
   FeedBloc({
     required FeedRepository feedRepository,
+    required FollowingRepository followingRepository,
     required ProfileRepository profileRepository,
     required SyncService syncService,
   })  : _feedRepository = feedRepository,
+        _followingRepository = followingRepository,
         _profileRepository = profileRepository,
         _syncService = syncService,
         super(const FeedInitial()) {
@@ -87,53 +91,42 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
   }
 
-  void _watchFeed(String userHex, {int? limit}) {
+  void _watch(
+    Stream<List<FeedNote>> Function() source,
+    void Function() retry,
+  ) {
     _feedSubscription?.cancel();
-    _feedSubscription = _feedRepository
-        .watchFeed(userHex, limit: limit ?? _currentLimit)
-        .listen(
+    _feedSubscription = source().listen(
       (notes) {
-        if (isClosed) return;
-        add(feed_event.FeedNotesUpdated(notes));
+        if (!isClosed) add(feed_event.FeedNotesUpdated(notes));
       },
       onError: (_) {
-        if (isClosed) return;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!isClosed) _watchFeed(userHex, limit: limit);
-        });
+        if (!isClosed) {
+          Future.delayed(const Duration(seconds: 2), () {
+            if (!isClosed) retry();
+          });
+        }
       },
       onDone: () {
-        if (isClosed) return;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!isClosed) _watchFeed(userHex, limit: limit);
-        });
+        if (!isClosed) {
+          Future.delayed(const Duration(seconds: 2), () {
+            if (!isClosed) retry();
+          });
+        }
       },
     );
   }
 
-  void _watchHashtagFeed(String hashtag, {int? limit}) {
-    _feedSubscription?.cancel();
-    _feedSubscription = _feedRepository
-        .watchHashtagFeed(hashtag, limit: limit ?? _currentLimit)
-        .listen(
-      (notes) {
-        if (isClosed) return;
-        add(feed_event.FeedNotesUpdated(notes));
-      },
-      onError: (_) {
-        if (isClosed) return;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!isClosed) _watchHashtagFeed(hashtag, limit: limit);
-        });
-      },
-      onDone: () {
-        if (isClosed) return;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!isClosed) _watchHashtagFeed(hashtag, limit: limit);
-        });
-      },
-    );
-  }
+  void _watchFeed(String userHex, {int? limit}) => _watch(
+        () => _feedRepository.watchFeed(userHex, limit: limit ?? _currentLimit),
+        () => _watchFeed(userHex, limit: limit),
+      );
+
+  void _watchHashtagFeed(String hashtag, {int? limit}) => _watch(
+        () => _feedRepository.watchHashtag(hashtag,
+            limit: limit ?? _currentLimit),
+        () => _watchHashtagFeed(hashtag, limit: limit),
+      );
 
   void _syncHashtagInBackground(String hashtag, Emitter<FeedState>? emit) {
     Future.microtask(() async {
@@ -156,7 +149,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     if (state is! FeedLoaded) return;
     final currentState = state as FeedLoaded;
 
-    _preCacheInteractions(event.notes);
+    InteractionService.instance.populateFromNotes(event.notes);
 
     final sortedNotes = _feedNotesToMaps(event.notes);
     _sortNotes(sortedNotes, currentState.sortMode);
@@ -267,7 +260,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       Future.microtask(() async {
         if (isClosed) return;
         try {
-          final follows = await _feedRepository.getFollowingList(userHex);
+          final follows = await _followingRepository.getFollowing(userHex);
           if (follows != null && follows.isNotEmpty) {
             _syncService.syncProfiles(follows);
           }
@@ -546,8 +539,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       }
       if (contents.isEmpty) return;
 
-      final resultJson =
-          rust_db.extractEmbeddedIdsBatch(contents: contents);
+      final resultJson = rust_db.extractEmbeddedIdsBatch(contents: contents);
       final result = jsonDecode(resultJson) as Map<String, dynamic>;
 
       final quoteEventIds = (result['quoteEventIds'] as List<dynamic>?)
@@ -569,23 +561,6 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     });
   }
 
-  void _preCacheInteractions(List<FeedNote> notes) {
-    final service = InteractionService.instance;
-    for (final note in notes) {
-      if (note.id.isEmpty) continue;
-      final counts = InteractionCounts(
-        reactions: note.reactionCount,
-        reposts: note.repostCount,
-        replies: note.replyCount,
-        zapAmount: note.zapCount,
-        hasReacted: note.hasReacted,
-        hasReposted: note.hasReposted,
-        hasZapped: note.hasZapped,
-      );
-      service.prePopulateCache(note.id, counts);
-    }
-  }
-
   List<Map<String, dynamic>> _feedNotesToMaps(List<FeedNote> notes) {
     return notes.map((note) => note.toMap()).toList();
   }
@@ -600,29 +575,14 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     });
   }
 
-  void _watchListFeed(List<String> pubkeys, {int? limit}) {
-    _feedSubscription?.cancel();
-    _feedSubscription = _feedRepository
-        .watchListFeed(pubkeys, limit: limit ?? _currentLimit)
-        .listen(
-      (notes) {
-        if (isClosed) return;
-        add(feed_event.FeedNotesUpdated(notes));
-      },
-      onError: (_) {
-        if (isClosed) return;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!isClosed) _watchListFeed(pubkeys, limit: limit);
-        });
-      },
-      onDone: () {
-        if (isClosed) return;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!isClosed) _watchListFeed(pubkeys, limit: limit);
-        });
-      },
-    );
-  }
+  void _watchListFeed(List<String> pubkeys, {int? limit}) => _watch(
+        () => _feedRepository.watchFeed(
+          _currentUserHex ?? '',
+          authors: pubkeys,
+          limit: limit ?? _currentLimit,
+        ),
+        () => _watchListFeed(pubkeys, limit: limit),
+      );
 
   Future<void> _onFeedListChanged(
     feed_event.FeedListChanged event,

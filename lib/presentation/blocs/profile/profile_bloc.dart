@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/repositories/feed_repository.dart';
@@ -8,7 +9,6 @@ import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/interaction_service.dart';
 import '../../../data/services/pinned_notes_service.dart';
-import '../../../data/services/rust_database_service.dart';
 import '../../../domain/entities/feed_note.dart';
 import 'profile_event.dart';
 import 'profile_state.dart';
@@ -20,7 +20,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final ArticleRepository _articleRepository;
   final SyncService _syncService;
   final AuthService _authService;
-  final RustDatabaseService _db;
 
   static const int _pageSize = 30;
   bool _isLoadingMore = false;
@@ -43,14 +42,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     required ArticleRepository articleRepository,
     required SyncService syncService,
     required AuthService authService,
-    RustDatabaseService? db,
   })  : _feedRepository = feedRepository,
         _profileRepository = profileRepository,
         _followingRepository = followingRepository,
         _articleRepository = articleRepository,
         _syncService = syncService,
         _authService = authService,
-        _db = db ?? RustDatabaseService.instance,
         super(const ProfileInitial()) {
     on<ProfileLoadRequested>(_onProfileLoaded);
     on<ProfileRefreshed>(_onProfileRefreshed);
@@ -106,7 +103,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
       if (cachedProfile != null) {
         final userMap = cachedProfile.toMap();
-        userMap['pubkeyHex'] = targetHex;
+        userMap['pubkey'] = targetHex;
         userMap['npub'] = _authService.hexToNpub(targetHex) ?? targetHex;
 
         bool isFollowing = false;
@@ -131,11 +128,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         _syncProfileInBackground(targetHex, emit);
       } else {
         final placeholderUser = <String, dynamic>{
-          'pubkeyHex': targetHex,
+          'pubkey': targetHex,
           'npub': _authService.hexToNpub(targetHex) ?? targetHex,
           'name': targetHex.length > 8 ? targetHex.substring(0, 8) : targetHex,
           'about': '',
-          'profileImage': '',
+          'picture': '',
           'banner': '',
           'website': '',
           'nip05': '',
@@ -164,16 +161,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   void _watchProfile(String pubkey) {
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(pubkey).listen((profileData) {
-      if (profileData == null || isClosed) return;
-
+    _profileSubscription =
+        _profileRepository.watchProfile(pubkey).listen((profile) {
+      if (profile == null || isClosed) return;
       try {
-        final userMap = <String, dynamic>{};
-        profileData.forEach((key, value) {
-          userMap[key == 'picture' ? 'profileImage' : key] =
-              value?.toString() ?? '';
-        });
-        userMap['pubkeyHex'] = pubkey;
+        final userMap = profile.toMap();
+        userMap['pubkey'] = pubkey;
         userMap['npub'] = _authService.hexToNpub(pubkey) ?? pubkey;
         add(ProfileUserUpdated(userMap));
       } catch (_) {}
@@ -191,7 +184,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         final freshProfile = await _profileRepository.getProfile(targetHex);
         if (freshProfile != null && !isClosed && state is ProfileLoaded) {
           final userMap = freshProfile.toMap();
-          userMap['pubkeyHex'] = targetHex;
+          userMap['pubkey'] = targetHex;
           userMap['npub'] = _authService.hexToNpub(targetHex) ?? targetHex;
           add(ProfileUserUpdated(userMap));
         }
@@ -219,12 +212,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         _syncService.syncProfileNotes(targetHex, limit: _pageSize, force: true),
       ]);
 
-      final notesFuture =
-          _feedRepository.getProfileNotes(targetHex, limit: _pageSize);
+      final notesFuture = _feedRepository.getNotes(targetHex, limit: _pageSize);
       final repliesFuture =
-          _feedRepository.getProfileReplies(targetHex, limit: _pageSize);
-      final likesFuture =
-          _feedRepository.getProfileLikes(targetHex, limit: _pageSize);
+          _feedRepository.getUserReplies(targetHex, limit: _pageSize);
+      final likesFuture = _feedRepository.getLikes(targetHex, limit: _pageSize);
 
       final results =
           await Future.wait([notesFuture, repliesFuture, likesFuture]);
@@ -265,14 +256,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       if (wasFollowing) {
         await _followingRepository.unfollow(currentUserHex, targetHex);
         final updatedFollows =
-            await _followingRepository.getFollowingList(currentUserHex);
+            await _followingRepository.getFollowing(currentUserHex);
         if (updatedFollows != null) {
           await _syncService.publishFollow(followingPubkeys: updatedFollows);
         }
       } else {
         await _followingRepository.follow(currentUserHex, targetHex);
         final updatedFollows =
-            await _followingRepository.getFollowingList(currentUserHex);
+            await _followingRepository.getFollowing(currentUserHex);
         if (updatedFollows != null) {
           await _syncService.publishFollow(followingPubkeys: updatedFollows);
         }
@@ -301,7 +292,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       }
 
       final followingPubkeys =
-          await _followingRepository.getFollowingList(currentUserHex);
+          await _followingRepository.getFollowing(currentUserHex);
       if (followingPubkeys == null || followingPubkeys.isEmpty) {
         emit(const ProfileFollowingListLoaded([]));
         return;
@@ -315,14 +306,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         final profile = profiles[pubkey];
         if (profile != null) {
           final userMap = profile.toMap();
-          userMap['pubkeyHex'] = pubkey;
+          userMap['pubkey'] = pubkey;
           users.add(userMap);
         } else {
-          users.add({
-            'pubkeyHex': pubkey,
-            'pubkey': pubkey,
-            'name': pubkey.substring(0, 8)
-          });
+          users.add({'pubkey': pubkey, 'name': pubkey.substring(0, 8)});
         }
       }
 
@@ -470,7 +457,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     try {
       final targetHex = currentState.currentProfileHex;
 
-      final moreNotes = await _feedRepository.getProfileNotes(
+      final moreNotes = await _feedRepository.getNotes(
         targetHex,
         limit: _pageSize + currentNotes.length,
       );
@@ -511,7 +498,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final currentState = state as ProfileLoaded;
       final updatedProfiles =
           Map<String, Map<String, dynamic>>.from(currentState.profiles);
-      final pubkeyHex = event.user['pubkeyHex'] as String? ??
+      final pubkeyHex = event.user['pubkey'] as String? ??
           event.user['pubkey'] as String? ??
           '';
       if (pubkeyHex.isNotEmpty) {
@@ -596,23 +583,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     });
   }
 
-  void _preCacheInteractions(List<FeedNote> notes) {
-    final service = InteractionService.instance;
-    for (final note in notes) {
-      if (note.id.isEmpty) continue;
-      final counts = InteractionCounts(
-        reactions: note.reactionCount,
-        reposts: note.repostCount,
-        replies: note.replyCount,
-        zapAmount: note.zapCount,
-        hasReacted: note.hasReacted,
-        hasReposted: note.hasReposted,
-        hasZapped: note.hasZapped,
-      );
-      service.prePopulateCache(note.id, counts);
-    }
-  }
-
   List<Map<String, dynamic>> _feedNotesToMaps(List<FeedNote> notes) {
     return notes.map((note) => note.toMap()).toList();
   }
@@ -641,8 +611,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   void _watchProfileNotes(String pubkeyHex) {
     _notesSubscription?.cancel();
-    _notesSubscription =
-        _feedRepository.watchProfileNotes(pubkeyHex).listen((notes) {
+    _notesSubscription = _feedRepository.watchNotes(pubkeyHex).listen((notes) {
       if (isClosed) return;
       add(_ProfileNotesUpdated(notes));
     });
@@ -655,7 +624,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (state is! ProfileLoaded) return;
     final currentState = state as ProfileLoaded;
 
-    _preCacheInteractions(event.notes);
+    InteractionService.instance.populateFromNotes(event.notes);
 
     final newNoteMaps = _feedNotesToMaps(event.notes);
 
@@ -685,7 +654,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   void _watchProfileReplies(String pubkeyHex) {
     _repliesSubscription?.cancel();
     _repliesSubscription =
-        _feedRepository.watchProfileReplies(pubkeyHex).listen((replies) {
+        _feedRepository.watchUserReplies(pubkeyHex).listen((replies) {
       if (isClosed) return;
       add(_ProfileRepliesUpdated(replies));
     });
@@ -730,7 +699,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     try {
       final targetHex = currentState.currentProfileHex;
 
-      final moreReplies = await _feedRepository.getProfileReplies(
+      final moreReplies = await _feedRepository.getUserReplies(
         targetHex,
         limit: _pageSize + currentReplies.length,
       );
@@ -773,8 +742,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     _articlesOffset = _pageSize;
 
     try {
-      final articles = await _articleRepository.getArticlesByAuthor(
-        event.pubkeyHex,
+      final articles = await _articleRepository.getArticles(
+        authors: [event.pubkeyHex],
         limit: _pageSize,
       );
       if (isClosed || state is! ProfileLoaded) return;
@@ -802,7 +771,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   void _watchProfileLikes(String pubkeyHex) {
     _likesSubscription?.cancel();
     _likesSubscription = _feedRepository
-        .watchProfileLikes(pubkeyHex, limit: _likesReactionsLimit)
+        .watchLikes(pubkeyHex, limit: _likesReactionsLimit)
         .listen((likes) {
       if (isClosed) return;
       add(_ProfileLikesUpdated(likes));
@@ -851,7 +820,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final targetHex = currentState.currentProfileHex;
       _likesReactionsLimit += _pageSize * 3;
 
-      final moreLikes = await _feedRepository.getProfileLikes(
+      final moreLikes = await _feedRepository.getLikes(
         targetHex,
         limit: _likesReactionsLimit,
       );
@@ -910,8 +879,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final targetHex = currentState.currentProfileHex;
       final newLimit = _articlesOffset + _pageSize;
 
-      final articles = await _articleRepository.getArticlesByAuthor(
-        targetHex,
+      final articles = await _articleRepository.getArticles(
+        authors: [targetHex],
         limit: newLimit,
       );
       if (isClosed || state is! ProfileLoaded) return;
@@ -1014,9 +983,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       List<String> noteIds) async {
     final notes = <Map<String, dynamic>>[];
     for (final noteId in noteIds) {
-      final event = await _db.getEventModel(noteId);
-      if (event != null) {
-        notes.add(event);
+      final note = await _feedRepository.getNote(noteId);
+      if (note != null) {
+        notes.add(note.toMap());
       }
     }
     return notes;
@@ -1034,7 +1003,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
         final currentState = state as ProfileLoaded;
         final currentIds = currentState.pinnedNoteIds;
-        if (_listEquals(pinnedIds, currentIds)) return;
+        if (listEquals(pinnedIds, currentIds)) return;
 
         final pinnedNotes = await _fetchNotesByIds(pinnedIds);
 
@@ -1044,8 +1013,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         if (missingIds.isNotEmpty) {
           for (final id in missingIds) {
             await _syncService.syncNote(id);
-            final event = await _db.getEventModel(id);
-            if (event != null) pinnedNotes.add(event);
+            final note = await _feedRepository.getNote(id);
+            if (note != null) pinnedNotes.add(note.toMap());
           }
         }
 
@@ -1057,14 +1026,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         }
       } catch (_) {}
     });
-  }
-
-  bool _listEquals(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 
   void _onProfilePinnedNotesUpdated(

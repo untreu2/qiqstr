@@ -18,12 +18,14 @@ class FollowSetLoaded extends FollowSetState {
   final List<FollowSet> followedUsersSets;
   final Map<String, List<Map<String, dynamic>>> resolvedProfiles;
   final Map<String, Map<String, String>> resolvedAuthors;
+  final List<String> favoriteIds;
 
   const FollowSetLoaded({
     required this.followSets,
     this.followedUsersSets = const [],
     this.resolvedProfiles = const {},
     this.resolvedAuthors = const {},
+    this.favoriteIds = const [],
   });
 
   FollowSetLoaded copyWith({
@@ -31,18 +33,25 @@ class FollowSetLoaded extends FollowSetState {
     List<FollowSet>? followedUsersSets,
     Map<String, List<Map<String, dynamic>>>? resolvedProfiles,
     Map<String, Map<String, String>>? resolvedAuthors,
+    List<String>? favoriteIds,
   }) {
     return FollowSetLoaded(
       followSets: followSets ?? this.followSets,
       followedUsersSets: followedUsersSets ?? this.followedUsersSets,
       resolvedProfiles: resolvedProfiles ?? this.resolvedProfiles,
       resolvedAuthors: resolvedAuthors ?? this.resolvedAuthors,
+      favoriteIds: favoriteIds ?? this.favoriteIds,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [followSets, followedUsersSets, resolvedProfiles, resolvedAuthors];
+  List<Object?> get props => [
+        followSets,
+        followedUsersSets,
+        resolvedProfiles,
+        resolvedAuthors,
+        favoriteIds
+      ];
 }
 
 class FollowSetError extends FollowSetState {

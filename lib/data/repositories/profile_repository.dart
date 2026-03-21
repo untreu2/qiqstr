@@ -1,7 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:rxdart/rxdart.dart';
+
 import '../../domain/entities/user_profile.dart';
+import '../../src/rust/api/database.dart' as rust_db;
 import '../services/primal_cache_service.dart';
-import 'base_repository.dart';
+import '../services/rust_database_service.dart';
 
 abstract class ProfileRepository {
   Stream<UserProfile?> watchProfile(String pubkey);
@@ -13,119 +19,126 @@ abstract class ProfileRepository {
   Future<bool> hasProfile(String pubkey);
   Future<int> getFollowerCount(String pubkeyHex);
   Future<Map<String, int>> getFollowerCounts(List<String> pubkeyHexes);
-  Future<List<Map<String, dynamic>>> getRandomUsersWithImages({int limit = 50});
+  Future<List<Map<String, dynamic>>> getSuggestedUsers({int limit = 50});
 }
 
-class ProfileRepositoryImpl extends BaseRepository
-    implements ProfileRepository {
+class ProfileRepositoryImpl implements ProfileRepository {
+  final RustDatabaseService _events;
   final PrimalCacheService _primalCacheService;
 
   ProfileRepositoryImpl({
-    required super.db,
+    required RustDatabaseService events,
     PrimalCacheService? primalCacheService,
-  }) : _primalCacheService = primalCacheService ?? PrimalCacheService.instance;
+  })  : _events = events,
+        _primalCacheService = primalCacheService ?? PrimalCacheService.instance;
+
+  UserProfile _toProfile(String pubkey, Map<String, dynamic> m) {
+    return UserProfile(
+      pubkey: pubkey,
+      name: m['name'] as String?,
+      displayName: m['display_name'] as String?,
+      about: m['about'] as String?,
+      picture: m['picture'] as String?,
+      banner: m['banner'] as String?,
+      nip05: m['nip05'] as String?,
+      lud16: m['lud16'] as String?,
+      website: m['website'] as String?,
+      location: m['location'] as String?,
+    );
+  }
 
   @override
   Stream<UserProfile?> watchProfile(String pubkey) {
-    return db.watchProfile(pubkey).map((profileData) {
-      if (profileData == null) return null;
-      return UserProfile(
-        pubkey: pubkey,
-        name: profileData['name'] as String?,
-        displayName: profileData['display_name'] as String?,
-        about: profileData['about'] as String?,
-        picture: profileData['picture'] as String?,
-        banner: profileData['banner'] as String?,
-        nip05: profileData['nip05'] as String?,
-        lud16: profileData['lud16'] as String?,
-        website: profileData['website'] as String?,
-        location: profileData['location'] as String?,
-      );
-    });
+    return _events.onChange
+        .debounceTime(const Duration(milliseconds: 500))
+        .startWith(null)
+        .asyncMap((_) => getProfile(pubkey));
   }
 
   @override
   Future<UserProfile?> getProfile(String pubkey) async {
-    final profileData = await db.getUserProfile(pubkey);
-    if (profileData == null) return null;
-
-    return UserProfile(
-      pubkey: pubkey,
-      name: profileData['name'],
-      displayName: profileData['display_name'],
-      about: profileData['about'],
-      picture: profileData['picture'],
-      banner: profileData['banner'],
-      nip05: profileData['nip05'],
-      lud16: profileData['lud16'],
-      website: profileData['website'],
-      location: profileData['location'],
-    );
+    try {
+      final json = await rust_db.dbGetProfile(pubkeyHex: pubkey);
+      if (json == null) return null;
+      final m = jsonDecode(json) as Map<String, dynamic>;
+      return _toProfile(pubkey, m);
+    } catch (e) {
+      if (kDebugMode) print('[ProfileRepository] getProfile error: $e');
+      return null;
+    }
   }
 
   @override
   Future<Map<String, UserProfile>> getProfiles(List<String> pubkeys) async {
     if (pubkeys.isEmpty) return {};
-
-    final profilesData = await db.getUserProfiles(pubkeys);
-    final result = <String, UserProfile>{};
-
-    for (final entry in profilesData.entries) {
-      final pubkey = entry.key;
-      final data = entry.value;
-
-      result[pubkey] = UserProfile(
-        pubkey: pubkey,
-        name: data['name'],
-        displayName: data['display_name'],
-        about: data['about'],
-        picture: data['picture'],
-        banner: data['banner'],
-        nip05: data['nip05'],
-        lud16: data['lud16'],
-        website: data['website'],
-        location: data['location'],
-      );
+    try {
+      final json = await rust_db.dbGetProfiles(pubkeysHex: pubkeys);
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      return decoded.map((key, value) =>
+          MapEntry(key, _toProfile(key, value as Map<String, dynamic>)));
+    } catch (e) {
+      if (kDebugMode) print('[ProfileRepository] getProfiles error: $e');
+      return {};
     }
-
-    return result;
   }
 
   @override
   Future<List<UserProfile>> searchProfiles(String query,
       {int limit = 50}) async {
-    final results = await db.searchUserProfiles(query, limit: limit);
-
-    return results.map((data) {
-      return UserProfile(
-        pubkey: (data['pubkey'] ?? data['pubkeyHex'] ?? '') as String,
-        name: data['name'] as String?,
-        displayName: data['display_name'] as String?,
-        about: data['about'] as String?,
-        picture: data['picture'] ?? data['profileImage'] as String?,
-        banner: data['banner'] as String?,
-        nip05: data['nip05'] as String?,
-        lud16: data['lud16'] as String?,
-        website: data['website'] as String?,
-        location: data['location'] as String?,
-      );
-    }).toList();
+    try {
+      final json = await rust_db.dbSearchProfiles(query: query, limit: limit);
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>().map((m) {
+        final pubkey = (m['pubkey'] ?? m['pubkey'] ?? '') as String;
+        return UserProfile(
+          pubkey: pubkey,
+          name: m['name'] as String?,
+          displayName: m['display_name'] as String?,
+          about: m['about'] as String?,
+          picture: (m['picture'] ?? m['picture']) as String?,
+          banner: m['banner'] as String?,
+          nip05: m['nip05'] as String?,
+          lud16: m['lud16'] as String?,
+          website: m['website'] as String?,
+          location: m['location'] as String?,
+        );
+      }).toList();
+    } catch (e) {
+      if (kDebugMode) print('[ProfileRepository] searchProfiles error: $e');
+      return [];
+    }
   }
 
   @override
   Future<void> saveProfile(
       String pubkey, Map<String, String> profileData) async {
-    await db.saveUserProfile(pubkey, profileData);
+    try {
+      await rust_db.dbSaveProfile(
+          pubkeyHex: pubkey, profileJson: jsonEncode(profileData));
+      _events.notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[ProfileRepository] saveProfile error: $e');
+    }
   }
 
   @override
   Future<void> saveProfiles(Map<String, Map<String, String>> profiles) async {
-    await db.saveUserProfiles(profiles);
+    if (profiles.isEmpty) return;
+    try {
+      await rust_db.dbSaveProfilesBatch(profilesJson: jsonEncode(profiles));
+      _events.notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[ProfileRepository] saveProfiles error: $e');
+    }
   }
 
   @override
   Future<bool> hasProfile(String pubkey) async {
-    return await db.hasUserProfile(pubkey);
+    try {
+      return await rust_db.dbHasProfile(pubkeyHex: pubkey);
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -139,9 +152,14 @@ class ProfileRepositoryImpl extends BaseRepository
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getRandomUsersWithImages(
-      {int limit = 50}) async {
-    final results = await db.getRandomUsersWithImages(limit: limit);
-    return results.map((r) => Map<String, dynamic>.from(r)).toList();
+  Future<List<Map<String, dynamic>>> getSuggestedUsers({int limit = 50}) async {
+    try {
+      final json = await rust_db.dbGetRandomProfiles(limit: limit);
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[ProfileRepository] getSuggestedUsers error: $e');
+      return [];
+    }
   }
 }

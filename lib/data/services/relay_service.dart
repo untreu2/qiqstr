@@ -315,8 +315,8 @@ class RustRelayService {
 
   Stream<Map<String, dynamic>> streamRelayStatus() {
     return rust_relay.streamRelayStatus().map(
-          (json) => jsonDecode(json) as Map<String, dynamic>,
-        );
+      (json) => jsonDecode(json) as Map<String, dynamic>,
+    );
   }
 
   Stream<Map<String, dynamic>> subscribeToEvents(Map<String, dynamic> filter) {
@@ -372,6 +372,27 @@ class RustRelayService {
       mutedWords: mutedWords,
     );
     return jsonDecode(json) as Map<String, dynamic>;
+  }
+
+  /// DB-only fast path — no network calls, returns null if not cached yet.
+  Future<Map<String, dynamic>?> fetchFullThreadLocal(
+    String noteId, {
+    String? currentUserPubkeyHex,
+    List<String> mutedPubkeys = const [],
+    List<String> mutedWords = const [],
+  }) async {
+    try {
+      final json = await rust_relay.fetchFullThreadLocal(
+        noteId: noteId,
+        currentUserPubkeyHex: currentUserPubkeyHex,
+        mutedPubkeys: mutedPubkeys,
+        mutedWords: mutedWords,
+      );
+      if (json == null) return null;
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<List<Map<String, dynamic>>> mergeAndSortNotes(

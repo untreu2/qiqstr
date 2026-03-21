@@ -1,42 +1,73 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:rxdart/rxdart.dart';
+
 import '../../domain/entities/notification_item.dart';
-import 'base_repository.dart';
+import '../../src/rust/api/database.dart' as rust_db;
+import '../services/encrypted_mute_service.dart';
+import '../services/rust_database_service.dart';
 
 abstract class NotificationRepository {
   Stream<List<NotificationItem>> watchNotifications(String userPubkey,
       {int limit = 100});
   Future<List<NotificationItem>> getNotifications(String userPubkey,
       {int limit = 100});
-  Future<void> saveNotifications(
+  Future<void> save(
       String userPubkey, List<Map<String, dynamic>> notifications);
 }
 
-class NotificationRepositoryImpl extends BaseRepository
-    implements NotificationRepository {
-  NotificationRepositoryImpl({
-    required super.db,
-  });
+class NotificationRepositoryImpl implements NotificationRepository {
+  final RustDatabaseService _events;
+
+  NotificationRepositoryImpl({required RustDatabaseService events})
+      : _events = events;
+
+  List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
+  List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
 
   @override
   Stream<List<NotificationItem>> watchNotifications(String userPubkey,
       {int limit = 100}) {
-    return db
-        .watchHydratedNotifications(userPubkey, limit: limit)
-        .map((maps) =>
-            maps.map((m) => NotificationItem.fromMap(m)).toList());
+    return _events.onChange
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) => getNotifications(userPubkey, limit: limit));
   }
 
   @override
   Future<List<NotificationItem>> getNotifications(String userPubkey,
       {int limit = 100}) async {
-    final maps =
-        await db.getHydratedNotifications(userPubkey, limit: limit);
-    return maps.map((m) => NotificationItem.fromMap(m)).toList();
+    try {
+      final json = await rust_db.dbGetHydratedNotifications(
+        userPubkeyHex: userPubkey,
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .cast<Map<String, dynamic>>()
+          .map((m) => NotificationItem.fromMap(m))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) {
+        print('[NotificationRepository] getNotifications error: $e');
+      }
+      return [];
+    }
   }
 
   @override
-  Future<void> saveNotifications(
+  Future<void> save(
       String userPubkey, List<Map<String, dynamic>> notifications) async {
-    await db.saveNotifications(userPubkey, notifications);
+    if (notifications.isEmpty) return;
+    try {
+      await rust_db.dbSaveEvents(eventsJson: jsonEncode(notifications));
+      _events.notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[NotificationRepository] save error: $e');
+    }
   }
 }

@@ -1951,7 +1951,8 @@ async fn hydrate_notes(
 }
 
 pub async fn db_get_hydrated_feed_notes(
-    authors_hex: Vec<String>,
+    user_pubkey_hex: String,
+    authors_hex: Option<Vec<String>>,
     limit: u32,
     muted_pubkeys: Vec<String>,
     muted_words: Vec<String>,
@@ -1959,7 +1960,17 @@ pub async fn db_get_hydrated_feed_notes(
     current_user_pubkey_hex: Option<String>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
-    let authors: Vec<PublicKey> = authors_hex.iter()
+
+    let resolved_authors: Vec<String> = match authors_hex {
+        Some(list) => list,
+        None => {
+            let pk = PublicKey::from_hex(&user_pubkey_hex)?;
+            let contacts = client.database().contacts_public_keys(pk).await?;
+            contacts.into_iter().map(|k| k.to_hex()).collect()
+        }
+    };
+
+    let authors: Vec<PublicKey> = resolved_authors.iter()
         .filter_map(|h| PublicKey::from_hex(h).ok())
         .collect();
 
@@ -2494,43 +2505,28 @@ async fn hydrate_article_events(
 }
 
 pub async fn db_get_hydrated_articles(
+    authors_hex: Option<Vec<String>>,
     limit: u32,
     muted_pubkeys: Vec<String>,
     muted_words: Vec<String>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
-    let filter = Filter::new()
-        .kind(Kind::LongFormTextNote)
-        .limit(limit as usize);
-    let events = client.database().query(filter).await?;
 
-    let mut filtered: Vec<Event> = events.into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .collect();
-    filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    let filter = match authors_hex {
+        Some(list) if !list.is_empty() => {
+            let authors: Vec<PublicKey> = list.iter()
+                .filter_map(|h| PublicKey::from_hex(h).ok())
+                .collect();
+            Filter::new()
+                .kind(Kind::LongFormTextNote)
+                .authors(authors)
+                .limit(limit as usize)
+        }
+        _ => Filter::new()
+            .kind(Kind::LongFormTextNote)
+            .limit(limit as usize),
+    };
 
-    hydrate_article_events(&client, &filtered).await
-}
-
-pub async fn db_get_hydrated_articles_by_authors(
-    authors_hex: Vec<String>,
-    limit: u32,
-    muted_pubkeys: Vec<String>,
-    muted_words: Vec<String>,
-) -> Result<String> {
-    let client = get_client_pub().await?;
-    let authors: Vec<PublicKey> = authors_hex.iter()
-        .filter_map(|h| PublicKey::from_hex(h).ok())
-        .collect();
-
-    if authors.is_empty() {
-        return Ok("[]".to_string());
-    }
-
-    let filter = Filter::new()
-        .kind(Kind::LongFormTextNote)
-        .authors(authors)
-        .limit(limit as usize);
     let events = client.database().query(filter).await?;
 
     let mut filtered: Vec<Event> = events.into_iter()

@@ -49,10 +49,9 @@ class SuggestedFollowsBloc
         if (profile != null) {
           final userWithNpub = <String, dynamic>{
             'npub': npub,
-            'pubkeyHex': pubkeyHex,
+            'pubkey': pubkeyHex,
             'name': profile.name ?? profile.displayName ?? '',
             'about': profile.about ?? '',
-            'profileImage': profile.picture ?? '',
             'picture': profile.picture ?? '',
             'nip05': profile.nip05 ?? '',
             'banner': profile.banner ?? '',
@@ -65,11 +64,10 @@ class SuggestedFollowsBloc
           users.add(userWithNpub);
         } else {
           final fallbackUser = {
-            'pubkeyHex': pubkeyHex,
+            'pubkey': pubkeyHex,
             'npub': npub,
             'name': 'Nostr User',
             'about': 'A Nostr user',
-            'profileImage': '',
             'picture': '',
             'nip05': '',
             'banner': '',
@@ -134,7 +132,7 @@ class SuggestedFollowsBloc
       final currentUserHex = pubkeyResult.data!;
 
       final currentFollows =
-          await _followingRepository.getFollowingList(currentUserHex) ?? [];
+          await _followingRepository.getFollowing(currentUserHex) ?? [];
 
       final selectedHexes = currentState.selectedUsers
           .map((npub) => _authService.npubToHex(npub) ?? npub)

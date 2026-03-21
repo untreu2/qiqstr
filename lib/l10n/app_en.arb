@@ -15,7 +15,6 @@
   "english": "English",
   "turkish": "Turkish",
   "german": "German",
-  
   "failedToUploadEncryptedMedia": "Failed to upload encrypted media",
   "noMessagesYet": "No messages yet",
   "failedToDecryptMedia": "Failed to decrypt media",
@@ -24,7 +23,6 @@
   "unknownError": "Unknown error",
   "decryptionFailed": "Decryption failed",
   "yesterday": "Yesterday",
-  
   "errorSelectingMedia": "Error selecting media",
   "errorSelectingUser": "Error selecting user",
   "errorSharingNote": "Error sharing note",
@@ -39,7 +37,6 @@
   "postYourNote": "Post your note",
   "composeYourNote": "Compose your note",
   "removeThisMediaFile": "Remove this media file",
-  
   "yourFeedIsEmpty": "Your feed is empty",
   "notes": "Notes",
   "reads": "Reads",
@@ -49,17 +46,13 @@
   "users": "Users",
   "following": "Following",
   "follow": "Follow",
-  
   "login": "Login",
   "createNewAccount": "Create a New Account",
-  
   "noFollowingUsers": "No following users",
   "unknownUser": "Unknown User",
-  
   "failedToLoadSuggestedUsers": "Failed to load suggested users",
   "suggestedFollows": "Suggested Follows",
   "continueButton": "Continue",
-  
   "noEventsToRebroadcast": "No events to rebroadcast",
   "errorRebroadcastingEvents": "Error rebroadcasting events",
   "delete": "Delete",
@@ -78,22 +71,17 @@
   "rebroadcasting": "Rebroadcasting...",
   "rebroadcast": "Rebroadcast",
   "deleteAccount": "Delete Account",
-  
   "editProfile": "Edit Profile",
   "banner": "Banner",
   "profileImage": "Profile image",
   "username": "Username",
   "pleaseEnterValidWebsiteUrl": "Please enter a valid website URL",
-  
   "setUpProfile": "Set Up Profile",
-  
   "thread": "Thread",
   "noRepliesFound": "No replies found",
   "loadMore": "Load more",
   "failedToLoadThread": "Failed to load thread",
-  
   "closeDialog": "Close dialog",
-  
   "pleaseSetUpProfileFirst": "Please set up your profile first",
   "noRelayListFoundInProfile": "No relay list found in your profile",
   "relaysSavedSuccessfully": "Relays saved successfully",
@@ -106,22 +94,16 @@
   "relaysResetToDefaults": "Relays reset to defaults",
   "relayAddedFromFollowingList": "Relay added from following list",
   "relayAlreadyExistsInList": "Relay already exists in your list",
-  
   "untitledArticle": "Untitled Article",
   "article": "Article",
-  
   "eventNotFound": "Event not found",
   "articleNotFound": "Article not found",
-  
   "copy": "Copy",
   "copiedToClipboard": "Copied to clipboard",
-  
   "couldNotLoadHashtagFeed": "Could not load hashtag feed",
   "errorOpeningHashtag": "Error opening hashtag",
-  
   "videoSavedToGallery": "Video saved to gallery",
   "failedToSaveVideoToGallery": "Failed to save video to gallery",
-  
   "undoRepost": "Undo repost",
   "repostAgain": "Repost again",
   "quote": "Quote",
@@ -131,50 +113,35 @@
   "verificationFailed": "Verification failed",
   "verifySignature": "Verify signature",
   "interactions": "Interactions",
-  
   "errorLoadingNotes": "Error loading notes",
-  
   "repostedBy": "Reposted by ",
   "anonymous": "Anonymous",
-  
   "profile": "Profile",
-  
   "pleaseConnectWalletFirst": "Please connect your wallet first",
   "user": "User",
   "errorLoadingUserProfile": "Error loading user profile",
   "send": "Send",
   "enterValidAmount": "Enter a valid amount",
-  
   "relaysFromYourFollows": "Relays from your follows",
   "noRelaysFoundFromFollowingUsers": "No relays found from following users",
-  
   "editProfileButton": "Edit profile",
   "mutedButton": "Muted",
   "followButton": "Follow",
   "followingYou": "Following you",
-  
   "imageSavedToGallery": "Image saved to gallery",
   "failedToSaveImageToGallery": "Failed to save image to gallery",
-  
   "unfollow": "Unfollow",
-  
   "pleaseEnterInvoice": "Please enter an invoice",
   "payInvoice": "Pay Invoice",
-  
   "resetToDefaults": "Reset to Defaults",
-  
   "mute": "Mute",
-  
   "goBack": "Go back",
   "goBackToPreviousScreen": "Go back to previous screen",
-  
   "share": "Share",
-  
   "untitled": "Untitled",
   "noArticlesFound": "No articles found",
   "noRelaysFound": "No relays found",
   "refresh": "Refresh",
-  
   "displayTitle": "Display",
   "displaySubtitle": "Customize your viewing experience.",
   "expandedNotes": "Expanded Notes",
@@ -187,7 +154,6 @@
   "notifications": "Notifications",
   "navigationBarOrder": "Navigation Bar Order",
   "pressAndHoldToDrag": "Press and hold to drag and reorder items",
-  
   "loading": "Loading...",
   "notFound": "Not found",
   "errorLoadingKeys": "Error loading keys",
@@ -210,7 +176,6 @@
       }
     }
   },
-  
   "paymentsTitle": "Payments",
   "paymentsSubtitle": "Manage your payment preferences.",
   "oneTapZap": "One Tap Zap",
@@ -219,7 +184,6 @@
   "amountSats": "Amount (sats)",
   "amountSavedSuccessfully": "Amount saved successfully",
   "pleaseEnterValidAmount": "Please enter a valid amount",
-  
   "mutedTitle": "Muted",
   "mutedSubtitle": "Events from muted users and containing muted words are hidden from your feeds. Your mute list is encrypted and only visible to you.",
   "mutedWordsTitle": "Words",
@@ -237,7 +201,6 @@
     }
   },
   "unmute": "Unmute",
-  
   "addRelay": "Add Relay",
   "areYouSureLogout": "Are you sure you want to logout?",
   "seedPhraseWarning": "IF YOU HAVEN'T SAVED YOUR SEED PHRASE, YOU WILL LOSE YOUR ACCOUNT FOREVER.",
@@ -278,7 +241,6 @@
   },
   "followers": "followers",
   "followingCount": "following",
-  
   "saveYourSeedPhrase": "Save Your Seed Phrase",
   "thisIsYourOnlyChance": "This is your only chance to save your seed phrase. Write it down and store it safely.",
   "iHaveSavedMySeedPhrase": "I have saved my seed phrase",
@@ -294,20 +256,16 @@
   "website": "Website",
   "nip05": "NIP-05",
   "zapAddress": "Zap Address",
-  
   "searchUsers": "Search users...",
   "search": "Search",
   "searching": "Searching...",
-  
   "newMessage": "New Message",
   "typeAMessage": "Type a message...",
   "sendMessage": "Send message",
   "messagePlaceholder": "Message...",
-  
   "directMessages": "Direct Messages",
   "noConversationsYet": "No conversations yet",
   "startNewConversation": "Start a new conversation",
-  
   "media": "Media",
   "photos": "Photos",
   "videos": "Videos",
@@ -315,7 +273,6 @@
   "replies": "Replies",
   "reply": "Reply",
   "replyingTo": "Replying to",
-  
   "zap": "Zap",
   "zapUser": "Zap {user}",
   "@zapUser": {
@@ -329,55 +286,46 @@
   "message": "Message",
   "optional": "Optional",
   "zapNote": "Zap Note",
-  
   "invoice": "Invoice",
   "pasteInvoice": "Paste invoice",
   "paying": "Paying...",
   "paymentSuccess": "Payment successful!",
   "paymentFailed": "Payment failed",
-  
   "receive": "Receive",
   "yourLightningAddress": "Your Lightning Address",
   "scanQRCode": "Scan QR Code",
-  
   "relayStatus": "Relay Status",
   "connected": "Connected",
   "disconnected": "Disconnected",
   "connecting": "Connecting...",
   "addRelayUrl": "Add relay URL",
   "removeRelay": "Remove relay",
-  
   "eventType": "Event Type",
   "createdAt": "Created at",
   "relayCount": "Relay count",
   "deleteSelected": "Delete selected",
   "selectAll": "Select all",
   "deselectAll": "Deselect all",
-  
   "statistics": "Statistics",
   "reposts": "Reposts",
   "reactions": "Reactions",
   "zaps": "Zaps",
   "views": "Views",
-  
   "filters": "Filters",
   "filterBy": "Filter by",
   "sortBy": "Sort by",
   "newest": "Newest",
   "oldest": "Oldest",
   "mostPopular": "Most Popular",
-  
   "copied": "Copied!",
   "failed": "Failed",
   "success": "Success!",
   "error": "Error",
   "tryAgain": "Try again",
   "ok": "OK",
-  
   "deleteMessage": "Delete message?",
   "deleteConversation": "Delete conversation?",
   "areYouSureDelete": "Are you sure you want to delete this?",
-  
   "block": "Block",
   "unblock": "Unblock",
   "report": "Report",
@@ -399,7 +347,6 @@
   "reportSubmitted": "Report submitted",
   "reportFailed": "Failed to submit report",
   "selectReportReason": "Select a reason",
-  
   "today": "Today",
   "justNow": "Just now",
   "minutesAgo": "{count}m ago",
@@ -418,15 +365,14 @@
       }
     }
   },
-  "daysAgo": "{count}d ago",
+  "daysAgo": "{days}d ago",
   "@daysAgo": {
     "placeholders": {
-      "count": {
+      "days": {
         "type": "int"
       }
     }
   },
-  
   "backupYourAccount": "Backup Your Account",
   "secureYourAccount": "Secure your account with your seed phrase.",
   "important": "Important",
@@ -436,7 +382,6 @@
   "ifYouLoseIt": "If you lose it, you will lose access to your account forever",
   "accessFromSettings": "You can access this later from Settings > Keys",
   "iHaveWrittenDownSeedPhrase": "I have written down my seed phrase",
-  
   "noNotesFromThisUser": "No notes from this user yet",
   "fileTooLarge": "File is too large (max 50MB)",
   "encryptionFailed": "Encryption failed",
@@ -448,29 +393,19 @@
       }
     }
   },
-  
   "read": "Read",
   "write": "Write",
   "exploreRelays": "Explore Relays",
   "reset": "Reset",
   "mention": "Mention",
-  "removeThisMediaFile": "Remove this media file",
-  
   "searchByNameOrNpub": "Search by name or npub...",
   "searchDotDotDot": "Search...",
   "searchingForUsers": "Searching for users...",
   "searchingDotDotDot": "Searching...",
-  
   "uploadingDotDotDot": "Uploading...",
   "postExclamation": "Post!",
   "whatsOnYourMind": "What's on your mind?",
-  "uploadingMediaFiles": "Uploading media files",
   "postingYourNotePleaseWait": "Posting your note, please wait",
-  
-  "undoRepost": "Undo repost",
-  "repostAgain": "Repost again",
-  
-  "notifications": "Notifications",
   "failedToLoadNotifications": "Failed to load notifications",
   "noNotificationsYet": "No notifications yet",
   "whenSomeoneInteractsWithYourPosts": "When someone interacts with your posts,\nyou'll see it here",
@@ -484,56 +419,70 @@
   "andCountOthers": "and {count} others",
   "@andCountOthers": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "now": "now",
-
   "notificationSummaryPrefix": "Today you received ",
   "notificationSummaryAnd": " and ",
   "notificationReactionCount": "{count, plural, =1{1 reaction} other{{count} reactions}}",
   "@notificationReactionCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationRepostCount": "{count, plural, =1{1 repost} other{{count} reposts}}",
   "@notificationRepostCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationReplyCount": "{count, plural, =1{1 reply} other{{count} replies}}",
   "@notificationReplyCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationMentionCount": "{count, plural, =1{1 mention} other{{count} mentions}}",
   "@notificationMentionCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationQuoteCount": "{count, plural, =1{1 quote} other{{count} quotes}}",
   "@notificationQuoteCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationZapCount": "{count, plural, =1{1 zap} other{{count} zaps}}",
   "@notificationZapCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationZapSatsCount": "{count, plural, =1{1 sat} other{{count} sats}}",
   "@notificationZapSatsCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
-  
   "errorLoadingRelays": "Error loading relays",
   "privateKeyNotFound": "Private key not found. Please set up your profile first",
   "pleaseSetUpYourProfileFirst": "Please set up your profile first",
@@ -545,33 +494,33 @@
   "gossipModelEnabledRestartApp": "Gossip model enabled. Restart the app to apply.",
   "gossipModelDisabledRestartApp": "Gossip model disabled. Restart the app to apply.",
   "errorTogglingGossipModel": "Error toggling Gossip model",
-  "relaysSavedSuccessfully": "Relays saved successfully",
   "errorSavingRelays": "Error saving relays",
-  "pleaseEnterRelayUrl": "Please enter a relay URL",
   "invalidRelayUrl": "Invalid relay URL. Must start with ws:// or wss://",
   "relayAlreadyExistsInCategory": "Relay already exists in this category",
-  "relayAddedToMainList": "Relay added to Main list",
   "errorAddingRelay": "Error adding relay",
   "fetchingYourEvents": "Fetching your events...",
-  "noEventsFoundToBroadcast": "No events found to broadcast",
   "broadcastingEvents": "Broadcasting {count} events to {relayCount} relays...",
   "@broadcastingEvents": {
     "placeholders": {
-      "count": {"type": "int"},
-      "relayCount": {"type": "int"}
+      "count": {
+        "type": "int"
+      },
+      "relayCount": {
+        "type": "int"
+      }
     }
   },
   "eventsSuccessfullyBroadcast": "Successfully broadcast {count} events to {relayCount} relays",
   "@eventsSuccessfullyBroadcast": {
     "placeholders": {
-      "count": {"type": "int"},
-      "relayCount": {"type": "int"}
+      "count": {
+        "type": "int"
+      },
+      "relayCount": {
+        "type": "int"
+      }
     }
   },
-  "errorBroadcastingEvents": "Error broadcasting events",
-  "relayRemovedSuccessfully": "Relay removed successfully",
-  "relaysResetToDefaults": "Relays reset to defaults",
-  "relayAddedFromFollowingList": "Relay added from following list",
   "relayAlreadyExistsInYourList": "Relay already exists in your list",
   "fetchingRelayInformation": "Fetching relay information...",
   "paymentRequired": "Payment required",
@@ -592,11 +541,12 @@
   "eventCount": "{count} events",
   "@eventCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "broadcasted": "broadcasted",
-  
   "gossipMode": "Gossip Mode",
   "gossipModeDescription": "Automatically discover and connect to relays used by people you follow. When off, only your own relays are used to read and write.",
   "fetching": "Fetching...",
@@ -613,23 +563,12 @@
   "unknown": "unknown",
   "paid": "Paid",
   "auth": "Auth",
-  
-  "relays": "Relays",
   "manageYourRelayConnections": "Manage your relay connections and publish your relay list.",
-  
-  "goBackToPreviousScreen": "Go back to previous screen",
   "noInteractionsYet": "No interactions yet.",
-  
   "messages": "Messages",
-  "noMessagesYet": "No messages yet",
-  "typeAMessage": "Type a message...",
-  
   "yourDataOnRelaysDescription": "Everything you share on Nostr is an event. View your event count by type and resend them to relays.",
-  
-  "noConversationsYet": "No conversations yet",
   "startConversationBy": "Start a conversation by messaging someone",
   "errorLoadingConversations": "Error loading conversations",
-  "newMessage": "New message",
   "errorLoadingMessages": "Error loading messages: {message}",
   "@errorLoadingMessages": {
     "placeholders": {
@@ -638,11 +577,7 @@
       }
     }
   },
-  "failedToDecryptMedia": "Failed to decrypt media",
-  "legacyUnencryptedMedia": "Legacy unencrypted media",
   "notEncrypted": "Not encrypted",
-  "decryptionError": "Decryption Error",
-  "unknownError": "Unknown error",
   "videoTapToPlay": "Video (tap to play)",
   "fileType": "File: {type}",
   "@fileType": {
@@ -652,28 +587,9 @@
       }
     }
   },
-  "decryptionFailed": "Decryption failed",
-  
-  "searchingForUsers": "Searching for users...",
-  "searchError": "Search Error",
   "retry": "Retry",
   "noUsersFound": "No users found",
   "trySearchingDifferentTerm": "Try searching with a different term.",
-  "closeDialog": "Close dialog",
-  "searchByNameOrNpub": "Search by name or npub...",
-  "following": "Following",
-  "follow": "Follow",
-  
-  "yesterday": "Yesterday",
-  "daysAgo": "{days}d ago",
-  "@daysAgo": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-
   "databaseCache": "Database Cache",
   "databaseCacheSubtitle": "Manage local storage and cleanup old events.",
   "databaseOverview": "Database Overview",
@@ -683,9 +599,6 @@
   "textNotes": "Text Notes",
   "profiles": "Profiles",
   "contactLists": "Contact Lists",
-  "reactions": "Reactions",
-  "reposts": "Reposts",
-  "zaps": "Zaps",
   "articles": "Articles",
   "cleanupInfo": "Cleanup Information",
   "cleanupInfoDescription": "Automatically cleans up old events when database exceeds 1 GB.",
@@ -700,7 +613,6 @@
   "cleanup": "Cleanup",
   "addAccount": "Add account",
   "switchAccount": "Switch account",
-
   "connectYourWallet": "Connect Your Wallet",
   "connectWalletDescription": "Sign in with your Nostr identity\nto start using Coinos",
   "connectWallet": "Connect Wallet",
@@ -718,11 +630,9 @@
       }
     }
   },
-
   "iAcceptThe": "I accept the ",
   "termsOfUse": "terms of use",
   "acceptanceOfTermsIsRequired": "Acceptance of terms is required",
-
   "profileSetupSubtitle": "Add some basic information to help others discover you.",
   "uploadFailed": "Upload failed: {message}",
   "@uploadFailed": {
@@ -741,7 +651,6 @@
   "websiteOptional": "Website (optional)",
   "locationOptional": "Location (optional)",
   "locationTooLong": "Location must be 100 characters or less",
-
   "newNotesAvailable": "{count, plural, =1{1 new note} other{{count} new notes}}",
   "@newNotesAvailable": {
     "placeholders": {
@@ -750,13 +659,11 @@
       }
     }
   },
-
   "readsSubtitle": "Long-form articles from people you follow.",
   "loadingArticles": "Loading articles...",
   "somethingWentWrong": "Something went wrong",
   "noArticlesYet": "No articles yet",
   "longFormContentDescription": "Long-form content from people you follow will appear here.",
-
   "bookmarks": "Bookmarks",
   "bookmarksTitle": "Bookmarks",
   "bookmarksSubtitle": "Your bookmarked notes are encrypted and only visible to you.",
@@ -767,7 +674,6 @@
   "addBookmark": "Bookmark",
   "bookmarkAdded": "Bookmark added",
   "bookmarkRemoved": "Bookmark removed",
-
   "listsTitle": "Lists",
   "listsSubtitle": "Organize people you follow into categorized groups.",
   "noLists": "No lists",
@@ -825,7 +731,6 @@
   "signupFeatureBackup": "You will get a seed phrase to securely back up your account",
   "signupFeatureProfile": "Set up your profile and start connecting with others",
   "signupCreating": "Creating your account...",
-
   "followedByCount": "Followed by {count, plural, =1{1 person} other{{count} people}} you follow",
   "@followedByCount": {
     "placeholders": {
@@ -834,13 +739,11 @@
       }
     }
   },
-
   "pinNote": "Pin note",
   "unpinNote": "Unpin note",
   "notePinned": "Note pinned to profile",
   "noteUnpinned": "Note unpinned from profile",
   "pinnedNotes": "Pinned",
-
   "processingPayment": "Processing payment...",
   "zappedSatsToUser": "Zapped {sats} {sats, plural, =1{sat} other{sats}} to {user}!",
   "@zappedSatsToUser": {
@@ -856,7 +759,6 @@
   "failedToZap": "Failed to zap",
   "userNoLightningAddress": "User does not have a lightning address configured.",
   "commentOptional": "Comment (Optional)",
-
   "nwcSectionTitle": "WALLET CONNECT",
   "nwcTitle": "Nostr Wallet Connect",
   "nwcDescription": "Connect an external wallet via NWC protocol. Enabling this will replace the built-in wallet.",
@@ -870,30 +772,34 @@
   "nwcPleaseEnterConnectionString": "Please enter a connection string",
   "nwcDisclaimer": "NWC connects to a third-party wallet provider. We do not hold, control, or have access to your funds. All responsibility lies with your wallet provider.",
   "nwcAccept": "I understand and agree",
-
   "dmTabFollowing": "Following",
   "dmTabOther": "Other",
-
   "dmEncryptionNotice": "Your messages are end-to-end encrypted. No one can see who you talk to or what you write.",
-
-  "noEventsToRebroadcast": "No events to rebroadcast",
   "broadcastedEvents": "Broadcasted {sent} events",
   "@broadcastedEvents": {
     "placeholders": {
-      "sent": { "type": "int" }
+      "sent": {
+        "type": "int"
+      }
     }
   },
   "broadcastedEventsWithFailed": "Broadcasted {sent} events, {failed} failed",
   "@broadcastedEventsWithFailed": {
     "placeholders": {
-      "sent": { "type": "int" },
-      "failed": { "type": "int" }
+      "sent": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
     }
   },
   "errorRebroadcastingEventsDetail": "Error rebroadcasting events: {error}",
   "@errorRebroadcastingEventsDetail": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "noEventsToExport": "No events to export yet",
@@ -902,57 +808,74 @@
   "exportFailed": "Export failed: {error}",
   "@exportFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "deleteAccountTitle": "Delete Account?",
   "deleteAccountConfirmation": "This will send deletion requests for all your events and request all relays to delete your data. This action cannot be undone.",
-  "cancel": "Cancel",
-  "delete": "Delete",
-  "noEventsFoundToDelete": "No events found to delete",
   "noValidEventIds": "No valid event IDs found",
   "deletionRequestSent": "Deletion request sent for {count} events to {relays} relay",
   "@deletionRequestSent": {
     "placeholders": {
-      "count": { "type": "int" },
-      "relays": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "relays": {
+        "type": "int"
+      }
     }
   },
   "deletionRequestSentPlural": "Deletion request sent for {count} events to {relays} relays",
   "@deletionRequestSentPlural": {
     "placeholders": {
-      "count": { "type": "int" },
-      "relays": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "relays": {
+        "type": "int"
+      }
     }
   },
   "accountDeletionRequestSent": "Account deletion request sent to {relays} relay",
   "@accountDeletionRequestSent": {
     "placeholders": {
-      "relays": { "type": "int" }
+      "relays": {
+        "type": "int"
+      }
     }
   },
   "accountDeletionRequestSentPlural": "Account deletion request sent to {relays} relays",
   "@accountDeletionRequestSentPlural": {
     "placeholders": {
-      "relays": { "type": "int" }
+      "relays": {
+        "type": "int"
+      }
     }
   },
   "vanishRequestFailed": "Failed to send vanish request. {relays} relay failed",
   "@vanishRequestFailed": {
     "placeholders": {
-      "relays": { "type": "int" }
+      "relays": {
+        "type": "int"
+      }
     }
   },
   "vanishRequestFailedPlural": "Failed to send vanish request. {relays} relays failed",
   "@vanishRequestFailedPlural": {
     "placeholders": {
-      "relays": { "type": "int" }
+      "relays": {
+        "type": "int"
+      }
     }
   },
   "errorDeletingAccount": "Error deleting account: {error}",
   "@errorDeletingAccount": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "kindProfileMetadata": "Profile Metadata",
@@ -968,32 +891,44 @@
   "kindList": "List (kind {kind})",
   "@kindList": {
     "placeholders": {
-      "kind": { "type": "int" }
+      "kind": {
+        "type": "int"
+      }
     }
   },
   "kindUnknown": "Kind {kind}",
   "@kindUnknown": {
     "placeholders": {
-      "kind": { "type": "int" }
+      "kind": {
+        "type": "int"
+      }
     }
   },
   "scanningEventsFound": "Scanning… {count} found",
   "@scanningEventsFound": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "eventsOnRelays": "{count} events on relays",
   "@eventsOnRelays": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "broadcastProgress": "{sent} / {total} sent",
   "@broadcastProgress": {
     "placeholders": {
-      "sent": { "type": "int" },
-      "total": { "type": "int" }
+      "sent": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "deepScan": "Deep Scan",
@@ -1002,16 +937,26 @@
   "usingPersonalRelays": "Now using your personal relays ({count} main relays)",
   "@usingPersonalRelays": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "enterAmountToGenerateInvoice": "Enter an amount to generate an invoice",
+  "@enterAmountToGenerateInvoice": {},
   "amountInSats": "Amount in sats",
+  "@amountInSats": {},
   "addAmount": "Add amount",
+  "@addAmount": {},
   "editAmount": "Edit amount",
+  "@editAmount": {},
   "lightningAddressOrInvoice": "Lightning address or invoice",
+  "@lightningAddressOrInvoice": {},
   "resolvingAddress": "Resolving address…",
+  "@resolvingAddress": {},
   "resolveAddressFailed": "Could not resolve lightning address",
-
-  "dmYouPrefix": "You: "
+  "dmYouPrefix": "You: ",
+  "quotes": "Quotes",
+  "noQuotesFound": "No quotes found",
+  "quotePlural": "quotes"
 }

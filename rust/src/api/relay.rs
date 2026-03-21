@@ -1496,7 +1496,7 @@ async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<
 
         if event.is_none() {
             let filter = Filter::new().id(eid).limit(1);
-            let _ = client.fetch_events(filter, Duration::from_secs(5)).await;
+            let _ = client.fetch_events(filter, Duration::from_secs(3)).await;
             event = client.database().event_by_id(&eid).await.ok().flatten();
             if event.is_none() {
                 break;
@@ -1519,7 +1519,7 @@ async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<
                     .is_none()
                 {
                     let f = Filter::new().id(root_eid).limit(1);
-                    let _ = client.fetch_events(f, Duration::from_secs(5)).await;
+                    let _ = client.fetch_events(f, Duration::from_secs(3)).await;
                 }
                 return Ok(rid.clone());
             }
@@ -1934,6 +1934,344 @@ pub async fn merge_and_sort_notes(
     Ok(serde_json::to_string(&merged)?)
 }
 
+async fn resolve_repost_to_original(client: &Client, note_id: &str) -> String {
+    let eid = match EventId::from_hex(note_id) {
+        Ok(e) => e,
+        Err(_) => return note_id.to_string(),
+    };
+
+    let event = match client.database().event_by_id(&eid).await {
+        Ok(Some(e)) => e,
+        _ => {
+            let filter = Filter::new().id(eid).limit(1);
+            match client.fetch_events(filter, Duration::from_secs(5)).await {
+                Ok(events) => match events.into_iter().next() {
+                    Some(e) => e,
+                    None => return note_id.to_string(),
+                },
+                Err(_) => return note_id.to_string(),
+            }
+        }
+    };
+
+    if event.kind != Kind::Repost {
+        return note_id.to_string();
+    }
+
+    for tag in event.tags.iter() {
+        let tag_slice = tag.as_slice();
+        if tag_slice.len() >= 2 && tag_slice[0].as_str() == "e" {
+            let original_id = tag_slice[1].as_str();
+            if !original_id.is_empty() {
+                return original_id.to_string();
+            }
+        }
+    }
+
+    note_id.to_string()
+}
+
+/// DB-only version of fetch_full_thread — no network calls, returns instantly
+/// from local LMDB. Returns None if the root note is not in the DB yet.
+pub async fn fetch_full_thread_local(
+    note_id: String,
+    current_user_pubkey_hex: Option<String>,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<Option<String>> {
+    let client = get_client().await?;
+
+    // Resolve repost without network.
+    let resolved_note_id = resolve_repost_to_original_local(&client, &note_id).await;
+
+    // Resolve root without network.
+    let mut root_id = resolve_thread_root_local(&client, &resolved_note_id).await?;
+
+    let root_eid = EventId::from_hex(&root_id)?;
+    let root_event = match client.database().event_by_id(&root_eid).await.ok().flatten() {
+        Some(e) => e,
+        None => {
+            // Try the resolved id as root.
+            let resolved_eid = EventId::from_hex(&resolved_note_id)?;
+            match client.database().event_by_id(&resolved_eid).await.ok().flatten() {
+                Some(e) => {
+                    root_id = resolved_note_id.clone();
+                    e
+                }
+                None => return Ok(None),
+            }
+        }
+    };
+
+    // Collect all reply IDs from DB (no network).
+    let mut all_thread_ids: HashSet<String> = HashSet::new();
+    all_thread_ids.insert(root_id.clone());
+
+    {
+        let root_eid = EventId::from_hex(&root_id)?;
+        let mut processed_ids: HashSet<String> = HashSet::new();
+        processed_ids.insert(root_id.clone());
+        let mut pending_ids: Vec<EventId> = vec![root_eid];
+
+        for _ in 0..3u32 {
+            if pending_ids.is_empty() {
+                break;
+            }
+            let filter = Filter::new()
+                .kind(Kind::TextNote)
+                .events(pending_ids.clone())
+                .limit(200);
+            let events = client.database().query(filter).await.unwrap_or_default();
+            let mut new_ids: Vec<EventId> = Vec::new();
+            for event in events.iter() {
+                let eid_hex = event.id.to_hex();
+                if !processed_ids.contains(&eid_hex) {
+                    processed_ids.insert(eid_hex.clone());
+                    all_thread_ids.insert(eid_hex);
+                    new_ids.push(event.id);
+                }
+            }
+            pending_ids = new_ids;
+            if all_thread_ids.len() > 500 {
+                break;
+            }
+        }
+    }
+
+    let all_eids: Vec<EventId> = all_thread_ids
+        .iter()
+        .filter_map(|id| EventId::from_hex(id).ok())
+        .collect();
+
+    let reply_filter = Filter::new()
+        .kind(Kind::TextNote)
+        .events(all_eids)
+        .limit(500);
+    let reply_events = client.database().query(reply_filter).await.unwrap_or_default();
+
+    let mut all_events: Vec<Event> = Vec::with_capacity(1 + reply_events.len());
+    all_events.push(root_event);
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    seen_ids.insert(root_id.clone());
+    for ev in reply_events {
+        let eid = ev.id.to_hex();
+        if !seen_ids.insert(eid) {
+            continue;
+        }
+        if !super::database::is_event_muted(&ev, &muted_pubkeys, &muted_words) {
+            all_events.push(ev);
+        }
+    }
+
+    let hydrated_json = super::database::hydrate_notes_pub(
+        &client,
+        &all_events,
+        false,
+        current_user_pubkey_hex,
+    )
+    .await?;
+
+    let result = build_thread_result_json(&hydrated_json, &root_id, &resolved_note_id)?;
+    Ok(Some(result))
+}
+
+/// Resolve repost to original without network.
+async fn resolve_repost_to_original_local(client: &Client, note_id: &str) -> String {
+    let eid = match EventId::from_hex(note_id) {
+        Ok(e) => e,
+        Err(_) => return note_id.to_string(),
+    };
+    let event = match client.database().event_by_id(&eid).await.ok().flatten() {
+        Some(e) => e,
+        None => return note_id.to_string(),
+    };
+    if event.kind != Kind::Repost {
+        return note_id.to_string();
+    }
+    for tag in event.tags.iter() {
+        let tag_slice = tag.as_slice();
+        if tag_slice.len() >= 2 && tag_slice[0].as_str() == "e" {
+            let original_id = tag_slice[1].as_str();
+            if !original_id.is_empty() {
+                return original_id.to_string();
+            }
+        }
+    }
+    note_id.to_string()
+}
+
+/// Resolve thread root without any network calls — DB only.
+async fn resolve_thread_root_local(client: &Client, note_id: &str) -> Result<String> {
+    let mut current_id = note_id.to_string();
+    let mut visited: HashSet<String> = HashSet::new();
+
+    for _ in 0..15 {
+        if visited.contains(&current_id) {
+            break;
+        }
+        visited.insert(current_id.clone());
+
+        let eid = EventId::from_hex(&current_id)?;
+        let event = match client.database().event_by_id(&eid).await.ok().flatten() {
+            Some(e) => e,
+            None => break,
+        };
+
+        let tags = super::database::tags_from_event(&event);
+        let refs = super::database::extract_note_references(&tags);
+
+        if let Some(ref rid) = refs.root_id {
+            if !rid.is_empty() {
+                return Ok(rid.clone());
+            }
+        }
+
+        if let Some(ref pid) = refs.parent_id {
+            if !pid.is_empty() && *pid != current_id {
+                current_id = pid.clone();
+                continue;
+            }
+        }
+
+        break;
+    }
+
+    Ok(current_id)
+}
+
+/// Shared helper: build the thread result JSON from hydrated notes JSON.
+fn build_thread_result_json(
+    hydrated_json: &str,
+    root_id: &str,
+    resolved_note_id: &str,
+) -> Result<String> {
+    let hydrated_notes: Vec<serde_json::Value> = serde_json::from_str(hydrated_json)?;
+
+    let root_note = hydrated_notes
+        .iter()
+        .find(|n| n["id"].as_str() == Some(root_id))
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    let replies: Vec<serde_json::Value> = hydrated_notes
+        .iter()
+        .filter(|n| n["id"].as_str() != Some(root_id))
+        .cloned()
+        .collect();
+
+    let mut children_map: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+    let mut notes_map: HashMap<String, serde_json::Value> = HashMap::new();
+    let reply_ids: HashSet<String> = replies
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(|s| s.to_string()))
+        .collect();
+
+    notes_map.insert(root_id.to_string(), root_note.clone());
+    for reply in &replies {
+        let rid = reply["id"].as_str().unwrap_or("").to_string();
+        if !rid.is_empty() {
+            notes_map.insert(rid, reply.clone());
+        }
+    }
+
+    for reply in &replies {
+        let reply_id = reply["id"].as_str().unwrap_or("").to_string();
+        if reply_id.is_empty() {
+            continue;
+        }
+
+        let mut parent = reply["parentId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let reply_root = reply["rootId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        if parent.is_none() {
+            if let Some(ref rr) = reply_root {
+                if *rr == root_id || reply_ids.contains(rr) || notes_map.contains_key(rr) {
+                    parent = Some(rr.clone());
+                } else {
+                    parent = Some(root_id.to_string());
+                }
+            }
+        }
+
+        let parent = parent.unwrap_or_else(|| root_id.to_string());
+        let parent = if parent != root_id
+            && !reply_ids.contains(&parent)
+            && !notes_map.contains_key(&parent)
+        {
+            root_id.to_string()
+        } else {
+            parent
+        };
+
+        children_map.entry(parent).or_default().push(reply.clone());
+    }
+
+    for children in children_map.values_mut() {
+        children.sort_by(|a, b| {
+            let at = a["created_at"].as_i64().unwrap_or(0);
+            let bt = b["created_at"].as_i64().unwrap_or(0);
+            at.cmp(&bt)
+        });
+    }
+
+    let mut chain_notes: Vec<serde_json::Value> = Vec::new();
+    if resolved_note_id != root_id {
+        let mut chain_ids: Vec<String> = Vec::new();
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut current = resolved_note_id.to_string();
+
+        while !current.is_empty() && !visited.contains(&current) {
+            visited.insert(current.clone());
+            chain_ids.push(current.clone());
+            if current == root_id {
+                break;
+            }
+            if let Some(note) = notes_map.get(&current) {
+                let pid = note["parentId"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| note["rootId"].as_str().filter(|s| !s.is_empty()));
+                current = pid.map(|s| s.to_string()).unwrap_or_default();
+            } else {
+                break;
+            }
+        }
+
+        chain_ids.reverse();
+        if chain_ids.first().map(|s| s.as_str()) != Some(root_id) {
+            chain_ids.insert(0, root_id.to_string());
+        }
+
+        let mut seen: HashSet<String> = HashSet::new();
+        for cid in &chain_ids {
+            if seen.insert(cid.clone()) {
+                if let Some(note) = notes_map.get(cid) {
+                    chain_notes.push(note.clone());
+                }
+            }
+        }
+    } else {
+        chain_notes.push(root_note.clone());
+    }
+
+    let result = serde_json::json!({
+        "rootNote": root_note,
+        "chainNotes": chain_notes,
+        "childrenMap": children_map,
+        "notesMap": notes_map,
+        "totalReplies": replies.len(),
+    });
+
+    Ok(serde_json::to_string(&result)?)
+}
+
 pub async fn fetch_full_thread(
     note_id: String,
     current_user_pubkey_hex: Option<String>,
@@ -1942,7 +2280,8 @@ pub async fn fetch_full_thread(
 ) -> Result<String> {
     let client = get_client().await?;
 
-    let root_id = resolve_thread_root_internal(&client, &note_id).await?;
+    let resolved_note_id = resolve_repost_to_original(&client, &note_id).await;
+    let mut root_id = resolve_thread_root_internal(&client, &resolved_note_id).await?;
 
     let mut all_thread_ids: HashSet<String> = HashSet::new();
     all_thread_ids.insert(root_id.clone());
@@ -1964,7 +2303,7 @@ pub async fn fetch_full_thread(
                 .events(pending_ids.clone())
                 .limit(200);
             let events = client
-                .fetch_events(filter, Duration::from_secs(8))
+                .fetch_events(filter, Duration::from_secs(4))
                 .await?;
 
             let mut new_ids: Vec<EventId> = Vec::new();
@@ -2029,7 +2368,7 @@ pub async fn fetch_full_thread(
                     .kind(Kind::Metadata)
                     .limit(200);
                 let _ = client
-                    .fetch_events(profile_filter, Duration::from_secs(5))
+                    .fetch_events(profile_filter, Duration::from_secs(3))
                     .await;
             }
         }
@@ -2038,7 +2377,16 @@ pub async fn fetch_full_thread(
     let root_eid = EventId::from_hex(&root_id)?;
     let root_event = match client.database().event_by_id(&root_eid).await? {
         Some(e) => e,
-        None => return Err(anyhow!("Root note not found")),
+        None => {
+            let resolved_eid = EventId::from_hex(&resolved_note_id)?;
+            match client.database().event_by_id(&resolved_eid).await? {
+                Some(e) => {
+                    root_id = resolved_note_id.clone();
+                    e
+                }
+                None => return Err(anyhow!("Root note not found")),
+            }
+        }
     };
 
     let reply_filter = Filter::new()
@@ -2069,138 +2417,8 @@ pub async fn fetch_full_thread(
     )
     .await?;
 
-    let hydrated_notes: Vec<serde_json::Value> = serde_json::from_str(&hydrated_json)?;
-
-    let root_note = hydrated_notes
-        .iter()
-        .find(|n| n["id"].as_str() == Some(&root_id))
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
-
-    let replies: Vec<serde_json::Value> = hydrated_notes
-        .iter()
-        .filter(|n| n["id"].as_str() != Some(&root_id))
-        .cloned()
-        .collect();
-
-    let mut children_map: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
-    let mut notes_map: HashMap<String, serde_json::Value> = HashMap::new();
-    let reply_ids: HashSet<String> = replies
-        .iter()
-        .filter_map(|r| r["id"].as_str().map(|s| s.to_string()))
-        .collect();
-
-    notes_map.insert(root_id.clone(), root_note.clone());
-    for reply in &replies {
-        let rid = reply["id"].as_str().unwrap_or("").to_string();
-        if !rid.is_empty() {
-            notes_map.insert(rid, reply.clone());
-        }
-    }
-
-    for reply in &replies {
-        let reply_id = reply["id"].as_str().unwrap_or("").to_string();
-        if reply_id.is_empty() {
-            continue;
-        }
-
-        let mut parent = reply["parentId"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string());
-
-        let reply_root = reply["rootId"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string());
-
-        if parent.is_none() {
-            if let Some(ref rr) = reply_root {
-                if *rr == root_id
-                    || reply_ids.contains(rr)
-                    || notes_map.contains_key(rr)
-                {
-                    parent = Some(rr.clone());
-                } else {
-                    parent = Some(root_id.clone());
-                }
-            }
-        }
-
-        let parent = parent.unwrap_or_else(|| root_id.clone());
-        let parent = if parent != root_id
-            && !reply_ids.contains(&parent)
-            && !notes_map.contains_key(&parent)
-        {
-            root_id.clone()
-        } else {
-            parent
-        };
-
-        children_map
-            .entry(parent)
-            .or_default()
-            .push(reply.clone());
-    }
-
-    for children in children_map.values_mut() {
-        children.sort_by(|a, b| {
-            let at = a["created_at"].as_i64().unwrap_or(0);
-            let bt = b["created_at"].as_i64().unwrap_or(0);
-            at.cmp(&bt)
-        });
-    }
-
-    let mut chain_notes: Vec<serde_json::Value> = Vec::new();
-    if note_id != root_id {
-        let mut chain_ids: Vec<String> = Vec::new();
-        let mut visited: HashSet<String> = HashSet::new();
-        let mut current = note_id.clone();
-
-        while !current.is_empty() && !visited.contains(&current) {
-            visited.insert(current.clone());
-            chain_ids.push(current.clone());
-            if current == root_id {
-                break;
-            }
-
-            if let Some(note) = notes_map.get(&current) {
-                let pid = note["parentId"]
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                    .or_else(|| note["rootId"].as_str().filter(|s| !s.is_empty()));
-                current = pid.map(|s| s.to_string()).unwrap_or_default();
-            } else {
-                break;
-            }
-        }
-
-        chain_ids.reverse();
-        if chain_ids.first().map(|s| s.as_str()) != Some(&root_id) {
-            chain_ids.insert(0, root_id.clone());
-        }
-
-        let mut seen: HashSet<String> = HashSet::new();
-        for cid in &chain_ids {
-            if seen.insert(cid.clone()) {
-                if let Some(note) = notes_map.get(cid) {
-                    chain_notes.push(note.clone());
-                }
-            }
-        }
-    } else {
-        chain_notes.push(root_note.clone());
-    }
-
-    let result = serde_json::json!({
-        "rootNote": root_note,
-        "chainNotes": chain_notes,
-        "childrenMap": children_map,
-        "notesMap": notes_map,
-        "totalReplies": replies.len(),
-    });
-
-    Ok(serde_json::to_string(&result)?)
+    let result = build_thread_result_json(&hydrated_json, &root_id, &resolved_note_id)?;
+    Ok(result)
 }
 
 pub async fn get_database_size_mb() -> Result<u64> {

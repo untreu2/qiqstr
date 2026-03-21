@@ -161,7 +161,7 @@ class _UserProfileHeader extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: colors.avatarPlaceholder,
                   image: () {
-                    final profileImage = user['profileImage'] as String? ?? '';
+                    final profileImage = user['picture'] as String? ?? '';
                     return profileImage.isNotEmpty
                         ? DecorationImage(
                             image: NetworkImage(profileImage),
@@ -171,7 +171,7 @@ class _UserProfileHeader extends StatelessWidget {
                   }(),
                 ),
                 child: () {
-                  final profileImage = user['profileImage'] as String? ?? '';
+                  final profileImage = user['picture'] as String? ?? '';
                   return profileImage.isEmpty
                       ? Icon(
                           Icons.person,
@@ -328,21 +328,21 @@ class _SidebarContent extends StatelessWidget {
               label: l10n.profile,
               onTap: () {
                 final userNpub = user['npub'] as String? ?? '';
-                final userPubkeyHex = user['pubkeyHex'] as String? ?? '';
+                final userPubkeyHex = user['pubkey'] as String? ?? '';
                 final currentLocation = GoRouterState.of(
                   context,
                 ).matchedLocation;
                 if (currentLocation.startsWith('/home/feed')) {
                   context.push(
-                    '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}',
+                    '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}',
                   );
                 } else if (currentLocation.startsWith('/home/notifications')) {
                   context.push(
-                    '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}',
+                    '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}',
                   );
                 } else {
                   context.push(
-                    '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}',
+                    '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}',
                   );
                 }
               },

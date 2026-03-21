@@ -10,7 +10,8 @@ import '../../theme/theme_manager.dart';
 import '../../../constants/relays.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/nostr_service.dart';
-import '../../../data/services/relay_service.dart';
+import '../../../core/di/app_di.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/title_widget.dart';
@@ -19,7 +20,6 @@ import '../../widgets/dialogs/reset_relays_dialog.dart';
 import '../../widgets/dialogs/add_relay_dialog.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/dialogs/broadcast_events_dialog.dart';
-import '../../../data/services/event_counts_service.dart';
 
 class RelayPage extends StatefulWidget {
   const RelayPage({super.key});
@@ -81,7 +81,7 @@ class _RelayPageState extends State<RelayPage> {
 
   void _startStatusStream() {
     _statusSubscription?.cancel();
-    _statusSubscription = RustRelayService.instance.streamRelayStatus().listen(
+    _statusSubscription = AppDI.get<SyncService>().streamRelayStatus().listen(
           _applyRelayStatus,
           onError: (_) {},
         );
@@ -269,7 +269,7 @@ class _RelayPageState extends State<RelayPage> {
       if (decoded.isNotEmpty && decoded[0] == 'EVENT' && decoded.length >= 2) {
         final eventData = decoded[1] as Map<String, dynamic>;
         final eventJson = jsonEncode(eventData);
-        await RustRelayService.instance.sendEvent(eventJson);
+        await AppDI.get<SyncService>().sendEventJson(eventJson);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -344,7 +344,7 @@ class _RelayPageState extends State<RelayPage> {
         'limit': 1,
       };
 
-      final events = await RustRelayService.instance.fetchEvents(
+      final events = await AppDI.get<SyncService>().fetchEventsWithFilter(
         filter,
         timeoutSecs: 10,
       );
@@ -460,7 +460,7 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setStringList('custom_main_relays', _relays);
       await prefs.setString('relay_flags', jsonEncode(_relayFlags));
 
-      await RustRelayService.instance.reloadCustomRelays();
+      await AppDI.get<SyncService>().reloadCustomRelays();
 
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
@@ -569,26 +569,40 @@ class _RelayPageState extends State<RelayPage> {
     AppSnackbar.info(context, l10n.fetchingYourEvents);
 
     try {
-      final result = await EventCountsService.instance.fetchAllEventsForUser(
-        null,
+      final pubkeyHex = _authService.currentUserPubkeyHex;
+      if (pubkeyHex == null) return;
+
+      final allEvents = await AppDI.get<SyncService>().fetchEventsWithFilter(
+        {
+          'authors': [pubkeyHex]
+        },
+        timeoutSecs: 30,
       );
 
       if (!mounted) return;
 
-      if (result == null || result.allEvents.isEmpty) {
+      final uniqueEvents = <String, Map<String, dynamic>>{};
+      for (final e in allEvents) {
+        final id = e['id'] as String?;
+        if (id != null) uniqueEvents[id] = e;
+      }
+      final events = uniqueEvents.values.toList();
+
+      if (events.isEmpty) {
         AppSnackbar.info(context, l10n.noEventsFoundToBroadcast);
         return;
       }
 
       AppSnackbar.info(
         context,
-        l10n.broadcastingEvents(result.allEvents.length, relayUrls.length),
+        l10n.broadcastingEvents(events.length, relayUrls.length),
       );
 
-      final success = await EventCountsService.instance.rebroadcastEvents(
-        result.allEvents,
+      final result = await AppDI.get<SyncService>().broadcastEvents(
+        events,
         relayUrls: relayUrls,
       );
+      final success = (result['totalSuccess'] as int? ?? 0) > 0;
 
       if (!mounted) return;
 
@@ -596,7 +610,7 @@ class _RelayPageState extends State<RelayPage> {
         AppSnackbar.success(
           context,
           l10n.eventsSuccessfullyBroadcast(
-            result.allEvents.length,
+            events.length,
             relayUrls.length,
           ),
         );

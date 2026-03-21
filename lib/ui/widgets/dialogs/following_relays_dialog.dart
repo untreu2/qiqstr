@@ -5,8 +5,7 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/relay_service.dart';
-
+import '../../../data/sync/sync_service.dart';
 
 class RelayUsageStats {
   final String relayUrl;
@@ -92,8 +91,7 @@ class _FollowingRelaysDialogContentState
         return;
       }
 
-      final followingPubkeys =
-          await followingRepo.getFollowingList(currentUserHex);
+      final followingPubkeys = await followingRepo.getFollowing(currentUserHex);
       if (followingPubkeys == null || followingPubkeys.isEmpty) {
         if (mounted) {
           setState(() => _isLoading = false);
@@ -133,7 +131,8 @@ class _FollowingRelaysDialogContentState
         'limit': pubkeyHexList.length,
       };
 
-      final events = await RustRelayService.instance.fetchEvents(filter, timeoutSecs: 10);
+      final events = await AppDI.get<SyncService>()
+          .fetchEventsWithFilter(filter, timeoutSecs: 10);
 
       for (final data in events) {
         if (!mounted) break;

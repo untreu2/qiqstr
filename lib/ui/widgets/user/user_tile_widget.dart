@@ -78,7 +78,7 @@ class _UserTileState extends State<UserTile> {
         builder: (context, state) {
           final authService = AppDI.get<AuthService>();
           final currentUserHex = authService.currentUserPubkeyHex;
-          final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+          final userPubkeyHex = widget.user['pubkey'] as String? ?? '';
           final userNpub = widget.user['npub'] as String? ?? '';
           final userHex = authService.npubToHex(userNpub) ?? userPubkeyHex;
           final isCurrentUser =
@@ -89,7 +89,7 @@ class _UserTileState extends State<UserTile> {
               final loadedState =
                   state is UserTileLoaded ? state : const UserTileLoaded();
               final userProfileImage =
-                  widget.user['profileImage'] as String? ?? '';
+                  widget.user['picture'] as String? ?? '';
               final userName = widget.user['name'] as String? ?? '';
               final userNip05 = widget.user['nip05'] as String? ?? '';
               final userNip05Verified =
@@ -103,7 +103,7 @@ class _UserTileState extends State<UserTile> {
                     onTap: widget.onTap ??
                         () {
                           context.push(
-                              '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+                              '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
                         },
                     child: Container(
                       width: double.infinity,

@@ -2,15 +2,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
+import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/interaction_service.dart';
 import 'dart:convert';
-import '../../../data/services/rust_database_service.dart';
 import 'interaction_event.dart';
 import 'interaction_state.dart';
 
 class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
   final SyncService _syncService;
+  final FeedRepository _feedRepository;
+  final InteractionRepository _interactionRepository;
   final InteractionService _interactionService;
   final String noteId;
   final String currentUserHex;
@@ -21,11 +23,14 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
   InteractionBloc({
     required SyncService syncService,
     required FeedRepository feedRepository,
+    required InteractionRepository interactionRepository,
     required this.noteId,
     required this.currentUserHex,
     this.note,
     InteractionService? interactionService,
   })  : _syncService = syncService,
+        _feedRepository = feedRepository,
+        _interactionRepository = interactionRepository,
         _interactionService = interactionService ?? InteractionService.instance,
         super(const InteractionInitial()) {
     on<InteractionInitialized>(_onInitialized);
@@ -189,7 +194,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
     try {
       final noteAuthor =
-          note?['pubkey'] as String? ?? note?['author'] as String? ?? '';
+          note?['pubkey'] as String? ?? '';
       await _syncService.publishReaction(
         targetEventId: noteId,
         targetAuthor: noteAuthor,
@@ -216,12 +221,11 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
     try {
       final noteAuthor =
-          note?['pubkey'] as String? ?? note?['author'] as String? ?? '';
+          note?['pubkey'] as String? ?? '';
       String originalContent = '';
-      final eventData =
-          await RustDatabaseService.instance.getEventModel(noteId);
-      if (eventData != null) {
-        originalContent = jsonEncode(eventData);
+      final noteModel = await _feedRepository.getNote(noteId);
+      if (noteModel != null) {
+        originalContent = jsonEncode(noteModel.toMap());
       }
 
       await _syncService.publishRepost(
@@ -241,9 +245,8 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     _interactionService.markUnreposted(noteId);
 
     try {
-      final db = RustDatabaseService.instance;
       final repostEventId =
-          await db.findUserRepostEventId(currentUserHex, noteId);
+          await _interactionRepository.findRepostId(currentUserHex, noteId);
       if (repostEventId != null) {
         await _syncService.publishDeletion(eventIds: [repostEventId]);
       }

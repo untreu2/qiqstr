@@ -62,7 +62,7 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
   }
 
   void _toggleUser(Map<String, dynamic> user) {
-    final pubkey = user['pubkeyHex'] as String? ?? '';
+    final pubkey = user['pubkey'] as String? ?? '';
     if (pubkey.isEmpty) return;
 
     setState(() {
@@ -153,7 +153,7 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
                         itemBuilder: (context, index) {
                           final user = state.filteredUsers[index];
                           final pubkey =
-                              user['pubkeyHex'] as String? ?? '';
+                              user['pubkey'] as String? ?? '';
                           final isSelected =
                               _selectedUsers.containsKey(pubkey);
 
@@ -217,7 +217,7 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
           final entry = _selectedUsers.entries.elementAt(index);
           final user = entry.value;
           final name = user['name'] as String? ?? '';
-          final picture = user['profileImage'] as String? ?? '';
+          final picture = user['picture'] as String? ?? '';
 
           return GestureDetector(
             onTap: () => _toggleUser(user),

@@ -180,7 +180,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
       final currentPubkeyHex = _authService.currentUserPubkeyHex;
       if (currentPubkeyHex != null) {
         final followingList =
-            await _followingRepository.getFollowingList(currentPubkeyHex);
+            await _followingRepository.getFollowing(currentPubkeyHex);
         if (followingList != null) {
           followingSet = followingList.toSet();
         }

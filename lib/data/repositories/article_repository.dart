@@ -1,48 +1,71 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:rxdart/rxdart.dart';
+
 import '../../domain/entities/article.dart';
-import 'base_repository.dart';
+import '../../src/rust/api/database.dart' as rust_db;
+import '../services/encrypted_mute_service.dart';
+import '../services/rust_database_service.dart';
 
 abstract class ArticleRepository {
-  Stream<List<Article>> watchArticles({int limit = 50});
-  Future<List<Article>> getArticles({int limit = 50});
-  Future<List<Article>> getArticlesByAuthor(String pubkey, {int limit = 50});
+  Stream<List<Article>> watchArticles({List<String>? authors, int limit = 50});
+  Future<List<Article>> getArticles({List<String>? authors, int limit = 50});
   Future<Article?> getArticle(String articleId);
   Future<Article?> getArticleByNaddr(
       {required String pubkeyHex, required String identifier});
-  Future<void> saveArticles(List<Map<String, dynamic>> articles);
+  Future<void> save(List<Map<String, dynamic>> articles);
 }
 
-class ArticleRepositoryImpl extends BaseRepository
-    implements ArticleRepository {
-  ArticleRepositoryImpl({
-    required super.db,
-  });
+class ArticleRepositoryImpl implements ArticleRepository {
+  final RustDatabaseService _events;
+
+  ArticleRepositoryImpl({required RustDatabaseService events})
+      : _events = events;
+
+  List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
+  List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
 
   @override
-  Stream<List<Article>> watchArticles({int limit = 50}) {
-    return db
-        .watchHydratedArticles(limit: limit)
-        .map((maps) => maps.map((m) => Article.fromMap(m)).toList());
+  Stream<List<Article>> watchArticles({List<String>? authors, int limit = 50}) {
+    return _events.onChange
+        .debounceTime(const Duration(milliseconds: 500))
+        .startWith(null)
+        .asyncMap((_) => getArticles(authors: authors, limit: limit));
   }
 
   @override
-  Future<List<Article>> getArticles({int limit = 50}) async {
-    final maps = await db.getHydratedArticles(limit: limit);
-    return maps.map((m) => Article.fromMap(m)).toList();
-  }
-
-  @override
-  Future<List<Article>> getArticlesByAuthor(String pubkey,
-      {int limit = 50}) async {
-    final maps = await db.getHydratedArticles(limit: limit, authors: [pubkey]);
-    return maps.map((m) => Article.fromMap(m)).toList();
+  Future<List<Article>> getArticles(
+      {List<String>? authors, int limit = 50}) async {
+    try {
+      final json = await rust_db.dbGetHydratedArticles(
+        authorsHex: authors,
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .cast<Map<String, dynamic>>()
+          .map((m) => Article.fromMap(m))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) print('[ArticleRepository] getArticles error: $e');
+      return [];
+    }
   }
 
   @override
   Future<Article?> getArticle(String articleId) async {
-    final map = await db.getHydratedArticle(articleId);
-    if (map == null) return null;
-    return Article.fromMap(map);
+    try {
+      final json = await rust_db.dbGetHydratedArticle(eventId: articleId);
+      if (json == null) return null;
+      return Article.fromMap(jsonDecode(json) as Map<String, dynamic>);
+    } catch (e) {
+      if (kDebugMode) print('[ArticleRepository] getArticle error: $e');
+      return null;
+    }
   }
 
   @override
@@ -50,16 +73,27 @@ class ArticleRepositoryImpl extends BaseRepository
     required String pubkeyHex,
     required String identifier,
   }) async {
-    final map = await db.getHydratedArticleByNaddr(
-      pubkeyHex: pubkeyHex,
-      identifier: identifier,
-    );
-    if (map == null) return null;
-    return Article.fromMap(map);
+    try {
+      final json = await rust_db.dbGetHydratedArticleByNaddr(
+        pubkeyHex: pubkeyHex,
+        dTag: identifier,
+      );
+      if (json == null) return null;
+      return Article.fromMap(jsonDecode(json) as Map<String, dynamic>);
+    } catch (e) {
+      if (kDebugMode) print('[ArticleRepository] getArticleByNaddr error: $e');
+      return null;
+    }
   }
 
   @override
-  Future<void> saveArticles(List<Map<String, dynamic>> articles) async {
-    await db.saveArticles(articles);
+  Future<void> save(List<Map<String, dynamic>> articles) async {
+    if (articles.isEmpty) return;
+    try {
+      await rust_db.dbSaveEvents(eventsJson: jsonEncode(articles));
+      _events.notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[ArticleRepository] save error: $e');
+    }
   }
 }

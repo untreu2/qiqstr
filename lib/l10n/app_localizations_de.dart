@@ -21,7 +21,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get relays => 'Relays';
 
   @override
-  String get yourDataOnRelays => 'Deine Daten auf Relays';
+  String get yourDataOnRelays => 'Ihre Daten auf Relays';
 
   @override
   String get keys => 'Schlüssel';
@@ -61,10 +61,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noMessagesYet => 'Noch keine Nachrichten';
 
   @override
-  String get failedToDecryptMedia => 'Medien-Entschlüsselung fehlgeschlagen';
+  String get failedToDecryptMedia =>
+      'Medien konnten nicht entschlüsselt werden';
 
   @override
-  String get legacyUnencryptedMedia => 'Alte unverschlüsselte Medien';
+  String get legacyUnencryptedMedia => 'Legacy unverschlüsselte Medien';
 
   @override
   String get decryptionError => 'Entschlüsselungsfehler';
@@ -182,7 +183,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get delete => 'Löschen';
 
   @override
-  String get noEventsFoundToDelete => 'Keine zu löschenden Ereignisse gefunden';
+  String get noEventsFoundToDelete => 'Keine Ereignisse zum Löschen gefunden';
 
   @override
   String get noValidEventIdsFound => 'Keine gültigen Ereignis-IDs gefunden';
@@ -219,7 +220,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get relayList => 'Relay-Liste';
 
   @override
-  String get rebroadcasting => 'Wird gesendet...';
+  String get rebroadcasting => 'Wird erneut gesendet...';
 
   @override
   String get rebroadcast => 'Erneut senden';
@@ -283,11 +284,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get relayAddedToMainList => 'Relay zur Hauptliste hinzugefügt';
 
   @override
-  String get noEventsFoundToBroadcast =>
-      'Keine Ereignisse zum Übertragen gefunden';
+  String get noEventsFoundToBroadcast => 'Keine Ereignisse zum Senden gefunden';
 
   @override
-  String get errorBroadcastingEvents => 'Fehler beim Übertragen der Ereignisse';
+  String get errorBroadcastingEvents => 'Fehler beim Senden von Ereignissen';
 
   @override
   String get relayRemovedSuccessfully => 'Relay erfolgreich entfernt';
@@ -296,7 +296,8 @@ class AppLocalizationsDe extends AppLocalizations {
   String get relaysResetToDefaults => 'Relays auf Standardwerte zurückgesetzt';
 
   @override
-  String get relayAddedFromFollowingList => 'Relay aus Folgeliste hinzugefügt';
+  String get relayAddedFromFollowingList =>
+      'Relay aus Followerliste hinzugefügt';
 
   @override
   String get relayAlreadyExistsInList =>
@@ -335,10 +336,10 @@ class AppLocalizationsDe extends AppLocalizations {
       'Video konnte nicht in Galerie gespeichert werden';
 
   @override
-  String get undoRepost => 'Repost rückgängig machen';
+  String get undoRepost => 'Erneutes Posten rückgängig machen';
 
   @override
-  String get repostAgain => 'Erneut reposten';
+  String get repostAgain => 'Erneut posten';
 
   @override
   String get quote => 'Zitieren';
@@ -738,7 +739,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get newMessage => 'Neue Nachricht';
 
   @override
-  String get typeAMessage => 'Nachricht schreiben...';
+  String get typeAMessage => 'Nachricht eingeben...';
 
   @override
   String get sendMessage => 'Nachricht senden';
@@ -750,7 +751,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get directMessages => 'Direktnachrichten';
 
   @override
-  String get noConversationsYet => 'Noch keine Unterhaltungen';
+  String get noConversationsYet => 'Noch keine Gespräche';
 
   @override
   String get startNewConversation => 'Neues Gespräch beginnen';
@@ -980,7 +981,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String daysAgo(int days) {
-    return 'vor ${days}T';
+    return 'vor $days Tag(en)';
   }
 
   @override
@@ -1045,7 +1046,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get mention => 'Erwähnen';
 
   @override
-  String get searchByNameOrNpub => 'Suche nach Name oder npub...';
+  String get searchByNameOrNpub => 'Nach Name oder npub suchen...';
 
   @override
   String get searchDotDotDot => 'Suchen...';
@@ -2055,4 +2056,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get dmYouPrefix => 'Du: ';
+
+  @override
+  String get quotes => 'Zitate';
+
+  @override
+  String get noQuotesFound => 'Keine Zitate gefunden';
+
+  @override
+  String get quotePlural => 'Zitate';
 }

@@ -236,13 +236,15 @@ Future<String> dbGetDatabaseStats() =>
     RustLib.instance.api.crateApiDatabaseDbGetDatabaseStats();
 
 Future<String> dbGetHydratedFeedNotes(
-        {required List<String> authorsHex,
+        {required String userPubkeyHex,
+        List<String>? authorsHex,
         required int limit,
         required List<String> mutedPubkeys,
         required List<String> mutedWords,
         required bool filterReplies,
         String? currentUserPubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbGetHydratedFeedNotes(
+        userPubkeyHex: userPubkeyHex,
         authorsHex: authorsHex,
         limit: limit,
         mutedPubkeys: mutedPubkeys,
@@ -332,18 +334,11 @@ Future<String> dbGetHydratedNotifications(
         mutedWords: mutedWords);
 
 Future<String> dbGetHydratedArticles(
-        {required int limit,
-        required List<String> mutedPubkeys,
-        required List<String> mutedWords}) =>
-    RustLib.instance.api.crateApiDatabaseDbGetHydratedArticles(
-        limit: limit, mutedPubkeys: mutedPubkeys, mutedWords: mutedWords);
-
-Future<String> dbGetHydratedArticlesByAuthors(
-        {required List<String> authorsHex,
+        {List<String>? authorsHex,
         required int limit,
         required List<String> mutedPubkeys,
         required List<String> mutedWords}) =>
-    RustLib.instance.api.crateApiDatabaseDbGetHydratedArticlesByAuthors(
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedArticles(
         authorsHex: authorsHex,
         limit: limit,
         mutedPubkeys: mutedPubkeys,

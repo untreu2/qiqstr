@@ -10,7 +10,6 @@ import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/note/note_bloc.dart';
 import '../../../presentation/blocs/note/note_event.dart';
 import '../../../presentation/blocs/note/note_state.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../constants/giphy_api_key.dart';
 import '../../theme/theme_manager.dart';
@@ -299,11 +298,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     try {
       final state = _noteBloc.state;
-      
+
       if (state is! NoteComposeState) {
         return;
       }
-      
+
       if (state.isUploadingMedia) {
         return;
       }
@@ -377,7 +376,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
       try {
         String eventIdHex;
         if (widget.replyToNoteId!.startsWith('note1')) {
-          eventIdHex = decodeBasicBech32(widget.replyToNoteId!, 'note');
+          eventIdHex =
+              AuthService.instance.decodeNoteId(widget.replyToNoteId!) ??
+                  widget.replyToNoteId!;
         } else if (RegExp(r'^[0-9a-fA-F]{64}$')
             .hasMatch(widget.replyToNoteId!)) {
           eventIdHex = widget.replyToNoteId!;
@@ -526,17 +527,17 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final username = _formatUsername(userName);
     final mentionKey = '@$username';
 
-    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    final pubkeyHex = user['pubkey'] as String? ?? '';
     final npub = user['npub'] as String? ?? '';
 
     String npubBech32;
     if (pubkeyHex.isNotEmpty) {
-      npubBech32 = encodeBasicBech32(pubkeyHex, 'npub');
+      npubBech32 = AuthService.instance.hexToNpub(pubkeyHex) ?? pubkeyHex;
     } else if (npub.startsWith('npub1')) {
       npubBech32 = npub;
     } else {
       try {
-        npubBech32 = encodeBasicBech32(npub, 'npub');
+        npubBech32 = AuthService.instance.hexToNpub(npub) ?? npub;
       } catch (e) {
         npubBech32 = npub;
       }
@@ -721,7 +722,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
                             size: 16, color: context.colors.textPrimary),
                       const SizedBox(width: 6),
                       Text(
-                        isUploading ? l10n.uploadingDotDotDot : l10n.addMediaText,
+                        isUploading
+                            ? l10n.uploadingDotDotDot
+                            : l10n.addMediaText,
                         style: TextStyle(
                           color: context.colors.textPrimary,
                           fontSize: _smallFontSize,
@@ -889,7 +892,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       future: _loadCurrentUser(),
       builder: (context, snapshot) {
         final user = snapshot.data;
-        final profileImage = user?['profileImage'] as String? ?? '';
+        final profileImage = user?['picture'] as String? ?? '';
         return CircleAvatar(
           radius: _avatarRadius,
           backgroundImage: profileImage.isNotEmpty
@@ -1060,7 +1063,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       }
 
       if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(cleanId)) {
-        final encoded = encodeBasicBech32(cleanId, 'note');
+        final encoded = AuthService.instance.encodeNoteId(cleanId);
         debugPrint('[ShareNotePage] Encoded hex to note1: $encoded');
         return encoded;
       }
@@ -1105,7 +1108,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Widget _buildUserSuggestionItem(Map<String, dynamic> user) {
     final l10n = AppLocalizations.of(context)!;
     final userName = user['name'] as String? ?? '';
-    final userProfileImage = user['profileImage'] as String? ?? '';
+    final userProfileImage = user['picture'] as String? ?? '';
 
     return Semantics(
       label: '${l10n.mention} $userName',

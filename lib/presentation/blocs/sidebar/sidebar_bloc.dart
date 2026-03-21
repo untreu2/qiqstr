@@ -4,7 +4,6 @@ import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/rust_database_service.dart';
 import '../../../data/services/relay_service.dart';
 import 'sidebar_event.dart';
 import 'sidebar_state.dart';
@@ -14,11 +13,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
   final AuthService _authService;
-  final RustDatabaseService _db;
-
   String? _currentUserHex;
   String? _currentNpub;
-  StreamSubscription<Map<String, dynamic>?>? _profileSubscription;
+  StreamSubscription? _profileSubscription;
   Timer? _relayCountTimer;
   Timer? _countsTimer;
   Timer? _followingPollTimer;
@@ -28,12 +25,10 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     required ProfileRepository profileRepository,
     required SyncService syncService,
     required AuthService authService,
-    RustDatabaseService? db,
   })  : _followingRepository = followingRepository,
         _profileRepository = profileRepository,
         _syncService = syncService,
         _authService = authService,
-        _db = db ?? RustDatabaseService.instance,
         super(const SidebarInitial()) {
     on<SidebarInitialized>(_onSidebarInitialized);
     on<SidebarRefreshed>(_onSidebarRefreshed);
@@ -71,9 +66,10 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
 
   void _watchProfile(String userHex) {
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(userHex).listen((profileData) {
-      if (isClosed || profileData == null) return;
-      add(_SidebarProfileUpdated(profileData));
+    _profileSubscription =
+        _profileRepository.watchProfile(userHex).listen((profile) {
+      if (isClosed || profile == null) return;
+      add(_SidebarProfileUpdated(profile.toMap()));
     });
   }
 
@@ -92,12 +88,11 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
       Map<String, dynamic> profileData) {
     return {
       'npub': _currentNpub ?? '',
-      'pubkeyHex': _currentUserHex ?? '',
+      'pubkey': _currentUserHex ?? '',
       'name': profileData['name'] ?? profileData['display_name'] ?? '',
       'display_name': profileData['display_name'] ?? '',
       'about': profileData['about'] ?? '',
       'picture': profileData['picture'] ?? '',
-      'profileImage': profileData['picture'] ?? '',
       'banner': profileData['banner'] ?? '',
       'nip05': profileData['nip05'] ?? '',
       'lud16': profileData['lud16'] ?? '',
@@ -137,8 +132,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     Future.microtask(() async {
       if (isClosed) return;
       try {
-        final follows =
-            await _followingRepository.getFollowingList(userPubkeyHex);
+        final follows = await _followingRepository.getFollowing(userPubkeyHex);
         final followerCount =
             await _profileRepository.getFollowerCount(userPubkeyHex);
         if (isClosed) return;
@@ -161,8 +155,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
         return;
       }
       try {
-        final follows =
-            await _followingRepository.getFollowingList(pubkeyHex);
+        final follows = await _followingRepository.getFollowing(pubkeyHex);
         if (follows != null && follows.isNotEmpty) {
           timer.cancel();
           if (!isClosed && state is SidebarLoaded) {
@@ -229,9 +222,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
         for (final account in accounts) {
           final hex = _authService.npubToHex(account.npub);
           if (hex != null) {
-            final profile = await _db.getUserProfile(hex);
+            final profile = await _profileRepository.getProfile(hex);
             if (profile != null) {
-              final picture = profile['picture'] ?? '';
+              final picture = profile.picture ?? '';
               if (picture.isNotEmpty) {
                 profileImages[account.npub] = picture;
               }

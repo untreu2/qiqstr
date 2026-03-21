@@ -14,7 +14,6 @@ import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/dialogs/create_list_dialog.dart';
-import '../../../data/services/favorite_lists_service.dart';
 
 class FollowSetsPage extends StatefulWidget {
   const FollowSetsPage({super.key});
@@ -224,6 +223,7 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
     final followedSets = state.followedUsersSets;
     final resolvedProfiles = state.resolvedProfiles;
     final resolvedAuthors = state.resolvedAuthors;
+    final favoriteIds = state.favoriteIds;
     final slivers = <Widget>[];
 
     if (ownSets.isEmpty && followedSets.isEmpty) {
@@ -276,17 +276,15 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
                 final set = ownSets[index];
                 final users = resolvedProfiles[set.dTag] ?? [];
                 final listId = '${set.pubkey}:${set.dTag}';
-                final favService = FavoriteListsService.instance;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: _FollowSetCard(
                     followSet: set,
                     users: users,
-                    isAddedToFeed: favService.isFavorite(listId),
-                    onFeedToggle: () {
-                      favService.toggle(listId);
-                      setState(() {});
-                    },
+                    isAddedToFeed: favoriteIds.contains(listId),
+                    onFeedToggle: () => context
+                        .read<FollowSetBloc>()
+                        .add(FollowSetFavoriteToggled(listId)),
                     onTap: () async {
                       final deleted = await context.push<bool>(
                         '/follow-set-detail?dTag=${Uri.encodeComponent(set.dTag)}',
@@ -373,7 +371,6 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
                 final users =
                     resolvedProfiles[key] ?? resolvedProfiles[set.dTag] ?? [];
                 final listId = key;
-                final favService = FavoriteListsService.instance;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: _FollowSetCard(
@@ -381,11 +378,10 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
                     users: users,
                     authorName: resolvedAuthors[set.pubkey]?['name'],
                     authorPicture: resolvedAuthors[set.pubkey]?['picture'],
-                    isAddedToFeed: favService.isFavorite(listId),
-                    onFeedToggle: () {
-                      favService.toggle(listId);
-                      setState(() {});
-                    },
+                    isAddedToFeed: favoriteIds.contains(listId),
+                    onFeedToggle: () => context
+                        .read<FollowSetBloc>()
+                        .add(FollowSetFavoriteToggled(listId)),
                     onTap: () async {
                       final deleted = await context.push<bool>(
                         '/follow-set-detail?dTag=${Uri.encodeComponent(set.dTag)}&pubkey=${Uri.encodeComponent(set.pubkey)}',

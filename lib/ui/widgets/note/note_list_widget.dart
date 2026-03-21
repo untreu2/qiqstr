@@ -5,7 +5,6 @@ import 'package:carbon_icons/carbon_icons.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/list_separator_widget.dart';
-import '../../../data/services/interaction_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
 
@@ -23,6 +22,7 @@ class NoteListWidget extends StatefulWidget {
   final ScrollController? scrollController;
   final dynamic notesListProvider;
   final List<Map<String, dynamic>> pinnedNotes;
+  final void Function(List<String> noteIds)? onNotesVisible;
 
   const NoteListWidget({
     super.key,
@@ -39,6 +39,7 @@ class NoteListWidget extends StatefulWidget {
     this.scrollController,
     this.notesListProvider,
     this.pinnedNotes = const [],
+    this.onNotesVisible,
   });
 
   @override
@@ -165,7 +166,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _isSyncing = true;
     Future.microtask(() async {
       try {
-        await InteractionService.instance.fetchCountsFromRelays(noteIds);
+        widget.onNotesVisible?.call(noteIds);
         for (final id in noteIds) {
           _syncedNoteIds.add(id);
         }

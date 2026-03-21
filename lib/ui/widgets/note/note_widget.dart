@@ -83,7 +83,7 @@ class _NoteWidgetState extends State<NoteWidget> {
   void _precomputeImmutableData() {
     _noteId = widget.note['id'] as String? ?? '';
     _authorId = widget.note['pubkey'] as String? ??
-        widget.note['author'] as String? ??
+        widget.note['pubkey'] as String? ??
         '';
     _reposterId = widget.note['repostedBy'] as String?;
 
@@ -133,10 +133,10 @@ class _NoteWidgetState extends State<NoteWidget> {
           : null;
 
       authorUser ??= {
-        'pubkeyHex': _authorId,
+        'pubkey': _authorId,
         'name': _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
         'about': '',
-        'profileImage': '',
+        'picture': '',
         'banner': '',
         'website': '',
         'nip05': '',
@@ -148,11 +148,11 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (_reposterId != null && reposterUser == null) {
         final reposterId = _reposterId;
         reposterUser = {
-          'pubkeyHex': reposterId,
+          'pubkey': reposterId,
           'name':
               reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
           'about': '',
-          'profileImage': '',
+          'picture': '',
           'banner': '',
           'website': '',
           'nip05': '',
@@ -216,7 +216,7 @@ class _NoteWidgetState extends State<NoteWidget> {
     final hasName = (current?['name'] as String? ?? '').isNotEmpty &&
         (current?['name'] as String? ?? '') !=
             pubkey.substring(0, pubkey.length > 8 ? 8 : pubkey.length);
-    final hasImage = (current?['profileImage'] as String? ?? '').isNotEmpty;
+    final hasImage = (current?['picture'] as String? ?? '').isNotEmpty;
 
     if (current == null || !hasName || !hasImage) {
       final profile = await profileRepo.getProfile(pubkey);
@@ -236,10 +236,10 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _applyProfile(String pubkey, dynamic profile) {
     _locallyLoadedProfiles[pubkey] = {
-      'pubkeyHex': profile.pubkey,
+      'pubkey': profile.pubkey,
       'name': profile.name ?? '',
       'about': profile.about ?? '',
-      'profileImage': profile.picture ?? '',
+      'picture': profile.picture ?? '',
       'banner': profile.banner ?? '',
       'website': profile.website ?? '',
       'nip05': profile.nip05 ?? '',
@@ -337,10 +337,10 @@ class _NoteWidgetState extends State<NoteWidget> {
           : null;
 
       authorUser ??= {
-        'pubkeyHex': _authorId,
+        'pubkey': _authorId,
         'name': _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
         'about': '',
-        'profileImage': '',
+        'picture': '',
         'banner': '',
         'website': '',
         'nip05': '',
@@ -352,11 +352,11 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (_reposterId != null && reposterUser == null) {
         final reposterId = _reposterId;
         reposterUser = {
-          'pubkeyHex': reposterId,
+          'pubkey': reposterId,
           'name':
               reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
           'about': '',
-          'profileImage': '',
+          'picture': '',
           'banner': '',
           'website': '',
           'nip05': '',
@@ -521,10 +521,10 @@ class _NoteWidgetState extends State<NoteWidget> {
       final user = widget.profiles[npub] ??
           _locallyLoadedProfiles[npub] ??
           {
-            'pubkeyHex': npub,
+            'pubkey': npub,
             'name': npub.length > 8 ? npub.substring(0, 8) : npub,
             'about': '',
-            'profileImage': '',
+            'picture': '',
             'banner': '',
             'website': '',
             'nip05': '',
@@ -534,17 +534,17 @@ class _NoteWidgetState extends State<NoteWidget> {
           };
 
       final userNpub = user['npub'] as String? ?? npub;
-      final userPubkeyHex = user['pubkeyHex'] as String? ?? npub;
+      final userPubkeyHex = user['pubkey'] as String? ?? npub;
       final currentLocation = GoRouterState.of(context).matchedLocation;
       if (currentLocation.startsWith('/home/feed')) {
         context.push(
-            '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+            '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
       } else if (currentLocation.startsWith('/home/notifications')) {
         context.push(
-            '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+            '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
       } else {
         context.push(
-            '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(userPubkeyHex)}');
+            '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
       }
     } catch (e) {
       debugPrint('[NoteWidget] Navigate to profile error: $e');
@@ -655,10 +655,9 @@ class _NoteWidgetState extends State<NoteWidget> {
                                   ),
                                   const SizedBox(width: 6),
                                   _ProfileAvatar(
-                                    imageUrl:
-                                        state.reposterUser?['profileImage']
-                                                as String? ??
-                                            '',
+                                    imageUrl: state.reposterUser?['picture']
+                                            as String? ??
+                                        '',
                                     radius: 12,
                                     colors: colors,
                                   ),
@@ -679,7 +678,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                                         return name;
                                       }
                                       final pubkeyHex =
-                                          state.reposterUser?['pubkeyHex']
+                                          state.reposterUser?['pubkey']
                                                   as String? ??
                                               '';
                                       return pubkeyHex.length > 8
@@ -742,7 +741,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                                     notesListProvider: widget.notesListProvider,
                                     noteId: _noteId,
                                     authorProfileImageUrl: _stateNotifier.value
-                                        .authorUser?['profileImage'] as String?,
+                                        .authorUser?['picture'] as String?,
                                     authorId: _authorId,
                                     isSelectable: widget.isSelectable,
                                     profiles: widget.profiles,
@@ -833,10 +832,9 @@ class _NoteWidgetState extends State<NoteWidget> {
                                       ),
                                       const SizedBox(width: 6),
                                       _ProfileAvatar(
-                                        imageUrl:
-                                            state.reposterUser?['profileImage']
-                                                    as String? ??
-                                                '',
+                                        imageUrl: state.reposterUser?['picture']
+                                                as String? ??
+                                            '',
                                         radius: 10,
                                         colors: colors,
                                       ),
@@ -858,7 +856,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                                             return name;
                                           }
                                           final pubkeyHex =
-                                              state.reposterUser?['pubkeyHex']
+                                              state.reposterUser?['pubkey']
                                                       as String? ??
                                                   '';
                                           return pubkeyHex.length > 8
@@ -940,7 +938,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                             notesListProvider: widget.notesListProvider,
                             noteId: _noteId,
                             authorProfileImageUrl: _stateNotifier
-                                .value.authorUser?['profileImage'] as String?,
+                                .value.authorUser?['picture'] as String?,
                             authorId: _authorId,
                             isSelectable: widget.isSelectable,
                             profiles: widget.profiles,
@@ -1004,28 +1002,28 @@ class _NoteState {
       identical(this, other) ||
       other is _NoteState &&
           runtimeType == other.runtimeType &&
-          (authorUser?['pubkeyHex'] as String? ?? '') ==
-              (other.authorUser?['pubkeyHex'] as String? ?? '') &&
+          (authorUser?['pubkey'] as String? ?? '') ==
+              (other.authorUser?['pubkey'] as String? ?? '') &&
           (authorUser?['name'] as String? ?? '') ==
               (other.authorUser?['name'] as String? ?? '') &&
-          (authorUser?['profileImage'] as String? ?? '') ==
-              (other.authorUser?['profileImage'] as String? ?? '') &&
-          (reposterUser?['pubkeyHex'] as String? ?? '') ==
-              (other.reposterUser?['pubkeyHex'] as String? ?? '') &&
+          (authorUser?['picture'] as String? ?? '') ==
+              (other.authorUser?['picture'] as String? ?? '') &&
+          (reposterUser?['pubkey'] as String? ?? '') ==
+              (other.reposterUser?['pubkey'] as String? ?? '') &&
           (reposterUser?['name'] as String? ?? '') ==
               (other.reposterUser?['name'] as String? ?? '') &&
-          (reposterUser?['profileImage'] as String? ?? '') ==
-              (other.reposterUser?['profileImage'] as String? ?? '') &&
+          (reposterUser?['picture'] as String? ?? '') ==
+              (other.reposterUser?['picture'] as String? ?? '') &&
           replyText == other.replyText;
 
   @override
   int get hashCode => Object.hash(
-        authorUser?['pubkeyHex'] as String?,
+        authorUser?['pubkey'] as String?,
         authorUser?['name'] as String?,
-        authorUser?['profileImage'] as String?,
-        reposterUser?['pubkeyHex'] as String?,
+        authorUser?['picture'] as String?,
+        reposterUser?['pubkey'] as String?,
         reposterUser?['name'] as String?,
-        reposterUser?['profileImage'] as String?,
+        reposterUser?['picture'] as String?,
         replyText,
       );
 }
@@ -1071,7 +1069,7 @@ class _SafeProfileSection extends StatelessWidget {
   }
 
   Widget _buildNormalProfile(_NoteState state) {
-    final authorImageUrl = state.authorUser?['profileImage'] as String? ?? '';
+    final authorImageUrl = state.authorUser?['picture'] as String? ?? '';
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -1087,7 +1085,7 @@ class _SafeProfileSection extends StatelessWidget {
   }
 
   Widget _buildExpandedProfile(_NoteState state) {
-    final authorImageUrl = state.authorUser?['profileImage'] as String? ?? '';
+    final authorImageUrl = state.authorUser?['picture'] as String? ?? '';
 
     return GestureDetector(
       onTap: onAuthorTap,
@@ -1115,7 +1113,7 @@ class _SafeProfileSection extends StatelessWidget {
                         return name;
                       }
                       final pubkeyHex =
-                          state.authorUser?['pubkeyHex'] as String? ?? '';
+                          state.authorUser?['pubkey'] as String? ?? '';
                       return pubkeyHex.length > 8
                           ? pubkeyHex.substring(0, 8)
                           : (pubkeyHex.isEmpty ? 'Anonymous' : pubkeyHex);

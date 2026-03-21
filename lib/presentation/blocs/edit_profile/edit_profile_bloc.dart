@@ -101,7 +101,7 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
     final about =
         aboutValue is String ? aboutValue : (aboutValue?.toString() ?? '');
 
-    final pictureValue = user['profileImage'] ?? user['picture'];
+    final pictureValue = user['picture'] ?? user['picture'];
     final picture = pictureValue is String
         ? pictureValue
         : (pictureValue?.toString() ?? '');

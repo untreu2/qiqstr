@@ -192,8 +192,8 @@ class _FollowingPageState extends State<FollowingPage> {
             ? '${userNpub.substring(0, 16)}...'
             : 'Unknown User');
 
-    final profileImage = loadedUser['profileImage'] as String? ?? '';
-    final pubkeyHex = loadedUser['pubkeyHex'] as String? ?? '';
+    final profileImage = loadedUser['picture'] as String? ?? '';
+    final pubkeyHex = loadedUser['pubkey'] as String? ?? '';
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -203,13 +203,13 @@ class _FollowingPageState extends State<FollowingPage> {
             final currentLocation = GoRouterState.of(context).matchedLocation;
             if (currentLocation.startsWith('/home/feed')) {
               context.push(
-                  '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+                  '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(pubkeyHex)}');
             } else if (currentLocation.startsWith('/home/notifications')) {
               context.push(
-                  '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+                  '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(pubkeyHex)}');
             } else {
               context.push(
-                  '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+                  '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(pubkeyHex)}');
             }
           },
           child: Padding(

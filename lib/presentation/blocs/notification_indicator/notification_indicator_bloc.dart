@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../data/repositories/notification_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/rust_database_service.dart';
+import '../../../domain/entities/notification_item.dart';
 import 'notification_indicator_event.dart';
 import 'notification_indicator_state.dart';
 
@@ -11,20 +12,20 @@ class NotificationIndicatorBloc
     extends Bloc<NotificationIndicatorEvent, NotificationIndicatorState> {
   final SyncService _syncService;
   final AuthService _authService;
-  final RustDatabaseService _db;
+  final NotificationRepository _notificationRepository;
 
   static const String _lastCheckedKey = 'notification_last_checked_timestamp';
 
   int _lastCheckedTimestamp = 0;
-  StreamSubscription<List<Map<String, dynamic>>>? _notificationSubscription;
+  StreamSubscription<List<NotificationItem>>? _notificationSubscription;
 
   NotificationIndicatorBloc({
     required SyncService syncService,
     required AuthService authService,
-    required RustDatabaseService db,
+    required NotificationRepository notificationRepository,
   })  : _syncService = syncService,
         _authService = authService,
-        _db = db,
+        _notificationRepository = notificationRepository,
         super(const NotificationIndicatorInitial()) {
     on<NotificationIndicatorInitialized>(_onInitialized);
     on<NotificationIndicatorNewReceived>(_onNewNotificationReceived);
@@ -49,11 +50,11 @@ class NotificationIndicatorBloc
       await _syncService.syncNotifications(userHex);
 
       final notifications =
-          await _db.getCachedNotifications(userHex, limit: 50);
+          await _notificationRepository.getNotifications(userHex, limit: 50);
 
       if (notifications.isNotEmpty) {
         final latestTimestamp = notifications
-            .map((e) => (e['created_at'] as int?) ?? 0)
+            .map((e) => e.createdAt)
             .reduce((a, b) => a > b ? a : b);
 
         if (_lastCheckedTimestamp == 0) {
@@ -80,10 +81,12 @@ class NotificationIndicatorBloc
   void _watchNotifications(String userHex) {
     _notificationSubscription?.cancel();
     _notificationSubscription =
-        _db.watchNotifications(userHex, limit: 50).listen((notifications) {
-      if (isClosed) return;
-      add(_NotificationDataUpdated(notifications));
-    });
+        _notificationRepository.watchNotifications(userHex, limit: 50).listen(
+      (notifications) {
+        if (isClosed) return;
+        add(_NotificationDataUpdated(notifications));
+      },
+    );
   }
 
   void _onDataUpdated(
@@ -93,7 +96,7 @@ class NotificationIndicatorBloc
     if (event.notifications.isEmpty) return;
 
     final latestTimestamp = event.notifications
-        .map((e) => (e['created_at'] as int?) ?? 0)
+        .map((e) => e.createdAt)
         .reduce((a, b) => a > b ? a : b);
 
     if (_lastCheckedTimestamp > 0 && latestTimestamp > _lastCheckedTimestamp) {
@@ -134,7 +137,7 @@ class NotificationIndicatorBloc
 }
 
 class _NotificationDataUpdated extends NotificationIndicatorEvent {
-  final List<Map<String, dynamic>> notifications;
+  final List<NotificationItem> notifications;
   const _NotificationDataUpdated(this.notifications);
 
   @override

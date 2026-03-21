@@ -14,27 +14,19 @@ class UserSearchLoading extends UserSearchState {
 
 class UserSearchLoaded extends UserSearchState {
   final List<Map<String, dynamic>> filteredUsers;
-  final List<Map<String, dynamic>> filteredNotes;
-  final Map<String, Map<String, dynamic>> noteProfiles;
   final bool isSearching;
 
   const UserSearchLoaded({
     required this.filteredUsers,
-    this.filteredNotes = const [],
-    this.noteProfiles = const {},
     this.isSearching = false,
   });
 
   UserSearchLoaded copyWith({
     List<Map<String, dynamic>>? filteredUsers,
-    List<Map<String, dynamic>>? filteredNotes,
-    Map<String, Map<String, dynamic>>? noteProfiles,
     bool? isSearching,
   }) {
     return UserSearchLoaded(
       filteredUsers: filteredUsers ?? this.filteredUsers,
-      filteredNotes: filteredNotes ?? this.filteredNotes,
-      noteProfiles: noteProfiles ?? this.noteProfiles,
       isSearching: isSearching ?? this.isSearching,
     );
   }
@@ -42,8 +34,6 @@ class UserSearchLoaded extends UserSearchState {
   @override
   List<Object?> get props => [
         filteredUsers,
-        filteredNotes,
-        noteProfiles,
         isSearching,
       ];
 }

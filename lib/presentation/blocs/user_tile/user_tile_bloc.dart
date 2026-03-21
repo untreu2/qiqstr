@@ -67,7 +67,7 @@ class UserTileBloc extends Bloc<UserTileEvent, UserTileState> {
       final targetHex = _authService.npubToHex(userNpub) ?? userNpub;
 
       final currentFollows =
-          await _followingRepository.getFollowingList(currentUserHex) ?? [];
+          await _followingRepository.getFollowing(currentUserHex) ?? [];
 
       List<String> updatedFollows;
       if (currentIsFollowing) {

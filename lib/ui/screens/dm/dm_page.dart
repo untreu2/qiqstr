@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../presentation/blocs/dm/dm_bloc.dart';
@@ -83,7 +83,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
 
   Widget _buildConversationsContent(BuildContext context, DmState state) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (state is DmConversationsLoaded) {
       final conversations = state.conversations;
 
@@ -295,7 +295,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         conversation['otherUserPubkeyHex'] as String? ?? '';
     final otherUserProfileImage =
         conversation['otherUserProfileImage'] as String?;
-    final displayName = conversation['displayName'] as String? ?? '';
+    final displayName = conversation['display_name'] as String? ?? '';
     final lastMessageTime = conversation['lastMessageTime'] as DateTime?;
     final lastMessage = conversation['lastMessage'] as Map<String, dynamic>?;
     final lastMessageContent = lastMessage?['content'] as String? ?? '';
@@ -406,9 +406,9 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
         if (mounted && profile != null) {
           setState(() {
             _userCache[otherUserPubkeyHex] = {
-              'pubkeyHex': profile.pubkey,
+              'pubkey': profile.pubkey,
               'name': profile.name ?? '',
-              'profileImage': profile.picture ?? '',
+              'picture': profile.picture ?? '',
             };
           });
         }
@@ -416,7 +416,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
     }
 
     final double topPadding = MediaQuery.of(context).padding.top;
-    final otherUserProfileImage = otherUser?['profileImage'] as String? ?? '';
+    final otherUserProfileImage = otherUser?['picture'] as String? ?? '';
     final otherUserName = otherUser?['name'] as String? ?? '';
 
     return Scaffold(
@@ -485,7 +485,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
   Widget _buildMessagesContent(
       BuildContext context, DmState state, double topPadding) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (state is DmChatLoaded) {
       final messages = state.messages;
 
@@ -615,7 +615,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
     String recipientPubkeyHex,
   ) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (!_textControllers.containsKey(recipientPubkeyHex)) {
       _textControllers[recipientPubkeyHex] = TextEditingController();
     }
@@ -725,14 +725,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
   }
 
   String _hexToNpub(String hex) {
-    try {
-      if (hex.startsWith('npub1')) {
-        return hex;
-      }
-      return encodeBasicBech32(hex, 'npub');
-    } catch (e) {
-      return hex;
-    }
+    return AuthService.instance.hexToNpub(hex) ?? hex;
   }
 
   void _showUserSearchDialog(BuildContext context) {
@@ -743,7 +736,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
       backgroundColor: Colors.transparent,
       builder: (context) => UserSearchPage(
         onUserSelected: (user) {
-          final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+          final pubkeyHex = user['pubkey'] as String? ?? '';
           if (pubkeyHex.isNotEmpty) {
             setState(() {
               _selectedChatPubkeyHex = pubkeyHex;

@@ -1,21 +1,24 @@
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/repositories/feed_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/encrypted_bookmark_service.dart';
-import '../../../data/services/rust_database_service.dart';
 import '../../../src/rust/api/relay.dart' as rust_relay;
 import 'bookmark_event.dart';
 import 'bookmark_state.dart';
 
 class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
+  final FeedRepository _feedRepository;
   final SyncService _syncService;
   final AuthService _authService;
 
   BookmarkBloc({
+    required FeedRepository feedRepository,
     required SyncService syncService,
     required AuthService authService,
-  })  : _syncService = syncService,
+  })  : _feedRepository = feedRepository,
+        _syncService = syncService,
         _authService = authService,
         super(const BookmarkInitial()) {
     on<BookmarkLoadRequested>(_onLoadRequested);
@@ -70,16 +73,11 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
 
   Future<List<Map<String, dynamic>>> _fetchBookmarkedNotes(
       List<String> eventIds) async {
-    final db = RustDatabaseService.instance;
-    final validNotes = await db.getHydratedNotesByIds(eventIds);
+    final validNotes = await _feedRepository.getNotesByIds(eventIds);
 
-    final foundIds = <String>{};
-    for (final n in validNotes) {
-      final id = n['id'] as String? ?? '';
-      if (id.isNotEmpty) foundIds.add(id);
-    }
-    final missingIds =
-        eventIds.where((id) => !foundIds.contains(id)).toList();
+    final foundIds =
+        validNotes.map((n) => n.toMap()['id'] as String? ?? '').toSet();
+    final missingIds = eventIds.where((id) => !foundIds.contains(id)).toList();
 
     if (missingIds.isNotEmpty) {
       try {
@@ -90,20 +88,17 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
         final fetched = jsonDecode(batchJson) as List<dynamic>;
         if (fetched.isNotEmpty) {
           final events = fetched.cast<Map<String, dynamic>>();
-          await db.saveEvents(events);
+          await _feedRepository.save(events);
         }
       } catch (_) {}
 
-      final refetched = await db.getHydratedNotesByIds(missingIds);
+      final refetched = await _feedRepository.getNotesByIds(missingIds);
       for (final n in refetched) {
-        final id = n['id'] as String? ?? '';
-        if (id.isNotEmpty && foundIds.add(id)) {
-          validNotes.add(n);
-        }
+        validNotes.add(n);
       }
     }
 
-    return validNotes;
+    return validNotes.map((n) => n.toMap()).toList();
   }
 
   void _syncBookmarksInBackground(
@@ -146,11 +141,13 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
 
     if (state is BookmarkLoaded) {
       final currentState = state as BookmarkLoaded;
-      final db = RustDatabaseService.instance;
-      final notes = await db.getHydratedNotesByIds([event.eventId]);
+      final notes = await _feedRepository.getNotesByIds([event.eventId]);
       if (notes.isNotEmpty) {
         emit(currentState.copyWith(
-          bookmarkedNotes: [notes.first, ...currentState.bookmarkedNotes],
+          bookmarkedNotes: [
+            notes.first.toMap(),
+            ...currentState.bookmarkedNotes
+          ],
         ));
       }
     }
@@ -169,8 +166,7 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
     final currentState = state;
     if (currentState is! BookmarkLoaded) return;
 
-    final removingStates =
-        Map<String, bool>.from(currentState.removingStates);
+    final removingStates = Map<String, bool>.from(currentState.removingStates);
     if (removingStates[event.eventId] == true) return;
 
     removingStates[event.eventId] = true;

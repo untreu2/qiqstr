@@ -1,214 +1,330 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:rxdart/rxdart.dart';
+
 import '../../domain/entities/feed_note.dart';
-import 'base_repository.dart';
+import '../../src/rust/api/database.dart' as rust_db;
+import '../services/auth_service.dart';
+import '../services/encrypted_mute_service.dart';
+import '../services/rust_database_service.dart';
 
 abstract class FeedRepository {
-  Stream<List<FeedNote>> watchFeed(String userPubkey, {int limit = 100});
-  Stream<List<FeedNote>> watchListFeed(List<String> pubkeys, {int limit = 100});
-  Future<List<FeedNote>> getFeed(String userPubkey, {int limit = 100});
-  Stream<List<FeedNote>> watchProfileNotes(String pubkey, {int limit = 50});
-  Future<List<FeedNote>> getProfileNotes(String pubkey, {int limit = 50});
-  Stream<List<FeedNote>> watchProfileReplies(String pubkey, {int limit = 50});
-  Future<List<FeedNote>> getProfileReplies(String pubkey, {int limit = 50});
-  Stream<List<FeedNote>> watchProfileLikes(String pubkey, {int limit = 50});
-  Future<List<FeedNote>> getProfileLikes(String pubkey, {int limit = 50});
-  Stream<List<FeedNote>> watchHashtagFeed(String hashtag, {int limit = 100});
+  Stream<List<FeedNote>> watchFeed(String userPubkey,
+      {List<String>? authors, int limit = 100});
+  Future<List<FeedNote>> getFeed(String userPubkey,
+      {List<String>? authors, int limit = 100});
+  Stream<List<FeedNote>> watchNotes(String pubkey, {int limit = 50});
+  Future<List<FeedNote>> getNotes(String pubkey, {int limit = 50});
+  Stream<List<FeedNote>> watchUserReplies(String pubkey, {int limit = 50});
+  Future<List<FeedNote>> getUserReplies(String pubkey, {int limit = 50});
+  Stream<List<FeedNote>> watchLikes(String pubkey, {int limit = 50});
+  Future<List<FeedNote>> getLikes(String pubkey, {int limit = 50});
+  Stream<List<FeedNote>> watchHashtag(String hashtag, {int limit = 100});
   Future<FeedNote?> getNote(String noteId);
-  Future<Map<String, dynamic>?> getNoteRaw(String noteId);
   Stream<FeedNote?> watchNote(String noteId);
-  Future<List<FeedNote>> getReplies(String noteId, {int limit = 100});
-  Future<List<Map<String, dynamic>>> getRepliesRaw(String noteId,
-      {int limit = 100});
-  Stream<List<FeedNote>> watchReplies(String noteId, {int limit = 100});
-  Future<void> saveNotes(List<Map<String, dynamic>> notes);
-  Future<List<String>?> getFollowingList(String userPubkey);
+  Future<List<FeedNote>> getThreadReplies(String noteId, {int limit = 500});
+  Stream<List<FeedNote>> watchThreadReplies(String noteId, {int limit = 100});
+  Future<List<FeedNote>> getNotesByIds(List<String> noteIds);
+  Future<List<FeedNote>> searchNotes(String query, {int limit = 50});
+  Future<void> save(List<Map<String, dynamic>> notes);
 }
 
-class FeedRepositoryImpl extends BaseRepository implements FeedRepository {
-  FeedRepositoryImpl({
-    required super.db,
-  });
+class FeedRepositoryImpl implements FeedRepository {
+  final RustDatabaseService _events;
+
+  FeedRepositoryImpl({required RustDatabaseService events}) : _events = events;
+
+  List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
+  List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
+  String? get _currentUserHex => AuthService.instance.currentUserPubkeyHex;
+
+  Stream<T> _onChange<T>(Future<T> Function() fetch, {int debounceMs = 300}) {
+    return _events.onChange
+        .debounceTime(Duration(milliseconds: debounceMs))
+        .startWith(null)
+        .asyncMap((_) => fetch());
+  }
 
   @override
-  Stream<List<FeedNote>> watchFeed(String userPubkey,
-      {int limit = 100}) async* {
+  Stream<List<FeedNote>> watchFeed(
+    String userPubkey, {
+    List<String>? authors,
+    int limit = 100,
+  }) async* {
     if (userPubkey.isEmpty || userPubkey.length != 64) {
       yield [];
       return;
     }
-
-    var follows = await db.getFollowingList(userPubkey);
-
-    if (follows == null || follows.isEmpty) {
-      yield [];
-      await for (final _ in db.onChange) {
-        follows = await db.getFollowingList(userPubkey);
-        if (follows != null && follows.isNotEmpty) break;
-      }
-      if (follows == null || follows.isEmpty) return;
-    }
-
-    final activeFollows = follows;
-
-    final initial =
-        await db.getHydratedFeedNotes(activeFollows, limit: limit);
-    if (initial.isNotEmpty) {
-      yield initial.map((m) => FeedNote.fromMap(m)).toList();
-    }
-
-    yield* db
-        .watchHydratedFeedNotes(activeFollows, limit: limit)
-        .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
-  }
-
-  @override
-  Stream<List<FeedNote>> watchListFeed(List<String> pubkeys,
-      {int limit = 100}) async* {
-    if (pubkeys.isEmpty) {
+    if (authors != null && authors.isEmpty) {
       yield [];
       return;
     }
 
-    final initial = await db.getHydratedFeedNotes(pubkeys, limit: limit);
-    if (initial.isNotEmpty) {
-      yield initial.map((m) => FeedNote.fromMap(m)).toList();
-    }
+    final initial = await _fetchFeed(userPubkey, authors, limit);
+    if (initial.isNotEmpty) yield initial;
 
-    yield* db
-        .watchHydratedFeedNotes(pubkeys, limit: limit)
-        .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
+    yield* _events.onChange
+        .debounceTime(const Duration(milliseconds: 300))
+        .startWith(null)
+        .asyncMap((_) => _fetchFeed(userPubkey, authors, limit));
   }
 
-  @override
-  Future<List<FeedNote>> getFeed(String userPubkey, {int limit = 100}) async {
-    final follows = await db.getFollowingList(userPubkey);
-    if (follows == null || follows.isEmpty) {
+  Future<List<FeedNote>> _fetchFeed(
+    String userPubkey,
+    List<String>? authors,
+    int limit,
+  ) async {
+    try {
+      final json = await rust_db.dbGetHydratedFeedNotes(
+        userPubkeyHex: userPubkey,
+        authorsHex: authors,
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+        filterReplies: true,
+        currentUserPubkeyHex: _currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .cast<Map<String, dynamic>>()
+          .map((m) => FeedNote.fromMap(m))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] fetchFeed error: $e');
       return [];
     }
-
-    final maps = await db.getHydratedFeedNotes(follows, limit: limit);
-    return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
   @override
-  Stream<List<FeedNote>> watchProfileNotes(String pubkey,
-      {int limit = 50}) async* {
-    final initial =
-        await db.getHydratedProfileNotes(pubkey, limit: limit);
+  Future<List<FeedNote>> getFeed(
+    String userPubkey, {
+    List<String>? authors,
+    int limit = 100,
+  }) =>
+      _fetchFeed(userPubkey, authors, limit);
+
+  @override
+  Stream<List<FeedNote>> watchNotes(String pubkey, {int limit = 50}) async* {
+    final initial = await _fetchNotes(pubkey, limit);
     if (initial.isNotEmpty) {
       yield initial.map((m) => FeedNote.fromMap(m)).toList();
     }
-
-    yield* db
-        .watchHydratedProfileNotes(pubkey, limit: limit)
+    yield* _onChange(() => _fetchNotes(pubkey, limit))
         .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
+  Future<List<Map<String, dynamic>>> _fetchNotes(
+      String pubkey, int limit) async {
+    try {
+      final json = await rust_db.dbGetHydratedProfileNotes(
+        pubkeyHex: pubkey,
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+        filterReplies: true,
+        currentUserPubkeyHex: _currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getNotes error: $e');
+      return [];
+    }
+  }
+
   @override
-  Future<List<FeedNote>> getProfileNotes(String pubkey,
-      {int limit = 50}) async {
-    final maps = await db.getHydratedProfileNotes(pubkey, limit: limit);
+  Future<List<FeedNote>> getNotes(String pubkey, {int limit = 50}) async {
+    final maps = await _fetchNotes(pubkey, limit);
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
   @override
-  Stream<List<FeedNote>> watchProfileReplies(String pubkey,
+  Stream<List<FeedNote>> watchUserReplies(String pubkey,
       {int limit = 50}) async* {
-    final initial = await db.getHydratedProfileReplies(pubkey, limit: limit);
+    final initial = await _fetchUserReplies(pubkey, limit);
     if (initial.isNotEmpty) {
       yield initial.map((m) => FeedNote.fromMap(m)).toList();
     }
-
-    yield* db
-        .watchHydratedProfileReplies(pubkey, limit: limit)
+    yield* _onChange(() => _fetchUserReplies(pubkey, limit))
         .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
+  Future<List<Map<String, dynamic>>> _fetchUserReplies(
+      String pubkey, int limit) async {
+    try {
+      final json = await rust_db.dbGetHydratedProfileReplies(
+        pubkeyHex: pubkey,
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+        currentUserPubkeyHex: _currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getUserReplies error: $e');
+      return [];
+    }
+  }
+
   @override
-  Future<List<FeedNote>> getProfileReplies(String pubkey,
-      {int limit = 50}) async {
-    final maps = await db.getHydratedProfileReplies(pubkey, limit: limit);
+  Future<List<FeedNote>> getUserReplies(String pubkey, {int limit = 50}) async {
+    final maps = await _fetchUserReplies(pubkey, limit);
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
   @override
-  Stream<List<FeedNote>> watchProfileLikes(String pubkey,
-      {int limit = 50}) async* {
-    final initial =
-        await db.getHydratedReactionNotes(pubkey, limit: limit);
+  Stream<List<FeedNote>> watchLikes(String pubkey, {int limit = 50}) async* {
+    final initial = await _fetchLikes(pubkey, limit);
     if (initial.isNotEmpty) {
       yield initial.map((m) => FeedNote.fromMap(m)).toList();
     }
+    yield* _onChange(() => _fetchLikes(pubkey, limit))
+        .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
+  }
 
-    yield* db
-        .watchProfileReactions(pubkey, limit: limit)
-        .asyncMap((_) async {
-      final maps =
-          await db.getHydratedReactionNotes(pubkey, limit: limit);
-      return maps.map((m) => FeedNote.fromMap(m)).toList();
-    });
+  Future<List<Map<String, dynamic>>> _fetchLikes(
+      String pubkey, int limit) async {
+    try {
+      final json = await rust_db.dbGetHydratedReactionNotes(
+        pubkeyHex: pubkey,
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+        currentUserPubkeyHex: _currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getLikes error: $e');
+      return [];
+    }
   }
 
   @override
-  Future<List<FeedNote>> getProfileLikes(String pubkey,
-      {int limit = 50}) async {
-    final maps =
-        await db.getHydratedReactionNotes(pubkey, limit: limit);
+  Future<List<FeedNote>> getLikes(String pubkey, {int limit = 50}) async {
+    final maps = await _fetchLikes(pubkey, limit);
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
   @override
-  Stream<List<FeedNote>> watchHashtagFeed(String hashtag, {int limit = 100}) {
-    return db
-        .watchHydratedHashtagNotes(hashtag, limit: limit)
-        .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
+  Stream<List<FeedNote>> watchHashtag(String hashtag, {int limit = 100}) {
+    return _onChange(() async {
+      try {
+        final json = await rust_db.dbGetHydratedHashtagNotes(
+          hashtag: hashtag,
+          limit: limit,
+          mutedPubkeys: _mutedPubkeys,
+          mutedWords: _mutedWords,
+          currentUserPubkeyHex: _currentUserHex,
+        );
+        final decoded = jsonDecode(json) as List<dynamic>;
+        return decoded.cast<Map<String, dynamic>>();
+      } catch (e) {
+        if (kDebugMode) print('[FeedRepository] watchHashtag error: $e');
+        return <Map<String, dynamic>>[];
+      }
+    }).map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
   @override
   Future<FeedNote?> getNote(String noteId) async {
-    final map = await db.getHydratedNote(noteId);
-    if (map == null) return null;
-    return FeedNote.fromMap(map);
+    try {
+      final json = await rust_db.dbGetHydratedNote(
+        eventId: noteId,
+        currentUserPubkeyHex: _currentUserHex,
+      );
+      if (json == null) return null;
+      final map = jsonDecode(json) as Map<String, dynamic>;
+      return FeedNote.fromMap(map);
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getNote error: $e');
+      return null;
+    }
   }
 
   @override
   Stream<FeedNote?> watchNote(String noteId) async* {
-    final note = await getNote(noteId);
-    yield note;
+    yield await getNote(noteId);
   }
 
   @override
-  Future<Map<String, dynamic>?> getNoteRaw(String noteId) async {
-    final map = await db.getHydratedNote(noteId);
-    return map;
+  Future<List<FeedNote>> getThreadReplies(String noteId,
+      {int limit = 500}) async {
+    try {
+      final json = await rust_db.dbGetHydratedReplies(
+        noteId: noteId,
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+        currentUserPubkeyHex: _currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .cast<Map<String, dynamic>>()
+          .map((m) => FeedNote.fromMap(m))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getThreadReplies error: $e');
+      return [];
+    }
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getRepliesRaw(String noteId,
-      {int limit = 100}) async {
-    return await db.getHydratedReplies(noteId, limit: limit);
+  Stream<List<FeedNote>> watchThreadReplies(String noteId, {int limit = 100}) {
+    return _events.onChange
+        .debounceTime(const Duration(milliseconds: 500))
+        .startWith(null)
+        .asyncMap((_) => getThreadReplies(noteId, limit: limit));
   }
 
   @override
-  Future<List<FeedNote>> getReplies(String noteId, {int limit = 100}) async {
-    final maps = await db.getHydratedReplies(noteId, limit: limit);
-    return maps.map((m) => FeedNote.fromMap(m)).toList();
+  Future<List<FeedNote>> getNotesByIds(List<String> noteIds) async {
+    if (noteIds.isEmpty) return [];
+    try {
+      final json = await rust_db.dbGetHydratedNotesByIds(
+        eventIds: noteIds,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+        currentUserPubkeyHex: _currentUserHex,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .cast<Map<String, dynamic>>()
+          .map((m) => FeedNote.fromMap(m))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getNotesByIds error: $e');
+      return [];
+    }
   }
 
   @override
-  Stream<List<FeedNote>> watchReplies(String noteId, {int limit = 100}) {
-    return db
-        .watchHydratedReplies(noteId, limit: limit)
-        .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
+  Future<List<FeedNote>> searchNotes(String query, {int limit = 50}) async {
+    try {
+      final json = await rust_db.dbSearchNotes(query: query, limit: limit);
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .cast<Map<String, dynamic>>()
+          .map((m) => FeedNote.fromMap(m))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] searchNotes error: $e');
+      return [];
+    }
   }
 
   @override
-  Future<void> saveNotes(List<Map<String, dynamic>> notes) async {
-    await db.saveFeedNotes(notes);
-  }
-
-  @override
-  Future<List<String>?> getFollowingList(String userPubkey) async {
-    return await db.getFollowingList(userPubkey);
+  Future<void> save(List<Map<String, dynamic>> notes) async {
+    if (notes.isEmpty) return;
+    try {
+      final json = jsonEncode(notes);
+      await rust_db.dbSaveEvents(eventsJson: json);
+      _events.notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] save error: $e');
+    }
   }
 }

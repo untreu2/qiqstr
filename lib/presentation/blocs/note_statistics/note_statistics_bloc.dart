@@ -1,11 +1,7 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/nostr_service.dart';
-import '../../../data/services/relay_service.dart';
 import '../../../data/sync/sync_service.dart';
 import 'note_statistics_event.dart';
 import 'note_statistics_state.dart';
@@ -38,12 +34,8 @@ class NoteStatisticsBloc
     Emitter<NoteStatisticsState> emit,
   ) async {
     emit(const NoteStatisticsLoading());
-
     await _syncService.syncInteractionsForNote(noteId);
-
-    final interactions =
-        await _interactionRepository.getDetailedInteractions(noteId);
-
+    final interactions = await _interactionRepository.getDetails(noteId);
     await _buildInteractionsList(emit, interactions);
   }
 
@@ -52,8 +44,7 @@ class NoteStatisticsBloc
     Emitter<NoteStatisticsState> emit,
   ) async {
     await _syncService.syncInteractionsForNote(noteId);
-    final interactions =
-        await _interactionRepository.getDetailedInteractions(noteId);
+    final interactions = await _interactionRepository.getDetails(noteId);
     await _buildInteractionsList(emit, interactions);
   }
 
@@ -70,12 +61,9 @@ class NoteStatisticsBloc
         if (pubkey.isEmpty) continue;
 
         uniquePubkeys.add(pubkey);
-
-        final npub = _authService.hexToNpub(pubkey) ?? pubkey;
-
         allInteractions.add({
           'type': interaction['type'],
-          'npub': npub,
+          'npub': _authService.hexToNpub(pubkey) ?? pubkey,
           'pubkey': pubkey,
           'content': interaction['content'] ?? '',
           'zapAmount': interaction['zapAmount'],
@@ -87,68 +75,26 @@ class NoteStatisticsBloc
 
       if (uniquePubkeys.isNotEmpty) {
         final pubkeysList = uniquePubkeys.toList();
-
         var profiles = await _profileRepository.getProfiles(pubkeysList);
 
         final missingPubkeys =
             pubkeysList.where((pk) => !profiles.containsKey(pk)).toList();
 
         if (missingPubkeys.isNotEmpty) {
-          try {
-            final filter = NostrService.createProfileFilter(
-              authors: missingPubkeys,
-              limit: missingPubkeys.length,
-            );
-            final fetchedProfiles =
-                await RustRelayService.instance.fetchEvents(filter);
-
-            if (fetchedProfiles.isNotEmpty) {
-              final profilesToSave = <String, Map<String, String>>{};
-
-              for (final event in fetchedProfiles) {
-                final pubkey = event['pubkey'] as String?;
-                if (pubkey == null) continue;
-
-                final contentStr = event['content'] as String? ?? '{}';
-                final content =
-                    jsonDecode(contentStr) as Map<String, dynamic>? ?? {};
-
-                profilesToSave[pubkey] = {
-                  'name': content['name']?.toString() ?? '',
-                  'display_name': content['display_name']?.toString() ?? '',
-                  'about': content['about']?.toString() ?? '',
-                  'profileImage': content['picture']?.toString() ?? '',
-                  'banner': content['banner']?.toString() ?? '',
-                  'nip05': content['nip05']?.toString() ?? '',
-                  'lud16': content['lud16']?.toString() ?? '',
-                  'website': content['website']?.toString() ?? '',
-                };
-              }
-
-              if (profilesToSave.isNotEmpty) {
-                await _profileRepository.saveProfiles(profilesToSave);
-                profiles = await _profileRepository.getProfiles(pubkeysList);
-              }
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint(
-                  '[NoteStatisticsBloc] Error fetching missing profiles: $e');
-            }
-          }
+          await _syncService.syncProfiles(missingPubkeys);
+          profiles = await _profileRepository.getProfiles(pubkeysList);
         }
 
         for (final entry in profiles.entries) {
           final profile = entry.value;
-          final userMap = {
-            'pubkeyHex': entry.key,
+          users[entry.key] = {
+            'pubkey': entry.key,
             'npub': _authService.hexToNpub(entry.key) ?? entry.key,
             'name': profile.name ?? profile.displayName ?? '',
-            'profileImage': profile.picture ?? '',
+            'picture': profile.picture ?? '',
             'nip05': profile.nip05 ?? '',
             'nip05Verified': false,
           };
-          users[entry.key] = userMap;
         }
       }
 

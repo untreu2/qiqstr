@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../data/services/auth_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/ui/widgets/note/note_widget.dart';
@@ -45,12 +44,15 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int _maxNestedReplies = 2;
   static const int _maxReplyDepth = 1;
 
+  String _stableOrderFocusedId = '';
   final List<String> _stableReplyOrder = [];
   final Set<String> _stableReplyOrderSet = {};
 
   bool _isRefreshing = false;
   final ValueNotifier<List<Map<String, dynamic>>> _emptyNotesNotifier =
       ValueNotifier([]);
+
+  final ValueNotifier<String> _currentUserImageNotifier = ValueNotifier('');
 
   late final List<String> _parsedChain;
 
@@ -65,6 +67,7 @@ class _ThreadPageState extends State<ThreadPage> {
   void dispose() {
     _scrollController.dispose();
     _emptyNotesNotifier.dispose();
+    _currentUserImageNotifier.dispose();
     super.dispose();
   }
 
@@ -81,7 +84,12 @@ class _ThreadPageState extends State<ThreadPage> {
       },
       child: BlocConsumer<ThreadBloc, ThreadState>(
         listenWhen: (previous, current) {
-          return previous is! ThreadLoaded && current is ThreadLoaded;
+          if (previous is! ThreadLoaded && current is ThreadLoaded) return true;
+          if (previous is ThreadLoaded && current is ThreadLoaded) {
+            return previous.chainNotes.length != current.chainNotes.length &&
+                current.chainNotes.length > 1;
+          }
+          return false;
         },
         listener: (context, state) {
           if (state is ThreadLoaded && state.chainNotes.length > 1) {
@@ -89,20 +97,29 @@ class _ThreadPageState extends State<ThreadPage> {
           }
         },
         buildWhen: (previous, current) {
+          if (previous.runtimeType != current.runtimeType) return true;
           if (previous is ThreadLoaded && current is ThreadLoaded) {
-            if (previous.replies.length != current.replies.length) return true;
+            if (previous.currentUser != current.currentUser) {
+              final img = current.currentUser?['picture'] as String? ?? '';
+              if (_currentUserImageNotifier.value != img) {
+                _currentUserImageNotifier.value = img;
+              }
+            }
             if (previous.rootNoteId != current.rootNoteId) return true;
+            if (previous.replies.length != current.replies.length) return true;
             if (previous.chainNotes.length != current.chainNotes.length) {
               return true;
             }
             if (previous.repliesSynced != current.repliesSynced) return true;
-            if (previous.currentUser != current.currentUser) return true;
-            if (previous.userProfiles.length != current.userProfiles.length) {
-              return true;
+            final prevCount = previous.userProfiles.length;
+            final currCount = current.userProfiles.length;
+            if (currCount != prevCount) {
+              if (prevCount == 0 || (currCount - prevCount) >= 3) return true;
+              return false;
             }
             return false;
           }
-          return previous.runtimeType != current.runtimeType;
+          return true;
         },
         builder: (context, state) {
           final l10n = AppLocalizations.of(context)!;
@@ -153,7 +170,8 @@ class _ThreadPageState extends State<ThreadPage> {
       return _buildErrorState(context, state.message, l10n);
     }
 
-    if (widget.initialNoteData != null && _parsedChain.isNotEmpty &&
+    if (widget.initialNoteData != null &&
+        _parsedChain.isNotEmpty &&
         (state is ThreadInitial || state is ThreadLoading)) {
       final focusedId = _parsedChain.last;
       final focusedNote =
@@ -220,10 +238,24 @@ class _ThreadPageState extends State<ThreadPage> {
           SliverToBoxAdapter(
             child: _buildMainNote(context, state, focusedNote),
           ),
-          SliverToBoxAdapter(
-            child: _buildReplyInputSection(context, state),
-          ),
-          _buildThreadRepliesSliver(context, state, focusedNote),
+          if (state.replies.isNotEmpty || state.repliesSynced)
+            SliverToBoxAdapter(
+              child: _buildReplyInputSection(context, state),
+            ),
+          if (!state.repliesSynced && state.replies.isEmpty)
+            SliverToBoxAdapter(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          if (state.replies.isNotEmpty || state.repliesSynced)
+            _buildThreadRepliesSliver(context, state, focusedNote),
           SliverToBoxAdapter(
             child:
                 SizedBox(height: MediaQuery.of(context).padding.bottom + 120),
@@ -266,8 +298,23 @@ class _ThreadPageState extends State<ThreadPage> {
         profiles: state.userProfiles,
         notesListProvider: null,
         isSelectable: true,
+        quoteCount: state.quoteCount,
+        onQuotesTap:
+            state.quoteCount > 0 ? () => _navigateToQuotes(noteId) : null,
       ),
     );
+  }
+
+  void _navigateToQuotes(String noteId) {
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    if (currentLocation.startsWith('/home/feed')) {
+      context.push('/home/feed/quotes?noteId=${Uri.encodeComponent(noteId)}');
+    } else if (currentLocation.startsWith('/home/notifications')) {
+      context.push(
+          '/home/notifications/quotes?noteId=${Uri.encodeComponent(noteId)}');
+    } else {
+      context.push('/quotes?noteId=${Uri.encodeComponent(noteId)}');
+    }
   }
 
   Widget _buildReplyInputSection(BuildContext context, ThreadLoaded state) {
@@ -295,34 +342,32 @@ class _ThreadPageState extends State<ThreadPage> {
                   color: context.colors.primary.withValues(alpha: 0.1),
                 ),
                 child: ClipOval(
-                  child: Builder(
-                    builder: (context) {
-                      final currentUser = state.currentUser;
-                      final profileImage =
-                          currentUser?['profileImage'] as String? ?? '';
-                      return profileImage.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: profileImage,
-                              fit: BoxFit.cover,
-                              fadeInDuration: Duration.zero,
-                              fadeOutDuration: Duration.zero,
-                              maxHeightDiskCache: 80,
-                              maxWidthDiskCache: 80,
-                              memCacheWidth: 80,
-                              memCacheHeight: 80,
-                              errorWidget: (context, url, error) {
-                                return Icon(
-                                  Icons.person,
-                                  size: 24,
-                                  color: context.colors.primary,
-                                );
-                              },
-                            )
-                          : Icon(
-                              Icons.person,
-                              size: 24,
-                              color: context.colors.primary,
-                            );
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: _currentUserImageNotifier,
+                    builder: (context, profileImage, _) {
+                      if (profileImage.isEmpty) {
+                        return Icon(
+                          Icons.person,
+                          size: 24,
+                          color: context.colors.primary,
+                        );
+                      }
+                      return CachedNetworkImage(
+                        key: ValueKey('reply_avatar_${profileImage.hashCode}'),
+                        imageUrl: profileImage,
+                        fit: BoxFit.cover,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        maxHeightDiskCache: 80,
+                        maxWidthDiskCache: 80,
+                        memCacheWidth: 80,
+                        memCacheHeight: 80,
+                        errorWidget: (context, url, error) => Icon(
+                          Icons.person,
+                          size: 24,
+                          color: context.colors.primary,
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -347,8 +392,7 @@ class _ThreadPageState extends State<ThreadPage> {
   void _handleReplyInputTap(ThreadLoaded state) {
     final focusedNote = state.focusedNote;
     final focusedNoteId = focusedNote['id'] as String? ?? '';
-    final parentAuthor =
-        focusedNote['pubkey'] as String? ?? focusedNote['author'] as String?;
+    final parentAuthor = focusedNote['pubkey'] as String?;
 
     ShareNotePage.show(
       context,
@@ -361,6 +405,12 @@ class _ThreadPageState extends State<ThreadPage> {
       Map<String, dynamic> displayNote) {
     final threadStructure = state.threadStructure;
     final displayNoteId = displayNote['id'] as String? ?? '';
+
+    if (_stableOrderFocusedId != displayNoteId) {
+      _stableOrderFocusedId = displayNoteId;
+      _stableReplyOrder.clear();
+      _stableReplyOrderSet.clear();
+    }
 
     final allDirectReplies = threadStructure.getChildren(displayNoteId);
     final repliesById = <String, Map<String, dynamic>>{};
@@ -378,34 +428,33 @@ class _ThreadPageState extends State<ThreadPage> {
         .where((id) => !_stableReplyOrderSet.contains(id))
         .toList();
 
-    if (_stableReplyOrder.isEmpty && newIds.isNotEmpty) {
+    if (newIds.isNotEmpty) {
       final currentUserHex = state.currentUserHex;
-      newIds.sort((a, b) {
-        final aReply = repliesById[a]!;
-        final bReply = repliesById[b]!;
-        final aAuthor = aReply['author'] as String? ?? '';
-        final bAuthor = bReply['author'] as String? ?? '';
-        final aIsUser = aAuthor == currentUserHex;
-        final bIsUser = bAuthor == currentUserHex;
-        if (aIsUser && !bIsUser) return -1;
-        if (!aIsUser && bIsUser) return 1;
-        final aTime = aReply['timestamp'] as DateTime? ?? DateTime(0);
-        final bTime = bReply['timestamp'] as DateTime? ?? DateTime(0);
-        return aTime.compareTo(bTime);
-      });
-    } else if (newIds.isNotEmpty) {
-      newIds.sort((a, b) {
-        final aTime = repliesById[a]!['timestamp'] as DateTime? ?? DateTime(0);
-        final bTime = repliesById[b]!['timestamp'] as DateTime? ?? DateTime(0);
-        return aTime.compareTo(bTime);
-      });
+      if (_stableReplyOrder.isEmpty) {
+        newIds.sort((a, b) {
+          final aReply = repliesById[a]!;
+          final bReply = repliesById[b]!;
+          final aIsUser = (aReply['pubkey'] as String? ?? '') == currentUserHex;
+          final bIsUser = (bReply['pubkey'] as String? ?? '') == currentUserHex;
+          if (aIsUser && !bIsUser) return -1;
+          if (!aIsUser && bIsUser) return 1;
+          final aTime = (aReply['created_at'] as int?) ?? 0;
+          final bTime = (bReply['created_at'] as int?) ?? 0;
+          return aTime.compareTo(bTime);
+        });
+      } else {
+        newIds.sort((a, b) {
+          final aTime = (repliesById[a]!['created_at'] as int?) ?? 0;
+          final bTime = (repliesById[b]!['created_at'] as int?) ?? 0;
+          return aTime.compareTo(bTime);
+        });
+      }
+      _stableReplyOrder.addAll(newIds);
+      _stableReplyOrderSet.addAll(newIds);
     }
 
-    _stableReplyOrder.addAll(newIds);
-    _stableReplyOrderSet.addAll(newIds);
-
     final directReplies = _stableReplyOrder
-        .where((id) => _stableReplyOrderSet.contains(id))
+        .where((id) => repliesById.containsKey(id))
         .map((id) => repliesById[id]!)
         .toList();
 
@@ -536,19 +585,15 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     final currentUserHex = state.currentUserHex;
-    nestedReplies.sort((a, b) {
-      final aAuthor = a['author'] as String? ?? '';
-      final bAuthor = b['author'] as String? ?? '';
-      final aIsUserReply = aAuthor == currentUserHex;
-      final bIsUserReply = bAuthor == currentUserHex;
-
-      if (aIsUserReply && !bIsUserReply) return -1;
-      if (!aIsUserReply && bIsUserReply) return 1;
-
-      final aTimestamp = a['timestamp'] as DateTime? ?? DateTime(0);
-      final bTimestamp = b['timestamp'] as DateTime? ?? DateTime(0);
-      return aTimestamp.compareTo(bTimestamp);
-    });
+    if (currentUserHex.isNotEmpty) {
+      nestedReplies.sort((a, b) {
+        final aIsUser = (a['pubkey'] as String? ?? '') == currentUserHex;
+        final bIsUser = (b['pubkey'] as String? ?? '') == currentUserHex;
+        if (aIsUser && !bIsUser) return -1;
+        if (!aIsUser && bIsUser) return 1;
+        return 0;
+      });
+    }
 
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
@@ -708,7 +753,7 @@ class _ThreadPageState extends State<ThreadPage> {
     if (note != null) {
       final isRepost = note['isRepost'] as bool? ?? false;
       if (isRepost) {
-        _navigateToThread(ThreadChain.buildFromNote(note));
+        _navigateToThread(ThreadChain.buildFromNote(note), note);
         return;
       }
     }
@@ -719,17 +764,18 @@ class _ThreadPageState extends State<ThreadPage> {
       threadStructure.getNote,
     );
 
-    _navigateToThread(ThreadChain.build(newChain));
+    _navigateToThread(ThreadChain.build(newChain), note);
   }
 
-  void _navigateToThread(String chainStr) {
+  void _navigateToThread(String chainStr, Map<String, dynamic>? noteData) {
     final currentLocation = GoRouterState.of(context).matchedLocation;
+    final extra = noteData != null ? Map<String, dynamic>.from(noteData) : null;
     if (currentLocation.startsWith('/home/feed')) {
-      context.push('/home/feed/thread/$chainStr');
+      context.push('/home/feed/thread/$chainStr', extra: extra);
     } else if (currentLocation.startsWith('/home/notifications')) {
-      context.push('/home/notifications/thread/$chainStr');
+      context.push('/home/notifications/thread/$chainStr', extra: extra);
     } else {
-      context.push('/thread/$chainStr');
+      context.push('/thread/$chainStr', extra: extra);
     }
   }
 
@@ -798,7 +844,7 @@ class _ThreadPageState extends State<ThreadPage> {
       if (rootNoteId.startsWith('note1')) {
         noteId = rootNoteId;
       } else {
-        noteId = encodeBasicBech32(rootNoteId, 'note');
+        noteId = AuthService.instance.encodeNoteId(rootNoteId);
       }
 
       final nostrLink = 'nostr:$noteId';

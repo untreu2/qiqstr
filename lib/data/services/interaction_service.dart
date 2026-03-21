@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'rust_database_service.dart';
+import '../../domain/entities/feed_note.dart';
+import '../../src/rust/api/database.dart' as rust_db;
 import '../../src/rust/api/relay.dart' as rust_relay;
 
 class InteractionCounts {
@@ -166,70 +168,95 @@ class InteractionService {
     }
   }
 
+  bool _differs(InteractionCounts a, InteractionCounts b) =>
+      a.reactions != b.reactions ||
+      a.reposts != b.reposts ||
+      a.replies != b.replies ||
+      a.zapAmount != b.zapAmount ||
+      a.hasReacted != b.hasReacted ||
+      a.hasReposted != b.hasReposted ||
+      a.hasZapped != b.hasZapped;
+
+  void _applyData(
+    String noteId,
+    Map<String, dynamic> d, {
+    required int newReactions,
+    required int newReposts,
+    required int newReplies,
+    required int newZaps,
+  }) {
+    final existing = _cache[noteId];
+    final counts = InteractionCounts(
+      reactions: existing != null && existing.reactions > newReactions
+          ? existing.reactions
+          : newReactions,
+      reposts: existing != null && existing.reposts > newReposts
+          ? existing.reposts
+          : newReposts,
+      replies: existing != null && existing.replies > newReplies
+          ? existing.replies
+          : newReplies,
+      zapAmount: existing != null && existing.zapAmount > newZaps
+          ? existing.zapAmount
+          : newZaps,
+      hasReacted: _localReactions.contains(noteId) ||
+          (d['hasReacted'] == true) ||
+          (existing?.hasReacted ?? false),
+      hasReposted: _localReposts.contains(noteId) ||
+          (d['hasReposted'] == true) ||
+          (existing?.hasReposted ?? false),
+      hasZapped: _localZaps.contains(noteId) ||
+          (d['hasZapped'] == true) ||
+          (existing?.hasZapped ?? false),
+    );
+    if (existing == null || _differs(existing, counts)) {
+      _cache[noteId] = counts;
+      _emit(noteId, counts);
+    }
+  }
+
   Future<void> _loadBatchFromDb(List<String> noteIds) async {
     if (_currentUserHex == null || noteIds.isEmpty) return;
 
     try {
-      final data = await _db.getBatchInteractionData(noteIds, _currentUserHex!);
+      final json = await rust_db.dbGetBatchInteractionData(
+        noteIds: noteIds,
+        userPubkeyHex: _currentUserHex!,
+      );
+      final data = (jsonDecode(json) as Map<String, dynamic>).map(
+        (key, value) => MapEntry(key, Map<String, dynamic>.from(value as Map)),
+      );
 
       for (final noteId in noteIds) {
         final d = data[noteId];
         if (d == null) continue;
-
-        final dbReactions = (d['reactions'] as num?)?.toInt() ?? 0;
-        final dbReposts = (d['reposts'] as num?)?.toInt() ?? 0;
-        final dbReplies = (d['replies'] as num?)?.toInt() ?? 0;
-        final dbZaps = (d['zaps'] as num?)?.toInt() ?? 0;
-
-        final existing = _cache[noteId];
-
-        final hasReacted = _localReactions.contains(noteId) ||
-            (d['hasReacted'] == true) ||
-            (existing?.hasReacted ?? false);
-        final hasReposted = _localReposts.contains(noteId) ||
-            (d['hasReposted'] == true) ||
-            (existing?.hasReposted ?? false);
-        final hasZapped = _localZaps.contains(noteId) ||
-            (d['hasZapped'] == true) ||
-            (existing?.hasZapped ?? false);
-
-        final reactions = existing != null && existing.reactions > dbReactions
-            ? existing.reactions
-            : dbReactions;
-        final reposts = existing != null && existing.reposts > dbReposts
-            ? existing.reposts
-            : dbReposts;
-        final replies = existing != null && existing.replies > dbReplies
-            ? existing.replies
-            : dbReplies;
-        final zapAmount = existing != null && existing.zapAmount > dbZaps
-            ? existing.zapAmount
-            : dbZaps;
-
-        final counts = InteractionCounts(
-          reactions: reactions,
-          reposts: reposts,
-          replies: replies,
-          zapAmount: zapAmount,
-          hasReacted: hasReacted,
-          hasReposted: hasReposted,
-          hasZapped: hasZapped,
+        _applyData(
+          noteId,
+          d,
+          newReactions: (d['reactions'] as num?)?.toInt() ?? 0,
+          newReposts: (d['reposts'] as num?)?.toInt() ?? 0,
+          newReplies: (d['replies'] as num?)?.toInt() ?? 0,
+          newZaps: (d['zaps'] as num?)?.toInt() ?? 0,
         );
-
-        _cache[noteId] = counts;
-
-        if (existing == null ||
-            existing.reactions != counts.reactions ||
-            existing.reposts != counts.reposts ||
-            existing.replies != counts.replies ||
-            existing.zapAmount != counts.zapAmount ||
-            existing.hasReacted != counts.hasReacted ||
-            existing.hasReposted != counts.hasReposted ||
-            existing.hasZapped != counts.hasZapped) {
-          _emit(noteId, counts);
-        }
       }
     } catch (_) {}
+  }
+
+  void populateFromNotes(List<FeedNote> notes) {
+    for (final note in notes) {
+      prePopulateCache(
+        note.id,
+        InteractionCounts(
+          reactions: note.reactionCount,
+          reposts: note.repostCount,
+          replies: note.replyCount,
+          zapAmount: note.zapCount,
+          hasReacted: note.hasReacted,
+          hasReposted: note.hasReposted,
+          hasZapped: note.hasZapped,
+        ),
+      );
+    }
   }
 
   void prePopulateCache(String noteId, InteractionCounts counts) {
@@ -264,64 +291,14 @@ class InteractionService {
       for (final noteId in noteIds) {
         final d = decoded[noteId];
         if (d == null) continue;
-
-        final relayReactions = (d['reactions'] as num?)?.toInt() ?? 0;
-        final relayReposts = (d['reposts'] as num?)?.toInt() ?? 0;
-        final relayReplies = (d['replies'] as num?)?.toInt() ?? 0;
-        final relayZaps = (d['zaps'] as num?)?.toInt() ?? 0;
-
-        final existing = _cache[noteId];
-
-        final hasReacted = _localReactions.contains(noteId) ||
-            (d['hasReacted'] == true) ||
-            (existing?.hasReacted ?? false);
-        final hasReposted = _localReposts.contains(noteId) ||
-            (d['hasReposted'] == true) ||
-            (existing?.hasReposted ?? false);
-        final hasZapped = _localZaps.contains(noteId) ||
-            (d['hasZapped'] == true) ||
-            (existing?.hasZapped ?? false);
-
-        final reactions = existing != null
-            ? (relayReactions > existing.reactions
-                ? relayReactions
-                : existing.reactions)
-            : relayReactions;
-        final reposts = existing != null
-            ? (relayReposts > existing.reposts
-                ? relayReposts
-                : existing.reposts)
-            : relayReposts;
-        final replies = existing != null
-            ? (relayReplies > existing.replies
-                ? relayReplies
-                : existing.replies)
-            : relayReplies;
-        final zapAmount = existing != null
-            ? (relayZaps > existing.zapAmount ? relayZaps : existing.zapAmount)
-            : relayZaps;
-
-        final counts = InteractionCounts(
-          reactions: reactions,
-          reposts: reposts,
-          replies: replies,
-          zapAmount: zapAmount,
-          hasReacted: hasReacted,
-          hasReposted: hasReposted,
-          hasZapped: hasZapped,
+        _applyData(
+          noteId,
+          d,
+          newReactions: (d['reactions'] as num?)?.toInt() ?? 0,
+          newReposts: (d['reposts'] as num?)?.toInt() ?? 0,
+          newReplies: (d['replies'] as num?)?.toInt() ?? 0,
+          newZaps: (d['zaps'] as num?)?.toInt() ?? 0,
         );
-
-        if (existing == null ||
-            counts.reactions != existing.reactions ||
-            counts.reposts != existing.reposts ||
-            counts.replies != existing.replies ||
-            counts.zapAmount != existing.zapAmount ||
-            counts.hasReacted != existing.hasReacted ||
-            counts.hasReposted != existing.hasReposted ||
-            counts.hasZapped != existing.hasZapped) {
-          _cache[noteId] = counts;
-          _emit(noteId, counts);
-        }
       }
     } catch (_) {}
   }

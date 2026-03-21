@@ -1,111 +1,97 @@
 import 'dart:async';
 import 'dart:convert';
-import 'base_repository.dart';
-import '../services/encrypted_mute_service.dart';
-import '../services/encrypted_bookmark_service.dart';
+
+import 'package:flutter/foundation.dart';
+import 'package:rxdart/rxdart.dart';
+
 import '../../src/rust/api/database.dart' as rust_db;
+import '../services/encrypted_mute_service.dart';
+import '../services/rust_database_service.dart';
 
 abstract class FollowingRepository {
-  Future<List<String>?> getFollowingList(String userPubkey);
-  Stream<List<String>> watchFollowingList(String userPubkey);
-  Future<void> saveFollowingList(String userPubkey, List<String> followingList);
-  Future<bool> hasFollowingList(String userPubkey);
-  Future<void> deleteFollowingList(String userPubkey);
-  Future<List<String>?> getMuteList(String userPubkey);
-  Future<List<String>> getMuteWords();
-  Future<bool> hasMuteList(String userPubkey);
-  Future<void> deleteMuteList(String userPubkey);
+  Future<List<String>?> getFollowing(String userPubkey);
+  Stream<List<String>> watchFollowing(String userPubkey);
+  Future<void> saveFollowing(String userPubkey, List<String> following);
+  Future<List<String>?> getMuted(String userPubkey);
+  Future<List<String>> getMutedWords();
   Future<bool> isFollowing(String userPubkey, String targetPubkey);
   Future<bool> isMuted(String userPubkey, String targetPubkey);
   Future<void> follow(String userPubkey, String targetPubkey);
   Future<void> unfollow(String userPubkey, String targetPubkey);
   Future<void> mute(String userPubkey, String targetPubkey);
   Future<void> unmute(String userPubkey, String targetPubkey);
-  Future<({int count, List<String> avatarUrls})?> calculateFollowScore(
+  Future<({int count, List<String> avatarUrls})?> getFollowScore(
       String currentUserPubkey, String targetPubkey);
 }
 
-class FollowingRepositoryImpl extends BaseRepository
-    implements FollowingRepository {
-  FollowingRepositoryImpl({
-    required super.db,
-  });
+class FollowingRepositoryImpl implements FollowingRepository {
+  final RustDatabaseService _events;
+
+  FollowingRepositoryImpl({required RustDatabaseService events})
+      : _events = events;
 
   @override
-  Future<List<String>?> getFollowingList(String userPubkey) async {
-    final list = await db.getFollowingList(userPubkey);
-    if (list == null) return null;
-    
-    if (!list.contains(userPubkey)) {
-      return [...list, userPubkey];
+  Future<List<String>?> getFollowing(String userPubkey) async {
+    try {
+      final list = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
+      if (list.isEmpty) return null;
+      if (!list.contains(userPubkey)) return [...list, userPubkey];
+      return list;
+    } catch (e) {
+      if (kDebugMode) print('[FollowingRepository] getFollowing error: $e');
+      return null;
     }
-    return list;
   }
 
   @override
-  Stream<List<String>> watchFollowingList(String userPubkey) {
-    return db.watchFollowingList(userPubkey).map((list) {
-      if (!list.contains(userPubkey)) {
-        return [...list, userPubkey];
-      }
-      return list;
+  Stream<List<String>> watchFollowing(String userPubkey) {
+    return _events.onChange
+        .debounceTime(const Duration(milliseconds: 500))
+        .startWith(null)
+        .asyncMap((_) async {
+      final list = await getFollowing(userPubkey);
+      return list ?? [];
     });
   }
 
   @override
-  Future<void> saveFollowingList(
-      String userPubkey, List<String> followingList) async {
-    final listWithUser = followingList.toSet()..add(userPubkey);
-    await db.saveFollowingList(userPubkey, listWithUser.toList());
+  Future<void> saveFollowing(String userPubkey, List<String> following) async {
+    try {
+      final set = following.toSet()..add(userPubkey);
+      await rust_db.dbSaveFollowingList(
+          pubkeyHex: userPubkey, followsHex: set.toList());
+      _events.notifyChange();
+    } catch (e) {
+      if (kDebugMode) print('[FollowingRepository] saveFollowing error: $e');
+    }
   }
 
   @override
-  Future<bool> hasFollowingList(String userPubkey) async {
-    return await db.hasFollowingList(userPubkey);
-  }
-
-  @override
-  Future<void> deleteFollowingList(String userPubkey) async {
-    await db.deleteFollowingList(userPubkey);
-  }
-
-  @override
-  Future<List<String>?> getMuteList(String userPubkey) async {
+  Future<List<String>?> getMuted(String userPubkey) async {
     final muteService = EncryptedMuteService.instance;
     if (muteService.isInitialized) {
       final list = muteService.mutedPubkeys;
       return list.isEmpty ? null : list;
     }
-    return await db.getMuteList(userPubkey);
+    try {
+      final list = await rust_db.dbGetMuteList(pubkeyHex: userPubkey);
+      return list.isEmpty ? null : list;
+    } catch (e) {
+      if (kDebugMode) print('[FollowingRepository] getMuted error: $e');
+      return null;
+    }
   }
 
   @override
-  Future<List<String>> getMuteWords() async {
+  Future<List<String>> getMutedWords() async {
     return EncryptedMuteService.instance.mutedWords;
   }
 
   @override
-  Future<bool> hasMuteList(String userPubkey) async {
-    final muteService = EncryptedMuteService.instance;
-    if (muteService.isInitialized) {
-      return muteService.mutedPubkeys.isNotEmpty ||
-          muteService.mutedWords.isNotEmpty;
-    }
-    return await db.hasMuteList(userPubkey);
-  }
-
-  @override
-  Future<void> deleteMuteList(String userPubkey) async {
-    EncryptedMuteService.instance.clear();
-    EncryptedBookmarkService.instance.clear();
-    await db.deleteMuteList(userPubkey);
-  }
-
-  @override
   Future<bool> isFollowing(String userPubkey, String targetPubkey) async {
-    final followingList = await getFollowingList(userPubkey);
-    if (followingList == null) return false;
-    return followingList.contains(targetPubkey);
+    final list = await getFollowing(userPubkey);
+    if (list == null) return false;
+    return list.contains(targetPubkey);
   }
 
   @override
@@ -114,30 +100,37 @@ class FollowingRepositoryImpl extends BaseRepository
     if (muteService.isInitialized) {
       return muteService.isUserMuted(targetPubkey);
     }
-    final muteList = await db.getMuteList(userPubkey);
-    if (muteList == null) return false;
-    return muteList.contains(targetPubkey);
+    try {
+      final list = await rust_db.dbGetMuteList(pubkeyHex: userPubkey);
+      return list.contains(targetPubkey);
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
   Future<void> follow(String userPubkey, String targetPubkey) async {
-    final currentList = await db.getFollowingList(userPubkey) ?? [];
-    if (!currentList.contains(targetPubkey)) {
-      final updatedList = [...currentList, targetPubkey];
-      await saveFollowingList(userPubkey, updatedList);
+    try {
+      final current = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
+      if (!current.contains(targetPubkey)) {
+        await saveFollowing(userPubkey, [...current, targetPubkey]);
+      }
+    } catch (e) {
+      if (kDebugMode) print('[FollowingRepository] follow error: $e');
     }
   }
 
   @override
   Future<void> unfollow(String userPubkey, String targetPubkey) async {
-    if (userPubkey == targetPubkey) {
-      return;
-    }
-    
-    final currentList = await db.getFollowingList(userPubkey) ?? [];
-    if (currentList.contains(targetPubkey)) {
-      final updatedList = currentList.where((p) => p != targetPubkey).toList();
-      await saveFollowingList(userPubkey, updatedList);
+    if (userPubkey == targetPubkey) return;
+    try {
+      final current = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
+      if (current.contains(targetPubkey)) {
+        await saveFollowing(
+            userPubkey, current.where((p) => p != targetPubkey).toList());
+      }
+    } catch (e) {
+      if (kDebugMode) print('[FollowingRepository] unfollow error: $e');
     }
   }
 
@@ -152,14 +145,14 @@ class FollowingRepositoryImpl extends BaseRepository
   }
 
   @override
-  Future<({int count, List<String> avatarUrls})?> calculateFollowScore(
+  Future<({int count, List<String> avatarUrls})?> getFollowScore(
       String currentUserPubkey, String targetPubkey) async {
     try {
-      final resultJson = await rust_db.dbCalculateFollowScore(
+      final json = await rust_db.dbCalculateFollowScore(
         currentUserHex: currentUserPubkey,
         targetHex: targetPubkey,
       );
-      final result = jsonDecode(resultJson) as Map<String, dynamic>;
+      final result = jsonDecode(json) as Map<String, dynamic>;
       final count = result['count'] as int? ?? 0;
       if (count == 0) return null;
       final urls = (result['avatarUrls'] as List<dynamic>?)

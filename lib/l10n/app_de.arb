@@ -15,7 +15,6 @@
   "english": "Englisch",
   "turkish": "Türkisch",
   "german": "Deutsch",
-  
   "failedToUploadEncryptedMedia": "Verschlüsselte Medien konnten nicht hochgeladen werden",
   "noMessagesYet": "Noch keine Nachrichten",
   "failedToDecryptMedia": "Medien konnten nicht entschlüsselt werden",
@@ -24,7 +23,6 @@
   "unknownError": "Unbekannter Fehler",
   "decryptionFailed": "Entschlüsselung fehlgeschlagen",
   "yesterday": "Gestern",
-  
   "errorSelectingMedia": "Fehler beim Auswählen von Medien",
   "errorSelectingUser": "Fehler beim Auswählen des Benutzers",
   "errorSharingNote": "Fehler beim Teilen der Notiz",
@@ -39,7 +37,6 @@
   "postYourNote": "Notiz veröffentlichen",
   "composeYourNote": "Verfassen Sie Ihre Notiz",
   "removeThisMediaFile": "Diese Mediendatei entfernen",
-  
   "yourFeedIsEmpty": "Ihr Feed ist leer",
   "notes": "Notizen",
   "reads": "Gelesen",
@@ -49,17 +46,13 @@
   "users": "Benutzer",
   "following": "Folge ich",
   "follow": "Folgen",
-  
   "login": "Anmelden",
   "createNewAccount": "Neues Konto erstellen",
-  
   "noFollowingUsers": "Keine folgenden Benutzer",
   "unknownUser": "Unbekannter Benutzer",
-  
   "failedToLoadSuggestedUsers": "Vorgeschlagene Benutzer konnten nicht geladen werden",
   "suggestedFollows": "Vorgeschlagene Follower",
   "continueButton": "Fortfahren",
-  
   "noEventsToRebroadcast": "Keine Ereignisse zum erneuten Senden",
   "errorRebroadcastingEvents": "Fehler beim erneuten Senden von Ereignissen",
   "delete": "Löschen",
@@ -78,22 +71,17 @@
   "rebroadcasting": "Wird erneut gesendet...",
   "rebroadcast": "Erneut senden",
   "deleteAccount": "Konto löschen",
-  
   "editProfile": "Profil bearbeiten",
   "banner": "Banner",
   "profileImage": "Profilbild",
   "username": "Benutzername",
   "pleaseEnterValidWebsiteUrl": "Bitte geben Sie eine gültige Website-URL ein",
-  
   "setUpProfile": "Profil einrichten",
-  
   "thread": "Thread",
   "noRepliesFound": "Keine Antworten gefunden",
   "loadMore": "Mehr laden",
   "failedToLoadThread": "Thread konnte nicht geladen werden",
-  
   "closeDialog": "Dialog schließen",
-  
   "pleaseSetUpProfileFirst": "Bitte richten Sie zuerst Ihr Profil ein",
   "noRelayListFoundInProfile": "Keine Relay-Liste in Ihrem Profil gefunden",
   "relaysSavedSuccessfully": "Relays erfolgreich gespeichert",
@@ -106,22 +94,16 @@
   "relaysResetToDefaults": "Relays auf Standardwerte zurückgesetzt",
   "relayAddedFromFollowingList": "Relay aus Followerliste hinzugefügt",
   "relayAlreadyExistsInList": "Relay existiert bereits in Ihrer Liste",
-  
   "untitledArticle": "Unbenannter Artikel",
   "article": "Artikel",
-  
   "eventNotFound": "Ereignis nicht gefunden",
   "articleNotFound": "Artikel nicht gefunden",
-  
   "copy": "Kopieren",
   "copiedToClipboard": "In Zwischenablage kopiert",
-  
   "couldNotLoadHashtagFeed": "Hashtag-Feed konnte nicht geladen werden",
   "errorOpeningHashtag": "Fehler beim Öffnen des Hashtags",
-  
   "videoSavedToGallery": "Video in Galerie gespeichert",
   "failedToSaveVideoToGallery": "Video konnte nicht in Galerie gespeichert werden",
-  
   "undoRepost": "Erneutes Posten rückgängig machen",
   "repostAgain": "Erneut posten",
   "quote": "Zitieren",
@@ -131,50 +113,35 @@
   "verificationFailed": "Überprüfung fehlgeschlagen",
   "verifySignature": "Signatur überprüfen",
   "interactions": "Interaktionen",
-  
   "errorLoadingNotes": "Fehler beim Laden von Notizen",
-  
   "repostedBy": "Erneut gepostet von ",
   "anonymous": "Anonym",
-  
   "profile": "Profil",
-  
   "pleaseConnectWalletFirst": "Bitte verbinden Sie zuerst Ihr Wallet",
   "user": "Benutzer",
   "errorLoadingUserProfile": "Fehler beim Laden des Benutzerprofils",
   "send": "Senden",
   "enterValidAmount": "Geben Sie einen gültigen Betrag ein",
-  
   "relaysFromYourFollows": "Relays von Ihren Followern",
   "noRelaysFoundFromFollowingUsers": "Keine Relays von folgenden Benutzern gefunden",
-  
   "editProfileButton": "Profil bearbeiten",
   "mutedButton": "Stummgeschaltet",
   "followButton": "Folgen",
   "followingYou": "Folgt Ihnen",
-  
   "imageSavedToGallery": "Bild in Galerie gespeichert",
   "failedToSaveImageToGallery": "Bild konnte nicht in Galerie gespeichert werden",
-  
   "unfollow": "Entfolgen",
-  
   "pleaseEnterInvoice": "Bitte geben Sie eine Rechnung ein",
   "payInvoice": "Rechnung bezahlen",
-  
   "resetToDefaults": "Auf Standardwerte zurücksetzen",
-  
   "mute": "Stummschalten",
-  
   "goBack": "Zurück",
   "goBackToPreviousScreen": "Zurück zum vorherigen Bildschirm",
-  
   "share": "Teilen",
-  
   "untitled": "Unbenannt",
   "noArticlesFound": "Keine Artikel gefunden",
   "noRelaysFound": "Keine Relays gefunden",
   "refresh": "Aktualisieren",
-  
   "displayTitle": "Anzeige",
   "displaySubtitle": "Passen Sie Ihr Anzeigeerlebnis an.",
   "expandedNotes": "Erweiterte Notizen",
@@ -187,7 +154,6 @@
   "notifications": "Benachrichtigungen",
   "navigationBarOrder": "Reihenfolge der Navigationsleiste",
   "pressAndHoldToDrag": "Gedrückt halten, um zu ziehen und neu zu ordnen",
-  
   "loading": "Lädt...",
   "notFound": "Nicht gefunden",
   "errorLoadingKeys": "Fehler beim Laden der Schlüssel",
@@ -203,7 +169,6 @@
   "keysTitle": "Schlüssel",
   "keysSubtitle": "Verwalten Sie Ihre Nostr-Identitätsschlüssel.",
   "copiedToClipboardWithType": "{type} in Zwischenablage kopiert!",
-  
   "paymentsTitle": "Zahlungen",
   "paymentsSubtitle": "Verwalten Sie Ihre Zahlungseinstellungen.",
   "oneTapZap": "Ein-Tippen-Zap",
@@ -212,7 +177,6 @@
   "amountSats": "Betrag (Sats)",
   "amountSavedSuccessfully": "Betrag erfolgreich gespeichert",
   "pleaseEnterValidAmount": "Bitte geben Sie einen gültigen Betrag ein",
-  
   "mutedTitle": "Stummgeschaltet",
   "mutedSubtitle": "Ereignisse von stummgeschalteten Benutzern und mit stummgeschalteten Wörtern werden aus Ihren Feeds ausgeblendet. Ihre Stummschaltungsliste ist verschlüsselt und nur für Sie sichtbar.",
   "mutedWordsTitle": "Wörter",
@@ -223,7 +187,6 @@
   "youHaventMutedAnyUsersYet": "Sie haben noch keine Benutzer stummgeschaltet.",
   "mutedUsersCount": "{count} stummgeschaltete {count, plural, =1{Benutzer} other{Benutzer}}",
   "unmute": "Entmuten",
-  
   "addRelay": "Hinzufügen",
   "areYouSureLogout": "Sind Sie sicher, dass Sie sich abmelden möchten?",
   "seedPhraseWarning": "WENN SIE IHRE SEED-PHRASE NICHT GESPEICHERT HABEN, VERLIEREN SIE IHR KONTO FÜR IMMER.",
@@ -243,7 +206,6 @@
   "errorPrefix": "Fehler: {message}",
   "followers": "Follower",
   "followingCount": "folge ich",
-  
   "saveYourSeedPhrase": "Speichern Sie Ihre Seed-Phrase",
   "thisIsYourOnlyChance": "Dies ist Ihre einzige Chance, Ihre Seed-Phrase zu speichern. Schreiben Sie sie auf und bewahren Sie sie sicher auf.",
   "iHaveSavedMySeedPhrase": "Ich habe meine Seed-Phrase gespeichert",
@@ -259,20 +221,16 @@
   "website": "Webseite",
   "nip05": "NIP-05",
   "zapAddress": "Zap-Adresse",
-  
   "searchUsers": "Benutzer suchen...",
   "search": "Suchen",
   "searching": "Suche läuft...",
-  
   "newMessage": "Neue Nachricht",
   "typeAMessage": "Nachricht eingeben...",
   "sendMessage": "Nachricht senden",
   "messagePlaceholder": "Nachricht...",
-  
   "directMessages": "Direktnachrichten",
   "noConversationsYet": "Noch keine Gespräche",
   "startNewConversation": "Neues Gespräch beginnen",
-  
   "media": "Medien",
   "photos": "Fotos",
   "videos": "Videos",
@@ -280,62 +238,52 @@
   "replies": "Antworten",
   "reply": "Antworten",
   "replyingTo": "Antwort an",
-  
   "zap": "Zap",
   "zapUser": "{user} zappen",
   "amount": "Betrag",
   "message": "Nachricht",
   "optional": "Optional",
   "zapNote": "Zap-Notiz",
-  
   "invoice": "Rechnung",
   "pasteInvoice": "Rechnung einfügen",
   "paying": "Wird bezahlt...",
   "paymentSuccess": "Zahlung erfolgreich!",
   "paymentFailed": "Zahlung fehlgeschlagen",
-  
   "receive": "Empfangen",
   "yourLightningAddress": "Ihre Lightning-Adresse",
   "scanQRCode": "QR-Code scannen",
-  
   "relayStatus": "Relay-Status",
   "connected": "Verbunden",
   "disconnected": "Getrennt",
   "connecting": "Verbinde...",
   "addRelayUrl": "Relay-URL hinzufügen",
   "removeRelay": "Relay entfernen",
-  
   "eventType": "Ereignistyp",
   "createdAt": "Erstellt am",
   "relayCount": "Relay-Anzahl",
   "deleteSelected": "Ausgewählte löschen",
   "selectAll": "Alle auswählen",
   "deselectAll": "Alle abwählen",
-  
   "statistics": "Statistiken",
   "reposts": "Reposts",
   "reactions": "Reaktionen",
   "zaps": "Zaps",
   "views": "Aufrufe",
-  
   "filters": "Filter",
   "filterBy": "Filtern nach",
   "sortBy": "Sortieren nach",
   "newest": "Neueste",
   "oldest": "Älteste",
   "mostPopular": "Beliebteste",
-  
   "copied": "Kopiert!",
   "failed": "Fehlgeschlagen",
   "success": "Erfolg!",
   "error": "Fehler",
   "tryAgain": "Erneut versuchen",
   "ok": "OK",
-  
   "deleteMessage": "Nachricht löschen?",
   "deleteConversation": "Gespräch löschen?",
   "areYouSureDelete": "Sind Sie sicher, dass Sie dies löschen möchten?",
-  
   "block": "Blockieren",
   "unblock": "Entsperren",
   "report": "Melden",
@@ -357,13 +305,18 @@
   "reportSubmitted": "Meldung gesendet",
   "reportFailed": "Meldung konnte nicht gesendet werden",
   "selectReportReason": "Grund auswählen",
-  
   "today": "Heute",
   "justNow": "Gerade eben",
   "minutesAgo": "vor {count} Min.",
   "hoursAgo": "vor {count} Std.",
-  "daysAgo": "vor {count} Tag(en)",
-  
+  "daysAgo": "vor {days} Tag(en)",
+  "@daysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
   "backupYourAccount": "Sichern Sie Ihr Konto",
   "secureYourAccount": "Sichern Sie Ihr Konto mit Ihrer Seed-Phrase.",
   "important": "Wichtig",
@@ -373,34 +326,23 @@
   "ifYouLoseIt": "Wenn Sie sie verlieren, verlieren Sie den Zugriff auf Ihr Konto für immer",
   "accessFromSettings": "Sie können später über Einstellungen > Schlüssel darauf zugreifen",
   "iHaveWrittenDownSeedPhrase": "Ich habe meine Seed-Phrase aufgeschrieben",
-  
   "noNotesFromThisUser": "Noch keine Notizen von diesem Benutzer",
   "fileTooLarge": "Datei ist zu groß (max. 50 MB)",
   "encryptionFailed": "Verschlüsselung fehlgeschlagen",
   "errorWithMessage": "Fehler: {message}",
-  
   "read": "Lesen",
   "write": "Schreiben",
   "exploreRelays": "Erkunden",
   "reset": "Reset",
   "mention": "Erwähnen",
-  "removeThisMediaFile": "Diese Mediendatei entfernen",
-  
   "searchByNameOrNpub": "Nach Name oder npub suchen...",
   "searchDotDotDot": "Suchen...",
   "searchingForUsers": "Suche nach Benutzern...",
   "searchingDotDotDot": "Suche läuft...",
-  
   "uploadingDotDotDot": "Wird hochgeladen...",
   "postExclamation": "Posten!",
   "whatsOnYourMind": "Was denkst du?",
-  "uploadingMediaFiles": "Mediendateien werden hochgeladen",
   "postingYourNotePleaseWait": "Ihre Notiz wird gepostet, bitte warten",
-  
-  "undoRepost": "Repost rückgängig machen",
-  "repostAgain": "Erneut reposten",
-  
-  "notifications": "Benachrichtigungen",
   "failedToLoadNotifications": "Benachrichtigungen konnten nicht geladen werden",
   "noNotificationsYet": "Noch keine Benachrichtigungen",
   "whenSomeoneInteractsWithYourPosts": "Wenn jemand mit deinen Beiträgen interagiert,\nsiehst du es hier",
@@ -414,56 +356,70 @@
   "andCountOthers": "und {count} weitere",
   "@andCountOthers": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "now": "jetzt",
-
   "notificationSummaryPrefix": "Heute erhalten: ",
   "notificationSummaryAnd": " und ",
   "notificationReactionCount": "{count, plural, =1{1 Reaktion} other{{count} Reaktionen}}",
   "@notificationReactionCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationRepostCount": "{count, plural, =1{1 Repost} other{{count} Reposts}}",
   "@notificationRepostCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationReplyCount": "{count, plural, =1{1 Antwort} other{{count} Antworten}}",
   "@notificationReplyCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationMentionCount": "{count, plural, =1{1 Erwähnung} other{{count} Erwähnungen}}",
   "@notificationMentionCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationQuoteCount": "{count, plural, =1{1 Zitat} other{{count} Zitate}}",
   "@notificationQuoteCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationZapCount": "{count, plural, =1{1 Zap} other{{count} Zaps}}",
   "@notificationZapCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationZapSatsCount": "{count} Sats",
   "@notificationZapSatsCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
-  
   "errorLoadingRelays": "Fehler beim Laden der Relays",
   "privateKeyNotFound": "Privater Schlüssel nicht gefunden. Bitte richten Sie zuerst Ihr Profil ein",
   "pleaseSetUpYourProfileFirst": "Bitte richten Sie zuerst Ihr Profil ein",
@@ -475,33 +431,33 @@
   "gossipModelEnabledRestartApp": "Gossip-Modell aktiviert. App neu starten.",
   "gossipModelDisabledRestartApp": "Gossip-Modell deaktiviert. App neu starten.",
   "errorTogglingGossipModel": "Fehler beim Umschalten des Gossip-Modells",
-  "relaysSavedSuccessfully": "Relays erfolgreich gespeichert",
   "errorSavingRelays": "Fehler beim Speichern der Relays",
-  "pleaseEnterRelayUrl": "Bitte geben Sie eine Relay-URL ein",
   "invalidRelayUrl": "Ungültige Relay-URL. Muss mit ws:// oder wss:// beginnen",
   "relayAlreadyExistsInCategory": "Relay existiert bereits in dieser Kategorie",
-  "relayAddedToMainList": "Relay zur Hauptliste hinzugefügt",
   "errorAddingRelay": "Fehler beim Hinzufügen des Relays",
   "fetchingYourEvents": "Lade deine Ereignisse...",
-  "noEventsFoundToBroadcast": "Keine Ereignisse zum Übertragen gefunden",
   "broadcastingEvents": "{count} Ereignisse werden an {relayCount} Relays übertragen...",
   "@broadcastingEvents": {
     "placeholders": {
-      "count": {"type": "int"},
-      "relayCount": {"type": "int"}
+      "count": {
+        "type": "int"
+      },
+      "relayCount": {
+        "type": "int"
+      }
     }
   },
   "eventsSuccessfullyBroadcast": "{count} Ereignisse erfolgreich an {relayCount} Relays übertragen",
   "@eventsSuccessfullyBroadcast": {
     "placeholders": {
-      "count": {"type": "int"},
-      "relayCount": {"type": "int"}
+      "count": {
+        "type": "int"
+      },
+      "relayCount": {
+        "type": "int"
+      }
     }
   },
-  "errorBroadcastingEvents": "Fehler beim Übertragen der Ereignisse",
-  "relayRemovedSuccessfully": "Relay erfolgreich entfernt",
-  "relaysResetToDefaults": "Relays auf Standardwerte zurückgesetzt",
-  "relayAddedFromFollowingList": "Relay aus Folgeliste hinzugefügt",
   "relayAlreadyExistsInYourList": "Relay existiert bereits in deiner Liste",
   "fetchingRelayInformation": "Lade Relay-Informationen...",
   "paymentRequired": "Zahlung erforderlich",
@@ -522,11 +478,12 @@
   "eventCount": "{count} Ereignisse",
   "@eventCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "broadcasted": "übertragen",
-  
   "gossipMode": "Gossip-Modus",
   "gossipModeDescription": "Entdecke und verbinde dich automatisch mit Relays, die von Personen verwendet werden, denen du folgst. Wenn deaktiviert, werden nur deine eigenen Relays oben zum Lesen und Schreiben verwendet.",
   "fetching": "Lädt...",
@@ -543,26 +500,12 @@
   "unknown": "unbekannt",
   "paid": "Bezahlt",
   "auth": "Auth",
-  
-  "relays": "Relays",
   "manageYourRelayConnections": "Verwalte deine Relay-Verbindungen und veröffentliche deine Relay-Liste.",
-  
-  "goBackToPreviousScreen": "Zurück zum vorherigen Bildschirm",
   "noInteractionsYet": "Noch keine Interaktionen.",
-  
   "messages": "Nachrichten",
-  "noMessagesYet": "Noch keine Nachrichten",
-  "typeAMessage": "Nachricht schreiben...",
-  
-  "yourDataOnRelays": "Deine Daten auf Relays",
   "yourDataOnRelaysDescription": "Alles, was du auf Nostr teilst, ist ein Event. Sieh deine Event-Anzahl nach Art und sende sie erneut an Relays.",
-  "rebroadcasting": "Wird gesendet...",
-  "rebroadcast": "Erneut senden",
-  
-  "noConversationsYet": "Noch keine Unterhaltungen",
   "startConversationBy": "Starte eine Unterhaltung, indem du jemandem eine Nachricht sendest",
   "errorLoadingConversations": "Fehler beim Laden der Unterhaltungen",
-  "newMessage": "Neue Nachricht",
   "errorLoadingMessages": "Fehler beim Laden der Nachrichten: {message}",
   "@errorLoadingMessages": {
     "placeholders": {
@@ -571,11 +514,7 @@
       }
     }
   },
-  "failedToDecryptMedia": "Medien-Entschlüsselung fehlgeschlagen",
-  "legacyUnencryptedMedia": "Alte unverschlüsselte Medien",
   "notEncrypted": "Nicht verschlüsselt",
-  "decryptionError": "Entschlüsselungsfehler",
-  "unknownError": "Unbekannter Fehler",
   "videoTapToPlay": "Video (antippen zum Abspielen)",
   "fileType": "Datei: {type}",
   "@fileType": {
@@ -585,28 +524,9 @@
       }
     }
   },
-  "decryptionFailed": "Entschlüsselung fehlgeschlagen",
-  
-  "searchingForUsers": "Suche nach Benutzern...",
-  "searchError": "Suchfehler",
   "retry": "Wiederholen",
   "noUsersFound": "Keine Benutzer gefunden",
   "trySearchingDifferentTerm": "Versuche es mit einem anderen Suchbegriff.",
-  "closeDialog": "Dialog schließen",
-  "searchByNameOrNpub": "Suche nach Name oder npub...",
-  "following": "Folge ich",
-  "follow": "Folgen",
-  
-  "yesterday": "Gestern",
-  "daysAgo": "vor {days}T",
-  "@daysAgo": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-
   "databaseCache": "Datenbank-Cache",
   "databaseCacheSubtitle": "Verwalten Sie lokalen Speicher und bereinigen Sie alte Ereignisse.",
   "databaseOverview": "Datenbankübersicht",
@@ -616,9 +536,6 @@
   "textNotes": "Textnotizen",
   "profiles": "Profile",
   "contactLists": "Kontaktlisten",
-  "reactions": "Reaktionen",
-  "reposts": "Reposts",
-  "zaps": "Zaps",
   "articles": "Artikel",
   "cleanupInfo": "Bereinigungsinformationen",
   "cleanupInfoDescription": "Bereinigt automatisch alte Ereignisse, wenn die Datenbank 1 GB überschreitet.",
@@ -633,7 +550,6 @@
   "cleanup": "Bereinigen",
   "addAccount": "Konto hinzufügen",
   "switchAccount": "Konto wechseln",
-
   "connectYourWallet": "Wallet verbinden",
   "connectWalletDescription": "Melden Sie sich mit Ihrer Nostr-Identität an,\num Coinos zu nutzen",
   "connectWallet": "Wallet verbinden",
@@ -651,11 +567,9 @@
       }
     }
   },
-
   "iAcceptThe": "Ich akzeptiere die ",
   "termsOfUse": "Nutzungsbedingungen",
   "acceptanceOfTermsIsRequired": "Die Zustimmung zu den Nutzungsbedingungen ist erforderlich",
-
   "profileSetupSubtitle": "Fügen Sie grundlegende Informationen hinzu, damit andere Sie entdecken können.",
   "uploadFailed": "Hochladen fehlgeschlagen: {message}",
   "@uploadFailed": {
@@ -674,7 +588,6 @@
   "websiteOptional": "Webseite (optional)",
   "locationOptional": "Standort (optional)",
   "locationTooLong": "Standort darf maximal 100 Zeichen lang sein",
-
   "newNotesAvailable": "{count, plural, =1{1 neue Notiz} other{{count} neue Notizen}}",
   "@newNotesAvailable": {
     "placeholders": {
@@ -683,13 +596,11 @@
       }
     }
   },
-
   "readsSubtitle": "Langform-Artikel von Personen, denen Sie folgen.",
   "loadingArticles": "Artikel werden geladen...",
   "somethingWentWrong": "Etwas ist schiefgelaufen",
   "noArticlesYet": "Noch keine Artikel",
   "longFormContentDescription": "Langform-Inhalte von Personen, denen Sie folgen, werden hier angezeigt.",
-
   "bookmarks": "Lesezeichen",
   "bookmarksTitle": "Lesezeichen",
   "bookmarksSubtitle": "Ihre Lesezeichen sind verschlüsselt und nur für Sie sichtbar.",
@@ -700,7 +611,6 @@
   "addBookmark": "Lesezeichen",
   "bookmarkAdded": "Lesezeichen hinzugefügt",
   "bookmarkRemoved": "Lesezeichen entfernt",
-
   "listsTitle": "Listen",
   "listsSubtitle": "Organisieren Sie Personen, denen Sie folgen, in Gruppen.",
   "noLists": "Keine Listen",
@@ -758,7 +668,6 @@
   "signupFeatureBackup": "Sie erhalten eine Seed-Phrase zur sicheren Sicherung Ihres Kontos",
   "signupFeatureProfile": "Richten Sie Ihr Profil ein und beginnen Sie, sich mit anderen zu verbinden",
   "signupCreating": "Ihr Konto wird erstellt...",
-
   "followedByCount": "{count, plural, =1{Von 1 Person} other{Von {count} Personen}} gefolgt, denen du folgst",
   "@followedByCount": {
     "placeholders": {
@@ -767,13 +676,11 @@
       }
     }
   },
-
   "pinNote": "Notiz anheften",
   "unpinNote": "Notiz loslösen",
   "notePinned": "Notiz an Profil angeheftet",
   "noteUnpinned": "Notiz vom Profil gelöst",
   "pinnedNotes": "Angeheftet",
-
   "processingPayment": "Zahlung wird verarbeitet...",
   "zappedSatsToUser": "{sats} {sats, plural, =1{Sat} other{Sats}} an {user} gezappt!",
   "@zappedSatsToUser": {
@@ -789,7 +696,6 @@
   "failedToZap": "Zap fehlgeschlagen",
   "userNoLightningAddress": "Der Benutzer hat keine Lightning-Adresse konfiguriert.",
   "commentOptional": "Kommentar (Optional)",
-
   "nwcSectionTitle": "WALLET CONNECT",
   "nwcTitle": "Nostr Wallet Connect",
   "nwcDescription": "Verbinden Sie eine externe Wallet über das NWC-Protokoll. Dadurch wird die integrierte Wallet deaktiviert.",
@@ -803,13 +709,9 @@
   "nwcPleaseEnterConnectionString": "Bitte Verbindungszeichenfolge eingeben",
   "nwcDisclaimer": "NWC verbindet sich mit einem Drittanbieter-Wallet. Wir verwahren, kontrollieren oder haben keinen Zugriff auf Ihre Gelder. Die gesamte Verantwortung liegt bei Ihrem Wallet-Anbieter.",
   "nwcAccept": "Ich verstehe und stimme zu",
-
   "dmTabFollowing": "Gefolgt",
   "dmTabOther": "Andere",
-
   "dmEncryptionNotice": "Ihre Nachrichten sind Ende-zu-Ende-verschlüsselt. Niemand kann sehen, mit wem Sie sprechen oder was Sie schreiben.",
-
-  "noEventsToRebroadcast": "Keine Ereignisse zum erneuten Senden",
   "broadcastedEvents": "{sent} Ereignisse gesendet",
   "broadcastedEventsWithFailed": "{sent} Ereignisse gesendet, {failed} fehlgeschlagen",
   "errorRebroadcastingEventsDetail": "Fehler beim erneuten Senden: {error}",
@@ -819,9 +721,6 @@
   "exportFailed": "Export fehlgeschlagen: {error}",
   "deleteAccountTitle": "Konto löschen?",
   "deleteAccountConfirmation": "Dadurch werden Löschanfragen für alle Ihre Ereignisse gesendet und alle Relays gebeten, Ihre Daten zu löschen. Diese Aktion kann nicht rückgängig gemacht werden.",
-  "cancel": "Abbrechen",
-  "delete": "Löschen",
-  "noEventsFoundToDelete": "Keine zu löschenden Ereignisse gefunden",
   "noValidEventIds": "Keine gültigen Ereignis-IDs gefunden",
   "deletionRequestSent": "Löschanfrage für {count} Ereignisse an {relays} Relay gesendet",
   "deletionRequestSentPlural": "Löschanfrage für {count} Ereignisse an {relays} Relays gesendet",
@@ -856,6 +755,8 @@
   "lightningAddressOrInvoice": "Lightning-Adresse oder Rechnung",
   "resolvingAddress": "Adresse wird aufgelöst…",
   "resolveAddressFailed": "Lightning-Adresse konnte nicht aufgelöst werden",
-
-  "dmYouPrefix": "Du: "
+  "dmYouPrefix": "Du: ",
+  "quotes": "Zitate",
+  "noQuotesFound": "Keine Zitate gefunden",
+  "quotePlural": "Zitate"
 }

@@ -47,14 +47,14 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   @override
   void didUpdateWidget(ProfileInfoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldPubkeyHex = oldWidget.user['pubkeyHex'] as String? ?? '';
+    final oldPubkeyHex = oldWidget.user['pubkey'] as String? ?? '';
     final oldName = oldWidget.user['name'] as String? ?? '';
-    final oldProfileImage = oldWidget.user['profileImage'] as String? ?? '';
+    final oldProfileImage = oldWidget.user['picture'] as String? ?? '';
     final oldAbout = oldWidget.user['about'] as String? ?? '';
     final oldLocation = oldWidget.user['location'] as String? ?? '';
-    final newPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+    final newPubkeyHex = widget.user['pubkey'] as String? ?? '';
     final newName = widget.user['name'] as String? ?? '';
-    final newProfileImage = widget.user['profileImage'] as String? ?? '';
+    final newProfileImage = widget.user['picture'] as String? ?? '';
     final newAbout = widget.user['about'] as String? ?? '';
     final newLocation = widget.user['location'] as String? ?? '';
     if (oldPubkeyHex != newPubkeyHex ||
@@ -104,7 +104,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
 
     final parsedContent = _parseBioContent(about);
-    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    final pubkeyHex = user['pubkey'] as String? ?? '';
 
     return NoteContentWidget(
       parsedContent: parsedContent,
@@ -141,7 +141,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final userPubkeyHex = widget.user['pubkeyHex'] as String? ?? '';
+    final userPubkeyHex = widget.user['pubkey'] as String? ?? '';
     if (_bloc == null ||
         _bloc!.isClosed ||
         _bloc!.userPubkeyHex != userPubkeyHex) {
@@ -295,7 +295,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   Widget _buildAvatar(BuildContext context, Map<String, dynamic> user) {
     final avatarRadius = 40.0;
-    final profileImage = user['profileImage'] as String? ?? '';
+    final profileImage = user['picture'] as String? ?? '';
 
     Widget avatar = RepaintBoundary(
       child: Container(
@@ -330,7 +330,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final name = user['name'] as String? ?? '';
     final nip05 = user['nip05'] as String? ?? '';
     final nip05Verified = user['nip05Verified'] as bool? ?? false;
-    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    final pubkeyHex = user['pubkey'] as String? ?? '';
     final rawNpub = user['npub'] as String? ?? '';
     final npub = rawNpub.isNotEmpty
         ? rawNpub
@@ -444,7 +444,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       BuildContext context, Map<String, dynamic> user, double screenWidth) {
     final double bannerHeight = screenWidth * (3.5 / 10);
     final banner = user['banner'] as String? ?? '';
-    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    final pubkeyHex = user['pubkey'] as String? ?? '';
 
     return GestureDetector(
       onTap: () {
@@ -489,8 +489,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   Widget _buildAvatarAndActionsRow(
       BuildContext context, ProfileInfoLoaded? state) {
     final currentUserHex = state?.currentUserHex;
-    final userPubkeyHex = state?.user['pubkeyHex'] as String? ??
-        widget.user['pubkeyHex'] as String? ??
+    final userPubkeyHex = state?.user['pubkey'] as String? ??
+        widget.user['pubkey'] as String? ??
         '';
     final isOwnProfile = currentUserHex != null &&
         currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
@@ -597,7 +597,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       onSelected: (value) {
         switch (value) {
           case 'add_to_list':
-            final pubkeyHex = state.user['pubkeyHex'] as String? ?? '';
+            final pubkeyHex = state.user['pubkey'] as String? ?? '';
             if (pubkeyHex.isNotEmpty) {
               _showAddToListSheet(context, pubkeyHex);
             }
@@ -924,7 +924,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
 
     final currentUserHex = state.currentUserHex;
-    final userPubkeyHex = state.user['pubkeyHex'] as String? ?? '';
+    final userPubkeyHex = state.user['pubkey'] as String? ?? '';
     final isOwnProfile = currentUserHex != null &&
         currentUserHex.toLowerCase() == userPubkeyHex.toLowerCase();
 

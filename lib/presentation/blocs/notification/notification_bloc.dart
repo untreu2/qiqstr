@@ -127,7 +127,7 @@ class NotificationBloc
         'fromPubkey': n.fromPubkey,
         'fromName': n.fromName,
         'fromImage': n.fromImage,
-        'profileImage': n.fromImage ?? '',
+        'picture': n.fromImage ?? '',
         'name': n.fromName ?? '',
         'targetEventId': n.targetNoteId,
         'createdAt': n.createdAt,

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/services/auth_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
@@ -42,12 +42,8 @@ class _KeysPageState extends State<KeysPage> {
       final mnemonic = await _secureStorage.read(key: 'mnemonic');
 
       if (hexPrivateKey != null && npubBech32 != null) {
-        String nsecBech32;
-        try {
-          nsecBech32 = Nip19.encodePrivateKey(hexPrivateKey);
-        } catch (e) {
-          nsecBech32 = l10n.errorEncodingNsec;
-        }
+        final nsecBech32 = AuthService.instance.hexToNsec(hexPrivateKey) ??
+            l10n.errorEncodingNsec;
 
         setState(() {
           _nsecBech32 = nsecBech32;

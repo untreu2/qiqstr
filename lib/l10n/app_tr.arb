@@ -15,7 +15,6 @@
   "english": "İngilizce",
   "turkish": "Türkçe",
   "german": "Almanca",
-  
   "failedToUploadEncryptedMedia": "Şifreli medya yüklenemedi",
   "noMessagesYet": "Henüz mesaj yok",
   "failedToDecryptMedia": "Medyanın şifresi çözülemedi",
@@ -24,7 +23,6 @@
   "unknownError": "Bilinmeyen hata",
   "decryptionFailed": "Şifre çözme başarısız",
   "yesterday": "Dün",
-  
   "errorSelectingMedia": "Medya seçme hatası",
   "errorSelectingUser": "Kullanıcı seçme hatası",
   "errorSharingNote": "Not paylaşma hatası",
@@ -39,7 +37,6 @@
   "postYourNote": "Notunuzu paylaşın",
   "composeYourNote": "Notunuzu yazın",
   "removeThisMediaFile": "Bu medya dosyasını kaldır",
-  
   "yourFeedIsEmpty": "Akışınız boş",
   "notes": "Notlar",
   "reads": "Okumalar",
@@ -49,17 +46,13 @@
   "users": "Kullanıcılar",
   "following": "Takip Ediliyor",
   "follow": "Takip Et",
-  
   "login": "Giriş Yap",
   "createNewAccount": "Yeni Hesap Oluştur",
-  
   "noFollowingUsers": "Takip edilen kullanıcı yok",
   "unknownUser": "Bilinmeyen Kullanıcı",
-  
   "failedToLoadSuggestedUsers": "Önerilen kullanıcılar yüklenemedi",
   "suggestedFollows": "Önerilen Takipler",
   "continueButton": "Devam Et",
-  
   "noEventsToRebroadcast": "Yeniden yayınlanacak etkinlik yok",
   "errorRebroadcastingEvents": "Etkinlikleri yeniden yayınlama hatası",
   "delete": "Sil",
@@ -78,22 +71,17 @@
   "rebroadcasting": "Yeniden yayınlanıyor...",
   "rebroadcast": "Yeniden Yayınla",
   "deleteAccount": "Hesabı Sil",
-  
   "editProfile": "Profili Düzenle",
   "banner": "Banner",
   "profileImage": "Profil resmi",
   "username": "Kullanıcı adı",
   "pleaseEnterValidWebsiteUrl": "Lütfen geçerli bir web sitesi URL'si girin",
-  
   "setUpProfile": "Profil Oluştur",
-  
   "thread": "Konu",
   "noRepliesFound": "Yanıt bulunamadı",
   "loadMore": "Daha fazla yükle",
   "failedToLoadThread": "Konu yüklenemedi",
-  
   "closeDialog": "Diyalogu kapat",
-  
   "pleaseSetUpProfileFirst": "Lütfen önce profilinizi oluşturun",
   "noRelayListFoundInProfile": "Profilinizde röle listesi bulunamadı",
   "relaysSavedSuccessfully": "Röleler başarıyla kaydedildi",
@@ -106,22 +94,16 @@
   "relaysResetToDefaults": "Röleler varsayılanlara sıfırlandı",
   "relayAddedFromFollowingList": "Röle takip listesinden eklendi",
   "relayAlreadyExistsInList": "Röle listenizde zaten mevcut",
-  
   "untitledArticle": "Başlıksız Makale",
   "article": "Makale",
-  
   "eventNotFound": "Etkinlik bulunamadı",
   "articleNotFound": "Makale bulunamadı",
-  
   "copy": "Kopyala",
   "copiedToClipboard": "Panoya kopyalandı",
-  
   "couldNotLoadHashtagFeed": "Hashtag akışı yüklenemedi",
   "errorOpeningHashtag": "Hashtag açma hatası",
-  
   "videoSavedToGallery": "Video galeriye kaydedildi",
   "failedToSaveVideoToGallery": "Video galeriye kaydedilemedi",
-  
   "undoRepost": "Yeniden paylaşmayı geri al",
   "repostAgain": "Tekrar paylaş",
   "quote": "Alıntı",
@@ -131,50 +113,35 @@
   "verificationFailed": "Doğrulama başarısız",
   "verifySignature": "İmzayı doğrula",
   "interactions": "Etkileşimler",
-  
   "errorLoadingNotes": "Notlar yüklenirken hata",
-  
   "repostedBy": "Yeniden paylaşan: ",
   "anonymous": "Anonim",
-  
   "profile": "Profil",
-  
   "pleaseConnectWalletFirst": "Lütfen önce cüzdanınızı bağlayın",
   "user": "Kullanıcı",
   "errorLoadingUserProfile": "Kullanıcı profili yüklenirken hata",
   "send": "Gönder",
   "enterValidAmount": "Geçerli bir miktar girin",
-  
   "relaysFromYourFollows": "Takip ettiklerinizden röleler",
   "noRelaysFoundFromFollowingUsers": "Takip edilen kullanıcılardan röle bulunamadı",
-  
   "editProfileButton": "Profili düzenle",
   "mutedButton": "Sessize alındı",
   "followButton": "Takip Et",
   "followingYou": "Sizi takip ediyor",
-  
   "imageSavedToGallery": "Resim galeriye kaydedildi",
   "failedToSaveImageToGallery": "Resim galeriye kaydedilemedi",
-  
   "unfollow": "Takibi Bırak",
-  
   "pleaseEnterInvoice": "Lütfen bir fatura girin",
   "payInvoice": "Faturayı Öde",
-  
   "resetToDefaults": "Varsayılanlara Sıfırla",
-  
   "mute": "Sessize Al",
-  
   "goBack": "Geri dön",
   "goBackToPreviousScreen": "Önceki ekrana geri dön",
-  
   "share": "Paylaş",
-  
   "untitled": "Başlıksız",
   "noArticlesFound": "Makale bulunamadı",
   "noRelaysFound": "Röle bulunamadı",
   "refresh": "Yenile",
-  
   "displayTitle": "Görünüm",
   "displaySubtitle": "Görüntüleme deneyiminizi özelleştirin.",
   "expandedNotes": "Genişletilmiş Notlar",
@@ -187,7 +154,6 @@
   "notifications": "Bildirimler",
   "navigationBarOrder": "Gezinme Çubuğu Sırası",
   "pressAndHoldToDrag": "Sürüklemek ve yeniden sıralamak için basılı tutun",
-  
   "loading": "Yükleniyor...",
   "notFound": "Bulunamadı",
   "errorLoadingKeys": "Anahtarlar yüklenirken hata",
@@ -203,7 +169,6 @@
   "keysTitle": "Anahtarlar",
   "keysSubtitle": "Nostr kimlik anahtarlarınızı yönetin.",
   "copiedToClipboardWithType": "{type} panoya kopyalandı!",
-  
   "paymentsTitle": "Ödemeler",
   "paymentsSubtitle": "Ödeme tercihlerinizi yönetin.",
   "oneTapZap": "Tek Dokunuşta Zap",
@@ -212,7 +177,6 @@
   "amountSats": "Miktar (sats)",
   "amountSavedSuccessfully": "Miktar başarıyla kaydedildi",
   "pleaseEnterValidAmount": "Lütfen geçerli bir miktar girin",
-  
   "mutedTitle": "Sessize Alınmış",
   "mutedSubtitle": "Sessize alınan kullanıcıların ve kelimelerin bulunduğu olaylar akışlarınızdan gizlenir. Sessiz listeniz şifrelenmiştir ve yalnızca siz görebilirsiniz.",
   "mutedWordsTitle": "Kelimeler",
@@ -223,7 +187,6 @@
   "youHaventMutedAnyUsersYet": "Henüz hiçbir kullanıcıyı sessize almadınız.",
   "mutedUsersCount": "{count} sessize alınmış {count, plural, =1{kullanıcı} other{kullanıcı}}",
   "unmute": "Sesi Aç",
-  
   "addRelay": "Röle Ekle",
   "areYouSureLogout": "Çıkış yapmak istediğinizden emin misiniz?",
   "seedPhraseWarning": "KURTARMA KELİMELERİNİZİ KAYDETMEDİYSENİZ, HESABINIZI SONSUZA KADAR KAYBEDECEKSİNİZ.",
@@ -243,7 +206,6 @@
   "errorPrefix": "Hata: {message}",
   "followers": "takipçi",
   "followingCount": "takip",
-  
   "saveYourSeedPhrase": "Kurtarma Kelimelerinizi Kaydedin",
   "thisIsYourOnlyChance": "Kurtarma kelimelerinizi kaydetmek için tek şansınız bu. Yazın ve güvenli bir yerde saklayın.",
   "iHaveSavedMySeedPhrase": "Kurtarma kelimelerimi kaydettim",
@@ -259,20 +221,16 @@
   "website": "Web Sitesi",
   "nip05": "NIP-05",
   "zapAddress": "Zap Adresi",
-  
   "searchUsers": "Kullanıcı ara...",
   "search": "Ara",
   "searching": "Aranıyor...",
-  
   "newMessage": "Yeni Mesaj",
   "typeAMessage": "Bir mesaj yazın...",
   "sendMessage": "Mesaj gönder",
   "messagePlaceholder": "Mesaj...",
-  
   "directMessages": "Direkt Mesajlar",
   "noConversationsYet": "Henüz konuşma yok",
   "startNewConversation": "Yeni konuşma başlat",
-  
   "media": "Medya",
   "photos": "Fotoğraflar",
   "videos": "Videolar",
@@ -280,62 +238,52 @@
   "replies": "Yanıtlar",
   "reply": "Yanıtla",
   "replyingTo": "Yanıtlanıyor",
-  
   "zap": "Zap",
   "zapUser": "{user} zap gönder",
   "amount": "Miktar",
   "message": "Mesaj",
   "optional": "İsteğe bağlı",
   "zapNote": "Zap Notu",
-  
   "invoice": "Fatura",
   "pasteInvoice": "Fatura yapıştır",
   "paying": "Ödeniyor...",
   "paymentSuccess": "Ödeme başarılı!",
   "paymentFailed": "Ödeme başarısız",
-  
   "receive": "Al",
   "yourLightningAddress": "Lightning Adresiniz",
   "scanQRCode": "QR Kodu Tara",
-  
   "relayStatus": "Röle Durumu",
   "connected": "Bağlı",
   "disconnected": "Bağlantı Kesildi",
   "connecting": "Bağlanıyor...",
   "addRelayUrl": "Röle URL'si ekle",
   "removeRelay": "Röleyi kaldır",
-  
   "eventType": "Etkinlik Türü",
   "createdAt": "Oluşturulma",
   "relayCount": "Röle sayısı",
   "deleteSelected": "Seçilenleri sil",
   "selectAll": "Tümünü seç",
   "deselectAll": "Tüm seçimi kaldır",
-  
   "statistics": "İstatistikler",
   "reposts": "Yeniden Paylaşımlar",
   "reactions": "Tepkiler",
   "zaps": "Zap'ler",
   "views": "Görüntüleme",
-  
   "filters": "Filtreler",
   "filterBy": "Filtrele",
   "sortBy": "Sırala",
   "newest": "En Yeni",
   "oldest": "En Eski",
   "mostPopular": "En Popüler",
-  
   "copied": "Kopyalandı!",
   "failed": "Başarısız",
   "success": "Başarılı!",
   "error": "Hata",
   "tryAgain": "Tekrar dene",
   "ok": "Tamam",
-  
   "deleteMessage": "Mesaj silinsin mi?",
   "deleteConversation": "Konuşma silinsin mi?",
   "areYouSureDelete": "Bunu silmek istediğinizden emin misiniz?",
-  
   "block": "Engelle",
   "unblock": "Engeli Kaldır",
   "report": "Bildir",
@@ -357,13 +305,18 @@
   "reportSubmitted": "Bildirim gönderildi",
   "reportFailed": "Bildirim gönderilemedi",
   "selectReportReason": "Bir neden seçin",
-  
   "today": "Bugün",
   "justNow": "Şimdi",
   "minutesAgo": "{count} dk önce",
   "hoursAgo": "{count} sa önce",
-  "daysAgo": "{count} gün önce",
-  
+  "daysAgo": "{days} gün önce",
+  "@daysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
   "backupYourAccount": "Hesabınızı Yedekleyin",
   "secureYourAccount": "Hesabınızı kurtarma kelimelerinizle güvence altına alın.",
   "important": "Önemli",
@@ -373,34 +326,23 @@
   "ifYouLoseIt": "Kaybederseniz, hesabınıza sonsuza kadar erişimi kaybedersiniz",
   "accessFromSettings": "Buna daha sonra Ayarlar > Anahtarlar'dan erişebilirsiniz",
   "iHaveWrittenDownSeedPhrase": "Kurtarma kelimelerimi yazdım",
-  
   "noNotesFromThisUser": "Bu kullanıcıdan henüz not yok",
   "fileTooLarge": "Dosya çok büyük (maks 50MB)",
   "encryptionFailed": "Şifreleme başarısız",
   "errorWithMessage": "Hata: {message}",
-  
   "read": "Oku",
   "write": "Yaz",
   "exploreRelays": "Röleleri Keşfet",
   "reset": "Sıfırla",
   "mention": "Bahset",
-  "removeThisMediaFile": "Bu medya dosyasını kaldır",
-  
   "searchByNameOrNpub": "İsim veya npub ile ara...",
   "searchDotDotDot": "Ara...",
   "searchingForUsers": "Kullanıcılar aranıyor...",
   "searchingDotDotDot": "Aranıyor...",
-  
   "uploadingDotDotDot": "Yükleniyor...",
   "postExclamation": "Paylaş!",
   "whatsOnYourMind": "Aklında ne var?",
-  "uploadingMediaFiles": "Medya dosyaları yükleniyor",
   "postingYourNotePleaseWait": "Notunuz paylaşılıyor, lütfen bekleyin",
-  
-  "undoRepost": "Yeniden paylaşımı geri al",
-  "repostAgain": "Tekrar paylaş",
-  
-  "notifications": "Bildirimler",
   "failedToLoadNotifications": "Bildirimler yüklenemedi",
   "noNotificationsYet": "Henüz bildirim yok",
   "whenSomeoneInteractsWithYourPosts": "Birileri gönderilerinizle etkileşime girdiğinde,\nburada göreceksiniz",
@@ -414,56 +356,70 @@
   "andCountOthers": "ve {count} kişi daha",
   "@andCountOthers": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "now": "şimdi",
-
   "notificationSummaryPrefix": "Bugün ",
   "notificationSummaryAnd": " ve ",
   "notificationReactionCount": "{count} tepki",
   "@notificationReactionCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationRepostCount": "{count} paylaşım",
   "@notificationRepostCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationReplyCount": "{count} yanıt",
   "@notificationReplyCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationMentionCount": "{count} bahsetme",
   "@notificationMentionCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationQuoteCount": "{count} alıntı",
   "@notificationQuoteCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationZapCount": "{count} zap",
   "@notificationZapCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationZapSatsCount": "{count} sat",
   "@notificationZapSatsCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
-  
   "errorLoadingRelays": "Röle yükleme hatası",
   "privateKeyNotFound": "Özel anahtar bulunamadı. Lütfen önce profilinizi ayarlayın",
   "pleaseSetUpYourProfileFirst": "Lütfen önce profilinizi ayarlayın",
@@ -475,33 +431,33 @@
   "gossipModelEnabledRestartApp": "Gossip modeli etkinleştirildi. Uygulamayı yeniden başlatın.",
   "gossipModelDisabledRestartApp": "Gossip modeli devre dışı bırakıldı. Uygulamayı yeniden başlatın.",
   "errorTogglingGossipModel": "Gossip modeli değiştirme hatası",
-  "relaysSavedSuccessfully": "Röleler başarıyla kaydedildi",
   "errorSavingRelays": "Röle kaydetme hatası",
-  "pleaseEnterRelayUrl": "Lütfen bir röle URL'si girin",
   "invalidRelayUrl": "Geçersiz röle URL'si. ws:// veya wss:// ile başlamalı",
   "relayAlreadyExistsInCategory": "Röle bu kategoride zaten mevcut",
-  "relayAddedToMainList": "Röle Ana listeye eklendi",
   "errorAddingRelay": "Röle ekleme hatası",
   "fetchingYourEvents": "Etkinlikleriniz alınıyor...",
-  "noEventsFoundToBroadcast": "Yayınlanacak etkinlik bulunamadı",
   "broadcastingEvents": "{count} etkinlik {relayCount} röleye yayınlanıyor...",
   "@broadcastingEvents": {
     "placeholders": {
-      "count": {"type": "int"},
-      "relayCount": {"type": "int"}
+      "count": {
+        "type": "int"
+      },
+      "relayCount": {
+        "type": "int"
+      }
     }
   },
   "eventsSuccessfullyBroadcast": "{count} etkinlik {relayCount} röleye başarıyla yayınlandı",
   "@eventsSuccessfullyBroadcast": {
     "placeholders": {
-      "count": {"type": "int"},
-      "relayCount": {"type": "int"}
+      "count": {
+        "type": "int"
+      },
+      "relayCount": {
+        "type": "int"
+      }
     }
   },
-  "errorBroadcastingEvents": "Etkinlik yayınlama hatası",
-  "relayRemovedSuccessfully": "Röle başarıyla kaldırıldı",
-  "relaysResetToDefaults": "Röleler varsayılanlara sıfırlandı",
-  "relayAddedFromFollowingList": "Röle takip listesinden eklendi",
   "relayAlreadyExistsInYourList": "Röle listenizde zaten mevcut",
   "fetchingRelayInformation": "Röle bilgisi alınıyor...",
   "paymentRequired": "Ödeme gerekli",
@@ -522,11 +478,12 @@
   "eventCount": "{count} etkinlik",
   "@eventCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "broadcasted": "yayınlandı",
-  
   "gossipMode": "Gossip Modu",
   "gossipModeDescription": "Takip ettiğiniz kişiler tarafından kullanılan röleleri otomatik olarak keşfedin ve bağlanın. Kapalı olduğunda, yalnızca yukarıdaki kendi röleleriniz okuma ve yazma için kullanılır.",
   "fetching": "Alınıyor...",
@@ -543,26 +500,12 @@
   "unknown": "bilinmiyor",
   "paid": "Ücretli",
   "auth": "Kimlik Doğ.",
-  
-  "relays": "Röleler",
   "manageYourRelayConnections": "Röle bağlantılarınızı yönetin ve röle listenizi yayınlayın.",
-  
-  "goBackToPreviousScreen": "Önceki ekrana dön",
   "noInteractionsYet": "Henüz etkileşim yok.",
-  
   "messages": "Mesajlar",
-  "noMessagesYet": "Henüz mesaj yok",
-  "typeAMessage": "Bir mesaj yazın...",
-  
-  "yourDataOnRelays": "Rölelerdeki Verileriniz",
   "yourDataOnRelaysDescription": "Nostr'da paylaştığınız her şey bir olaydır. Olay sayılarınızı türlerine göre görüntüleyin ve rölelere yeniden yayınlayın.",
-  "rebroadcasting": "Yeniden yayınlanıyor...",
-  "rebroadcast": "Yeniden Yayınla",
-  
-  "noConversationsYet": "Henüz görüşme yok",
   "startConversationBy": "Birine mesaj göndererek görüşme başlatın",
   "errorLoadingConversations": "Görüşmeler yüklenirken hata",
-  "newMessage": "Yeni mesaj",
   "errorLoadingMessages": "Mesajlar yüklenirken hata: {message}",
   "@errorLoadingMessages": {
     "placeholders": {
@@ -571,11 +514,7 @@
       }
     }
   },
-  "failedToDecryptMedia": "Medya şifresi çözülemedi",
-  "legacyUnencryptedMedia": "Şifrelenmemiş eski medya",
   "notEncrypted": "Şifrelenmemiş",
-  "decryptionError": "Şifre Çözme Hatası",
-  "unknownError": "Bilinmeyen hata",
   "videoTapToPlay": "Video (oynatmak için dokun)",
   "fileType": "Dosya: {type}",
   "@fileType": {
@@ -585,28 +524,9 @@
       }
     }
   },
-  "decryptionFailed": "Şifre çözme başarısız",
-  
-  "searchingForUsers": "Kullanıcılar aranıyor...",
-  "searchError": "Arama Hatası",
   "retry": "Tekrar Dene",
   "noUsersFound": "Kullanıcı bulunamadı",
   "trySearchingDifferentTerm": "Farklı bir terim ile arama yapın.",
-  "closeDialog": "Diyalogu kapat",
-  "searchByNameOrNpub": "İsim veya npub ile ara...",
-  "following": "Takip Ediliyor",
-  "follow": "Takip Et",
-  
-  "yesterday": "Dün",
-  "daysAgo": "{days} gün önce",
-  "@daysAgo": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-
   "databaseCache": "Veritabanı Önbelleği",
   "databaseCacheSubtitle": "Yerel depolamayı yönetin ve eski olayları temizleyin.",
   "databaseOverview": "Veritabanı Genel Bakış",
@@ -616,9 +536,6 @@
   "textNotes": "Metin Notları",
   "profiles": "Profiller",
   "contactLists": "İletişim Listeleri",
-  "reactions": "Tepkiler",
-  "reposts": "Yeniden Paylaşımlar",
-  "zaps": "Zap'ler",
   "articles": "Makaleler",
   "cleanupInfo": "Temizleme Bilgisi",
   "cleanupInfoDescription": "Veritabanı 1 GB'ı aştığında eski olayları otomatik temizler.",
@@ -633,7 +550,6 @@
   "cleanup": "Temizle",
   "addAccount": "Hesap ekle",
   "switchAccount": "Hesap değiştir",
-
   "connectYourWallet": "Cüzdanınızı Bağlayın",
   "connectWalletDescription": "Coinos'u kullanmaya başlamak için\nNostr kimliğinizle giriş yapın",
   "connectWallet": "Cüzdanı Bağla",
@@ -651,11 +567,9 @@
       }
     }
   },
-
   "iAcceptThe": "Kabul ediyorum: ",
   "termsOfUse": "kullanım koşulları",
   "acceptanceOfTermsIsRequired": "Kullanım koşullarını kabul etmeniz gerekmektedir",
-
   "profileSetupSubtitle": "Başkalarının sizi keşfetmesine yardımcı olacak temel bilgileri ekleyin.",
   "uploadFailed": "Yükleme başarısız: {message}",
   "@uploadFailed": {
@@ -674,7 +588,6 @@
   "websiteOptional": "Web sitesi (isteğe bağlı)",
   "locationOptional": "Konum (isteğe bağlı)",
   "locationTooLong": "Konum en fazla 100 karakter olmalıdır",
-
   "newNotesAvailable": "{count, plural, =1{1 yeni not} other{{count} yeni not}}",
   "@newNotesAvailable": {
     "placeholders": {
@@ -683,13 +596,11 @@
       }
     }
   },
-
   "readsSubtitle": "Takip ettiğiniz kişilerin uzun içerikleri.",
   "loadingArticles": "Makaleler yükleniyor...",
   "somethingWentWrong": "Bir şeyler ters gitti",
   "noArticlesYet": "Henüz makale yok",
   "longFormContentDescription": "Takip ettiğiniz kişilerin uzun içerikleri burada görünecek.",
-
   "bookmarks": "Yer İmleri",
   "bookmarksTitle": "Yer İmleri",
   "bookmarksSubtitle": "Yer imleriniz şifrelenmiştir ve yalnızca siz görebilirsiniz.",
@@ -700,7 +611,6 @@
   "addBookmark": "Yer İmle",
   "bookmarkAdded": "Yer imine eklendi",
   "bookmarkRemoved": "Yer iminden kaldırıldı",
-
   "listsTitle": "Listeler",
   "listsSubtitle": "Takip ettiğiniz kişileri kategorilere ayırarak düzenleyin.",
   "noLists": "Liste yok",
@@ -758,7 +668,6 @@
   "signupFeatureBackup": "Hesabınızı güvenle yedeklemek için kurtarma kelimeleri alacaksınız",
   "signupFeatureProfile": "Profilinizi ayarlayın ve başkalarıyla bağlantı kurmaya başlayın",
   "signupCreating": "Hesabınız oluşturuluyor...",
-
   "followedByCount": "Takip ettiklerinden {count} kişi takip ediyor",
   "@followedByCount": {
     "placeholders": {
@@ -767,13 +676,11 @@
       }
     }
   },
-
   "pinNote": "Notu sabitle",
   "unpinNote": "Sabitlemeyi kaldır",
   "notePinned": "Not profile sabitlendi",
   "noteUnpinned": "Not sabitlemeden kaldırıldı",
   "pinnedNotes": "Sabitlenmiş",
-
   "processingPayment": "Ödeme işleniyor...",
   "zappedSatsToUser": "{user} kullanıcısına {sats} sat gönderildi!",
   "@zappedSatsToUser": {
@@ -789,7 +696,6 @@
   "failedToZap": "Zap gönderilemedi",
   "userNoLightningAddress": "Kullanıcının yapılandırılmış bir lightning adresi yok.",
   "commentOptional": "Yorum (İsteğe bağlı)",
-
   "nwcSectionTitle": "WALLET CONNECT",
   "nwcTitle": "Nostr Wallet Connect",
   "nwcDescription": "NWC protokolü ile harici cüzdan bağlayın. Bunu açmak yerleşik cüzdanı devre dışı bırakır.",
@@ -803,13 +709,9 @@
   "nwcPleaseEnterConnectionString": "Lütfen bir bağlantı dizesi girin",
   "nwcDisclaimer": "NWC, üçüncü taraf bir cüzdan sağlayıcısına bağlanır. Fonlarınızı tutmaz, kontrol etmez veya erişim sağlamayız. Tüm sorumluluk cüzdan sağlayıcınıza aittir.",
   "nwcAccept": "Anladım ve kabul ediyorum",
-
   "dmTabFollowing": "Takip edilenler",
   "dmTabOther": "Diğer",
-
   "dmEncryptionNotice": "Mesajlarınız uçtan uca şifrelidir. Kimle konuştuğunuzu veya ne yazdığınızı kimse göremez.",
-
-  "noEventsToRebroadcast": "Yeniden yayınlanacak etkinlik yok",
   "broadcastedEvents": "{sent} etkinlik yayınlandı",
   "broadcastedEventsWithFailed": "{sent} etkinlik yayınlandı, {failed} başarısız",
   "errorRebroadcastingEventsDetail": "Etkinlikler yeniden yayınlanırken hata oluştu: {error}",
@@ -819,9 +721,6 @@
   "exportFailed": "Dışa aktarma başarısız: {error}",
   "deleteAccountTitle": "Hesap Silinsin mi?",
   "deleteAccountConfirmation": "Bu işlem tüm etkinlikleriniz için silme istekleri gönderecek ve tüm rölelerin verilerinizi silmesini talep edecek. Bu işlem geri alınamaz.",
-  "cancel": "İptal",
-  "delete": "Sil",
-  "noEventsFoundToDelete": "Silinecek etkinlik bulunamadı",
   "noValidEventIds": "Geçerli etkinlik kimliği bulunamadı",
   "deletionRequestSent": "{count} etkinlik için {relays} röleye silme isteği gönderildi",
   "deletionRequestSentPlural": "{count} etkinlik için {relays} röleye silme isteği gönderildi",
@@ -856,6 +755,8 @@
   "lightningAddressOrInvoice": "Lightning adresi veya fatura",
   "resolvingAddress": "Adres çözümleniyor…",
   "resolveAddressFailed": "Lightning adresi çözümlenemedi",
-
-  "dmYouPrefix": "Sen: "
+  "dmYouPrefix": "Sen: ",
+  "quotes": "Alıntılar",
+  "noQuotesFound": "Alıntı bulunamadı",
+  "quotePlural": "alıntılar"
 }

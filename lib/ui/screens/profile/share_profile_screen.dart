@@ -6,7 +6,7 @@ import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/qr_scanner_widget.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../l10n/app_localizations.dart';
 
 class ShareProfileScreen extends StatefulWidget {
@@ -59,13 +59,13 @@ class _ShareProfileScreenState extends State<ShareProfileScreen> {
     if (raw.startsWith('npub1')) {
       npub = raw;
       try {
-        pubkeyHex = decodeBasicBech32(raw, 'npub');
+        pubkeyHex = AuthService.instance.npubToHex(raw) ?? '';
       } catch (_) {
         return;
       }
     } else if (raw.startsWith('nprofile1')) {
       try {
-        final decoded = decodeTlvBech32Full(raw);
+        final decoded = AuthService.instance.decodeTlvBech32(raw) ?? {};
         pubkeyHex = decoded['pubkey'] as String? ?? '';
       } catch (_) {
         return;
@@ -87,7 +87,7 @@ class _ShareProfileScreenState extends State<ShareProfileScreen> {
             : '';
 
     final profileRoute =
-        '$basePath/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(pubkeyHex)}';
+        '$basePath/profile?npub=${Uri.encodeComponent(npub)}&pubkey=${Uri.encodeComponent(pubkeyHex)}';
 
     Navigator.of(context).pop();
     router.push(profileRoute);

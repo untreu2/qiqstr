@@ -5,7 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../data/services/encrypted_media_service.dart';
 import '../../../data/sync/sync_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -40,7 +40,7 @@ class _DmChatPageState extends State<DmChatPage> {
   bool _isUploadingMedia = false;
   DmBloc? _dmBloc;
   final ScrollController _scrollController = ScrollController();
-  
+
   final List<Map<String, dynamic>> _attachedEncryptedMedia = [];
   final Map<String, Future<Widget>> _mediaCache = {};
 
@@ -97,7 +97,8 @@ class _DmChatPageState extends State<DmChatPage> {
       });
 
       final encryptedMediaService = EncryptedMediaService.instance;
-      final encryptResult = await encryptedMediaService.encryptMediaFile(file.path!);
+      final encryptResult =
+          await encryptedMediaService.encryptMediaFile(file.path!);
 
       if (!mounted) return;
 
@@ -107,7 +108,9 @@ class _DmChatPageState extends State<DmChatPage> {
         });
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${l10n.encryptionFailed}: ${encryptResult.error}')),
+          SnackBar(
+              content:
+                  Text('${l10n.encryptionFailed}: ${encryptResult.error}')),
         );
         return;
       }
@@ -115,11 +118,13 @@ class _DmChatPageState extends State<DmChatPage> {
       final encryptedMetadata = encryptResult.data!;
 
       final syncService = AppDI.get<SyncService>();
-      final url = await syncService.uploadMedia(encryptedMetadata.encryptedFilePath);
+      final url =
+          await syncService.uploadMedia(encryptedMetadata.encryptedFilePath);
 
       if (!mounted) return;
 
-      await encryptedMediaService.cleanupEncryptedFile(encryptedMetadata.encryptedFilePath);
+      await encryptedMediaService
+          .cleanupEncryptedFile(encryptedMetadata.encryptedFilePath);
 
       if (url != null && url.isNotEmpty) {
         setState(() {
@@ -218,8 +223,8 @@ class _DmChatPageState extends State<DmChatPage> {
           if (previous.runtimeType != current.runtimeType) return true;
           if (current is DmChatLoaded && previous is DmChatLoaded) {
             return current.pubkeyHex != previous.pubkeyHex ||
-                   current.messages.length != previous.messages.length ||
-                   current.messages != previous.messages;
+                current.messages.length != previous.messages.length ||
+                current.messages != previous.messages;
           }
           return true;
         },
@@ -246,9 +251,9 @@ class _DmChatPageState extends State<DmChatPage> {
         if (mounted && profile != null) {
           setState(() {
             _userCache[otherUserPubkeyHex] = {
-              'pubkeyHex': profile.pubkey,
+              'pubkey': profile.pubkey,
               'name': profile.name ?? '',
-              'profileImage': profile.picture ?? '',
+              'picture': profile.picture ?? '',
             };
           });
         }
@@ -275,8 +280,7 @@ class _DmChatPageState extends State<DmChatPage> {
                       builder: (context) {
                         final bottomPadding =
                             MediaQuery.of(context).padding.bottom;
-                        final itemCount =
-                            messages.length + (hasMore ? 1 : 0);
+                        final itemCount = messages.length + (hasMore ? 1 : 0);
                         return ListView.builder(
                           controller: _scrollController,
                           padding: EdgeInsets.only(
@@ -305,7 +309,7 @@ class _DmChatPageState extends State<DmChatPage> {
                             }
                             final message =
                                 messages[messages.length - 1 - index];
-                            final messageId = message['id'] as String? ?? 
+                            final messageId = message['id'] as String? ??
                                 '${message['createdAt']?.toString() ?? ''}_$index';
                             return KeyedSubtree(
                               key: ValueKey(messageId),
@@ -343,18 +347,17 @@ class _DmChatPageState extends State<DmChatPage> {
                     shape: BoxShape.circle,
                     color: context.colors.avatarPlaceholder,
                     image: otherUser != null
-                        ? (otherUser['profileImage'] as String? ?? '')
-                                .isNotEmpty
+                        ? (otherUser['picture'] as String? ?? '').isNotEmpty
                             ? DecorationImage(
                                 image: CachedNetworkImageProvider(
-                                    otherUser['profileImage'] as String),
+                                    otherUser['picture'] as String),
                                 fit: BoxFit.cover,
                               )
                             : null
                         : null,
                   ),
                   child: otherUser == null ||
-                          (otherUser['profileImage'] as String? ?? '').isEmpty
+                          (otherUser['picture'] as String? ?? '').isEmpty
                       ? Icon(
                           CarbonIcons.user,
                           size: 14,
@@ -507,12 +510,15 @@ class _DmChatPageState extends State<DmChatPage> {
     final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
     final encryptedUrl = message['content'] as String? ?? '';
-    final mimeType = message['mimeType'] as String? ?? 'application/octet-stream';
+    final mimeType =
+        message['mimeType'] as String? ?? 'application/octet-stream';
     final encryptionKey = message['encryptionKey'] as String?;
     final encryptionNonce = message['encryptionNonce'] as String?;
     final originalHash = message['originalHash'] as String?;
 
-    if (encryptionKey == null || encryptionNonce == null || originalHash == null) {
+    if (encryptionKey == null ||
+        encryptionNonce == null ||
+        originalHash == null) {
       return _buildLegacyMediaBubble(context, message);
     }
 
@@ -520,7 +526,7 @@ class _DmChatPageState extends State<DmChatPage> {
     final isVideo = mimeType.startsWith('video/');
 
     final cacheKey = '$encryptedUrl-$encryptionKey-$originalHash';
-    
+
     if (!_mediaCache.containsKey(cacheKey)) {
       _mediaCache[cacheKey] = _decryptAndDisplayMedia(
         encryptedUrl: encryptedUrl,
@@ -636,9 +642,9 @@ class _DmChatPageState extends State<DmChatPage> {
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
     final mediaUrl = message['content'] as String? ?? '';
     final mimeType = message['mimeType'] as String? ?? '';
-    
+
     final isImage = mimeType.startsWith('image/') || _isImageUrl(mediaUrl);
-    
+
     return RepaintBoundary(
       child: Align(
         alignment: isFromMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -675,7 +681,8 @@ class _DmChatPageState extends State<DmChatPage> {
                               height: 200,
                               color: colors.overlayLight,
                               child: const Center(
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
                             errorWidget: (_, __, ___) => Container(
@@ -763,7 +770,7 @@ class _DmChatPageState extends State<DmChatPage> {
       final httpClient = HttpClient();
       final request = await httpClient.getUrl(Uri.parse(encryptedUrl));
       final response = await request.close();
-      
+
       final encryptedBytes = await response.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
@@ -1036,7 +1043,7 @@ class _DmChatPageState extends State<DmChatPage> {
           final media = _attachedEncryptedMedia[index];
           final mimeType = media['mimeType'] as String;
           final isImage = mimeType.startsWith('image/');
-          
+
           return Stack(
             children: [
               Container(
@@ -1104,13 +1111,6 @@ class _DmChatPageState extends State<DmChatPage> {
   }
 
   String _hexToNpub(String hex) {
-    try {
-      if (hex.startsWith('npub1')) {
-        return hex;
-      }
-      return encodeBasicBech32(hex, 'npub');
-    } catch (e) {
-      return hex;
-    }
+    return AuthService.instance.hexToNpub(hex) ?? hex;
   }
 }

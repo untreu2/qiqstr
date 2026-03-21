@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
-import '../../../data/services/rust_database_service.dart';
 import '../../../utils/string_optimizer.dart';
 import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../src/rust/api/relay.dart' as rust_relay;
@@ -23,7 +22,6 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
   final FeedRepository _feedRepository;
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
-  final RustDatabaseService _db;
   final String bech32;
 
   StreamSubscription? _profileSubscription;
@@ -33,11 +31,9 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
     required ProfileRepository profileRepository,
     required SyncService syncService,
     required this.bech32,
-    RustDatabaseService? db,
   })  : _feedRepository = feedRepository,
         _profileRepository = profileRepository,
         _syncService = syncService,
-        _db = db ?? RustDatabaseService.instance,
         super(const QuoteWidgetInitial()) {
     on<QuoteWidgetLoadRequested>(_onQuoteWidgetLoadRequested);
     on<_InternalProfileUpdate>(_onInternalProfileUpdate);
@@ -61,22 +57,21 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
 
   void _watchProfile(String pubkey) {
     _profileSubscription?.cancel();
-    _profileSubscription = _db.watchProfile(pubkey).listen((profileData) {
-      if (isClosed || profileData == null) return;
+    _profileSubscription =
+        _profileRepository.watchProfile(pubkey).listen((profile) {
+      if (isClosed || profile == null) return;
 
       final user = {
-        'pubkeyHex': pubkey,
+        'pubkey': pubkey,
         'npub': pubkey,
-        'name': profileData['name'] ?? '',
-        'profileImage': profileData['picture'] ?? '',
-        'picture': profileData['picture'] ?? '',
-        'nip05': profileData['nip05'] ?? '',
+        'name': profile.name ?? '',
+        'picture': profile.picture ?? '',
+        'nip05': profile.nip05 ?? '',
       };
 
       add(_InternalProfileUpdate(user));
     });
   }
-
 
   @override
   Future<void> close() {
@@ -154,10 +149,10 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
           eventId: eventId,
           timeoutSecs: 5,
         );
-        
+
         if (eventJson != null) {
           eventData = jsonDecode(eventJson) as Map<String, dynamic>;
-          await _db.saveEvents([eventData]);
+          await _feedRepository.save([eventData]);
         } else {
           emit(const QuoteWidgetError());
           return;
@@ -201,8 +196,7 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
         var profile = await _profileRepository.getProfile(noteAuthor);
 
         if (profile == null ||
-            (profile.name ?? '').isEmpty &&
-                (profile.picture ?? '').isEmpty) {
+            (profile.name ?? '').isEmpty && (profile.picture ?? '').isEmpty) {
           await _syncService.syncProfile(noteAuthor);
           if (isClosed) return;
           profile = await _profileRepository.getProfile(noteAuthor);
@@ -210,10 +204,9 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
 
         if (profile != null) {
           user = {
-            'pubkeyHex': noteAuthor,
+            'pubkey': noteAuthor,
             'npub': noteAuthor,
             'name': profile.name ?? profile.displayName ?? '',
-            'profileImage': profile.picture ?? '',
             'picture': profile.picture ?? '',
             'nip05': profile.nip05 ?? '',
           };

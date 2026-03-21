@@ -167,7 +167,7 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                               final pubkey = currentSet?.pubkey ?? '';
                               if (pubkey.isNotEmpty) {
                                 context.push(
-                                  '/home/feed/profile?pubkeyHex=${Uri.encodeComponent(pubkey)}',
+                                  '/home/feed/profile?pubkey=${Uri.encodeComponent(pubkey)}',
                                 );
                               }
                             },
@@ -340,9 +340,9 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
           final pubkey = user['pubkey'] as String? ?? '';
           final tileUser = {
             'npub': user['npub'] ?? '',
-            'pubkeyHex': pubkey,
+            'pubkey': pubkey,
             'name': user['name'] ?? '',
-            'profileImage': user['picture'] ?? '',
+            'picture': user['picture'] ?? '',
             'nip05': '',
             'nip05Verified': false,
           };

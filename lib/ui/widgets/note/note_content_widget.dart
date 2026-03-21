@@ -1,7 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
 import '../../../domain/entities/article.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
@@ -115,9 +114,9 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     try {
       String? hexId;
       if (bech32.startsWith('note1')) {
-        hexId = decodeBasicBech32(bech32, 'note');
+        hexId = AuthService.instance.decodeNoteId(bech32);
       } else if (bech32.startsWith('nevent1')) {
-        final result = decodeTlvBech32Full(bech32);
+        final result = AuthService.instance.decodeTlvBech32(bech32) ?? {};
         hexId = result['id'] as String?;
       }
       if (hexId != null && embedded.containsKey(hexId)) {
@@ -132,7 +131,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     if (embedded == null) return null;
     try {
       final clean = naddr.startsWith('nostr:') ? naddr.substring(6) : naddr;
-      final result = decodeTlvBech32Full(clean);
+      final result = AuthService.instance.decodeTlvBech32(clean) ?? {};
       final pubkey = result['pubkey'] as String?;
       final identifier = result['identifier'] as String?;
       if (pubkey != null && identifier != null) {
@@ -212,7 +211,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
     final mentionUsersHash = mentionUsers.entries
         .map((e) => Object.hash(e.key, e.value['name'] as String? ?? '',
-            e.value['profileImage'] as String? ?? ''))
+            e.value['picture'] as String? ?? ''))
         .fold(0, (prev, hash) => Object.hash(prev, hash));
 
     final currentHash = Object.hash(
@@ -323,9 +322,9 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         String? actualPubkey;
         try {
           if (id.startsWith('npub1')) {
-            actualPubkey = decodeBasicBech32(id, 'npub');
+            actualPubkey = AuthService.instance.npubToHex(id);
           } else if (id.startsWith('nprofile1')) {
-            final result = decodeTlvBech32Full(id);
+            final result = AuthService.instance.decodeTlvBech32(id) ?? {};
             actualPubkey = result['pubkey'] as String?;
           }
         } catch (e) {
@@ -346,7 +345,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             if (name.isNotEmpty) {
               return name;
             }
-            final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+            final pubkeyHex = user['pubkey'] as String? ?? '';
             return pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
           }();
           displayText = userName.length > 25
@@ -363,7 +362,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             try {
               final npubForNavigation = pubkey.startsWith('npub1')
                   ? pubkey
-                  : encodeBasicBech32(pubkey, 'npub');
+                  : AuthService.instance.hexToNpub(pubkey) ?? pubkey;
               widget.onNavigateToMentionProfile?.call(npubForNavigation);
             } catch (_) {}
           };

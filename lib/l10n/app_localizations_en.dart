@@ -712,7 +712,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searching => 'Searching...';
 
   @override
-  String get newMessage => 'New message';
+  String get newMessage => 'New Message';
 
   @override
   String get typeAMessage => 'Type a message...';
@@ -2021,4 +2021,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dmYouPrefix => 'You: ';
+
+  @override
+  String get quotes => 'Quotes';
+
+  @override
+  String get noQuotesFound => 'No quotes found';
+
+  @override
+  String get quotePlural => 'quotes';
 }

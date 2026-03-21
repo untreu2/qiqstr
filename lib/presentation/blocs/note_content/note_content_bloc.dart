@@ -39,12 +39,10 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
 
   static Map<String, dynamic> _createPlaceholderUser(String pubkey) {
     return {
-      'pubkeyHex': pubkey,
       'pubkey': pubkey,
       'npub': pubkey,
       'name': pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey,
       'about': '',
-      'profileImage': '',
       'picture': '',
       'banner': '',
       'website': '',
@@ -128,12 +126,10 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
 
   Map<String, dynamic> _profileToMap(String pubkey, dynamic profile) {
     return {
-      'pubkeyHex': pubkey,
       'pubkey': pubkey,
       'npub': _authService.hexToNpub(pubkey) ?? pubkey,
       'name': profile.name ?? profile.displayName ?? '',
       'about': profile.about ?? '',
-      'profileImage': profile.picture ?? '',
       'picture': profile.picture ?? '',
       'banner': profile.banner ?? '',
       'website': profile.website ?? '',

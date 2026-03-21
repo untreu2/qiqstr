@@ -182,10 +182,8 @@ class FeedNote {
     return {
       'id': id,
       'pubkey': pubkey,
-      'author': pubkey,
       'content': content,
       'created_at': createdAt,
-      'timestamp': createdAtDateTime,
       'tags': tags,
       'isRepost': isRepost,
       'repostEventId': repostEventId,

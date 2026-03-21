@@ -15,6 +15,7 @@ import '../../ui/screens/profile/edit_profile.dart';
 import '../../ui/screens/note/feed_page.dart';
 import '../../ui/screens/note/thread_page.dart';
 import '../../ui/screens/note/note_statistics_page.dart';
+import '../../ui/screens/note/quotes_page.dart';
 import '../../ui/screens/settings/settings_page.dart';
 import '../../ui/screens/settings/keys_page.dart';
 import '../../ui/screens/settings/relay_page.dart';
@@ -122,7 +123,7 @@ class AppRouter {
                     builder: (context, state) {
                       final npubParam = state.uri.queryParameters['npub'] ?? '';
                       final pubkeyHexParam =
-                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                          state.uri.queryParameters['pubkey'] ?? '';
                       String pubkeyHex;
                       if (pubkeyHexParam.isNotEmpty) {
                         pubkeyHex = pubkeyHexParam;
@@ -163,6 +164,14 @@ class AppRouter {
                     },
                   ),
                   GoRoute(
+                    path: 'quotes',
+                    name: 'feed-quotes',
+                    builder: (context, state) {
+                      final noteId = state.uri.queryParameters['noteId'] ?? '';
+                      return QuotesPage(noteId: noteId);
+                    },
+                  ),
+                  GoRoute(
                     path: 'note-statistics',
                     name: 'feed-note-statistics',
                     builder: (context, state) {
@@ -190,13 +199,13 @@ class AppRouter {
                     builder: (context, state) {
                       final npub = state.uri.queryParameters['npub'] ?? '';
                       final pubkeyHexParam =
-                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                          state.uri.queryParameters['pubkey'] ?? '';
                       String pubkeyHex =
                           pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
                       if (pubkeyHex.isEmpty &&
                           state.extra is Map<String, dynamic>) {
                         final extra = state.extra as Map<String, dynamic>;
-                        pubkeyHex = extra['pubkeyHex'] as String? ?? '';
+                        pubkeyHex = extra['pubkey'] as String? ?? '';
                       }
                       if (pubkeyHex.startsWith('npub1')) {
                         try {
@@ -250,7 +259,7 @@ class AppRouter {
                     name: 'dm-tab-chat',
                     builder: (context, state) {
                       final pubkeyHexParam =
-                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                          state.uri.queryParameters['pubkey'] ?? '';
                       String pubkeyHex = pubkeyHexParam;
                       if (pubkeyHex.startsWith('npub1')) {
                         try {
@@ -298,7 +307,7 @@ class AppRouter {
                     builder: (context, state) {
                       final npubParam = state.uri.queryParameters['npub'] ?? '';
                       final pubkeyHexParam =
-                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                          state.uri.queryParameters['pubkey'] ?? '';
                       String pubkeyHex;
                       if (pubkeyHexParam.isNotEmpty) {
                         pubkeyHex = pubkeyHexParam;
@@ -339,6 +348,14 @@ class AppRouter {
                     },
                   ),
                   GoRoute(
+                    path: 'quotes',
+                    name: 'notifications-quotes',
+                    builder: (context, state) {
+                      final noteId = state.uri.queryParameters['noteId'] ?? '';
+                      return QuotesPage(noteId: noteId);
+                    },
+                  ),
+                  GoRoute(
                     path: 'note-statistics',
                     name: 'notifications-note-statistics',
                     builder: (context, state) {
@@ -366,13 +383,13 @@ class AppRouter {
                     builder: (context, state) {
                       final npub = state.uri.queryParameters['npub'] ?? '';
                       final pubkeyHexParam =
-                          state.uri.queryParameters['pubkeyHex'] ?? '';
+                          state.uri.queryParameters['pubkey'] ?? '';
                       String pubkeyHex =
                           pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
                       if (pubkeyHex.isEmpty &&
                           state.extra is Map<String, dynamic>) {
                         final extra = state.extra as Map<String, dynamic>;
-                        pubkeyHex = extra['pubkeyHex'] as String? ?? '';
+                        pubkeyHex = extra['pubkey'] as String? ?? '';
                       }
                       if (pubkeyHex.startsWith('npub1')) {
                         try {
@@ -396,7 +413,7 @@ class AppRouter {
         name: 'profile',
         builder: (context, state) {
           final npubParam = state.uri.queryParameters['npub'] ?? '';
-          final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+          final pubkeyHexParam = state.uri.queryParameters['pubkey'] ?? '';
           String pubkeyHex;
           if (pubkeyHexParam.isNotEmpty) {
             pubkeyHex = pubkeyHexParam;
@@ -436,6 +453,14 @@ class AppRouter {
         },
       ),
       GoRoute(
+        path: '/quotes',
+        name: 'quotes',
+        builder: (context, state) {
+          final noteId = state.uri.queryParameters['noteId'] ?? '';
+          return QuotesPage(noteId: noteId);
+        },
+      ),
+      GoRoute(
         path: '/note-statistics',
         name: 'note-statistics',
         builder: (context, state) {
@@ -462,11 +487,11 @@ class AppRouter {
         name: 'following',
         builder: (context, state) {
           final npub = state.uri.queryParameters['npub'] ?? '';
-          final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+          final pubkeyHexParam = state.uri.queryParameters['pubkey'] ?? '';
           String pubkeyHex = pubkeyHexParam.isNotEmpty ? pubkeyHexParam : npub;
           if (pubkeyHex.isEmpty && state.extra is Map<String, dynamic>) {
             final extra = state.extra as Map<String, dynamic>;
-            pubkeyHex = extra['pubkeyHex'] as String? ?? '';
+            pubkeyHex = extra['pubkey'] as String? ?? '';
           }
           if (pubkeyHex.startsWith('npub1')) {
             try {

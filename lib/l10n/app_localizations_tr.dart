@@ -60,10 +60,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noMessagesYet => 'Henüz mesaj yok';
 
   @override
-  String get failedToDecryptMedia => 'Medya şifresi çözülemedi';
+  String get failedToDecryptMedia => 'Medyanın şifresi çözülemedi';
 
   @override
-  String get legacyUnencryptedMedia => 'Şifrelenmemiş eski medya';
+  String get legacyUnencryptedMedia => 'Eski şifresiz medya';
 
   @override
   String get decryptionError => 'Şifre Çözme Hatası';
@@ -280,7 +280,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noEventsFoundToBroadcast => 'Yayınlanacak etkinlik bulunamadı';
 
   @override
-  String get errorBroadcastingEvents => 'Etkinlik yayınlama hatası';
+  String get errorBroadcastingEvents => 'Etkinlikleri yayınlama hatası';
 
   @override
   String get relayRemovedSuccessfully => 'Röle başarıyla kaldırıldı';
@@ -325,7 +325,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get failedToSaveVideoToGallery => 'Video galeriye kaydedilemedi';
 
   @override
-  String get undoRepost => 'Yeniden paylaşımı geri al';
+  String get undoRepost => 'Yeniden paylaşmayı geri al';
 
   @override
   String get repostAgain => 'Tekrar paylaş';
@@ -425,7 +425,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get goBack => 'Geri dön';
 
   @override
-  String get goBackToPreviousScreen => 'Önceki ekrana dön';
+  String get goBackToPreviousScreen => 'Önceki ekrana geri dön';
 
   @override
   String get share => 'Paylaş';
@@ -719,7 +719,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get searching => 'Aranıyor...';
 
   @override
-  String get newMessage => 'Yeni mesaj';
+  String get newMessage => 'Yeni Mesaj';
 
   @override
   String get typeAMessage => 'Bir mesaj yazın...';
@@ -734,7 +734,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get directMessages => 'Direkt Mesajlar';
 
   @override
-  String get noConversationsYet => 'Henüz görüşme yok';
+  String get noConversationsYet => 'Henüz konuşma yok';
 
   @override
   String get startNewConversation => 'Yeni konuşma başlat';
@@ -1975,4 +1975,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dmYouPrefix => 'Sen: ';
+
+  @override
+  String get quotes => 'Alıntılar';
+
+  @override
+  String get noQuotesFound => 'Alıntı bulunamadı';
+
+  @override
+  String get quotePlural => 'alıntılar';
 }

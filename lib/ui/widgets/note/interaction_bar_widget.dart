@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import '../../../data/services/rust_nostr_bridge.dart';
+import '../../../data/services/auth_service.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/share_note.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
@@ -13,6 +13,7 @@ import '../../../presentation/blocs/interaction/interaction_event.dart';
 import '../../../presentation/blocs/interaction/interaction_state.dart';
 import '../../../data/services/event_verifier.dart';
 import '../../../data/repositories/feed_repository.dart';
+import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../core/di/app_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -64,6 +65,7 @@ class _InteractionBarState extends State<InteractionBar> {
     _interactionBloc = InteractionBloc(
       syncService: AppDI.get<SyncService>(),
       feedRepository: AppDI.get<FeedRepository>(),
+      interactionRepository: AppDI.get<InteractionRepository>(),
       noteId: widget.noteId,
       currentUserHex: widget.currentUserHex,
       note: widget.note,
@@ -158,7 +160,7 @@ class _InteractionBarState extends State<InteractionBar> {
     final noteToQuote = _interactionBloc.getNoteForActions();
     if (noteToQuote == null) return;
     final noteId = noteToQuote['id'] as String? ?? '';
-    final bech32 = encodeBasicBech32(noteId, 'note');
+    final bech32 = AuthService.instance.encodeNoteId(noteId);
     final quoteText = 'nostr:$bech32';
 
     ShareNotePage.show(
@@ -289,7 +291,7 @@ class _InteractionBarState extends State<InteractionBar> {
       if (!mounted) return;
 
       final authorHex =
-          note['pubkey'] as String? ?? note['author'] as String? ?? '';
+          note['pubkey'] as String? ?? '';
       bool profileValid = false;
       if (authorHex.isNotEmpty) {
         profileValid = await verifier.verifyProfile(authorHex);
@@ -494,7 +496,7 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final noteForActions = _interactionBloc.getNoteForActions();
     final noteAuthor = noteForActions?['pubkey'] as String? ??
-        noteForActions?['author'] as String?;
+        noteForActions?['pubkey'] as String?;
     if (noteAuthor == widget.currentUserHex) {
       final isPinned = PinnedNotesService.instance.isPinned(widget.noteId);
       items.add(AppPopupMenuItem(

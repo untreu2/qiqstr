@@ -154,7 +154,7 @@ class SuggestedFollowsPage extends StatelessWidget {
       SuggestedFollowsLoaded state) {
     final userNpub = user['npub'] as String? ?? '';
     final isSelected = state.selectedUsers.contains(userNpub);
-    final profileImage = user['profileImage'] as String? ?? '';
+    final profileImage = user['picture'] as String? ?? '';
     final userName = user['name'] as String? ?? '';
     final nip05 = user['nip05'] as String? ?? '';
     final nip05Verified = user['nip05Verified'] as bool? ?? false;

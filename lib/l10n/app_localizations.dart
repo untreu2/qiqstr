@@ -1447,7 +1447,7 @@ abstract class AppLocalizations {
   /// No description provided for @newMessage.
   ///
   /// In en, this message translates to:
-  /// **'New message'**
+  /// **'New Message'**
   String get newMessage;
 
   /// No description provided for @typeAMessage.
@@ -3657,6 +3657,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You: '**
   String get dmYouPrefix;
+
+  /// No description provided for @quotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Quotes'**
+  String get quotes;
+
+  /// No description provided for @noQuotesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No quotes found'**
+  String get noQuotesFound;
+
+  /// No description provided for @quotePlural.
+  ///
+  /// In en, this message translates to:
+  /// **'quotes'**
+  String get quotePlural;
 }
 
 class _AppLocalizationsDelegate

@@ -8,6 +8,7 @@ import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/article/article_widget.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/interaction_service.dart';
 import '../../../presentation/blocs/profile/profile_bloc.dart';
 import '../../../presentation/blocs/profile/profile_event.dart';
 import '../../../presentation/blocs/profile/profile_state.dart';
@@ -147,7 +148,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           color: colors.avatarPlaceholder,
                           image: () {
                             final profileImage =
-                                currentUser['profileImage'] as String? ?? '';
+                                currentUser['picture'] as String? ?? '';
                             return profileImage.isNotEmpty
                                 ? DecorationImage(
                                     image: CachedNetworkImageProvider(
@@ -159,7 +160,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         child: () {
                           final profileImage =
-                              currentUser['profileImage'] as String? ?? '';
+                              currentUser['picture'] as String? ?? '';
                           return profileImage.isEmpty
                               ? Icon(
                                   Icons.person,
@@ -400,13 +401,13 @@ class _ProfilePageState extends State<ProfilePage> {
       return const SizedBox.shrink();
     }
     final user = state.user;
-    final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+    final pubkeyHex = user['pubkey'] as String? ?? '';
     return ProfileInfoWidget(
       key: ValueKey(pubkeyHex),
       user: user,
       onNavigateToProfile: (npub) {
         context.push(
-            '/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
+            '/profile?npub=${Uri.encodeComponent(npub)}&pubkey=${Uri.encodeComponent(npub)}');
       },
     );
   }
@@ -436,6 +437,8 @@ class _ProfilePageState extends State<ProfilePage> {
           }
         },
         scrollController: _scrollController,
+        onNotesVisible: (ids) =>
+            InteractionService.instance.fetchCountsFromRelays(ids),
       );
     }
 
@@ -466,6 +469,8 @@ class _ProfilePageState extends State<ProfilePage> {
           }
         },
         scrollController: _scrollController,
+        onNotesVisible: (ids) =>
+            InteractionService.instance.fetchCountsFromRelays(ids),
       );
     }
 
@@ -581,6 +586,8 @@ class _ProfilePageState extends State<ProfilePage> {
               .add(const ProfileLoadMoreNotesRequested());
         },
         scrollController: _scrollController,
+        onNotesVisible: (ids) =>
+            InteractionService.instance.fetchCountsFromRelays(ids),
       );
     }
 
@@ -605,6 +612,8 @@ class _ProfilePageState extends State<ProfilePage> {
               .add(const ProfileLoadMoreNotesRequested());
         },
         scrollController: _scrollController,
+        onNotesVisible: (ids) =>
+            InteractionService.instance.fetchCountsFromRelays(ids),
       );
     }
 
@@ -628,6 +637,8 @@ class _ProfilePageState extends State<ProfilePage> {
               .add(const ProfileLoadMoreLikesRequested());
         },
         scrollController: _scrollController,
+        onNotesVisible: (ids) =>
+            InteractionService.instance.fetchCountsFromRelays(ids),
       );
     }
 

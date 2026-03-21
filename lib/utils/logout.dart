@@ -72,7 +72,7 @@ class Logout {
 
     try {
       final dbService = AppDI.get<RustDatabaseService>();
-      await dbService.wipe();
+      await dbService.wipeDatabase();
     } catch (e) {
       if (kDebugMode) print('Error wiping database: $e');
     }

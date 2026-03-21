@@ -38,7 +38,6 @@ import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/sync/sync_service.dart';
-import '../../../data/services/rust_database_service.dart';
 
 class BlocsModule extends DIModule {
   @override
@@ -50,6 +49,7 @@ class BlocsModule extends DIModule {
 
     AppDI.registerLazySingleton<FeedBloc>(() => FeedBloc(
           feedRepository: AppDI.get<FeedRepository>(),
+          followingRepository: AppDI.get<FollowingRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
           syncService: AppDI.get<SyncService>(),
         ));
@@ -99,7 +99,7 @@ class BlocsModule extends DIModule {
         () => NotificationIndicatorBloc(
               syncService: AppDI.get<SyncService>(),
               authService: AppDI.get<AuthService>(),
-              db: AppDI.get<RustDatabaseService>(),
+              notificationRepository: AppDI.get<NotificationRepository>(),
             ));
 
     AppDI.registerLazySingleton<DmIndicatorBloc>(
@@ -140,6 +140,7 @@ class BlocsModule extends DIModule {
         ));
 
     AppDI.registerFactory<BookmarkBloc>(() => BookmarkBloc(
+          feedRepository: AppDI.get<FeedRepository>(),
           syncService: AppDI.get<SyncService>(),
           authService: AppDI.get<AuthService>(),
         ));

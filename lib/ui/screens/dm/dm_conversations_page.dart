@@ -290,7 +290,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
             onTap: () {
               if (otherUserPubkeyHex.isNotEmpty) {
                 context.push(
-                    '/home/dm/chat?pubkeyHex=${Uri.encodeComponent(otherUserPubkeyHex)}');
+                    '/home/dm/chat?pubkey=${Uri.encodeComponent(otherUserPubkeyHex)}');
               }
             },
             child: Padding(
@@ -354,7 +354,8 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                               children: [
                                 if (isFromCurrentUser)
                                   TextSpan(
-                                    text: AppLocalizations.of(context)!.dmYouPrefix,
+                                    text: AppLocalizations.of(context)!
+                                        .dmYouPrefix,
                                     style: TextStyle(
                                       color: context.colors.textSecondary,
                                       fontSize: 13,
@@ -471,10 +472,10 @@ class _DmConversationsPageState extends State<DmConversationsPage>
       backgroundColor: Colors.transparent,
       builder: (context) => UserSearchPage(
         onUserSelected: (user) {
-          final pubkeyHex = user['pubkeyHex'] as String? ?? '';
+          final pubkeyHex = user['pubkey'] as String? ?? '';
           if (pubkeyHex.isNotEmpty) {
-            context.push(
-                '/home/dm/chat?pubkeyHex=${Uri.encodeComponent(pubkeyHex)}');
+            context
+                .push('/home/dm/chat?pubkey=${Uri.encodeComponent(pubkeyHex)}');
           }
         },
       ),

@@ -61,3 +61,11 @@ class FollowSetUserRemoved extends FollowSetEvent {
 class FollowSetRefreshed extends FollowSetEvent {
   const FollowSetRefreshed();
 }
+
+class FollowSetFavoriteToggled extends FollowSetEvent {
+  final String listId;
+  const FollowSetFavoriteToggled(this.listId);
+
+  @override
+  List<Object?> get props => [listId];
+}

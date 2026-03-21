@@ -7,10 +7,10 @@ import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/rust_database_service.dart';
+import '../../../src/rust/api/database.dart' as rust_db;
 import '../../../data/services/relay_service.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/sync/publishers/event_publisher.dart';
-import '../../../data/services/favorite_lists_service.dart';
 import '../../../data/services/follow_set_service.dart';
 
 class ServicesModule extends DIModule {
@@ -43,8 +43,6 @@ class ServicesModule extends DIModule {
       AppDI.get<NwcService>().setActiveAccount(currentNpub);
       await AppDI.get<NwcService>().warmCache();
     }
-
-    await FavoriteListsService.instance.load();
 
     await _initRelayService();
   }
@@ -122,9 +120,9 @@ class ServicesModule extends DIModule {
         if (gossipEnabled) {
           Future.microtask(() async {
             try {
-              final db = RustDatabaseService.instance;
-              final follows = await db.getFollowingList(userPubkeyHex!);
-              if (follows != null && follows.isNotEmpty) {
+              final follows =
+                  await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex!);
+              if (follows.isNotEmpty) {
                 final allPubkeys = [userPubkeyHex, ...follows];
                 await RustRelayService.instance
                     .discoverAndConnectOutboxRelays(allPubkeys);
@@ -157,9 +155,9 @@ class ServicesModule extends DIModule {
         final service = FollowSetService.instance;
         if (!service.isInitialized) {
           await service.loadFromDatabase(userPubkeyHex: userPubkeyHex);
-          final db = RustDatabaseService.instance;
-          final follows = await db.getFollowingList(userPubkeyHex);
-          if (follows != null && follows.isNotEmpty) {
+          final follows =
+              await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex);
+          if (follows.isNotEmpty) {
             await service.loadFollowedUsersSets(followedPubkeys: follows);
           }
         }
@@ -174,9 +172,9 @@ class ServicesModule extends DIModule {
   void _discoverOutboxRelays(String userPubkeyHex) {
     Future.microtask(() async {
       try {
-        final db = RustDatabaseService.instance;
-        final follows = await db.getFollowingList(userPubkeyHex);
-        if (follows != null && follows.isNotEmpty) {
+        final follows =
+            await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex);
+        if (follows.isNotEmpty) {
           final allPubkeys = [userPubkeyHex, ...follows];
           await RustRelayService.instance
               .discoverAndConnectOutboxRelays(allPubkeys);

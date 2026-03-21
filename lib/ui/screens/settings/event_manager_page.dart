@@ -10,8 +10,9 @@ import '../../theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
+import '../../../core/di/app_di.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/relay_service.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../../src/rust/api/relay.dart' as rust_relay;
 import '../../../utils/logout.dart';
@@ -83,7 +84,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
     }
 
     _scanSubscription =
-        RustRelayService.instance.fetchAllEventsForAuthor(pubkeyHex).listen(
+        AppDI.get<SyncService>().fetchAllEventsForAuthor(pubkeyHex).listen(
       (event) {
         if (!mounted) return;
         final id = event['id'] as String?;
@@ -125,7 +126,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
     final completer = Completer<void>();
 
     _broadcastSubscription =
-        RustRelayService.instance.streamBroadcastEvents(_allEvents).listen(
+        AppDI.get<SyncService>().streamBroadcastEvents(_allEvents).listen(
       (progress) {
         if (!mounted) return;
         final sent = progress['sent'] as int? ?? 0;

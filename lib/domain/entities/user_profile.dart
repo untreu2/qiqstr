@@ -59,13 +59,10 @@ class UserProfile {
 
   Map<String, dynamic> toMap() {
     return {
-      'pubkeyHex': pubkey,
       'pubkey': pubkey,
       if (name != null) 'name': name!,
       if (displayName != null) 'display_name': displayName!,
-      if (displayName != null) 'displayName': displayName!,
       if (about != null) 'about': about!,
-      if (picture != null) 'profileImage': picture!,
       if (picture != null) 'picture': picture!,
       if (banner != null) 'banner': banner!,
       if (nip05 != null) 'nip05': nip05!,

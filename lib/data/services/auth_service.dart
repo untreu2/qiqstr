@@ -417,6 +417,41 @@ class AuthService {
     }
   }
 
+  String encodeNoteId(String hexNoteId) {
+    try {
+      return encodeBasicBech32(hexNoteId, 'note');
+    } catch (_) {
+      return hexNoteId;
+    }
+  }
+
+  String? decodeNoteId(String bech32NoteId) {
+    try {
+      if (bech32NoteId.startsWith('note1')) {
+        return decodeBasicBech32(bech32NoteId, 'note');
+      }
+      return bech32NoteId;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? decodeNip19(String bech32) {
+    try {
+      return Nip19.decode(bech32);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Map<String, dynamic>? decodeTlvBech32(String bech32) {
+    try {
+      return decodeTlvBech32Full(bech32);
+    } catch (_) {
+      return null;
+    }
+  }
+
   String? hexToNsec(String hexPrivateKey) {
     try {
       if (hexPrivateKey.length == 64) {

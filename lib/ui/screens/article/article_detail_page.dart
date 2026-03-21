@@ -73,7 +73,6 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           setState(() {
             _authorUser = {
               'name': article.authorName,
-              'profileImage': article.authorImage,
               'picture': article.authorImage,
             };
           });
@@ -105,10 +104,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     if (profile != null && mounted) {
       setState(() {
         _authorUser = {
-          'pubkeyHex': profile.pubkey,
+          'pubkey': profile.pubkey,
           'name': profile.name ?? '',
           'about': profile.about ?? '',
-          'profileImage': profile.picture ?? '',
+          'picture': profile.picture ?? '',
           'banner': profile.banner ?? '',
           'website': profile.website ?? '',
           'nip05': profile.nip05 ?? '',
@@ -135,10 +134,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
     if (currentLocation.startsWith('/home/feed')) {
       context.push(
-          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkey)}');
+          '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(pubkey)}');
     } else {
       context.push(
-          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkeyHex=${Uri.encodeComponent(pubkey)}');
+          '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(pubkey)}');
     }
   }
 
@@ -302,7 +301,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final authorName = _authorUser?['name'] as String? ??
         _authorUser?['display_name'] as String? ??
         authorNameFromArticle;
-    final authorImage = _authorUser?['profileImage'] as String? ??
+    final authorImage = _authorUser?['picture'] as String? ??
         _authorUser?['picture'] as String? ??
         authorImageFromArticle;
     final pubkey = _article!['pubkey'] as String? ?? '';
