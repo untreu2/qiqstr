@@ -204,7 +204,7 @@ class BlocsModule extends DIModule {
           syncService: AppDI.get<SyncService>(),
         ));
 
-    AppDI.registerFactory<FollowSetBloc>(() => FollowSetBloc(
+    AppDI.registerLazySingleton<FollowSetBloc>(() => FollowSetBloc(
           profileRepository: AppDI.get<ProfileRepository>(),
           followingRepository: AppDI.get<FollowingRepository>(),
           syncService: AppDI.get<SyncService>(),

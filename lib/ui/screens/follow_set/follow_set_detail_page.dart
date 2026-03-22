@@ -60,7 +60,6 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
   void dispose() {
     _scrollController.dispose();
     _showTitleBubble.dispose();
-    _bloc.close();
     super.dispose();
   }
 

@@ -188,11 +188,13 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
 
       final resolved = await _resolveProfiles(service.allSets);
       if (state is FollowSetLoaded) {
+        final current = state as FollowSetLoaded;
         emit(FollowSetLoaded(
           followSets: service.followSets,
           followedUsersSets: service.followedUsersSets,
           resolvedProfiles: resolved.profiles,
           resolvedAuthors: resolved.authors,
+          favoriteIds: current.favoriteIds,
         ));
       }
     });
@@ -215,11 +217,15 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
 
       final service = FollowSetService.instance;
       final resolved = await _resolveProfiles(service.allSets);
+      final favoriteIds = state is FollowSetLoaded
+          ? (state as FollowSetLoaded).favoriteIds
+          : await _loadFavoriteIds();
       emit(FollowSetLoaded(
         followSets: service.followSets,
         followedUsersSets: service.followedUsersSets,
         resolvedProfiles: resolved.profiles,
         resolvedAuthors: resolved.authors,
+        favoriteIds: favoriteIds,
       ));
     } catch (_) {}
   }
@@ -243,11 +249,15 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     service.removeSet(event.dTag);
 
     final resolved = await _resolveProfiles(service.allSets);
+    final favoriteIds = state is FollowSetLoaded
+        ? (state as FollowSetLoaded).favoriteIds
+        : await _loadFavoriteIds();
     emit(FollowSetLoaded(
       followSets: service.followSets,
       followedUsersSets: service.followedUsersSets,
       resolvedProfiles: resolved.profiles,
       resolvedAuthors: resolved.authors,
+      favoriteIds: favoriteIds,
     ));
   }
 
@@ -272,11 +282,15 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     } catch (_) {}
 
     final resolved = await _resolveProfiles(service.allSets);
+    final favoriteIds = state is FollowSetLoaded
+        ? (state as FollowSetLoaded).favoriteIds
+        : await _loadFavoriteIds();
     emit(FollowSetLoaded(
       followSets: service.followSets,
       followedUsersSets: service.followedUsersSets,
       resolvedProfiles: resolved.profiles,
       resolvedAuthors: resolved.authors,
+      favoriteIds: favoriteIds,
     ));
   }
 
@@ -301,11 +315,15 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     } catch (_) {}
 
     final resolved = await _resolveProfiles(service.allSets);
+    final favoriteIds = state is FollowSetLoaded
+        ? (state as FollowSetLoaded).favoriteIds
+        : await _loadFavoriteIds();
     emit(FollowSetLoaded(
       followSets: service.followSets,
       followedUsersSets: service.followedUsersSets,
       resolvedProfiles: resolved.profiles,
       resolvedAuthors: resolved.authors,
+      favoriteIds: favoriteIds,
     ));
   }
 

@@ -48,7 +48,6 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
   void dispose() {
     _scrollController.dispose();
     _showTitleBubble.dispose();
-    _bloc.close();
     super.dispose();
   }
 

@@ -61,6 +61,7 @@ class FeedPageState extends State<FeedPage> {
       ValueNotifier([]);
   Timer? _relayCountTimer;
   Timer? _searchDebounceTimer;
+  StreamSubscription<FollowSetState>? _followSetSubscription;
   final ValueNotifier<int> _connectedRelaysCount = ValueNotifier(0);
   int _totalRelays = 0;
   int _connectedRelays = 0;
@@ -103,6 +104,13 @@ class FeedPageState extends State<FeedPage> {
         Timer.periodic(const Duration(seconds: 1), (_) => _updateRelayCount());
     _loadLoggedInUserProfile();
     _loadFavoriteLists();
+    _followSetSubscription = AppDI.get<FollowSetBloc>().stream.listen((state) {
+      if (state is FollowSetLoaded && mounted) {
+        setState(() {
+          _refreshFavoriteLists();
+        });
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
@@ -296,6 +304,7 @@ class FeedPageState extends State<FeedPage> {
     ScrollToTopNotifier.feed.removeListener(_onScrollToTopNotified);
     _relayCountTimer?.cancel();
     _searchDebounceTimer?.cancel();
+    _followSetSubscription?.cancel();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _listSelectorController.dispose();
