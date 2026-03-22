@@ -1457,6 +1457,7 @@ dependencies = [
  "futures",
  "hex",
  "nostr",
+ "nostr-database",
  "nostr-lmdb",
  "nostr-sdk",
  "rand 0.8.5",

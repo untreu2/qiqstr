@@ -9,6 +9,7 @@ use nostr_lmdb::NostrLMDB;
 use nostr_sdk::prelude::*;
 use tokio::sync::RwLock;
 
+use crate::hybrid_database::HybridDatabase;
 use crate::frb_generated::StreamSink;
 
 static COUNTING_CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
@@ -130,7 +131,8 @@ pub async fn init_client(
     }
 
     if let Some(ref path) = db_path {
-        let database = open_or_recreate_lmdb(path)?;
+        let lmdb = open_or_recreate_lmdb(path)?;
+        let database = HybridDatabase::new(lmdb);
         builder = builder.database(database);
 
         let mut db_path_lock = db_path_state().write().await;

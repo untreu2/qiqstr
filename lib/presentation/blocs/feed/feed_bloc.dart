@@ -25,6 +25,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   int _currentLimit = 50;
   List<Map<String, dynamic>> _bufferedNotes = [];
   bool _acceptNextUpdate = false;
+  int _latestDisplayedTimestamp = 0;
 
   FeedBloc({
     required FeedRepository feedRepository,
@@ -159,23 +160,19 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         currentState.isSyncing) {
       _acceptNextUpdate = false;
       _bufferedNotes = [];
+      _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
       emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
       _loadProfilesForNotes(sortedNotes);
       _prefetchEmbeddedContent(sortedNotes);
       return;
     }
 
-    final displayedIds = <String>{};
-    for (final n in currentState.notes) {
-      final id = n['id'] as String? ?? '';
-      if (id.isNotEmpty) displayedIds.add(id);
-    }
-
     int othersCount = 0;
     bool hasOwnNew = false;
     for (final n in sortedNotes) {
-      final id = n['id'] as String? ?? '';
-      if (id.isNotEmpty && !displayedIds.contains(id)) {
+      final noteTime =
+          n['repostCreatedAt'] as int? ?? n['created_at'] as int? ?? 0;
+      if (noteTime > _latestDisplayedTimestamp) {
         final pubkey = n['pubkey'] as String? ?? '';
         if (pubkey == _currentUserHex) {
           hasOwnNew = true;
@@ -188,10 +185,19 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     if (othersCount > 0) {
       _bufferedNotes = sortedNotes;
       if (hasOwnNew) {
+        final displayedIds = <String>{};
+        for (final n in currentState.notes) {
+          final id = n['id'] as String? ?? '';
+          if (id.isNotEmpty) displayedIds.add(id);
+        }
         final ownNotes = sortedNotes.where((n) {
+          final noteTime =
+              n['repostCreatedAt'] as int? ?? n['created_at'] as int? ?? 0;
           final id = n['id'] as String? ?? '';
           final pubkey = n['pubkey'] as String? ?? '';
-          return displayedIds.contains(id) || pubkey == _currentUserHex;
+          return noteTime <= _latestDisplayedTimestamp ||
+              displayedIds.contains(id) ||
+              pubkey == _currentUserHex;
         }).toList();
         emit(currentState.copyWith(
           notes: ownNotes,
@@ -202,6 +208,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       }
     } else if (hasOwnNew) {
       _bufferedNotes = [];
+      _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
       emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
     } else {
       _bufferedNotes = [];
@@ -219,11 +226,22 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final currentState = state as FeedLoaded;
 
     if (_bufferedNotes.isNotEmpty) {
+      _latestDisplayedTimestamp = _getLatestTimestamp(_bufferedNotes);
       emit(currentState.copyWith(notes: _bufferedNotes, pendingNotesCount: 0));
       _bufferedNotes = [];
     } else {
       emit(currentState.copyWith(pendingNotesCount: 0));
     }
+  }
+
+  int _getLatestTimestamp(List<Map<String, dynamic>> notes) {
+    if (notes.isEmpty) return 0;
+    int latest = 0;
+    for (final n in notes) {
+      final t = n['repostCreatedAt'] as int? ?? n['created_at'] as int? ?? 0;
+      if (t > latest) latest = t;
+    }
+    return latest;
   }
 
   void _syncInBackground(String userHex, Emitter<FeedState>? emit) {
