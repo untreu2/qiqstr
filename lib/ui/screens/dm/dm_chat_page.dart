@@ -337,47 +337,55 @@ class _DmChatPageState extends State<DmChatPage> {
             onBackPressed: () {
               context.pop();
             },
-            centerBubble: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: context.colors.avatarPlaceholder,
-                    image: otherUser != null
-                        ? (otherUser['picture'] as String? ?? '').isNotEmpty
-                            ? DecorationImage(
-                                image: CachedNetworkImageProvider(
-                                    otherUser['picture'] as String),
-                                fit: BoxFit.cover,
-                              )
-                            : null
+            centerBubble: GestureDetector(
+              onTap: () {
+                final npub = _hexToNpub(otherUserPubkeyHex);
+                context.push(
+                  '/profile?npub=${Uri.encodeComponent(npub)}&pubkey=${Uri.encodeComponent(otherUserPubkeyHex)}',
+                );
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: context.colors.avatarPlaceholder,
+                      image: otherUser != null
+                          ? (otherUser['picture'] as String? ?? '').isNotEmpty
+                              ? DecorationImage(
+                                  image: CachedNetworkImageProvider(
+                                      otherUser['picture'] as String),
+                                  fit: BoxFit.cover,
+                                )
+                              : null
+                          : null,
+                    ),
+                    child: otherUser == null ||
+                            (otherUser['picture'] as String? ?? '').isEmpty
+                        ? Icon(
+                            CarbonIcons.user,
+                            size: 14,
+                            color: context.colors.textSecondary,
+                          )
                         : null,
                   ),
-                  child: otherUser == null ||
-                          (otherUser['picture'] as String? ?? '').isEmpty
-                      ? Icon(
-                          CarbonIcons.user,
-                          size: 14,
-                          color: context.colors.textSecondary,
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  otherUser != null &&
-                          (otherUser['name'] as String? ?? '').isNotEmpty
-                      ? otherUser['name'] as String
-                      : _hexToNpub(otherUserPubkeyHex).substring(0, 12),
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(width: 8),
+                  Text(
+                    otherUser != null &&
+                            (otherUser['name'] as String? ?? '').isNotEmpty
+                        ? otherUser['name'] as String
+                        : _hexToNpub(otherUserPubkeyHex).substring(0, 12),
+                    style: TextStyle(
+                      color: context.colors.background,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             showShareButton: false,
           ),

@@ -98,11 +98,11 @@ class _DmConversationsPageState extends State<DmConversationsPage>
               letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             l10n.dmEncryptionNotice,
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 13,
               color: context.colors.textSecondary,
               height: 1.4,
             ),
@@ -124,12 +124,12 @@ class _DmConversationsPageState extends State<DmConversationsPage>
           height: 44,
           decoration: BoxDecoration(
             color: context.colors.textPrimary,
-            borderRadius: BorderRadius.circular(22),
+            shape: BoxShape.circle,
           ),
           child: Icon(
-            Icons.add,
-            color: context.colors.background,
+            CarbonIcons.add,
             size: 24,
+            color: context.colors.background,
           ),
         ),
       ),
@@ -138,18 +138,17 @@ class _DmConversationsPageState extends State<DmConversationsPage>
 
   Widget _buildTabBar(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: AnimatedBuilder(
         animation: _tabController,
         builder: (context, _) {
           final selected = _tabController.index;
           return Container(
-            height: 52,
+            height: 48,
             decoration: BoxDecoration(
-              color: context.colors.cardBackground,
-              borderRadius: BorderRadius.circular(18),
+              color: context.colors.overlayLight,
+              borderRadius: BorderRadius.circular(40),
             ),
             child: Row(
               children: [
@@ -184,10 +183,10 @@ class _DmConversationsPageState extends State<DmConversationsPage>
         onTap: () => _tabController.animateTo(index),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.all(5),
+          margin: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             color: selected ? context.colors.textPrimary : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(36),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -281,108 +280,97 @@ class _DmConversationsPageState extends State<DmConversationsPage>
 
     return RepaintBoundary(
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Material(
-          color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () {
-              if (otherUserPubkeyHex.isNotEmpty) {
-                context.push(
-                    '/home/dm/chat?pubkey=${Uri.encodeComponent(otherUserPubkeyHex)}');
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 26,
-                    backgroundColor: context.colors.border,
-                    backgroundImage: otherUserProfileImage != null &&
-                            otherUserProfileImage.isNotEmpty
-                        ? CachedNetworkImageProvider(otherUserProfileImage)
-                        : null,
-                    child: otherUserProfileImage == null ||
-                            otherUserProfileImage.isEmpty
-                        ? Icon(
-                            CarbonIcons.user,
-                            color: context.colors.textSecondary,
-                            size: 24,
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                displayName,
-                                style: TextStyle(
-                                  color: context.colors.textPrimary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.6,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+        padding: const EdgeInsets.only(bottom: 8),
+        child: GestureDetector(
+          onTap: () {
+            if (otherUserPubkeyHex.isNotEmpty) {
+              context.push(
+                  '/home/dm/chat?pubkey=${Uri.encodeComponent(otherUserPubkeyHex)}');
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: context.colors.overlayLight,
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: Row(
+              children: [
+                _buildAvatar(context, otherUserProfileImage),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              displayName,
+                              style: TextStyle(
+                                color: context.colors.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                height: 1.6,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (lastMessageTime != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              _formatTime(lastMessageTime),
+                              style: TextStyle(
+                                color: context.colors.textSecondary,
+                                fontSize: 12,
                               ),
                             ),
-                            if (lastMessageTime != null) ...[
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatTime(lastMessageTime),
+                          ],
+                        ],
+                      ),
+                      if (lastMessageContent.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              if (isFromCurrentUser)
+                                TextSpan(
+                                  text:
+                                      AppLocalizations.of(context)!.dmYouPrefix,
+                                  style: TextStyle(
+                                    color: context.colors.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.6,
+                                  ),
+                                ),
+                              TextSpan(
+                                text: lastMessageContent,
                                 style: TextStyle(
                                   color: context.colors.textSecondary,
-                                  fontSize: 12,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
                                   height: 1.6,
                                 ),
                               ),
                             ],
-                          ],
-                        ),
-                        if (lastMessageContent.isNotEmpty) ...[
-                          const SizedBox(height: 1),
-                          Text.rich(
-                            TextSpan(
-                              children: [
-                                if (isFromCurrentUser)
-                                  TextSpan(
-                                    text: AppLocalizations.of(context)!
-                                        .dmYouPrefix,
-                                    style: TextStyle(
-                                      color: context.colors.textSecondary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.6,
-                                    ),
-                                  ),
-                                TextSpan(
-                                  text: lastMessageContent,
-                                  style: TextStyle(
-                                    color: context.colors.textSecondary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w400,
-                                    height: 1.6,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  CarbonIcons.chevron_right,
+                  size: 16,
+                  color: context.colors.textSecondary,
+                ),
+              ],
             ),
           ),
         ),
@@ -390,34 +378,81 @@ class _DmConversationsPageState extends State<DmConversationsPage>
     );
   }
 
+  Widget _buildAvatar(BuildContext context, String? imageUrl) {
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: context.colors.overlayLight,
+      ),
+      child: ClipOval(
+        child: hasImage
+            ? CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => _avatarPlaceholder(context),
+              )
+            : _avatarPlaceholder(context),
+      ),
+    );
+  }
+
+  Widget _avatarPlaceholder(BuildContext context) {
+    return Container(
+      color: context.colors.overlayLight,
+      child: Icon(
+        CarbonIcons.user,
+        color: context.colors.textSecondary,
+        size: 22,
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            CarbonIcons.chat,
-            size: 64,
-            color: context.colors.textSecondary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            l10n.noConversationsYet,
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 18,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: context.colors.overlayLight,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                CarbonIcons.chat,
+                size: 32,
+                color: context.colors.textSecondary,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            l10n.startConversationBy,
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 14,
+            const SizedBox(height: 20),
+            Text(
+              l10n.noConversationsYet,
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              l10n.startConversationBy,
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -433,13 +468,27 @@ class _DmConversationsPageState extends State<DmConversationsPage>
             style: TextStyle(color: context.colors.textSecondary),
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () {
+          GestureDetector(
+            onTap: () {
               context
                   .read<DmBloc>()
                   .add(const dm_events.DmConversationsLoadRequested());
             },
-            child: Text(l10n.retryText),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: context.colors.textPrimary,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Text(
+                l10n.retryText,
+                style: TextStyle(
+                  color: context.colors.background,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           ),
         ],
       ),

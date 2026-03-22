@@ -78,7 +78,7 @@ class _WalletPageState extends State<WalletPage>
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(28),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,7 +140,7 @@ class _WalletPageState extends State<WalletPage>
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(28),
         ),
         child: Row(
           children: [
@@ -224,7 +224,7 @@ class _WalletPageState extends State<WalletPage>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.colors.overlayLight,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(28),
       ),
       child: Row(
         children: [
@@ -324,7 +324,7 @@ class _WalletPageState extends State<WalletPage>
           height: 40,
           decoration: BoxDecoration(
             color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(12),
+            shape: BoxShape.circle,
           ),
           child: Icon(
             icon,
@@ -388,7 +388,7 @@ class _WalletPageState extends State<WalletPage>
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: context.colors.textPrimary,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(40),
         ),
         child: Text(
           l10n.connectWallet,
@@ -414,7 +414,7 @@ class _WalletPageState extends State<WalletPage>
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.textPrimary,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -444,7 +444,7 @@ class _WalletPageState extends State<WalletPage>
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.textPrimary,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
