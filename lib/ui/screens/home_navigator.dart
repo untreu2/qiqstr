@@ -466,29 +466,50 @@ class _HomeNavigatorState extends State<HomeNavigator>
       value: indicatorBloc,
       child: BlocBuilder<ThemeBloc, ThemeState>(
         builder: (context, themeState) {
-          return Scaffold(
-            extendBody: true,
-            body: PageStorage(
-              bucket: PageStorageBucket(),
-              child: widget.navigationShell,
-            ),
-            bottomNavigationBar: BlocBuilder<NotificationIndicatorBloc,
-                NotificationIndicatorState>(
-              bloc: AppDI.get<NotificationIndicatorBloc>(),
-              builder: (context, notifState) {
-                final hasNewNotifications =
-                    notifState is NotificationIndicatorLoaded &&
-                        notifState.hasNewNotifications;
-                return BlocBuilder<DmIndicatorBloc, DmIndicatorState>(
-                  bloc: AppDI.get<DmIndicatorBloc>(),
-                  builder: (context, dmState) {
-                    final hasNewDmMessages =
-                        dmState is DmIndicatorLoaded && dmState.hasNewMessages;
-                    return _buildCustomBottomBar(
-                        hasNewNotifications, hasNewDmMessages);
-                  },
-                );
-              },
+          return PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+
+              if (GoRouter.of(context).canPop()) {
+                context.pop();
+                return;
+              }
+
+              final navOrder =
+                  context.themeState?.bottomNavOrder ?? [0, 1, 2, 3];
+              final feedPageViewIndex = navOrder.indexOf(0);
+
+              if (widget.navigationShell.currentIndex != feedPageViewIndex) {
+                widget.navigationShell
+                    .goBranch(feedPageViewIndex, initialLocation: true);
+              }
+            },
+            child: Scaffold(
+              extendBody: true,
+              body: PageStorage(
+                bucket: PageStorageBucket(),
+                child: widget.navigationShell,
+              ),
+              bottomNavigationBar: BlocBuilder<NotificationIndicatorBloc,
+                  NotificationIndicatorState>(
+                bloc: AppDI.get<NotificationIndicatorBloc>(),
+                builder: (context, notifState) {
+                  final hasNewNotifications =
+                      notifState is NotificationIndicatorLoaded &&
+                          notifState.hasNewNotifications;
+                  return BlocBuilder<DmIndicatorBloc, DmIndicatorState>(
+                    bloc: AppDI.get<DmIndicatorBloc>(),
+                    builder: (context, dmState) {
+                      final hasNewDmMessages =
+                          dmState is DmIndicatorLoaded &&
+                              dmState.hasNewMessages;
+                      return _buildCustomBottomBar(
+                          hasNewNotifications, hasNewDmMessages);
+                    },
+                  );
+                },
+              ),
             ),
           );
         },
