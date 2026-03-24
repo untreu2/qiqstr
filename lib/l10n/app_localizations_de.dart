@@ -450,6 +450,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noArticlesFound => 'Keine Artikel gefunden';
 
   @override
+  String get noPhotosYet => 'Noch keine Fotos';
+
+  @override
+  String get noVideosYet => 'Noch keine Videos';
+
+  @override
   String get noRelaysFound => 'Keine Relays gefunden';
 
   @override

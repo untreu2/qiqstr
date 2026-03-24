@@ -437,6 +437,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noArticlesFound => 'Makale bulunamadı';
 
   @override
+  String get noPhotosYet => 'Henüz fotoğraf yok';
+
+  @override
+  String get noVideosYet => 'Henüz video yok';
+
+  @override
   String get noRelaysFound => 'Röle bulunamadı';
 
   @override

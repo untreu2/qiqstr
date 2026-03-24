@@ -583,8 +583,10 @@ class DmService {
           jsonDecode(recipientWrapJson) as Map<String, dynamic>;
       final senderWrap = jsonDecode(senderWrapJson) as Map<String, dynamic>;
 
-      await RustRelayService.instance.broadcastEvent(recipientWrap);
-      await RustRelayService.instance.broadcastEvent(senderWrap);
+      await Future.wait([
+        RustRelayService.instance.broadcastEvent(recipientWrap),
+        RustRelayService.instance.broadcastEvent(senderWrap),
+      ]);
 
       final senderMessage = _unwrapGiftWrapCached(senderWrap, privateKey);
       final optimisticMessage = <String, dynamic>{
@@ -661,8 +663,10 @@ class DmService {
           jsonDecode(recipientWrapJson) as Map<String, dynamic>;
       final senderWrap = jsonDecode(senderWrapJson) as Map<String, dynamic>;
 
-      await RustRelayService.instance.broadcastEvent(recipientWrap);
-      await RustRelayService.instance.broadcastEvent(senderWrap);
+      await Future.wait([
+        RustRelayService.instance.broadcastEvent(recipientWrap),
+        RustRelayService.instance.broadcastEvent(senderWrap),
+      ]);
 
       final senderMessage = _unwrapGiftWrapCached(senderWrap, privateKey);
       final optimisticMessage = <String, dynamic>{

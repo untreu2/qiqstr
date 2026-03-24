@@ -47,7 +47,6 @@ class NoteListWidget extends StatefulWidget {
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> {
-  bool _hasTriggeredLoadMore = false;
   bool _hasTriggeredEmptyRefresh = false;
   Timer? _updateTimer;
   Timer? _interactionSyncTimer;
@@ -102,22 +101,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _onScroll() {
-    if (widget.scrollController == null) return;
-
-    if (!_hasTriggeredLoadMore && widget.canLoadMore && !widget.isLoading) {
-      final maxScroll = widget.scrollController!.position.maxScrollExtent;
-      final currentScroll = widget.scrollController!.position.pixels;
-      final threshold = maxScroll * 0.8;
-
-      if (currentScroll >= threshold) {
-        _hasTriggeredLoadMore = true;
-        widget.onLoadMore?.call();
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _hasTriggeredLoadMore = false;
-        });
-      }
-    }
-
     _scheduleUpdate();
     _scheduleInteractionSync();
   }
@@ -234,6 +217,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       canLoadMore: widget.canLoadMore,
       isLoading: widget.isLoading,
       pinnedNotes: widget.pinnedNotes,
+      onLoadMore: widget.onLoadMore,
     );
   }
 }
@@ -247,6 +231,7 @@ class _NoteListContent extends StatelessWidget {
   final bool canLoadMore;
   final bool isLoading;
   final List<Map<String, dynamic>> pinnedNotes;
+  final VoidCallback? onLoadMore;
 
   const _NoteListContent({
     required this.notes,
@@ -257,17 +242,28 @@ class _NoteListContent extends StatelessWidget {
     required this.canLoadMore,
     required this.isLoading,
     this.pinnedNotes = const [],
+    this.onLoadMore,
   });
 
   @override
   Widget build(BuildContext context) {
     final pinnedCount = pinnedNotes.length;
     final allCount = pinnedCount + notes.length;
+    final showFooter = canLoadMore && onLoadMore != null;
 
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (index >= allCount) {
+          if (showFooter && index == allCount) {
+            return _LoadMoreTrigger(
+              key: ValueKey('load_more_${notes.length}'),
+              isLoading: isLoading,
+              onLoadMore: onLoadMore!,
+            );
+          }
+
+          final footerOffset = showFooter ? 1 : 0;
+          if (index >= allCount + footerOffset) {
             return SizedBox(
                 height: MediaQuery.of(context).padding.bottom + 120);
           }
@@ -291,10 +287,69 @@ class _NoteListContent extends StatelessWidget {
             ),
           );
         },
-        childCount: allCount + 1,
+        childCount: allCount + (showFooter ? 1 : 0) + 1,
         addAutomaticKeepAlives: true,
         addRepaintBoundaries: false,
         addSemanticIndexes: false,
+      ),
+    );
+  }
+}
+
+class _LoadMoreTrigger extends StatefulWidget {
+  final bool isLoading;
+  final VoidCallback onLoadMore;
+
+  const _LoadMoreTrigger({
+    super.key,
+    required this.isLoading,
+    required this.onLoadMore,
+  });
+
+  @override
+  State<_LoadMoreTrigger> createState() => _LoadMoreTriggerState();
+}
+
+class _LoadMoreTriggerState extends State<_LoadMoreTrigger> {
+  bool _triggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _triggerIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(_LoadMoreTrigger oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isLoading && oldWidget.isLoading) {
+      _triggered = false;
+    }
+    _triggerIfNeeded();
+  }
+
+  void _triggerIfNeeded() {
+    if (!_triggered && !widget.isLoading) {
+      _triggered = true;
+      Future.microtask(() {
+        if (mounted) widget.onLoadMore();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
       ),
     );
   }

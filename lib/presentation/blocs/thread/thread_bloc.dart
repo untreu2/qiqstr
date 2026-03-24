@@ -36,6 +36,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     on<_ThreadRepliesUpdated>(_onThreadRepliesUpdated);
     on<_ThreadCurrentUserLoaded>(_onThreadCurrentUserLoaded);
     on<_ThreadNetworkDataLoaded>(_onThreadNetworkDataLoaded);
+    on<_ThreadNetworkFailed>(_onThreadNetworkFailed);
   }
 
   void _onThreadProfilesUpdated(
@@ -116,9 +117,13 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             repliesSynced: false,
           ),
         );
+
+        _loadCurrentUserProfile(currentUserHex);
       } else {
         emit(const ThreadLoading());
       }
+
+      _fetchNetworkThread(focusedNoteId, chain, currentUserHex);
 
       final localThreadData = await _loadFromLocalDb(
         focusedNoteId,
@@ -144,8 +149,6 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           );
         }
       }
-
-      _fetchNetworkThread(focusedNoteId, chain, currentUserHex);
     } catch (e) {
       if (!isClosed && state is! ThreadLoaded) {
         emit(ThreadError('Failed to load thread: ${e.toString()}'));
@@ -175,20 +178,18 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     List<String> chain,
     String currentUserHex,
   ) {
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        final threadData = await _syncService.fetchFullThread(
-          focusedNoteId,
-          currentUserPubkeyHex:
-              currentUserHex.isNotEmpty ? currentUserHex : null,
-        );
-        if (isClosed) return;
+    _syncService
+        .fetchFullThread(
+      focusedNoteId,
+      currentUserPubkeyHex: currentUserHex.isNotEmpty ? currentUserHex : null,
+    )
+        .then((threadData) {
+      if (!isClosed) {
         add(_ThreadNetworkDataLoaded(threadData, chain, currentUserHex));
-      } catch (e) {
-        if (!isClosed && state is! ThreadLoaded) {
-          add(const _ThreadNetworkFailed());
-        }
+      }
+    }).catchError((e) {
+      if (!isClosed) {
+        add(const _ThreadNetworkFailed());
       }
     });
   }
@@ -322,17 +323,12 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   void _loadCurrentUserProfile(String currentUserHex) {
     if (currentUserHex.isEmpty) return;
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        final profile = await _profileRepository.getProfile(currentUserHex);
-        if (isClosed || state is! ThreadLoaded) return;
-        if (profile != null) {
-          final profileMap = profile.toMap();
-          add(_ThreadCurrentUserLoaded(profileMap));
-        }
-      } catch (_) {}
-    });
+    _profileRepository.getProfile(currentUserHex).then((profile) {
+      if (isClosed || state is! ThreadLoaded) return;
+      if (profile != null) {
+        add(_ThreadCurrentUserLoaded(profile.toMap()));
+      }
+    }).catchError((_) {});
   }
 
   void _watchReplies(String rootNoteId) {
@@ -379,10 +375,13 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       }
     }
 
-    final structure = await compute(_computeThreadStructure, {
+    final structureArgs = {
       'rootNote': currentState.rootNote,
       'replies': repliesMap,
-    });
+    };
+    final structure = repliesMap.length > 50
+        ? await compute(_computeThreadStructure, structureArgs)
+        : _computeThreadStructure(structureArgs);
 
     if (isClosed) return;
 
@@ -431,94 +430,90 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   }
 
   void _loadInteractionCountsInBackground(List<String> initialIds) {
-    Future.microtask(() async {
-      if (isClosed) return;
+    final ids = (state is ThreadLoaded)
+        ? {
+            ...initialIds,
+            ...(state as ThreadLoaded)
+                .replies
+                .map((r) => r['id'] as String? ?? '')
+                .where((id) => id.isNotEmpty),
+          }.toList()
+        : initialIds;
 
-      if (state is ThreadLoaded) {
-        final currentReplies = (state as ThreadLoaded).replies;
-        final allIds = {
-          ...initialIds,
-          ...currentReplies
-              .map((r) => r['id'] as String? ?? '')
-              .where((id) => id.isNotEmpty),
-        }.toList();
-        if (isClosed) return;
-        try {
-          await InteractionService.instance.fetchCountsFromRelays(allIds);
-        } catch (_) {}
-      } else {
-        if (isClosed) return;
-        try {
-          await InteractionService.instance.fetchCountsFromRelays(initialIds);
-        } catch (_) {}
-      }
-    });
+    InteractionService.instance.fetchCountsFromRelays(ids).catchError((_) {});
   }
 
-  void _loadAndSyncProfilesForNotes(List<Map<String, dynamic>> notes) {
-    Future.microtask(() async {
-      if (isClosed || state is! ThreadLoaded) return;
+  void _loadAndSyncProfilesForNotes(List<Map<String, dynamic>> notes) async {
+    if (isClosed || state is! ThreadLoaded) return;
 
-      final currentState = state as ThreadLoaded;
-      final authorIds = notes
-          .map((n) => n['pubkey'] as String? ?? '')
-          .where(
-            (id) => id.isNotEmpty && !currentState.userProfiles.containsKey(id),
-          )
-          .toSet()
-          .toList();
+    final currentState = state as ThreadLoaded;
+    final authorIds = notes
+        .map((n) => n['pubkey'] as String? ?? '')
+        .where(
+          (id) => id.isNotEmpty && !currentState.userProfiles.containsKey(id),
+        )
+        .toSet()
+        .toList();
 
-      if (authorIds.isEmpty) return;
+    if (authorIds.isEmpty) return;
 
-      try {
-        final profilesFuture = _profileRepository.getProfiles(authorIds);
-        final syncFuture = _syncService.syncProfiles(authorIds);
+    try {
+      final profilesFuture = _profileRepository.getProfiles(authorIds);
+      final syncFuture = _syncService.syncProfiles(authorIds);
 
-        final profiles = await profilesFuture;
-        if (isClosed) return;
+      final profiles = await profilesFuture;
+      if (isClosed) return;
 
-        final updatedProfiles = <String, Map<String, dynamic>>{};
-        final missingPubkeys = <String>[];
+      final updatedProfiles = <String, Map<String, dynamic>>{};
+      final missingPubkeys = <String>[];
 
-        for (final pubkey in authorIds) {
-          final profile = profiles[pubkey];
-          if (profile != null) {
-            updatedProfiles[pubkey] = profile.toMap();
-            final npub = _authService.hexToNpub(pubkey);
-            if (npub != null) updatedProfiles[npub] = profile.toMap();
-            if ((profile.name ?? '').isEmpty ||
-                (profile.picture ?? '').isEmpty) {
-              missingPubkeys.add(pubkey);
-            }
-          } else {
+      for (final pubkey in authorIds) {
+        final profile = profiles[pubkey];
+        if (profile != null) {
+          updatedProfiles[pubkey] = profile.toMap();
+          final npub = _authService.hexToNpub(pubkey);
+          if (npub != null) updatedProfiles[npub] = profile.toMap();
+          if ((profile.name ?? '').isEmpty ||
+              (profile.picture ?? '').isEmpty) {
             missingPubkeys.add(pubkey);
           }
+        } else {
+          missingPubkeys.add(pubkey);
         }
+      }
 
-        if (updatedProfiles.isNotEmpty && !isClosed) {
-          add(ThreadProfilesUpdated(updatedProfiles));
-        }
+      if (updatedProfiles.isNotEmpty && !isClosed) {
+        add(ThreadProfilesUpdated(updatedProfiles));
+      }
 
-        await syncFuture;
+      await syncFuture;
+      if (isClosed) return;
+
+      if (missingPubkeys.isNotEmpty) {
+        final synced = await _profileRepository.getProfiles(missingPubkeys);
         if (isClosed) return;
 
-        if (missingPubkeys.isNotEmpty) {
-          final synced = await _profileRepository.getProfiles(missingPubkeys);
-          if (isClosed) return;
-
-          final syncedProfiles = <String, Map<String, dynamic>>{};
-          for (final entry in synced.entries) {
-            syncedProfiles[entry.key] = entry.value.toMap();
-            final npub = _authService.hexToNpub(entry.key);
-            if (npub != null) syncedProfiles[npub] = entry.value.toMap();
-          }
-
-          if (syncedProfiles.isNotEmpty && !isClosed) {
-            add(ThreadProfilesUpdated(syncedProfiles));
-          }
+        final syncedProfiles = <String, Map<String, dynamic>>{};
+        for (final entry in synced.entries) {
+          syncedProfiles[entry.key] = entry.value.toMap();
+          final npub = _authService.hexToNpub(entry.key);
+          if (npub != null) syncedProfiles[npub] = entry.value.toMap();
         }
-      } catch (_) {}
-    });
+
+        if (syncedProfiles.isNotEmpty && !isClosed) {
+          add(ThreadProfilesUpdated(syncedProfiles));
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _onThreadNetworkFailed(
+    _ThreadNetworkFailed event,
+    Emitter<ThreadState> emit,
+  ) {
+    if (state is! ThreadLoaded) {
+      emit(const ThreadError('Failed to load thread from network'));
+    }
   }
 
   Future<void> _onThreadRefreshed(

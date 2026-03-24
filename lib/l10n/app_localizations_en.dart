@@ -433,6 +433,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noArticlesFound => 'No articles found';
 
   @override
+  String get noPhotosYet => 'No photos yet';
+
+  @override
+  String get noVideosYet => 'No videos yet';
+
+  @override
   String get noRelaysFound => 'No relays found';
 
   @override

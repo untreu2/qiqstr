@@ -940,6 +940,18 @@ abstract class AppLocalizations {
   /// **'No articles found'**
   String get noArticlesFound;
 
+  /// No description provided for @noPhotosYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No photos yet'**
+  String get noPhotosYet;
+
+  /// No description provided for @noVideosYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No videos yet'**
+  String get noVideosYet;
+
   /// No description provided for @noRelaysFound.
   ///
   /// In en, this message translates to:

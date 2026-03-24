@@ -313,6 +313,20 @@ class RustRelayService {
         .map((json) => jsonDecode(json) as Map<String, dynamic>);
   }
 
+  Stream<Map<String, dynamic>> fetchProfileEvents(
+    String authorHex,
+    String kindsStr, {
+    int sinceTimestamp = -1,
+  }) {
+    return rust_relay
+        .fetchProfileEvents(
+          authorHex: authorHex,
+          kindsStr: kindsStr,
+          sinceTimestamp: sinceTimestamp,
+        )
+        .map((json) => jsonDecode(json) as Map<String, dynamic>);
+  }
+
   Stream<Map<String, dynamic>> streamRelayStatus() {
     return rust_relay.streamRelayStatus().map(
       (json) => jsonDecode(json) as Map<String, dynamic>,

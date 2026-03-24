@@ -258,14 +258,16 @@ Future<String> dbGetHydratedProfileNotes(
         required List<String> mutedPubkeys,
         required List<String> mutedWords,
         required bool filterReplies,
-        String? currentUserPubkeyHex}) =>
+        String? currentUserPubkeyHex,
+        PlatformInt64? untilTimestamp}) =>
     RustLib.instance.api.crateApiDatabaseDbGetHydratedProfileNotes(
         pubkeyHex: pubkeyHex,
         limit: limit,
         mutedPubkeys: mutedPubkeys,
         mutedWords: mutedWords,
         filterReplies: filterReplies,
-        currentUserPubkeyHex: currentUserPubkeyHex);
+        currentUserPubkeyHex: currentUserPubkeyHex,
+        untilTimestamp: untilTimestamp);
 
 Future<String> dbGetHydratedHashtagNotes(
         {required String hashtag,
@@ -296,13 +298,15 @@ Future<String> dbGetHydratedProfileReplies(
         required int limit,
         required List<String> mutedPubkeys,
         required List<String> mutedWords,
-        String? currentUserPubkeyHex}) =>
+        String? currentUserPubkeyHex,
+        PlatformInt64? untilTimestamp}) =>
     RustLib.instance.api.crateApiDatabaseDbGetHydratedProfileReplies(
         pubkeyHex: pubkeyHex,
         limit: limit,
         mutedPubkeys: mutedPubkeys,
         mutedWords: mutedWords,
-        currentUserPubkeyHex: currentUserPubkeyHex);
+        currentUserPubkeyHex: currentUserPubkeyHex,
+        untilTimestamp: untilTimestamp);
 
 Future<String> dbGetHydratedReplies(
         {required String noteId,
