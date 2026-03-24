@@ -142,11 +142,6 @@ class CoinosService {
     try {
       debugPrint('[CoinosService] Starting Nostr authentication with Coinos');
 
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        return const Result.error('No Nostr private key found');
-      }
-
       final headers = await _buildHeaders();
 
       final challengeResponse = await _httpClient.get(
@@ -169,9 +164,10 @@ class CoinosService {
 
       debugPrint('[CoinosService] Got challenge: $challenge');
 
-      final authEventJson = rust_events.createCoinosAuthEvent(
-        challenge: challenge,
-        privateKeyHex: privateKey,
+      final authEventJson = await rust_events.signEventWithSigner(
+        kind: 27235,
+        content: '',
+        tags: [['challenge', challenge]],
       );
       final authEvent = jsonDecode(authEventJson) as Map<String, dynamic>;
       final authResponse = await _httpClient.post(

@@ -126,12 +126,12 @@ class EncryptedMuteService {
         .toList();
   }
 
-  Map<String, dynamic> createEncryptedMuteEvent({
+  Future<Map<String, dynamic>> createEncryptedMuteEvent({
     required List<String> mutedPubkeys,
     required List<String> mutedWords,
     required String privateKeyHex,
     required String publicKeyHex,
-  }) {
+  }) async {
     final privateTags = <List<String>>[
       ...mutedPubkeys.map((pk) => ['p', pk]),
       ...mutedWords.map((word) => ['word', word]),
@@ -144,11 +144,10 @@ class EncryptedMuteService {
       receiverPkHex: publicKeyHex,
     );
 
-    final eventJson = rust_events.createSignedEvent(
+    final eventJson = await rust_events.signEventWithSigner(
       kind: 10000,
       content: encrypted,
       tags: [],
-      privateKeyHex: privateKeyHex,
     );
 
     _mutedPubkeys = List.from(mutedPubkeys);

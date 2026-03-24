@@ -184,15 +184,6 @@ class _RelayPageState extends State<RelayPage> {
     });
 
     try {
-      final privateKeyResult = await _authService.getCurrentUserPrivateKey();
-      if (privateKeyResult.isError || privateKeyResult.data == null) {
-        if (mounted) {
-          final l10n = AppLocalizations.of(context)!;
-          AppSnackbar.error(context, l10n.privateKeyNotFound);
-        }
-        return;
-      }
-
       final npubResult = await _authService.getCurrentUserNpub();
       if (npubResult.isError || npubResult.data == null) {
         if (mounted) {
@@ -201,8 +192,6 @@ class _RelayPageState extends State<RelayPage> {
         }
         return;
       }
-
-      final privateKey = privateKeyResult.data!;
 
       List<String> relayConfigs = [];
       for (String relay in _relays) {
@@ -219,9 +208,18 @@ class _RelayPageState extends State<RelayPage> {
         }
       }
 
-      final eventJsonStr = rust_events.createRelayListEventWithMarkers(
-        relayConfigs: relayConfigs,
-        privateKeyHex: privateKey,
+      final tags = relayConfigs.map((config) {
+        if (config.contains('|')) {
+          final parts = config.split('|');
+          return ['r', parts[0], parts[1]];
+        }
+        return ['r', config];
+      }).toList();
+
+      final eventJsonStr = await rust_events.signEventWithSigner(
+        kind: 10002,
+        content: '',
+        tags: tags,
       );
       final event = jsonDecode(eventJsonStr) as Map<String, dynamic>;
 

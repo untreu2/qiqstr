@@ -84,19 +84,17 @@ class PinnedNotesService {
         .toList();
   }
 
-  Map<String, dynamic> createPinnedNotesEvent({
+  Future<Map<String, dynamic>> createPinnedNotesEvent({
     required List<String> pinnedNoteIds,
-    required String privateKeyHex,
-  }) {
+  }) async {
     final tags = <List<String>>[
       ...pinnedNoteIds.map((id) => ['e', id]),
     ];
 
-    final eventJson = rust_events.createSignedEvent(
+    final eventJson = await rust_events.signEventWithSigner(
       kind: 10001,
       content: '',
       tags: tags,
-      privateKeyHex: privateKeyHex,
     );
 
     _pinnedNoteIds = List.from(pinnedNoteIds);

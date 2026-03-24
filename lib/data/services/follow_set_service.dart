@@ -78,14 +78,13 @@ class FollowSetService {
         .toList();
   }
 
-  Map<String, dynamic> createFollowSetEvent({
+  Future<Map<String, dynamic>> createFollowSetEvent({
     required String dTag,
     required String title,
     required String description,
     required String image,
     required List<String> pubkeys,
-    required String privateKeyHex,
-  }) {
+  }) async {
     final tags = <List<String>>[
       ['d', dTag],
       if (title.isNotEmpty) ['title', title],
@@ -94,11 +93,10 @@ class FollowSetService {
       ...pubkeys.map((pk) => ['p', pk]),
     ];
 
-    final eventJson = rust_events.createSignedEvent(
+    final eventJson = await rust_events.signEventWithSigner(
       kind: 30000,
       content: '',
       tags: tags,
-      privateKeyHex: privateKeyHex,
     );
 
     final event = jsonDecode(eventJson) as Map<String, dynamic>;

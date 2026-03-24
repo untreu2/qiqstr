@@ -32,6 +32,8 @@ Future<void> updateSigner({required String privateKeyHex}) =>
     RustLib.instance.api
         .crateApiRelayUpdateSigner(privateKeyHex: privateKeyHex);
 
+Future<void> clearSigner() => RustLib.instance.api.crateApiRelayClearSigner();
+
 Future<bool> isClientInitialized() =>
     RustLib.instance.api.crateApiRelayIsClientInitialized();
 

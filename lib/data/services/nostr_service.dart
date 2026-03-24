@@ -18,177 +18,181 @@ class NostrService {
   static final Queue<Map<String, dynamic>> _batchQueue = Queue();
   static bool _isBatchProcessing = false;
 
-  static Map<String, dynamic> createNoteEvent({
+  static Future<Map<String, dynamic>> createNoteEvent({
     required String content,
-    required String privateKey,
     List<List<String>>? tags,
-  }) {
-    final json = rust_events.createNoteEvent(
+  }) async {
+    final json = await rust_events.signEventWithSigner(
+      kind: 1,
       content: content,
       tags: tags ?? [],
-      privateKeyHex: privateKey,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createReactionEvent({
+  static Future<Map<String, dynamic>> createReactionEvent({
     required String targetEventId,
     required String targetAuthor,
     required String content,
-    required String privateKey,
     String? relayUrl,
     int targetKind = 1,
-  }) {
-    final json = rust_events.createReactionEvent(
-      targetEventId: targetEventId,
-      targetAuthor: targetAuthor,
-      content: content,
-      privateKeyHex: privateKey,
-      relayUrl: relayUrl ?? '',
-      targetKind: targetKind,
-    );
-    return jsonDecode(json) as Map<String, dynamic>;
-  }
-
-  static Map<String, dynamic> createReplyEvent({
-    required String content,
-    required String privateKey,
-    required List<List<String>> tags,
-  }) {
-    final json = rust_events.createReplyEvent(
+  }) async {
+    final tags = <List<String>>[
+      ['e', targetEventId, relayUrl ?? ''],
+      ['p', targetAuthor],
+      ['k', targetKind.toString()],
+    ];
+    final json = await rust_events.signEventWithSigner(
+      kind: 7,
       content: content,
       tags: tags,
-      privateKeyHex: privateKey,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createRepostEvent({
+  static Future<Map<String, dynamic>> createReplyEvent({
+    required String content,
+    required List<List<String>> tags,
+  }) async {
+    final json = await rust_events.signEventWithSigner(
+      kind: 1,
+      content: content,
+      tags: tags,
+    );
+    return jsonDecode(json) as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> createRepostEvent({
     required String noteId,
     required String noteAuthor,
     required String content,
-    required String privateKey,
     String? relayUrl,
-  }) {
-    final json = rust_events.createRepostEvent(
-      noteId: noteId,
-      noteAuthor: noteAuthor,
+  }) async {
+    final tags = <List<String>>[
+      ['e', noteId, relayUrl ?? ''],
+      ['p', noteAuthor],
+    ];
+    final json = await rust_events.signEventWithSigner(
+      kind: 6,
       content: content,
-      privateKeyHex: privateKey,
-      relayUrl: relayUrl ?? '',
+      tags: tags,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createDeletionEvent({
+  static Future<Map<String, dynamic>> createDeletionEvent({
     required List<String> eventIds,
-    required String privateKey,
     String? reason,
-  }) {
-    final json = rust_events.createDeletionEvent(
-      eventIds: eventIds,
-      reason: reason ?? '',
-      privateKeyHex: privateKey,
+  }) async {
+    final tags = eventIds.map((id) => ['e', id]).toList();
+    final json = await rust_events.signEventWithSigner(
+      kind: 5,
+      content: reason ?? '',
+      tags: tags,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createProfileEvent({
+  static Future<Map<String, dynamic>> createProfileEvent({
     required Map<String, dynamic> profileContent,
-    required String privateKey,
-  }) {
-    final json = rust_events.createProfileEvent(
-      profileJson: jsonEncode(profileContent),
-      privateKeyHex: privateKey,
+  }) async {
+    final json = await rust_events.signEventWithSigner(
+      kind: 0,
+      content: jsonEncode(profileContent),
+      tags: [],
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createFollowEvent({
+  static Future<Map<String, dynamic>> createFollowEvent({
     required List<String> followingPubkeys,
-    required String privateKey,
-  }) {
-    final json = rust_events.createFollowEvent(
-      followingPubkeys: followingPubkeys,
-      privateKeyHex: privateKey,
+  }) async {
+    final tags = followingPubkeys.map((pk) => ['p', pk, '']).toList();
+    final json = await rust_events.signEventWithSigner(
+      kind: 3,
+      content: '',
+      tags: tags,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createMuteEvent({
+  static Future<Map<String, dynamic>> createMuteEvent({
     required String encryptedContent,
-    required String privateKey,
-  }) {
-    final json = rust_events.createSignedEvent(
+  }) async {
+    final json = await rust_events.signEventWithSigner(
       kind: 10000,
       content: encryptedContent,
       tags: [],
-      privateKeyHex: privateKey,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createReportEvent({
+  static Future<Map<String, dynamic>> createReportEvent({
     required String reportedPubkey,
     required String reportType,
-    required String privateKey,
     String content = '',
-  }) {
+  }) async {
     final tags = <List<String>>[
       ['p', reportedPubkey, reportType],
     ];
-    final json = rust_events.createSignedEvent(
+    final json = await rust_events.signEventWithSigner(
       kind: 1984,
       content: content,
       tags: tags,
-      privateKeyHex: privateKey,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createZapRequestEvent({
+  static Future<Map<String, dynamic>> createZapRequestEvent({
     required List<List<String>> tags,
     required String content,
-    required String privateKey,
-  }) {
-    final json = rust_events.createZapRequestEvent(
-      tags: tags,
+  }) async {
+    final json = await rust_events.signEventWithSigner(
+      kind: 9734,
       content: content,
-      privateKeyHex: privateKey,
+      tags: tags,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createQuoteEvent({
+  static Future<Map<String, dynamic>> createQuoteEvent({
     required String content,
     required String quotedEventId,
     String? quotedEventPubkey,
     String? relayUrl,
-    required String privateKey,
     List<List<String>>? additionalTags,
-  }) {
-    final json = rust_events.createQuoteEvent(
+  }) async {
+    final tags = <List<String>>[];
+    if (quotedEventPubkey != null) {
+      tags.add(['q', quotedEventId, relayUrl ?? '', quotedEventPubkey]);
+      tags.add(['p', quotedEventPubkey]);
+    } else {
+      tags.add(['q', quotedEventId, relayUrl ?? '']);
+    }
+    if (additionalTags != null) tags.addAll(additionalTags);
+
+    final json = await rust_events.signEventWithSigner(
+      kind: 1,
       content: content,
-      quotedEventId: quotedEventId,
-      quotedEventPubkey: quotedEventPubkey,
-      relayUrl: relayUrl ?? '',
-      privateKeyHex: privateKey,
-      additionalTags: additionalTags ?? [],
+      tags: tags,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  static Map<String, dynamic> createBlossomAuthEvent({
+  static Future<Map<String, dynamic>> createBlossomAuthEvent({
     required String content,
     required String sha256Hash,
     required int expiration,
-    required String privateKey,
-  }) {
-    final json = rust_events.createBlossomAuthEvent(
+  }) async {
+    final tags = <List<String>>[
+      ['t', 'upload'],
+      ['x', sha256Hash],
+      ['expiration', expiration.toString()],
+    ];
+    final json = await rust_events.signEventWithSigner(
+      kind: 24242,
       content: content,
-      sha256Hash: sha256Hash,
-      expiration: expiration,
-      privateKeyHex: privateKey,
+      tags: tags,
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }
@@ -539,7 +543,7 @@ class NostrService {
     }
   }
 
-  static List<dynamic> processBatch() {
+  static Future<List<dynamic>> processBatch() async {
     if (_isBatchProcessing || _batchQueue.isEmpty) return [];
 
     _isBatchProcessing = true;
@@ -553,18 +557,16 @@ class NostrService {
 
         switch (operation) {
           case 'createNoteEvent':
-            results.add(createNoteEvent(
+            results.add(await createNoteEvent(
               content: params['content'],
-              privateKey: params['privateKey'],
               tags: params['tags'],
             ));
             break;
           case 'createReactionEvent':
-            results.add(createReactionEvent(
+            results.add(await createReactionEvent(
               targetEventId: params['targetEventId'],
               targetAuthor: params['targetAuthor'],
               content: params['content'],
-              privateKey: params['privateKey'],
             ));
             break;
           case 'createFilter':
@@ -643,15 +645,16 @@ class NostrService {
     _batchQueue.clear();
   }
 
-  static List<Map<String, dynamic>> createMultipleNoteEvents(
-      List<Map<String, dynamic>> eventData) {
-    return eventData
-        .map((data) => createNoteEvent(
-              content: data['content'],
-              privateKey: data['privateKey'],
-              tags: data['tags'],
-            ))
-        .toList();
+  static Future<List<Map<String, dynamic>>> createMultipleNoteEvents(
+      List<Map<String, dynamic>> eventData) async {
+    final results = <Map<String, dynamic>>[];
+    for (final data in eventData) {
+      results.add(await createNoteEvent(
+        content: data['content'],
+        tags: data['tags'],
+      ));
+    }
+    return results;
   }
 
   static List<Map<String, dynamic>> createMultipleFilters(
@@ -677,7 +680,6 @@ class NostrService {
   static Future<String> sendMedia({
     required String filePath,
     required String blossomUrl,
-    required String privateKey,
   }) async {
     final file = File(filePath);
     if (!await file.exists()) {
@@ -689,11 +691,14 @@ class NostrService {
     final mimeType = detectMimeType(filePath);
     final expiration = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600;
 
-    final authEventJson = rust_events.createBlossomAuthEvent(
+    final authEventJson = await rust_events.signEventWithSigner(
+      kind: 24242,
       content: 'Upload $filePath',
-      sha256Hash: hash,
-      expiration: expiration,
-      privateKeyHex: privateKey,
+      tags: [
+        ['t', 'upload'],
+        ['x', hash],
+        ['expiration', expiration.toString()],
+      ],
     );
 
     final authBase64 = base64Encode(utf8.encode(authEventJson));

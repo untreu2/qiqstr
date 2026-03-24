@@ -85,11 +85,11 @@ class EncryptedBookmarkService {
         .toList();
   }
 
-  Map<String, dynamic> createEncryptedBookmarkEvent({
+  Future<Map<String, dynamic>> createEncryptedBookmarkEvent({
     required List<String> bookmarkedEventIds,
     required String privateKeyHex,
     required String publicKeyHex,
-  }) {
+  }) async {
     final privateTags = <List<String>>[
       ...bookmarkedEventIds.map((id) => ['e', id]),
     ];
@@ -101,14 +101,13 @@ class EncryptedBookmarkService {
       receiverPkHex: publicKeyHex,
     );
 
-    final eventJson = rust_events.createSignedEvent(
+    final eventJson = await rust_events.signEventWithSigner(
       kind: 30001,
       content: encrypted,
       tags: [
         ['d', 'bookmark'],
         ['alt', 'List of bookmarks'],
       ],
-      privateKeyHex: privateKeyHex,
     );
 
     _bookmarkedEventIds = List.from(bookmarkedEventIds);

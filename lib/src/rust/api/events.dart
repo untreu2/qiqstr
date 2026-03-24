@@ -126,3 +126,10 @@ String createCoinosAuthEvent(
         {required String challenge, required String privateKeyHex}) =>
     RustLib.instance.api.crateApiEventsCreateCoinosAuthEvent(
         challenge: challenge, privateKeyHex: privateKeyHex);
+
+Future<String> signEventWithSigner(
+        {required int kind,
+        required String content,
+        required List<List<String>> tags}) =>
+    RustLib.instance.api.crateApiEventsSignEventWithSigner(
+        kind: kind, content: content, tags: tags);

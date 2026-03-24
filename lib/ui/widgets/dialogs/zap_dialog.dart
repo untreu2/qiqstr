@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -41,7 +40,6 @@ Future<bool> _payZapWithNwc(
   String comment,
 ) async {
   final nwcService = AppDI.get<NwcService>();
-  const secureStorage = FlutterSecureStorage();
 
   try {
     final l10n = AppLocalizations.of(context);
@@ -61,11 +59,6 @@ Future<bool> _payZapWithNwc(
       AppSnackbar.info(
           context, l10n?.processingPayment ?? 'Processing payment...',
           duration: const Duration(seconds: 5));
-    }
-
-    final privateKey = await secureStorage.read(key: 'privateKey');
-    if (privateKey == null || privateKey.isEmpty) {
-      throw Exception('Private key not found.');
     }
 
     final lud16 = user['lud16'] as String? ?? '';
@@ -125,10 +118,9 @@ Future<bool> _payZapWithNwc(
       tags.add(['e', noteId]);
     }
 
-    final zapRequest = NostrService.createZapRequestEvent(
+    final zapRequest = await NostrService.createZapRequestEvent(
       tags: tags,
       content: comment,
-      privateKey: privateKey,
     );
 
     final encodedZap =
@@ -172,7 +164,6 @@ Future<bool> _payZapWithNwc(
         recipientPubkeyHex,
         note,
         comment,
-        privateKey,
         sats,
         paymentResult));
 
@@ -195,7 +186,6 @@ Future<bool> _payZapWithCoinos(
   String comment,
 ) async {
   final coinosService = AppDI.get<CoinosService>();
-  const secureStorage = FlutterSecureStorage();
 
   try {
     final l10n = AppLocalizations.of(context);
@@ -214,11 +204,6 @@ Future<bool> _payZapWithCoinos(
       AppSnackbar.info(
           context, l10n?.processingPayment ?? 'Processing payment...',
           duration: const Duration(seconds: 5));
-    }
-
-    final privateKey = await secureStorage.read(key: 'privateKey');
-    if (privateKey == null || privateKey.isEmpty) {
-      throw Exception('Private key not found.');
     }
 
     final lud16 = user['lud16'] as String? ?? '';
@@ -281,10 +266,9 @@ Future<bool> _payZapWithCoinos(
       }
     }
 
-    final zapRequest = NostrService.createZapRequestEvent(
+    final zapRequest = await NostrService.createZapRequestEvent(
       tags: tags,
       content: comment,
-      privateKey: privateKey,
     );
 
     final encodedZap =
@@ -327,14 +311,12 @@ Future<bool> _payZapWithCoinos(
           duration: const Duration(seconds: 2));
     }
 
-    // Publish Nostr events in the background without affecting success status
     unawaited(_publishZapEventsAsync(
         NostrService.eventToJson(zapRequest),
         invoice,
         recipientPubkeyHex,
         note,
         comment,
-        privateKey,
         sats,
         paymentResult));
 
@@ -355,7 +337,6 @@ Future<void> _publishZapEventsAsync(
   String recipientPubkeyHex,
   Map<String, dynamic> note,
   String comment,
-  String privateKey,
   int sats,
   dynamic paymentResult,
 ) async {

@@ -21,7 +21,6 @@ class DmService {
   Timer? _reconnectTimer;
   Timer? _chatPollTimer;
   String? _activeChatPubkeyHex;
-  String? _cachedPrivateKey;
 
   final StreamController<List<Map<String, dynamic>>>
       _conversationsStreamController =
@@ -820,14 +819,14 @@ class DmService {
     final initResult = await _ensureInitialized();
     if (initResult.isError || _currentUserPubkeyHex == null) return;
 
-    _cachedPrivateKey = await _getPrivateKey();
-    if (_cachedPrivateKey == null) return;
+    final hasKey = await _getPrivateKey() != null;
+    if (!hasKey) return;
 
     _connectRealtimeSubscription();
   }
 
   void _connectRealtimeSubscription() {
-    if (_cachedPrivateKey == null || _currentUserPubkeyHex == null) return;
+    if (_currentUserPubkeyHex == null) return;
 
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
@@ -844,8 +843,10 @@ class DmService {
       final stream = RustRelayService.instance.subscribeToEvents(filter);
 
       _realtimeSubscription = stream.listen(
-        (eventData) {
-          _handleRealtimeEvent(eventData, _cachedPrivateKey!);
+        (eventData) async {
+          final privateKey = await _getPrivateKey();
+          if (privateKey == null) return;
+          _handleRealtimeEvent(eventData, privateKey);
         },
         onError: (_) {
           _realtimeSubscription = null;

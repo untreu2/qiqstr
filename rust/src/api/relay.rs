@@ -205,6 +205,12 @@ pub async fn update_signer(private_key_hex: String) -> Result<()> {
     Ok(())
 }
 
+pub async fn clear_signer() -> Result<()> {
+    let client = get_client().await?;
+    client.unset_signer().await;
+    Ok(())
+}
+
 pub async fn is_client_initialized() -> bool {
     let lock = state().read().await;
     lock.is_some()

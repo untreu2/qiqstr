@@ -193,3 +193,21 @@ pub fn create_coinos_auth_event(challenge: String, private_key_hex: String) -> R
     let tags = vec![vec!["challenge".into(), challenge]];
     create_signed_event(27235, String::new(), tags, private_key_hex)
 }
+
+pub async fn sign_event_with_signer(
+    kind: u16,
+    content: String,
+    tags: Vec<Vec<String>>,
+) -> Result<String> {
+    let client = crate::api::relay::get_client_pub().await?;
+
+    let nostr_tags: Vec<Tag> = tags
+        .iter()
+        .filter(|t| !t.is_empty())
+        .map(|t| Tag::custom(TagKind::custom(&t[0]), t[1..].to_vec()))
+        .collect();
+
+    let builder = EventBuilder::new(Kind::from(kind), &content).tags(nostr_tags);
+    let event = client.sign_event_builder(builder).await?;
+    Ok(event.as_json())
+}
