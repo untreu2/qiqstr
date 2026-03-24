@@ -636,32 +636,46 @@ pub async fn db_process_deletion_events() -> Result<u32> {
     let filter = Filter::new().kind(Kind::EventDeletion);
     let deletion_events = client.database().query(filter).await?;
 
-    let mut deleted_count: u32 = 0;
+    let mut candidate_ids: Vec<EventId> = Vec::new();
+    let mut del_author_map: HashMap<EventId, PublicKey> = HashMap::new();
 
     for del_event in deletion_events {
-        let mut ids_to_delete: Vec<EventId> = Vec::new();
-
         for tag in del_event.tags.iter() {
             let tag_kind = tag.kind();
             if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
                 if let Some(ref_id_str) = tag.content() {
                     if let Ok(ref_id) = EventId::from_hex(ref_id_str) {
-                        if let Ok(Some(referenced)) = client.database().event_by_id(&ref_id).await {
-                            if referenced.pubkey == del_event.pubkey {
-                                ids_to_delete.push(ref_id);
-                            }
-                        }
+                        candidate_ids.push(ref_id);
+                        del_author_map.insert(ref_id, del_event.pubkey);
                     }
                 }
             }
         }
+    }
 
-        if !ids_to_delete.is_empty() {
-            let del_filter = Filter::new().ids(ids_to_delete.clone());
-            let _ = client.database().delete(del_filter).await;
-            deleted_count += ids_to_delete.len() as u32;
+    if candidate_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let batch_filter = Filter::new().ids(candidate_ids);
+    let referenced_events = client.database().query(batch_filter).await?;
+
+    let mut ids_to_delete: Vec<EventId> = Vec::new();
+    for event in referenced_events {
+        if let Some(expected_author) = del_author_map.get(&event.id) {
+            if event.pubkey == *expected_author {
+                ids_to_delete.push(event.id);
+            }
         }
     }
+
+    if ids_to_delete.is_empty() {
+        return Ok(0);
+    }
+
+    let deleted_count = ids_to_delete.len() as u32;
+    let del_filter = Filter::new().ids(ids_to_delete);
+    let _ = client.database().delete(del_filter).await;
 
     Ok(deleted_count)
 }
@@ -1994,14 +2008,20 @@ pub async fn db_get_hydrated_profile_notes(
     muted_words: Vec<String>,
     filter_replies: bool,
     current_user_pubkey_hex: Option<String>,
+    until_timestamp: Option<i64>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
 
-    let filter = Filter::new()
+    let mut filter = Filter::new()
         .author(pk)
         .kinds([Kind::TextNote, Kind::Repost])
         .limit(limit as usize);
+    if let Some(until) = until_timestamp {
+        if until > 0 {
+            filter = filter.until(Timestamp::from(until as u64));
+        }
+    }
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events.into_iter()
@@ -2087,14 +2107,20 @@ pub async fn db_get_hydrated_profile_replies(
     muted_pubkeys: Vec<String>,
     muted_words: Vec<String>,
     current_user_pubkey_hex: Option<String>,
+    until_timestamp: Option<i64>,
 ) -> Result<String> {
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
 
-    let filter = Filter::new()
+    let mut filter = Filter::new()
         .author(pk)
         .kind(Kind::TextNote)
         .limit(limit as usize * 3);
+    if let Some(until) = until_timestamp {
+        if until > 0 {
+            filter = filter.until(Timestamp::from(until as u64));
+        }
+    }
     let events = client.database().query(filter).await?;
 
     let mut reply_events: Vec<Event> = Vec::new();

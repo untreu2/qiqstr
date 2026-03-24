@@ -10,7 +10,11 @@ use nostr_sdk::prelude::*;
 fn is_persistent_kind(kind: Kind) -> bool {
     matches!(
         kind,
-        Kind::Metadata | Kind::ContactList | Kind::MuteList | Kind::RelayList
+        Kind::Metadata
+            | Kind::ContactList
+            | Kind::EventDeletion
+            | Kind::MuteList
+            | Kind::RelayList
     )
 }
 

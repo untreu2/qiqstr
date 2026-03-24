@@ -176,6 +176,87 @@ class SyncService {
     });
   }
 
+  Stream<int> streamProfileNotesProgress(String pubkey,
+      {bool force = false}) async* {
+    final key = 'profile_notes_$pubkey';
+    if (!force && !_shouldSync(key)) return;
+
+    _syncStatusController.add(const SyncOperationStatus(
+        operation: 'profile_notes_stream',
+        state: SyncOperationState.syncing));
+
+    int count = 0;
+    final pubkeys = <String>{};
+    final repostRefIds = <String>{};
+
+    try {
+      final sinceRaw = _getSincestamp(key);
+      final since = sinceRaw ?? -1;
+
+      await for (final event
+          in _relayService.fetchProfileEvents(pubkey, '1,5,6',
+              sinceTimestamp: since)) {
+        final eventPubkey = event['pubkey'] as String?;
+        if (eventPubkey != null && eventPubkey.isNotEmpty) {
+          pubkeys.add(eventPubkey);
+        }
+
+        final kind = (event['kind'] as num?)?.toInt();
+        if (kind == 6) {
+          final tags = event['tags'] as List<dynamic>? ?? [];
+          for (final tag in tags) {
+            if (tag is List && tag.length > 1 && tag[0] == 'e') {
+              final id = tag[1] as String?;
+              if (id != null && id.isNotEmpty) {
+                repostRefIds.add(id);
+                break;
+              }
+            }
+            if (tag is List &&
+                tag.isNotEmpty &&
+                tag[0] == 'p' &&
+                tag.length > 1) {
+              final originalAuthor = tag[1] as String?;
+              if (originalAuthor != null && originalAuthor.isNotEmpty) {
+                pubkeys.add(originalAuthor);
+              }
+            }
+          }
+        }
+
+        count++;
+        if (count == 1 || count % 50 == 0) {
+          _notifyDbChanged();
+          yield count;
+        }
+      }
+
+      await rust_db.dbProcessDeletionEvents();
+      _notifyDbChanged();
+      _schedulePendingProfileSync(pubkeys);
+      if (repostRefIds.isNotEmpty) {
+        _pendingRefIds.addAll(repostRefIds);
+        _refFetchTimer?.cancel();
+        _refFetchTimer = Timer(const Duration(seconds: 2), () {
+          _processPendingRefs();
+        });
+      }
+      _markSynced(key);
+
+      _syncStatusController.add(const SyncOperationStatus(
+          operation: 'profile_notes_stream',
+          state: SyncOperationState.completed));
+    } catch (e) {
+      _notifyDbChanged();
+      _syncStatusController.add(SyncOperationStatus(
+          operation: 'profile_notes_stream',
+          state: SyncOperationState.error,
+          error: e.toString()));
+    }
+
+    yield count;
+  }
+
   Future<void> syncProfileReactions(String pubkey,
       {int limit = 50, bool force = false}) async {
     final key = 'profile_reactions_$pubkey';
@@ -764,8 +845,10 @@ class SyncService {
       if (_feedSubscription != null || _notificationSubscription != null) {
         return;
       }
-      await syncFeed(userPubkey);
-      await syncNotifications(userPubkey);
+      await Future.wait([
+        syncFeed(userPubkey),
+        syncNotifications(userPubkey),
+      ]);
     });
   }
 
@@ -775,8 +858,10 @@ class SyncService {
   }
 
   Future<void> startRealtimeSubscriptions(String userPubkey) async {
-    await _startFeedSubscription(userPubkey);
-    await _startNotificationSubscription(userPubkey);
+    await Future.wait([
+      _startFeedSubscription(userPubkey),
+      _startNotificationSubscription(userPubkey),
+    ]);
   }
 
   Future<void> _startFeedSubscription(String userPubkey) async {

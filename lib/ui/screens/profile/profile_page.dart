@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/article/article_widget.dart';
+import '../../../utils/thread_chain.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/interaction_service.dart';
@@ -43,8 +44,6 @@ class _ProfilePageState extends State<ProfilePage> {
   final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier =
       ValueNotifier([]);
   final ValueNotifier<List<Map<String, dynamic>>> _repliesNotifier =
-      ValueNotifier([]);
-  final ValueNotifier<List<Map<String, dynamic>>> _photosNotifier =
       ValueNotifier([]);
   final ValueNotifier<List<Map<String, dynamic>>> _videosNotifier =
       ValueNotifier([]);
@@ -86,7 +85,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _scrollController.dispose();
     _notesNotifier.dispose();
     _repliesNotifier.dispose();
-    _photosNotifier.dispose();
     _videosNotifier.dispose();
     _likesNotifier.dispose();
     _showUsernameBubbleNotifier.dispose();
@@ -546,14 +544,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  List<Map<String, dynamic>> _filterByRegExp(
-      List<Map<String, dynamic>> notes, RegExp regExp) {
-    return notes.where((note) {
-      final content = note['content'] as String? ?? '';
-      return regExp.hasMatch(content);
-    }).toList();
-  }
-
   List<Map<String, dynamic>> _ownNotesSorted(ProfileLoaded state) {
     final ownNotes = [...state.notes, ...state.replies]
         .where((n) => n['isRepost'] != true)
@@ -568,30 +558,64 @@ class _ProfilePageState extends State<ProfilePage> {
     return ownNotes;
   }
 
+  List<({String url, Map<String, dynamic> note})> _extractPhotoEntries(
+      List<Map<String, dynamic>> notes) {
+    final entries = <({String url, Map<String, dynamic> note})>[];
+    for (final note in notes) {
+      final content = note['content'] as String? ?? '';
+      for (final match in _photoRegExp.allMatches(content)) {
+        entries.add((url: match.group(0)!, note: note));
+      }
+    }
+    return entries;
+  }
+
   Widget _buildProfilePhotos(BuildContext context, ProfileState state) {
     if (state is ProfileLoaded) {
-      final photoNotes = _filterByRegExp(_ownNotesSorted(state), _photoRegExp);
-      _photosNotifier.value = photoNotes;
+      final photoEntries = _extractPhotoEntries(_ownNotesSorted(state));
 
-      return widgets.NoteListWidget(
-        notes: photoNotes,
-        currentUserHex: state.currentUserHex,
-        notesNotifier: _photosNotifier,
-        profiles: state.profiles,
-        isLoading: state.isLoadingMore,
-        canLoadMore: state.canLoadMore,
-        onLoadMore: () {
-          context
-              .read<ProfileBloc>()
-              .add(const ProfileLoadMoreNotesRequested());
-        },
-        scrollController: _scrollController,
-        onNotesVisible: (ids) =>
-            InteractionService.instance.fetchCountsFromRelays(ids),
+      if (photoEntries.isEmpty) {
+        return SliverFillRemaining(
+          child: Center(
+            child: Text(
+              AppLocalizations.of(context)!.noPhotosYet,
+              style: TextStyle(color: context.colors.textSecondary),
+            ),
+          ),
+        );
+      }
+
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final entry = photoEntries[index];
+              return _PhotoGridTile(
+                url: entry.url,
+                note: entry.note,
+              );
+            },
+            childCount: photoEntries.length,
+          ),
+        ),
       );
     }
 
     return _buildNonLoadedState(context, state);
+  }
+
+  List<Map<String, dynamic>> _filterByRegExp(
+      List<Map<String, dynamic>> notes, RegExp regExp) {
+    return notes.where((note) {
+      final content = note['content'] as String? ?? '';
+      return regExp.hasMatch(content);
+    }).toList();
   }
 
   Widget _buildProfileVideos(BuildContext context, ProfileState state) {
@@ -716,4 +740,50 @@ class _ProfileTab {
   final int index;
 
   const _ProfileTab({required this.label, required this.index});
+}
+
+class _PhotoGridTile extends StatelessWidget {
+  final String url;
+  final Map<String, dynamic> note;
+
+  const _PhotoGridTile({
+    required this.url,
+    required this.note,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        final chainStr = ThreadChain.buildFromNote(note);
+        if (chainStr.isEmpty) return;
+        final noteData = Map<String, dynamic>.from(note);
+        final currentLocation = GoRouterState.of(context).matchedLocation;
+        if (currentLocation.startsWith('/home/feed')) {
+          context.push('/home/feed/thread/$chainStr', extra: noteData);
+        } else if (currentLocation.startsWith('/home/notifications')) {
+          context.push('/home/notifications/thread/$chainStr', extra: noteData);
+        } else {
+          context.push('/thread/$chainStr', extra: noteData);
+        }
+      },
+      child: CachedNetworkImage(
+        imageUrl: url,
+        fit: BoxFit.cover,
+        fadeInDuration: Duration.zero,
+        fadeOutDuration: Duration.zero,
+        maxHeightDiskCache: 400,
+        maxWidthDiskCache: 400,
+        memCacheWidth: 400,
+        placeholder: (context, url) => Container(
+          color: context.colors.surfaceTransparent,
+        ),
+        errorWidget: (context, url, error) => Container(
+          color: context.colors.surfaceTransparent,
+          child: Icon(Icons.broken_image,
+              color: context.colors.textSecondary, size: 24),
+        ),
+      ),
+    );
+  }
 }

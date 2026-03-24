@@ -132,6 +132,15 @@ Stream<String> fetchAllEventsForAuthor({required String authorHex}) =>
     RustLib.instance.api
         .crateApiRelayFetchAllEventsForAuthor(authorHex: authorHex);
 
+Stream<String> fetchProfileEvents(
+        {required String authorHex,
+        required String kindsStr,
+        required PlatformInt64 sinceTimestamp}) =>
+    RustLib.instance.api.crateApiRelayFetchProfileEvents(
+        authorHex: authorHex,
+        kindsStr: kindsStr,
+        sinceTimestamp: sinceTimestamp);
+
 Stream<String> subscribeToEvents({required String filterJson}) =>
     RustLib.instance.api.crateApiRelaySubscribeToEvents(filterJson: filterJson);
 

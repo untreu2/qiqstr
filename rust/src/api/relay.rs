@@ -1437,6 +1437,165 @@ pub async fn fetch_all_events_for_author(
 }
 
 #[frb]
+pub async fn fetch_profile_events(
+    author_hex: String,
+    kinds_str: String,
+    since_timestamp: i64,
+    sink: StreamSink<String>,
+) -> Result<()> {
+    let client = get_client().await?;
+    let pubkey = PublicKey::from_hex(&author_hex)?;
+
+    let kind_list: Vec<Kind> = kinds_str
+        .split(',')
+        .filter_map(|s| s.trim().parse::<u16>().ok())
+        .map(Kind::from)
+        .collect();
+
+    if kind_list.is_empty() {
+        return Ok(());
+    }
+
+    const PAGE_SIZE: usize = 500;
+    let seen = std::sync::Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
+
+    let relay_urls: Vec<RelayUrl> = {
+        let relays = client.relays().await;
+        relays
+            .iter()
+            .filter(|(_, r)| {
+                let flags = r.flags();
+                !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
+                    && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
+                    && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
+            })
+            .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
+            .collect()
+    };
+
+    if relay_urls.is_empty() {
+        return Ok(());
+    }
+
+    let since_ts = if since_timestamp > 0 {
+        Some(Timestamp::from(since_timestamp as u64))
+    } else {
+        None
+    };
+
+    let cursors = std::sync::Arc::new(tokio::sync::Mutex::new(HashMap::<String, u64>::new()));
+    let exhausted = std::sync::Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
+    let sink = std::sync::Arc::new(sink);
+
+    loop {
+        let active: Vec<RelayUrl> = {
+            let ex = exhausted.lock().await;
+            relay_urls
+                .iter()
+                .filter(|u| !ex.contains(u.as_str()))
+                .cloned()
+                .collect()
+        };
+
+        if active.is_empty() {
+            break;
+        }
+
+        let mut handles = Vec::new();
+        for relay_url in active {
+            let client = client.clone();
+            let kind_list = kind_list.clone();
+            let seen = seen.clone();
+            let cursors = cursors.clone();
+            let exhausted = exhausted.clone();
+            let sink = sink.clone();
+
+            handles.push(tokio::spawn(async move {
+                let key = relay_url.to_string();
+                let until_ts = cursors.lock().await.get(&key).copied();
+
+                let mut filter = Filter::new()
+                    .author(pubkey)
+                    .kinds(kind_list)
+                    .limit(PAGE_SIZE);
+                if let Some(ts) = until_ts {
+                    filter = filter.until(Timestamp::from(ts));
+                }
+                if let Some(since) = since_ts {
+                    filter = filter.since(since);
+                }
+
+                let events = match client
+                    .fetch_events_from(
+                        vec![relay_url],
+                        filter,
+                        Duration::from_secs(15),
+                    )
+                    .await
+                {
+                    Ok(e) => e,
+                    Err(_) => {
+                        exhausted.lock().await.insert(key);
+                        return false;
+                    }
+                };
+
+                let mut new_count = 0usize;
+                let mut oldest_ts: Option<u64> = None;
+
+                for event in events.into_iter() {
+                    let id_hex = event.id.to_hex();
+                    {
+                        let mut s = seen.lock().await;
+                        if s.contains(&id_hex) {
+                            continue;
+                        }
+                        s.insert(id_hex);
+                    }
+                    new_count += 1;
+
+                    let ts = event.created_at.as_secs();
+                    oldest_ts = Some(match oldest_ts {
+                        None => ts,
+                        Some(prev) => prev.min(ts),
+                    });
+
+                    let _ = client.database().save_event(&event).await;
+
+                    let json = match serde_json::from_str::<serde_json::Value>(&event.as_json()) {
+                        Ok(v) => serde_json::to_string(&v).unwrap_or_default(),
+                        Err(_) => continue,
+                    };
+                    if sink.add(json).is_err() {
+                        return false;
+                    }
+                }
+
+                if new_count == 0 {
+                    exhausted.lock().await.insert(key);
+                } else if let Some(oldest) = oldest_ts {
+                    if oldest == 0 {
+                        exhausted.lock().await.insert(key);
+                    } else {
+                        cursors.lock().await.insert(key, oldest - 1);
+                    }
+                } else {
+                    exhausted.lock().await.insert(key);
+                }
+
+                true
+            }));
+        }
+
+        for handle in handles {
+            let _ = handle.await;
+        }
+    }
+
+    Ok(())
+}
+
+#[frb]
 pub async fn subscribe_to_events(
     filter_json: String,
     sink: StreamSink<String>,

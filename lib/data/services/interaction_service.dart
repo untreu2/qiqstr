@@ -386,7 +386,7 @@ class InteractionService {
 
   void _refreshActiveStreams() {
     _refreshDebounceTimer?.cancel();
-    _refreshDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 200), () {
       final activeNoteIds = _streams.keys.toList();
       if (activeNoteIds.isEmpty || _currentUserHex == null) return;
       _loadBatchFromDb(activeNoteIds);

@@ -30,7 +30,7 @@ class ArticleRepositoryImpl implements ArticleRepository {
   @override
   Stream<List<Article>> watchArticles({List<String>? authors, int limit = 50}) {
     return _events.onChange
-        .debounceTime(const Duration(milliseconds: 500))
+        .debounceTime(const Duration(milliseconds: 250))
         .startWith(null)
         .asyncMap((_) => getArticles(authors: authors, limit: limit));
   }

@@ -130,13 +130,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       );
 
   void _syncHashtagInBackground(String hashtag, Emitter<FeedState>? emit) {
-    Future.microtask(() async {
+    _syncService.syncHashtag(hashtag).then((_) {
       if (isClosed) return;
-      try {
-        await _syncService.syncHashtag(hashtag);
-        if (isClosed) return;
-        _watchHashtagFeed(hashtag);
-      } catch (_) {}
+      _watchHashtagFeed(hashtag);
+    }).catchError((_) {}).whenComplete(() {
       if (!isClosed && state is FeedLoaded) {
         add(feed_event.FeedSyncCompleted());
       }
@@ -247,21 +244,15 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   void _syncInBackground(String userHex, Emitter<FeedState>? emit) {
     _watchFeed(userHex);
 
-    Future.microtask(() async {
-      if (isClosed) return;
-
-      final initialSyncs = Future.wait([
-        _syncService.syncProfile(userHex),
-        _syncService.syncFollowingList(userHex),
-        _syncService.syncMuteList(userHex),
-        _syncService.syncFeed(userHex, force: true),
-      ]);
-
-      await initialSyncs.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () => [],
-      );
-
+    Future.wait([
+      _syncService.syncProfile(userHex),
+      _syncService.syncFollowingList(userHex),
+      _syncService.syncMuteList(userHex),
+      _syncService.syncFeed(userHex, force: true),
+    ]).timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => [],
+    ).then((_) async {
       if (isClosed) return;
 
       _watchFeed(userHex);
@@ -275,24 +266,21 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         add(feed_event.FeedSyncCompleted());
       }
 
-      Future.microtask(() async {
-        if (isClosed) return;
-        try {
-          final follows = await _followingRepository.getFollowing(userHex);
-          if (follows != null && follows.isNotEmpty) {
-            _syncService.syncProfiles(follows);
-          }
+      try {
+        final follows = await _followingRepository.getFollowing(userHex);
+        if (follows != null && follows.isNotEmpty) {
+          _syncService.syncProfiles(follows);
+        }
 
-          await Future.wait([
-            _syncService.syncBookmarkList(userHex),
-            _syncService.syncPinnedNotes(userHex),
-          ]);
+        await Future.wait([
+          _syncService.syncBookmarkList(userHex),
+          _syncService.syncPinnedNotes(userHex),
+        ]);
 
-          await _syncService.startRealtimeSubscriptions(userHex);
-          await _syncService.syncFollowsOfFollows(userHex);
-        } catch (_) {}
-      });
-    });
+        await _syncService.startRealtimeSubscriptions(userHex);
+        await _syncService.syncFollowsOfFollows(userHex);
+      } catch (_) {}
+    }).catchError((_) {});
   }
 
   Future<void> _onFeedRefreshed(
@@ -321,11 +309,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         final listPubkeys = service?.pubkeysForList(currentState.activeListId!);
         if (listPubkeys != null && listPubkeys.isNotEmpty) {
           _watchListFeed(listPubkeys);
-          Future.microtask(() async {
-            if (isClosed) return;
-            try {
-              await _syncService.syncListFeed(listPubkeys, force: true);
-            } catch (_) {}
+          _syncService.syncListFeed(listPubkeys, force: true).catchError((_) {}).whenComplete(() {
             if (!isClosed && state is FeedLoaded) {
               add(feed_event.FeedSyncCompleted());
             }
@@ -333,11 +317,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         }
       } else {
         _watchFeed(_currentUserHex!);
-        Future.microtask(() async {
-          if (isClosed) return;
-          try {
-            await _syncService.syncFeed(_currentUserHex!, force: true);
-          } catch (_) {}
+        _syncService.syncFeed(_currentUserHex!, force: true).catchError((_) {}).whenComplete(() {
           if (!isClosed && state is FeedLoaded) {
             add(feed_event.FeedSyncCompleted());
           }
@@ -481,102 +461,98 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
   }
 
-  void _loadProfilesForNotes(List<Map<String, dynamic>> notes) {
-    Future.microtask(() async {
-      if (isClosed || state is! FeedLoaded) return;
+  void _loadProfilesForNotes(List<Map<String, dynamic>> notes) async {
+    if (isClosed || state is! FeedLoaded) return;
 
-      final currentState = state as FeedLoaded;
-      final authorIds = <String>{};
-      for (final n in notes) {
-        final pubkey = n['pubkey'] as String? ?? '';
-        if (pubkey.isNotEmpty && !currentState.profiles.containsKey(pubkey)) {
-          authorIds.add(pubkey);
-        }
-        final repostedBy = n['repostedBy'] as String? ?? '';
-        if (repostedBy.isNotEmpty &&
-            !currentState.profiles.containsKey(repostedBy)) {
-          authorIds.add(repostedBy);
+    final currentState = state as FeedLoaded;
+    final authorIds = <String>{};
+    for (final n in notes) {
+      final pubkey = n['pubkey'] as String? ?? '';
+      if (pubkey.isNotEmpty && !currentState.profiles.containsKey(pubkey)) {
+        authorIds.add(pubkey);
+      }
+      final repostedBy = n['repostedBy'] as String? ?? '';
+      if (repostedBy.isNotEmpty &&
+          !currentState.profiles.containsKey(repostedBy)) {
+        authorIds.add(repostedBy);
+      }
+    }
+
+    if (authorIds.isEmpty) return;
+
+    try {
+      final profiles =
+          await _profileRepository.getProfiles(authorIds.toList());
+      if (isClosed) return;
+
+      final updatedProfiles = <String, Map<String, dynamic>>{};
+      final missingPubkeys = <String>[];
+
+      for (final pubkey in authorIds) {
+        final profile = profiles[pubkey];
+        if (profile != null) {
+          updatedProfiles[pubkey] = profile.toMap();
+        } else {
+          missingPubkeys.add(pubkey);
         }
       }
 
-      if (authorIds.isEmpty) return;
+      if (updatedProfiles.isNotEmpty) {
+        add(feed_event.FeedProfilesLoaded(updatedProfiles));
+      }
 
-      try {
-        final profiles =
-            await _profileRepository.getProfiles(authorIds.toList());
+      if (missingPubkeys.isNotEmpty) {
+        try {
+          await _syncService
+              .syncProfiles(missingPubkeys)
+              .timeout(const Duration(seconds: 2));
+        } catch (_) {}
         if (isClosed) return;
 
-        final updatedProfiles = <String, Map<String, dynamic>>{};
-        final missingPubkeys = <String>[];
+        final synced = await _profileRepository.getProfiles(missingPubkeys);
+        if (isClosed) return;
 
-        for (final pubkey in authorIds) {
-          final profile = profiles[pubkey];
-          if (profile != null) {
-            updatedProfiles[pubkey] = profile.toMap();
-          } else {
-            missingPubkeys.add(pubkey);
-          }
+        final syncedProfiles = <String, Map<String, dynamic>>{};
+        for (final entry in synced.entries) {
+          syncedProfiles[entry.key] = entry.value.toMap();
         }
 
-        if (updatedProfiles.isNotEmpty) {
-          add(feed_event.FeedProfilesLoaded(updatedProfiles));
+        if (syncedProfiles.isNotEmpty) {
+          add(feed_event.FeedProfilesLoaded(syncedProfiles));
         }
-
-        if (missingPubkeys.isNotEmpty) {
-          try {
-            await _syncService
-                .syncProfiles(missingPubkeys)
-                .timeout(const Duration(seconds: 2));
-          } catch (_) {}
-          if (isClosed) return;
-
-          final synced = await _profileRepository.getProfiles(missingPubkeys);
-          if (isClosed) return;
-
-          final syncedProfiles = <String, Map<String, dynamic>>{};
-          for (final entry in synced.entries) {
-            syncedProfiles[entry.key] = entry.value.toMap();
-          }
-
-          if (syncedProfiles.isNotEmpty) {
-            add(feed_event.FeedProfilesLoaded(syncedProfiles));
-          }
-        }
-      } catch (_) {}
-    });
+      }
+    } catch (_) {}
   }
 
   void _prefetchEmbeddedContent(List<Map<String, dynamic>> notes) {
-    Future.microtask(() {
-      if (isClosed) return;
+    if (isClosed) return;
 
-      final contents = <String>[];
-      for (final note in notes) {
-        final content = note['content'] as String? ?? '';
-        if (content.isNotEmpty) contents.add(content);
-      }
-      if (contents.isEmpty) return;
+    final contents = <String>[];
+    for (final note in notes) {
+      final content = note['content'] as String? ?? '';
+      if (content.isNotEmpty) contents.add(content);
+    }
+    if (contents.isEmpty) return;
 
-      final resultJson = rust_db.extractEmbeddedIdsBatch(contents: contents);
-      final result = jsonDecode(resultJson) as Map<String, dynamic>;
+    final resultJson = rust_db.extractEmbeddedIdsBatch(contents: contents);
+    final result = jsonDecode(resultJson) as Map<String, dynamic>;
 
-      final quoteEventIds = (result['quoteEventIds'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [];
-      final articleAuthorPubkeys =
-          (result['articleAuthorPubkeys'] as List<dynamic>?)
-                  ?.map((e) => e.toString())
-                  .toList() ??
-              [];
+    final quoteEventIds = (result['quoteEventIds'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+    final articleAuthorPubkeys =
+        (result['articleAuthorPubkeys'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
 
-      if (quoteEventIds.isNotEmpty) {
-        _syncService.prefetchQuotedNotes(quoteEventIds);
-      }
-      if (articleAuthorPubkeys.isNotEmpty) {
-        _syncService.prefetchArticlesByAuthors(articleAuthorPubkeys);
-      }
-    });
+    if (quoteEventIds.isNotEmpty) {
+      _syncService.prefetchQuotedNotes(quoteEventIds);
+    }
+    if (articleAuthorPubkeys.isNotEmpty) {
+      _syncService.prefetchArticlesByAuthors(articleAuthorPubkeys);
+    }
   }
 
   List<Map<String, dynamic>> _feedNotesToMaps(List<FeedNote> notes) {
@@ -633,12 +609,9 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         activeListTitle: event.listTitle,
       ));
 
-      Future.microtask(() async {
-        if (isClosed) return;
-        try {
-          await _syncService.syncListFeed(event.pubkeys!);
-          if (!isClosed) _watchListFeed(event.pubkeys!);
-        } catch (_) {}
+      _syncService.syncListFeed(event.pubkeys!).then((_) {
+        if (!isClosed) _watchListFeed(event.pubkeys!);
+      }).catchError((_) {}).whenComplete(() {
         if (!isClosed && state is FeedLoaded) {
           add(feed_event.FeedSyncCompleted());
         }

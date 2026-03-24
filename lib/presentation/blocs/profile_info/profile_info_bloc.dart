@@ -115,12 +115,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   }
 
   void _syncProfileInBackground(String pubkey) {
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        await _syncService.syncProfile(pubkey);
-      } catch (_) {}
-    });
+    _syncService.syncProfile(pubkey).catchError((_) {});
   }
 
   void _watchProfile(String pubkey) {
@@ -145,26 +140,20 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   }
 
   void _loadFollowStateInBackground(String targetHex, String currentUserHex) {
-    Future.microtask(() async {
+    Future.wait([
+      _followingRepository.isFollowing(currentUserHex, targetHex),
+      _followingRepository.isMuted(currentUserHex, targetHex),
+    ]).then((results) {
       if (isClosed) return;
-      try {
-        final isFollowing =
-            await _followingRepository.isFollowing(currentUserHex, targetHex);
-        final isMuted =
-            await _followingRepository.isMuted(currentUserHex, targetHex);
-
-        if (isClosed) return;
-        final currentState = state;
-        if (currentState is ProfileInfoLoaded) {
-          add(_InternalStateUpdate(currentState.copyWith(
-            isFollowing: isFollowing,
-            isMuted: isMuted,
-          )));
-        }
-
-        _refreshDoesUserFollowMeInBackground(targetHex, currentUserHex);
-      } catch (_) {}
-    });
+      final currentState = state;
+      if (currentState is ProfileInfoLoaded) {
+        add(_InternalStateUpdate(currentState.copyWith(
+          isFollowing: results[0],
+          isMuted: results[1],
+        )));
+      }
+      _refreshDoesUserFollowMeInBackground(targetHex, currentUserHex);
+    }).catchError((_) {});
   }
 
   void _syncCountsInBackground(ProfileInfoLoaded currentState) {
@@ -173,31 +162,19 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
         userPubkeyHex;
     if (pubkeyHex.isEmpty) return;
 
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        final count = await _profileRepository.getFollowerCount(pubkeyHex);
-        if (!isClosed && state is ProfileInfoLoaded) {
-          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followerCount: count,
-          )));
-        }
-      } catch (_) {}
-    });
-
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        await _syncService.syncFollowingList(pubkeyHex);
-        if (isClosed) return;
-        final follows = await _followingRepository.getFollowing(pubkeyHex);
-        if (!isClosed && state is ProfileInfoLoaded) {
-          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followingCount: follows?.length ?? 0,
-          )));
-        }
-      } catch (_) {}
-    });
+    Future.wait([
+      _profileRepository.getFollowerCount(pubkeyHex),
+      _syncService.syncFollowingList(pubkeyHex).then((_) =>
+          _followingRepository.getFollowing(pubkeyHex)),
+    ]).then((results) {
+      if (isClosed || state is! ProfileInfoLoaded) return;
+      final followerCount = results[0] as int;
+      final follows = results[1] as List<String>?;
+      add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+        followerCount: followerCount,
+        followingCount: follows?.length ?? 0,
+      )));
+    }).catchError((_) {});
 
     _calculateFollowScoreInBackground(pubkeyHex, currentState.currentUserHex);
   }
@@ -207,44 +184,33 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     if (currentUserHex == null || currentUserHex.isEmpty) return;
     if (currentUserHex.toLowerCase() == targetHex.toLowerCase()) return;
 
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        final result = await _followingRepository.getFollowScore(
-            currentUserHex, targetHex);
-        if (result != null && !isClosed && state is ProfileInfoLoaded) {
-          add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
-            followScoreCount: result.count,
-            followScoreAvatars: result.avatarUrls,
-          )));
-        }
-      } catch (_) {}
-    });
+    _followingRepository.getFollowScore(currentUserHex, targetHex).then((result) {
+      if (result != null && !isClosed && state is ProfileInfoLoaded) {
+        add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+          followScoreCount: result.count,
+          followScoreAvatars: result.avatarUrls,
+        )));
+      }
+    }).catchError((_) {});
   }
 
   void _refreshDoesUserFollowMeInBackground(
       String targetHex, String currentUserHex) {
-    Future.microtask(() async {
+    _followingRepository.getFollowing(targetHex).then((targetFollows) {
       if (isClosed) return;
-      try {
-        final targetFollows =
-            await _followingRepository.getFollowing(targetHex);
-        if (targetFollows != null && targetFollows.isNotEmpty) {
-          final doesUserFollowMe = targetFollows
-              .any((f) => f.toLowerCase() == currentUserHex.toLowerCase());
-
-          if (isClosed) return;
-          final currentState = state;
-          if (currentState is ProfileInfoLoaded) {
-            add(_InternalStateUpdate(
-                currentState.copyWith(doesUserFollowMe: doesUserFollowMe)));
-          }
-        } else {
-          _startFollowsYouPoll(targetHex, currentUserHex);
+      if (targetFollows != null && targetFollows.isNotEmpty) {
+        final doesUserFollowMe = targetFollows
+            .any((f) => f.toLowerCase() == currentUserHex.toLowerCase());
+        final currentState = state;
+        if (currentState is ProfileInfoLoaded) {
+          add(_InternalStateUpdate(
+              currentState.copyWith(doesUserFollowMe: doesUserFollowMe)));
         }
-      } catch (_) {
+      } else {
         _startFollowsYouPoll(targetHex, currentUserHex);
       }
+    }).catchError((_) {
+      _startFollowsYouPoll(targetHex, currentUserHex);
     });
   }
 

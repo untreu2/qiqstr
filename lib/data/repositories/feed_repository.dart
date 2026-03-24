@@ -16,9 +16,14 @@ abstract class FeedRepository {
   Future<List<FeedNote>> getFeed(String userPubkey,
       {List<String>? authors, int limit = 100});
   Stream<List<FeedNote>> watchNotes(String pubkey, {int limit = 50});
-  Future<List<FeedNote>> getNotes(String pubkey, {int limit = 50});
+  Future<List<FeedNote>> getNotes(String pubkey,
+      {int limit = 50, int? untilTimestamp});
   Stream<List<FeedNote>> watchUserReplies(String pubkey, {int limit = 50});
-  Future<List<FeedNote>> getUserReplies(String pubkey, {int limit = 50});
+  Future<List<FeedNote>> getUserReplies(String pubkey,
+      {int limit = 50, int? untilTimestamp});
+  Stream<({List<FeedNote> notes, List<FeedNote> replies})>
+      watchProfileNotesAndReplies(String pubkey,
+          {int notesLimit, int repliesLimit, int debounceMs});
   Stream<List<FeedNote>> watchLikes(String pubkey, {int limit = 50});
   Future<List<FeedNote>> getLikes(String pubkey, {int limit = 50});
   Stream<List<FeedNote>> watchHashtag(String hashtag, {int limit = 100});
@@ -116,7 +121,7 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   Future<List<Map<String, dynamic>>> _fetchNotes(
-      String pubkey, int limit) async {
+      String pubkey, int limit, {int? untilTimestamp}) async {
     try {
       final json = await rust_db.dbGetHydratedProfileNotes(
         pubkeyHex: pubkey,
@@ -125,6 +130,7 @@ class FeedRepositoryImpl implements FeedRepository {
         mutedWords: _mutedWords,
         filterReplies: true,
         currentUserPubkeyHex: _currentUserHex,
+        untilTimestamp: untilTimestamp,
       );
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
@@ -135,8 +141,9 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   @override
-  Future<List<FeedNote>> getNotes(String pubkey, {int limit = 50}) async {
-    final maps = await _fetchNotes(pubkey, limit);
+  Future<List<FeedNote>> getNotes(String pubkey,
+      {int limit = 50, int? untilTimestamp}) async {
+    final maps = await _fetchNotes(pubkey, limit, untilTimestamp: untilTimestamp);
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
@@ -152,7 +159,7 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   Future<List<Map<String, dynamic>>> _fetchUserReplies(
-      String pubkey, int limit) async {
+      String pubkey, int limit, {int? untilTimestamp}) async {
     try {
       final json = await rust_db.dbGetHydratedProfileReplies(
         pubkeyHex: pubkey,
@@ -160,6 +167,7 @@ class FeedRepositoryImpl implements FeedRepository {
         mutedPubkeys: _mutedPubkeys,
         mutedWords: _mutedWords,
         currentUserPubkeyHex: _currentUserHex,
+        untilTimestamp: untilTimestamp,
       );
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
@@ -170,9 +178,36 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   @override
-  Future<List<FeedNote>> getUserReplies(String pubkey, {int limit = 50}) async {
-    final maps = await _fetchUserReplies(pubkey, limit);
+  Future<List<FeedNote>> getUserReplies(String pubkey,
+      {int limit = 50, int? untilTimestamp}) async {
+    final maps = await _fetchUserReplies(pubkey, limit,
+        untilTimestamp: untilTimestamp);
     return maps.map((m) => FeedNote.fromMap(m)).toList();
+  }
+
+  @override
+  Stream<({List<FeedNote> notes, List<FeedNote> replies})>
+      watchProfileNotesAndReplies(String pubkey,
+          {int notesLimit = 200,
+          int repliesLimit = 200,
+          int debounceMs = 500}) async* {
+    Future<({List<FeedNote> notes, List<FeedNote> replies})> fetchBoth() async {
+      final results = await Future.wait([
+        _fetchNotes(pubkey, notesLimit),
+        _fetchUserReplies(pubkey, repliesLimit),
+      ]);
+      return (
+        notes: results[0].map((m) => FeedNote.fromMap(m)).toList(),
+        replies: results[1].map((m) => FeedNote.fromMap(m)).toList(),
+      );
+    }
+
+    final initial = await fetchBoth();
+    yield initial;
+
+    yield* _events.onChange
+        .debounceTime(Duration(milliseconds: debounceMs))
+        .asyncMap((_) => fetchBoth());
   }
 
   @override
@@ -275,7 +310,7 @@ class FeedRepositoryImpl implements FeedRepository {
   @override
   Stream<List<FeedNote>> watchThreadReplies(String noteId, {int limit = 100}) {
     return _events.onChange
-        .debounceTime(const Duration(milliseconds: 500))
+        .debounceTime(const Duration(milliseconds: 200))
         .startWith(null)
         .asyncMap((_) => getThreadReplies(noteId, limit: limit));
   }

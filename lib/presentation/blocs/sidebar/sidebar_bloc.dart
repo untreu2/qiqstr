@@ -101,12 +101,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   }
 
   void _syncInBackground(String userHex) {
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        await _syncService.syncProfile(userHex);
-      } catch (_) {}
-    });
+    _syncService.syncProfile(userHex).catchError((_) {});
   }
 
   Future<void> _onSidebarRefreshed(
@@ -129,18 +124,16 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   }
 
   void _fetchCounts(String userPubkeyHex) {
-    Future.microtask(() async {
+    Future.wait([
+      _followingRepository.getFollowing(userPubkeyHex),
+      _profileRepository.getFollowerCount(userPubkeyHex),
+    ]).then((results) {
       if (isClosed) return;
-      try {
-        final follows = await _followingRepository.getFollowing(userPubkeyHex);
-        final followerCount =
-            await _profileRepository.getFollowerCount(userPubkeyHex);
-        if (isClosed) return;
-        add(_SidebarCountsUpdated(follows?.length ?? 0, followerCount));
-      } catch (_) {
-        if (isClosed) return;
-        add(_SidebarCountsUpdated(0, 0));
-      }
+      final follows = results[0] as List<String>?;
+      final followerCount = results[1] as int;
+      add(_SidebarCountsUpdated(follows?.length ?? 0, followerCount));
+    }).catchError((_) {
+      if (!isClosed) add(_SidebarCountsUpdated(0, 0));
     });
   }
 
@@ -190,14 +183,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   }
 
   void _loadRelayCount() {
-    Future.microtask(() async {
-      if (isClosed) return;
-      try {
-        final count = await RustRelayService.instance.getConnectedRelayCount();
-        if (isClosed) return;
-        add(_SidebarRelayCountUpdated(count));
-      } catch (_) {}
-    });
+    RustRelayService.instance.getConnectedRelayCount().then((count) {
+      if (!isClosed) add(_SidebarRelayCountUpdated(count));
+    }).catchError((_) {});
   }
 
   void _onSidebarRelayCountUpdated(
@@ -210,32 +198,30 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     ));
   }
 
-  void _loadStoredAccounts() {
-    Future.microtask(() async {
+  void _loadStoredAccounts() async {
+    if (isClosed) return;
+    try {
+      final accounts = await _authService.getStoredAccounts();
       if (isClosed) return;
-      try {
-        final accounts = await _authService.getStoredAccounts();
-        if (isClosed) return;
 
-        // Load profile images for each account from database
-        final profileImages = <String, String>{};
-        for (final account in accounts) {
-          final hex = _authService.npubToHex(account.npub);
-          if (hex != null) {
-            final profile = await _profileRepository.getProfile(hex);
-            if (profile != null) {
-              final picture = profile.picture ?? '';
-              if (picture.isNotEmpty) {
-                profileImages[account.npub] = picture;
-              }
+      final profileImages = <String, String>{};
+      final futures = accounts.map((account) async {
+        final hex = _authService.npubToHex(account.npub);
+        if (hex != null) {
+          final profile = await _profileRepository.getProfile(hex);
+          if (profile != null) {
+            final picture = profile.picture ?? '';
+            if (picture.isNotEmpty) {
+              profileImages[account.npub] = picture;
             }
           }
         }
+      });
+      await Future.wait(futures);
 
-        if (isClosed) return;
-        add(_SidebarAccountsLoaded(accounts, profileImages));
-      } catch (_) {}
-    });
+      if (isClosed) return;
+      add(_SidebarAccountsLoaded(accounts, profileImages));
+    } catch (_) {}
   }
 
   void _onAccountsLoaded(
