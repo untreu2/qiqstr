@@ -9,25 +9,14 @@ import '../../src/rust/api/database.dart' as rust_db;
 import '../services/encrypted_mute_service.dart';
 import '../services/rust_database_service.dart';
 
-abstract class ArticleRepository {
-  Stream<List<Article>> watchArticles({List<String>? authors, int limit = 50});
-  Future<List<Article>> getArticles({List<String>? authors, int limit = 50});
-  Future<Article?> getArticle(String articleId);
-  Future<Article?> getArticleByNaddr(
-      {required String pubkeyHex, required String identifier});
-  Future<void> save(List<Map<String, dynamic>> articles);
-}
-
-class ArticleRepositoryImpl implements ArticleRepository {
+class ArticleRepository {
   final RustDatabaseService _events;
 
-  ArticleRepositoryImpl({required RustDatabaseService events})
-      : _events = events;
+  ArticleRepository({required RustDatabaseService events}) : _events = events;
 
   List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
   List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
 
-  @override
   Stream<List<Article>> watchArticles({List<String>? authors, int limit = 50}) {
     return _events.onChange
         .debounceTime(const Duration(milliseconds: 250))
@@ -35,7 +24,6 @@ class ArticleRepositoryImpl implements ArticleRepository {
         .asyncMap((_) => getArticles(authors: authors, limit: limit));
   }
 
-  @override
   Future<List<Article>> getArticles(
       {List<String>? authors, int limit = 50}) async {
     try {
@@ -56,7 +44,6 @@ class ArticleRepositoryImpl implements ArticleRepository {
     }
   }
 
-  @override
   Future<Article?> getArticle(String articleId) async {
     try {
       final json = await rust_db.dbGetHydratedArticle(eventId: articleId);
@@ -68,7 +55,6 @@ class ArticleRepositoryImpl implements ArticleRepository {
     }
   }
 
-  @override
   Future<Article?> getArticleByNaddr({
     required String pubkeyHex,
     required String identifier,
@@ -86,7 +72,6 @@ class ArticleRepositoryImpl implements ArticleRepository {
     }
   }
 
-  @override
   Future<void> save(List<Map<String, dynamic>> articles) async {
     if (articles.isEmpty) return;
     try {

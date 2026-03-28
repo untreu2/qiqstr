@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../services/rust_database_service.dart';
 import '../services/relay_service.dart';
-import '../services/nostr_service.dart';
 import '../services/auth_service.dart';
 import '../services/encrypted_mute_service.dart';
 import '../services/encrypted_bookmark_service.dart';
@@ -100,12 +99,20 @@ class SyncService {
 
       final since = _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
-      final notesFilter = NostrService.createNotesFilter(
-          authors: follows, kinds: [1, 5, 6], since: since, limit: 100);
-      final articlesFilter = NostrService.createArticlesFilter(
-          authors: follows, since: since, limit: 30);
+      final notesFilter = <String, dynamic>{
+        'authors': follows,
+        'kinds': [1, 5, 6],
+        'since': since,
+        'limit': 100,
+      };
+      final articlesFilter = <String, dynamic>{
+        'kinds': [30023],
+        'authors': follows,
+        'since': since,
+        'limit': 30,
+      };
 
-      await Future.wait([
+      final results = await Future.wait([
         _fetchAndStore(notesFilter),
         _fetchAndStore(articlesFilter),
       ]);
@@ -113,6 +120,11 @@ class SyncService {
       await rust_db.dbProcessDeletionEvents();
       _notifyDbChanged();
       _queueMissingRepostOriginals(since);
+      final noteEvents = results[0];
+      if (noteEvents.isNotEmpty) {
+        _fetchThreadAncestorsInBackground(noteEvents);
+        _syncMissingProfilesInBackground(noteEvents);
+      }
       _markSynced(key);
     });
   }
@@ -125,13 +137,21 @@ class SyncService {
     await _sync('list_feed', () async {
       final since = _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
-      final notesFilter = NostrService.createNotesFilter(
-          authors: pubkeys, kinds: [1, 5, 6], since: since, limit: 100);
+      final notesFilter = <String, dynamic>{
+        'authors': pubkeys,
+        'kinds': [1, 5, 6],
+        'since': since,
+        'limit': 100,
+      };
 
-      await _fetchAndStore(notesFilter);
+      final noteEvents = await _fetchAndStore(notesFilter);
       await rust_db.dbProcessDeletionEvents();
       _notifyDbChanged();
       _queueMissingRepostOriginals(since);
+      if (noteEvents.isNotEmpty) {
+        _fetchThreadAncestorsInBackground(noteEvents);
+        _syncMissingProfilesInBackground(noteEvents);
+      }
       _markSynced(key);
     });
   }
@@ -141,8 +161,11 @@ class SyncService {
     if (!_shouldSync(key)) return;
 
     await _sync('profile', () async {
-      final filter =
-          NostrService.createProfileFilter(authors: [pubkey], limit: 1);
+      final filter = <String, dynamic>{
+        'kinds': [0],
+        'authors': [pubkey],
+        'limit': 1
+      };
       await _queryRelays(filter);
       _notifyDbChanged();
       _markSynced(key);
@@ -156,10 +179,17 @@ class SyncService {
 
     await _sync('profile_notes', () async {
       final since = _getSincestamp(key);
-      final profileFilter =
-          NostrService.createProfileFilter(authors: [pubkey], limit: 1);
-      final notesFilter = NostrService.createNotesFilter(
-          authors: [pubkey], kinds: [1, 5, 6], limit: limit, since: since);
+      final profileFilter = <String, dynamic>{
+        'kinds': [0],
+        'authors': [pubkey],
+        'limit': 1
+      };
+      final notesFilter = <String, dynamic>{
+        'authors': [pubkey],
+        'kinds': [1, 5, 6],
+        'limit': limit,
+        if (since != null) 'since': since,
+      };
 
       final results = await Future.wait([
         _queryRelays(profileFilter),
@@ -172,6 +202,7 @@ class SyncService {
       _notifyDbChanged();
       _syncMissingProfilesInBackground(noteEvents);
       _fetchReferencedEventsInBackground(noteEvents);
+      _fetchThreadAncestorsInBackground(noteEvents);
       _markSynced(key);
     });
   }
@@ -182,8 +213,7 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     _syncStatusController.add(const SyncOperationStatus(
-        operation: 'profile_notes_stream',
-        state: SyncOperationState.syncing));
+        operation: 'profile_notes_stream', state: SyncOperationState.syncing));
 
     int count = 0;
     final pubkeys = <String>{};
@@ -193,9 +223,8 @@ class SyncService {
       final sinceRaw = _getSincestamp(key);
       final since = sinceRaw ?? -1;
 
-      await for (final event
-          in _relayService.fetchProfileEvents(pubkey, '1,5,6',
-              sinceTimestamp: since)) {
+      await for (final event in _relayService
+          .fetchProfileEvents(pubkey, '1,5,6', sinceTimestamp: since)) {
         final eventPubkey = event['pubkey'] as String?;
         if (eventPubkey != null && eventPubkey.isNotEmpty) {
           pubkeys.add(eventPubkey);
@@ -264,8 +293,12 @@ class SyncService {
 
     await _sync('profile_reactions', () async {
       final since = _getSincestamp(key);
-      final filter = NostrService.createNotesFilter(
-          authors: [pubkey], kinds: [7], limit: limit, since: since);
+      final filter = <String, dynamic>{
+        'authors': [pubkey],
+        'kinds': [7],
+        'limit': limit,
+        if (since != null) 'since': since,
+      };
       await _queryRelays(filter);
       _notifyDbChanged();
       _markSynced(key);
@@ -275,8 +308,11 @@ class SyncService {
   Future<void> syncProfiles(List<String> pubkeys) async {
     if (pubkeys.isEmpty) return;
     await _sync('profiles', () async {
-      final filter = NostrService.createProfileFilter(
-          authors: pubkeys, limit: pubkeys.length);
+      final filter = <String, dynamic>{
+        'kinds': [0],
+        'authors': pubkeys,
+        'limit': pubkeys.length
+      };
       await _queryRelays(filter);
       _notifyDbChanged();
     });
@@ -289,11 +325,12 @@ class SyncService {
     await _sync('notifications', () async {
       final since = _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
-      final filter = NostrService.createNotificationFilter(
-          pubkeys: [userPubkey],
-          kinds: [1, 6, 7, 9735],
-          since: since,
-          limit: 100);
+      final filter = <String, dynamic>{
+        '#p': [userPubkey],
+        'kinds': [1, 6, 7, 9735],
+        'since': since,
+        'limit': 100,
+      };
       await _fetchAndStore(filter);
       _notifyDbChanged();
 
@@ -330,8 +367,11 @@ class SyncService {
     if (!_shouldSync(key)) return;
 
     await _sync('following', () async {
-      final filter =
-          NostrService.createFollowingFilter(authors: [userPubkey], limit: 1);
+      final filter = <String, dynamic>{
+        'kinds': [3],
+        'authors': [userPubkey],
+        'limit': 1
+      };
       final events = await _queryRelays(filter);
 
       if (events.isNotEmpty) {
@@ -379,8 +419,11 @@ class SyncService {
       for (var i = 0; i < totalToSync; i += batchSize) {
         final end = (i + batchSize).clamp(0, totalToSync);
         final batch = pubkeysToSync.sublist(i, end);
-        final filter = NostrService.createFollowingFilter(
-            authors: batch, limit: batch.length);
+        final filter = <String, dynamic>{
+          'kinds': [3],
+          'authors': batch,
+          'limit': batch.length
+        };
         await _queryRelays(filter);
       }
 
@@ -415,14 +458,22 @@ class SyncService {
 
   Future<void> syncMuteList(String userPubkey) => _syncEncryptedList(
         syncKey: 'mute',
-        filter: NostrService.createMuteFilter(authors: [userPubkey], limit: 1),
+        filter: <String, dynamic>{
+          'kinds': [10000],
+          'authors': [userPubkey],
+          'limit': 1
+        },
         loadFromDatabase: EncryptedMuteService.instance.loadFromDatabase,
       );
 
   Future<void> syncBookmarkList(String userPubkey) => _syncEncryptedList(
         syncKey: 'bookmark',
-        filter:
-            NostrService.createBookmarkFilter(authors: [userPubkey], limit: 1),
+        filter: <String, dynamic>{
+          'kinds': [30001],
+          '#d': ['bookmark'],
+          'authors': [userPubkey],
+          'limit': 1
+        },
         loadFromDatabase: EncryptedBookmarkService.instance.loadFromDatabase,
       );
 
@@ -437,8 +488,11 @@ class SyncService {
 
   Future<void> syncPinnedNotes(String userPubkey) async {
     await _sync('pinned_notes', () async {
-      final filter =
-          NostrService.createPinnedNotesFilter(authors: [userPubkey], limit: 1);
+      final filter = <String, dynamic>{
+        'kinds': [10001],
+        'authors': [userPubkey],
+        'limit': 1
+      };
       await _queryRelays(filter);
 
       final authService = AuthService.instance;
@@ -467,8 +521,11 @@ class SyncService {
       final follows = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
       final allAuthors = [userPubkey, ...follows];
 
-      final filter =
-          NostrService.createFollowSetsFilter(authors: allAuthors, limit: 500);
+      final filter = <String, dynamic>{
+        'kinds': [30000],
+        'authors': allAuthors,
+        'limit': 500
+      };
       await _queryRelays(filter);
 
       await FollowSetService.instance
@@ -506,11 +563,12 @@ class SyncService {
     await _sync('articles', () async {
       final since = _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 7);
-      final filter = NostrService.createArticlesFilter(
-        authors: authors,
-        since: since,
-        limit: limit,
-      );
+      final filter = <String, dynamic>{
+        'kinds': [30023],
+        if (authors != null && authors.isNotEmpty) 'authors': authors,
+        'since': since,
+        'limit': limit,
+      };
       await _fetchAndStore(filter);
       _notifyDbChanged();
       _markSynced(key);
@@ -541,10 +599,11 @@ class SyncService {
 
       var profile = await fetchProfile();
       if (profile == null) {
-        final profileFilter = NostrService.createProfileFilter(
-          authors: [pubkey],
-          limit: 1,
-        );
+        final profileFilter = <String, dynamic>{
+          'kinds': [0],
+          'authors': [pubkey],
+          'limit': 1
+        };
         final profileEvents =
             await _relayService.fetchEvents(profileFilter, timeoutSecs: 8);
         if (profileEvents.isNotEmpty) {
@@ -617,12 +676,12 @@ class SyncService {
     await _sync('hashtag', () async {
       final since = _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
-      final filter = NostrService.createHashtagFilter(
-        hashtag: normalizedHashtag,
-        kinds: [1],
-        since: since,
-        limit: 100,
-      );
+      final filter = <String, dynamic>{
+        'kinds': [1],
+        '#t': [normalizedHashtag],
+        'since': since,
+        'limit': 100,
+      };
       await _fetchAndStore(filter);
       _notifyDbChanged();
       _markSynced(key);
@@ -631,8 +690,11 @@ class SyncService {
 
   Future<void> syncInteractionsForNote(String noteId) async {
     await _sync('interactions_$noteId', () async {
-      final filter = NostrService.createCombinedInteractionFilter(
-          eventIds: [noteId], limit: 200);
+      final filter = <String, dynamic>{
+        'kinds': [7, 1, 5, 6, 9735],
+        '#e': [noteId],
+        'limit': 200,
+      };
       final events = await _queryRelays(filter);
       if (events.isNotEmpty) {
         await _saveEventsAndProfiles(events);
@@ -644,8 +706,11 @@ class SyncService {
     if (noteIds.isEmpty) return;
     await _sync('interactions_batch', () async {
       final limitPerNote = (500 ~/ noteIds.length).clamp(10, 100);
-      final filter = NostrService.createCombinedInteractionFilter(
-          eventIds: noteIds, limit: noteIds.length * limitPerNote);
+      final filter = <String, dynamic>{
+        'kinds': [7, 1, 5, 6, 9735],
+        '#e': noteIds,
+        'limit': noteIds.length * limitPerNote,
+      };
       final events = await _queryRelays(filter);
       if (events.isNotEmpty) {
         await _saveEventsAndProfiles(events);
@@ -679,7 +744,7 @@ class SyncService {
             pendingIds.where((id) => !processedIds.contains(id)).toList();
         if (idsToFetch.isEmpty) break;
 
-        final filter = NostrService.createEventByIdFilter(eventIds: idsToFetch);
+        final filter = <String, dynamic>{'ids': idsToFetch};
         final events = await _queryRelays(filter);
         allEvents.addAll(events);
         for (final id in idsToFetch) {

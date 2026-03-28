@@ -9,24 +9,11 @@ import '../../src/rust/api/database.dart' as rust_db;
 import '../services/primal_cache_service.dart';
 import '../services/rust_database_service.dart';
 
-abstract class ProfileRepository {
-  Stream<UserProfile?> watchProfile(String pubkey);
-  Future<UserProfile?> getProfile(String pubkey);
-  Future<Map<String, UserProfile>> getProfiles(List<String> pubkeys);
-  Future<List<UserProfile>> searchProfiles(String query, {int limit = 50});
-  Future<void> saveProfile(String pubkey, Map<String, String> profileData);
-  Future<void> saveProfiles(Map<String, Map<String, String>> profiles);
-  Future<bool> hasProfile(String pubkey);
-  Future<int> getFollowerCount(String pubkeyHex);
-  Future<Map<String, int>> getFollowerCounts(List<String> pubkeyHexes);
-  Future<List<Map<String, dynamic>>> getSuggestedUsers({int limit = 50});
-}
-
-class ProfileRepositoryImpl implements ProfileRepository {
+class ProfileRepository {
   final RustDatabaseService _events;
   final PrimalCacheService _primalCacheService;
 
-  ProfileRepositoryImpl({
+  ProfileRepository({
     required RustDatabaseService events,
     PrimalCacheService? primalCacheService,
   })  : _events = events,
@@ -47,7 +34,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
     );
   }
 
-  @override
   Stream<UserProfile?> watchProfile(String pubkey) {
     return _events.onChange
         .debounceTime(const Duration(milliseconds: 250))
@@ -55,7 +41,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
         .asyncMap((_) => getProfile(pubkey));
   }
 
-  @override
   Future<UserProfile?> getProfile(String pubkey) async {
     try {
       final json = await rust_db.dbGetProfile(pubkeyHex: pubkey);
@@ -68,7 +53,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
     }
   }
 
-  @override
   Future<Map<String, UserProfile>> getProfiles(List<String> pubkeys) async {
     if (pubkeys.isEmpty) return {};
     try {
@@ -82,20 +66,19 @@ class ProfileRepositoryImpl implements ProfileRepository {
     }
   }
 
-  @override
   Future<List<UserProfile>> searchProfiles(String query,
       {int limit = 50}) async {
     try {
       final json = await rust_db.dbSearchProfiles(query: query, limit: limit);
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>().map((m) {
-        final pubkey = (m['pubkey'] ?? m['pubkey'] ?? '') as String;
+        final pubkey = (m['pubkey'] ?? '') as String;
         return UserProfile(
           pubkey: pubkey,
           name: m['name'] as String?,
           displayName: m['display_name'] as String?,
           about: m['about'] as String?,
-          picture: (m['picture'] ?? m['picture']) as String?,
+          picture: m['picture'] as String?,
           banner: m['banner'] as String?,
           nip05: m['nip05'] as String?,
           lud16: m['lud16'] as String?,
@@ -109,7 +92,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
     }
   }
 
-  @override
   Future<void> saveProfile(
       String pubkey, Map<String, String> profileData) async {
     try {
@@ -121,7 +103,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
     }
   }
 
-  @override
   Future<void> saveProfiles(Map<String, Map<String, String>> profiles) async {
     if (profiles.isEmpty) return;
     try {
@@ -132,7 +113,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
     }
   }
 
-  @override
   Future<bool> hasProfile(String pubkey) async {
     try {
       return await rust_db.dbHasProfile(pubkeyHex: pubkey);
@@ -141,17 +121,14 @@ class ProfileRepositoryImpl implements ProfileRepository {
     }
   }
 
-  @override
   Future<int> getFollowerCount(String pubkeyHex) async {
     return await _primalCacheService.fetchFollowerCount(pubkeyHex);
   }
 
-  @override
   Future<Map<String, int>> getFollowerCounts(List<String> pubkeyHexes) async {
     return await _primalCacheService.fetchFollowerCounts(pubkeyHexes);
   }
 
-  @override
   Future<List<Map<String, dynamic>>> getSuggestedUsers({int limit = 50}) async {
     try {
       final json = await rust_db.dbGetRandomProfiles(limit: limit);

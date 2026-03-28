@@ -9,8 +9,8 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
-import '../../../data/services/nostr_service.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../src/rust/api/events.dart' as rust_events;
 import '../../../data/services/auth_service.dart';
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
@@ -125,14 +125,14 @@ Future<bool> _payZapWithNwc(
       tags.add(['e', noteId]);
     }
 
-    final zapRequest = NostrService.createZapRequestEvent(
+    final zapRequestJson = rust_events.createZapRequestEvent(
       tags: tags,
       content: comment,
-      privateKey: privateKey,
+      privateKeyHex: privateKey,
     );
+    final zapRequest = jsonDecode(zapRequestJson) as Map<String, dynamic>;
 
-    final encodedZap =
-        Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
+    final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest));
     final zapUrl = Uri.parse(
       '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
     );
@@ -166,15 +166,8 @@ Future<bool> _payZapWithNwc(
           duration: const Duration(seconds: 2));
     }
 
-    unawaited(_publishZapEventsAsync(
-        NostrService.eventToJson(zapRequest),
-        invoice,
-        recipientPubkeyHex,
-        note,
-        comment,
-        privateKey,
-        sats,
-        paymentResult));
+    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex,
+        note, comment, privateKey, sats, paymentResult));
 
     return true;
   } catch (e) {
@@ -281,14 +274,14 @@ Future<bool> _payZapWithCoinos(
       }
     }
 
-    final zapRequest = NostrService.createZapRequestEvent(
+    final zapRequestJson = rust_events.createZapRequestEvent(
       tags: tags,
       content: comment,
-      privateKey: privateKey,
+      privateKeyHex: privateKey,
     );
+    final zapRequest = jsonDecode(zapRequestJson) as Map<String, dynamic>;
 
-    final encodedZap =
-        Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
+    final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest));
     final zapUrl = Uri.parse(
       '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
     );
@@ -328,15 +321,8 @@ Future<bool> _payZapWithCoinos(
     }
 
     // Publish Nostr events in the background without affecting success status
-    unawaited(_publishZapEventsAsync(
-        NostrService.eventToJson(zapRequest),
-        invoice,
-        recipientPubkeyHex,
-        note,
-        comment,
-        privateKey,
-        sats,
-        paymentResult));
+    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex,
+        note, comment, privateKey, sats, paymentResult));
 
     return true;
   } catch (e) {

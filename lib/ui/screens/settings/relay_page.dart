@@ -9,7 +9,6 @@ import 'dart:async';
 import '../../theme/theme_manager.dart';
 import '../../../constants/relays.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/nostr_service.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../widgets/common/common_buttons.dart';
@@ -225,7 +224,7 @@ class _RelayPageState extends State<RelayPage> {
       );
       final event = jsonDecode(eventJsonStr) as Map<String, dynamic>;
 
-      final serializedEvent = NostrService.serializeEvent(event);
+      final serializedEvent = jsonEncode(['EVENT', event]);
 
       await _broadcastRelayListEvent(serializedEvent);
 

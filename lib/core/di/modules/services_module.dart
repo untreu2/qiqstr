@@ -8,6 +8,7 @@ import '../../../data/services/nwc_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/rust_database_service.dart';
 import '../../../src/rust/api/database.dart' as rust_db;
+import '../../../src/rust/api/relay.dart' as rust_relay;
 import '../../../data/services/relay_service.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/sync/publishers/event_publisher.dart';
@@ -16,8 +17,6 @@ import '../../../data/services/follow_set_service.dart';
 class ServicesModule extends DIModule {
   @override
   Future<void> register() async {
-    await RustDatabaseService.instance.initialize();
-
     AppDI.registerLazySingleton<RustDatabaseService>(
         () => RustDatabaseService.instance);
     AppDI.registerLazySingleton<AuthService>(() => AuthService.instance);
@@ -78,8 +77,7 @@ class ServicesModule extends DIModule {
       }
 
       if (userPubkeyHex != null) {
-        RustDatabaseService.instance.updateOwnPubkey(userPubkeyHex);
-        RustDatabaseService.instance.autoCleanupIfNeeded();
+        _autoCleanupIfNeeded(userPubkeyHex);
 
         final prefs = await SharedPreferences.getInstance();
         final gossipEnabled = prefs.getBool('gossip_model_enabled') ?? false;
@@ -147,6 +145,31 @@ class ServicesModule extends DIModule {
         print('[ServicesModule] Error during account switch reinit: $e');
       }
     }
+  }
+
+  void _autoCleanupIfNeeded(String ownPubkeyHex) {
+    Future.microtask(() async {
+      try {
+        final sizeMb = (await rust_relay.getDatabaseSizeMb()).toInt();
+        if (sizeMb > 1500) {
+          await rust_db.dbWipeDirectory();
+        } else if (sizeMb > 500) {
+          await rust_db.dbSmartCleanup(
+            ownPubkeyHex: ownPubkeyHex,
+            interactionDays: 5,
+            noteDays: 7,
+          );
+        } else if (sizeMb > 200) {
+          await rust_db.dbSmartCleanup(
+            ownPubkeyHex: ownPubkeyHex,
+            interactionDays: 7,
+            noteDays: 7,
+          );
+        }
+      } catch (e) {
+        if (kDebugMode) print('[ServicesModule] autoCleanup error: $e');
+      }
+    });
   }
 
   void _loadFollowSets(String userPubkeyHex) {

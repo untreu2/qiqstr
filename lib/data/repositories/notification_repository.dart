@@ -9,25 +9,15 @@ import '../../src/rust/api/database.dart' as rust_db;
 import '../services/encrypted_mute_service.dart';
 import '../services/rust_database_service.dart';
 
-abstract class NotificationRepository {
-  Stream<List<NotificationItem>> watchNotifications(String userPubkey,
-      {int limit = 100});
-  Future<List<NotificationItem>> getNotifications(String userPubkey,
-      {int limit = 100});
-  Future<void> save(
-      String userPubkey, List<Map<String, dynamic>> notifications);
-}
-
-class NotificationRepositoryImpl implements NotificationRepository {
+class NotificationRepository {
   final RustDatabaseService _events;
 
-  NotificationRepositoryImpl({required RustDatabaseService events})
+  NotificationRepository({required RustDatabaseService events})
       : _events = events;
 
   List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
   List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
 
-  @override
   Stream<List<NotificationItem>> watchNotifications(String userPubkey,
       {int limit = 100}) {
     return _events.onChange
@@ -36,7 +26,6 @@ class NotificationRepositoryImpl implements NotificationRepository {
         .asyncMap((_) => getNotifications(userPubkey, limit: limit));
   }
 
-  @override
   Future<List<NotificationItem>> getNotifications(String userPubkey,
       {int limit = 100}) async {
     try {
@@ -59,7 +48,6 @@ class NotificationRepositoryImpl implements NotificationRepository {
     }
   }
 
-  @override
   Future<void> save(
       String userPubkey, List<Map<String, dynamic>> notifications) async {
     if (notifications.isEmpty) return;

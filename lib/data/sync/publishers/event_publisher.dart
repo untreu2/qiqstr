@@ -1,11 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/encrypted_mute_service.dart';
 import '../../services/encrypted_bookmark_service.dart';
 import '../../services/pinned_notes_service.dart';
 import '../../services/follow_set_service.dart';
+import '../../../src/rust/api/events.dart' as rust_events;
+import '../../../src/rust/api/crypto.dart' as rust_crypto;
 
 class EventPublisher {
   final AuthService _authService;
@@ -26,11 +29,12 @@ class EventPublisher {
     List<List<String>>? tags,
   }) async {
     final privateKey = await _getPrivateKey();
-    return NostrService.createNoteEvent(
+    final json = rust_events.createNoteEvent(
       content: content,
-      privateKey: privateKey,
-      tags: tags,
+      tags: tags ?? [],
+      privateKeyHex: privateKey,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createReply({
@@ -43,19 +47,26 @@ class EventPublisher {
     final privateKey = await _getPrivateKey();
     final relays = await RustRelayService.instance.getRelayList();
 
-    final tags = NostrService.createReplyTags(
-      rootId: rootId,
-      replyId: replyToId,
-      rootAuthor: rootAuthor,
-      replyAuthor: replyAuthor,
-      relayUrls: relays,
-    );
+    final tags = <List<String>>[
+      if (replyToId != null && replyToId != rootId) ...[
+        ['e', rootId, '', 'root'],
+        ['e', replyToId, '', 'reply'],
+        ['p', rootAuthor],
+        if (replyAuthor != null && replyAuthor != rootAuthor)
+          ['p', replyAuthor],
+      ] else ...[
+        ['e', rootId, '', 'root'],
+        ['p', rootAuthor],
+      ],
+      for (final url in relays) ['r', url],
+    ];
 
-    return NostrService.createReplyEvent(
+    final json = rust_events.createReplyEvent(
       content: content,
-      privateKey: privateKey,
       tags: tags,
+      privateKeyHex: privateKey,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createQuote({
@@ -64,12 +75,15 @@ class EventPublisher {
     String? quotedAuthor,
   }) async {
     final privateKey = await _getPrivateKey();
-    return NostrService.createQuoteEvent(
+    final json = rust_events.createQuoteEvent(
       content: content,
       quotedEventId: quotedNoteId,
       quotedEventPubkey: quotedAuthor,
-      privateKey: privateKey,
+      relayUrl: '',
+      privateKeyHex: privateKey,
+      additionalTags: [],
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createReaction({
@@ -79,15 +93,17 @@ class EventPublisher {
   }) async {
     final privateKey = await _getPrivateKey();
     final relays = await RustRelayService.instance.getRelayList();
-    final relayUrl = relays.isNotEmpty ? relays.first : null;
+    final relayUrl = relays.isNotEmpty ? relays.first : '';
 
-    return NostrService.createReactionEvent(
+    final json = rust_events.createReactionEvent(
       targetEventId: targetEventId,
       targetAuthor: targetAuthor,
       content: content,
-      privateKey: privateKey,
+      privateKeyHex: privateKey,
       relayUrl: relayUrl,
+      targetKind: 1,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createRepost({
@@ -97,15 +113,16 @@ class EventPublisher {
   }) async {
     final privateKey = await _getPrivateKey();
     final relays = await RustRelayService.instance.getRelayList();
-    final relayUrl = relays.isNotEmpty ? relays.first : null;
+    final relayUrl = relays.isNotEmpty ? relays.first : '';
 
-    return NostrService.createRepostEvent(
+    final json = rust_events.createRepostEvent(
       noteId: noteId,
       noteAuthor: noteAuthor,
       content: originalContent,
-      privateKey: privateKey,
+      privateKeyHex: privateKey,
       relayUrl: relayUrl,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createDeletion({
@@ -113,21 +130,23 @@ class EventPublisher {
     String? reason,
   }) async {
     final privateKey = await _getPrivateKey();
-    return NostrService.createDeletionEvent(
+    final json = rust_events.createDeletionEvent(
       eventIds: eventIds,
-      privateKey: privateKey,
-      reason: reason,
+      reason: reason ?? '',
+      privateKeyHex: privateKey,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createFollow({
     required List<String> followingPubkeys,
   }) async {
     final privateKey = await _getPrivateKey();
-    return NostrService.createFollowEvent(
+    final json = rust_events.createFollowEvent(
       followingPubkeys: followingPubkeys,
-      privateKey: privateKey,
+      privateKeyHex: privateKey,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createMute({
@@ -200,31 +219,33 @@ class EventPublisher {
     String content = '',
   }) async {
     final privateKey = await _getPrivateKey();
-    return NostrService.createReportEvent(
-      reportedPubkey: reportedPubkey,
-      reportType: reportType,
-      privateKey: privateKey,
+    final json = rust_events.createSignedEvent(
+      kind: 1984,
       content: content,
+      tags: [
+        ['p', reportedPubkey, reportType],
+      ],
+      privateKeyHex: privateKey,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> createProfileUpdate({
     required Map<String, dynamic> profileContent,
   }) async {
     final privateKey = await _getPrivateKey();
-    return NostrService.createProfileEvent(
-      profileContent: profileContent,
-      privateKey: privateKey,
+    final json = rust_events.createProfileEvent(
+      profileJson: jsonEncode(profileContent),
+      privateKeyHex: privateKey,
     );
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   Future<bool> broadcast(Map<String, dynamic> event) async {
     try {
       return await RustRelayService.instance.broadcastEvent(event);
     } catch (e) {
-      if (kDebugMode) {
-        print('[EventPublisher] Broadcast error: $e');
-      }
+      if (kDebugMode) print('[EventPublisher] Broadcast error: $e');
       return false;
     }
   }
@@ -233,9 +254,7 @@ class EventPublisher {
     try {
       return await RustRelayService.instance.broadcastEvent(event);
     } catch (e) {
-      if (kDebugMode) {
-        print('[EventPublisher] Broadcast raw event error: $e');
-      }
+      if (kDebugMode) print('[EventPublisher] Broadcast raw event error: $e');
       return false;
     }
   }
@@ -244,16 +263,59 @@ class EventPublisher {
       {String blossomUrl = 'https://blossom.primal.net'}) async {
     try {
       final privateKey = await _getPrivateKey();
-      final url = await NostrService.sendMedia(
-        filePath: filePath,
-        blossomUrl: blossomUrl,
-        privateKey: privateKey,
+      final file = File(filePath);
+      if (!await file.exists()) throw Exception('File not found: $filePath');
+
+      final fileBytes = await file.readAsBytes();
+      final hash = rust_crypto.sha256Hash(data: fileBytes);
+
+      final lowerPath = filePath.toLowerCase();
+      final mimeType = lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')
+          ? 'image/jpeg'
+          : lowerPath.endsWith('.png')
+              ? 'image/png'
+              : lowerPath.endsWith('.gif')
+                  ? 'image/gif'
+                  : lowerPath.endsWith('.mp4')
+                      ? 'video/mp4'
+                      : 'application/octet-stream';
+
+      final expiration = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600;
+      final authEventJson = rust_events.createBlossomAuthEvent(
+        content: 'Upload $filePath',
+        sha256Hash: hash,
+        expiration: expiration,
+        privateKeyHex: privateKey,
       );
-      return url;
-    } catch (e) {
-      if (kDebugMode) {
-        print('[EventPublisher] Upload media error: $e');
+
+      final authBase64 = base64Encode(utf8.encode(authEventJson));
+      final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
+
+      final httpClient = HttpClient();
+      try {
+        final request =
+            await httpClient.putUrl(Uri.parse('$cleanedUrl/upload'));
+        request.headers.set('Authorization', 'Nostr $authBase64');
+        request.headers.set('Content-Type', mimeType);
+        request.add(fileBytes);
+
+        final response = await request.close();
+        final responseBody = await response.transform(utf8.decoder).join();
+
+        if (response.statusCode == 200) {
+          final responseData = jsonDecode(responseBody) as Map<String, dynamic>;
+          final url = responseData['url'] as String? ?? '';
+          final sha256 = responseData['sha256'] as String? ?? '';
+          return url.isNotEmpty ? url : sha256;
+        } else {
+          throw Exception(
+              'Upload failed with status ${response.statusCode}: $responseBody');
+        }
+      } finally {
+        httpClient.close();
       }
+    } catch (e) {
+      if (kDebugMode) print('[EventPublisher] Upload media error: $e');
       return null;
     }
   }

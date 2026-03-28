@@ -117,10 +117,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             repliesSynced: false,
           ),
         );
-
         _loadCurrentUserProfile(currentUserHex);
-      } else {
-        emit(const ThreadLoading());
       }
 
       _fetchNetworkThread(focusedNoteId, chain, currentUserHex);
@@ -148,6 +145,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             [...localState.chainNotes, ...localState.replies],
           );
         }
+      } else if (state is! ThreadLoaded) {
+        emit(const ThreadLoading());
       }
     } catch (e) {
       if (!isClosed && state is! ThreadLoaded) {
@@ -473,8 +472,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           updatedProfiles[pubkey] = profile.toMap();
           final npub = _authService.hexToNpub(pubkey);
           if (npub != null) updatedProfiles[npub] = profile.toMap();
-          if ((profile.name ?? '').isEmpty ||
-              (profile.picture ?? '').isEmpty) {
+          if ((profile.name ?? '').isEmpty || (profile.picture ?? '').isEmpty) {
             missingPubkeys.add(pubkey);
           }
         } else {

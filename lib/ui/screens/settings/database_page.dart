@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import '../../../data/services/rust_database_service.dart';
+import '../../../src/rust/api/database.dart' as rust_db;
+import '../../../src/rust/api/relay.dart' as rust_relay;
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
@@ -49,8 +51,9 @@ class _DatabasePageState extends State<DatabasePage> {
   Future<void> _loadStats() async {
     setState(() => _isLoading = true);
     try {
-      final stats = await RustDatabaseService.instance.getDatabaseStats();
-      final sizeMb = await RustDatabaseService.instance.getDatabaseSizeMB();
+      final statsJson = await rust_db.dbGetDatabaseStats();
+      final stats = jsonDecode(statsJson) as Map<String, dynamic>;
+      final sizeMb = (await rust_relay.getDatabaseSizeMb()).toInt();
       if (mounted) {
         setState(() {
           _stats = stats;
@@ -67,7 +70,11 @@ class _DatabasePageState extends State<DatabasePage> {
   Future<void> _performCleanup() async {
     setState(() => _isCleaningUp = true);
     try {
-      await RustDatabaseService.instance.wipeDatabase();
+      try {
+        await rust_db.dbWipeDirectory();
+      } catch (_) {
+        await rust_db.dbWipe();
+      }
 
       await _loadStats();
       if (mounted) {

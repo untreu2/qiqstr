@@ -4,9 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/services/auth_service.dart';
 import '../data/services/coinos_service.dart';
-import '../data/services/rust_database_service.dart';
 import '../data/services/pinned_notes_service.dart';
 import '../core/di/app_di.dart';
+import '../src/rust/api/database.dart' as rust_db;
 import '../ui/widgets/common/snackbar_widget.dart';
 
 class Logout {
@@ -71,10 +71,13 @@ class Logout {
     PinnedNotesService.instance.clear();
 
     try {
-      final dbService = AppDI.get<RustDatabaseService>();
-      await dbService.wipeDatabase();
-    } catch (e) {
-      if (kDebugMode) print('Error wiping database: $e');
+      await rust_db.dbWipeDirectory();
+    } catch (_) {
+      try {
+        await rust_db.dbWipe();
+      } catch (e) {
+        if (kDebugMode) print('Error wiping database: $e');
+      }
     }
 
     await authService.logout();

@@ -5,20 +5,9 @@ import 'package:flutter/foundation.dart';
 
 import '../../src/rust/api/database.dart' as rust_db;
 
-abstract class InteractionRepository {
-  Future<Map<String, int>> getCounts(List<String> noteIds);
-  Future<Map<String, Map<String, dynamic>>> getData(
-      List<String> noteIds, String userPubkey);
-  Future<List<Map<String, dynamic>>> getDetails(String noteId);
-  Future<bool> hasReacted(String noteId, String userPubkey);
-  Future<bool> hasReposted(String noteId, String userPubkey);
-  Future<String?> findRepostId(String userPubkey, String noteId);
-}
+class InteractionRepository {
+  const InteractionRepository();
 
-class InteractionRepositoryImpl implements InteractionRepository {
-  const InteractionRepositoryImpl();
-
-  @override
   Future<Map<String, int>> getCounts(List<String> noteIds) async {
     if (noteIds.isEmpty) return {};
     try {
@@ -40,7 +29,6 @@ class InteractionRepositoryImpl implements InteractionRepository {
     }
   }
 
-  @override
   Future<Map<String, Map<String, dynamic>>> getData(
       List<String> noteIds, String userPubkey) async {
     if (noteIds.isEmpty) return {};
@@ -56,7 +44,6 @@ class InteractionRepositoryImpl implements InteractionRepository {
     }
   }
 
-  @override
   Future<List<Map<String, dynamic>>> getDetails(String noteId) async {
     try {
       final json = await rust_db.dbGetDetailedInteractions(noteId: noteId);
@@ -68,7 +55,6 @@ class InteractionRepositoryImpl implements InteractionRepository {
     }
   }
 
-  @override
   Future<bool> hasReacted(String noteId, String userPubkey) async {
     try {
       return await rust_db.dbHasUserReacted(
@@ -78,7 +64,6 @@ class InteractionRepositoryImpl implements InteractionRepository {
     }
   }
 
-  @override
   Future<bool> hasReposted(String noteId, String userPubkey) async {
     try {
       return await rust_db.dbHasUserReposted(
@@ -88,7 +73,6 @@ class InteractionRepositoryImpl implements InteractionRepository {
     }
   }
 
-  @override
   Future<String?> findRepostId(String userPubkey, String noteId) async {
     try {
       return await rust_db.dbFindUserRepostEventId(
