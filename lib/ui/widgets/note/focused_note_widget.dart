@@ -55,7 +55,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
       ValueNotifier(_FocusedNoteState.initial());
   final Map<String, Map<String, dynamic>> _locallyLoadedProfiles = {};
 
-  bool _isDisposed = false;
   bool _isInitialized = false;
 
   @override
@@ -136,34 +135,15 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
   void _initializeAsync() {
     Future.microtask(() {
-      if (_isDisposed || !mounted) return;
+      if (!mounted) return;
 
       try {
-        _setupUserListener();
         _loadInitialUserData();
         _loadUsersAsync();
       } catch (e) {
         debugPrint('[FocusedNoteWidget] Async init error: $e');
       }
     });
-  }
-
-  void _setupUserListener() {
-    try {
-      widget.notesNotifier.addListener(_onNotesChange);
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Setup listener error: $e');
-    }
-  }
-
-  void _onNotesChange() {
-    if (!mounted || _isDisposed) return;
-
-    try {
-      _updateUserData();
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Notes change error: $e');
-    }
   }
 
   void _loadInitialUserData() {
@@ -175,7 +155,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
   }
 
   void _updateUserData() {
-    if (_isDisposed || !mounted) return;
+    if (!mounted) return;
 
     try {
       final currentState = _stateNotifier.value;
@@ -234,7 +214,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
   }
 
   Future<void> _loadUsersAsync() async {
-    if (_isDisposed || !mounted) return;
+    if (!mounted) return;
 
     try {
       if (widget.notesListProvider != null) {
@@ -256,7 +236,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
       final profileRepo = AppDI.get<ProfileRepository>();
       final author = await profileRepo.getProfile(_authorId);
-      if (author != null && mounted && !_isDisposed) {
+      if (author != null && mounted) {
         _locallyLoadedProfiles[_authorId] = {
           'pubkey': author.pubkey,
           'name': author.name ?? '',
@@ -275,7 +255,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
       if (_reposterId != null) {
         final reposterId = _reposterId;
         final reposter = await profileRepo.getProfile(reposterId);
-        if (reposter != null && mounted && !_isDisposed) {
+        if (reposter != null && mounted) {
           _locallyLoadedProfiles[reposterId] = {
             'pubkey': reposter.pubkey,
             'name': reposter.name ?? '',
@@ -312,19 +292,13 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
   @override
   void dispose() {
-    _isDisposed = true;
-    try {
-      widget.notesNotifier.removeListener(_onNotesChange);
-      _stateNotifier.dispose();
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Dispose error: $e');
-    }
+    _stateNotifier.dispose();
     super.dispose();
   }
 
   void _navigateToProfile(String npub) {
     try {
-      if (mounted && !_isDisposed) {
+      if (mounted) {
         debugPrint(
             '[FocusedNoteWidget] Attempting to navigate to profile: $npub');
 
@@ -364,7 +338,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
   void _navigateToMentionProfile(String id) {
     try {
-      if (mounted && !_isDisposed) {
+      if (mounted) {
         _navigateToProfile(id);
       }
     } catch (e) {
@@ -384,7 +358,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
   Widget build(BuildContext context) {
     super.build(context);
 
-    if (!_isInitialized || _isDisposed || !mounted) {
+    if (!_isInitialized || !mounted) {
       return const SizedBox.shrink();
     }
 

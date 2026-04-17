@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -54,7 +56,7 @@ class _NoteWidgetState extends State<NoteWidget> {
   late final DateTime _timestamp;
   late final String _widgetKey;
 
-  late final String _formattedTimestamp;
+  late String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
   late final bool _shouldTruncate;
   late final Map<String, dynamic>? _truncatedContent;
@@ -62,8 +64,8 @@ class _NoteWidgetState extends State<NoteWidget> {
   final ValueNotifier<_NoteState> _stateNotifier =
       ValueNotifier(_NoteState.initial());
   final Map<String, Map<String, dynamic>> _locallyLoadedProfiles = {};
+  Timer? _timestampTimer;
 
-  bool _isDisposed = false;
   bool _isInitialized = false;
 
   @override
@@ -71,13 +73,31 @@ class _NoteWidgetState extends State<NoteWidget> {
     super.initState();
     try {
       _precomputeImmutableData();
-      _setupUserListener();
       _loadInitialUserDataSync();
       _initializeAsync();
+      _scheduleTimestampUpdates();
     } catch (e) {
       debugPrint('[NoteWidget] InitState error: $e');
       _isInitialized = false;
     }
+  }
+
+  void _scheduleTimestampUpdates() {
+    final age = DateTime.now().difference(_timestamp);
+    if (age.inHours >= 24) return;
+    final interval = age.inMinutes < 60
+        ? const Duration(minutes: 1)
+        : const Duration(minutes: 5);
+    _timestampTimer = Timer.periodic(interval, (_) {
+      if (!mounted) {
+        _timestampTimer?.cancel();
+        return;
+      }
+      final newTs = _calculateTimestamp(_timestamp);
+      if (newTs != _formattedTimestamp) {
+        setState(() => _formattedTimestamp = newTs);
+      }
+    });
   }
 
   void _precomputeImmutableData() {
@@ -181,7 +201,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _initializeAsync() {
     Future.microtask(() {
-      if (_isDisposed || !mounted) return;
+      if (!mounted) return;
 
       try {
         _loadUsersAsync();
@@ -192,7 +212,7 @@ class _NoteWidgetState extends State<NoteWidget> {
   }
 
   Future<void> _loadUsersAsync() async {
-    if (_isDisposed || !mounted) return;
+    if (!mounted) return;
 
     try {
       final profileRepo = AppDI.get<ProfileRepository>();
@@ -210,7 +230,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   Future<void> _loadAndSyncProfile(ProfileRepository profileRepo,
       SyncService syncService, String pubkey) async {
-    if (_isDisposed || !mounted) return;
+    if (!mounted) return;
 
     final current = widget.profiles[pubkey] ?? _locallyLoadedProfiles[pubkey];
     final hasName = (current?['name'] as String? ?? '').isNotEmpty &&
@@ -220,7 +240,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
     if (current == null || !hasName || !hasImage) {
       final profile = await profileRepo.getProfile(pubkey);
-      if (profile != null && mounted && !_isDisposed) {
+      if (profile != null && mounted) {
         _applyProfile(pubkey, profile);
       }
 
@@ -252,14 +272,14 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _syncProfileInBackground(SyncService syncService, String pubkey) {
     Future.microtask(() async {
-      if (_isDisposed || !mounted) return;
+      if (!mounted) return;
       try {
         await syncService.syncProfile(pubkey);
-        if (_isDisposed || !mounted) return;
+        if (!mounted) return;
 
         final profileRepo = AppDI.get<ProfileRepository>();
         final profile = await profileRepo.getProfile(pubkey);
-        if (profile != null && mounted && !_isDisposed) {
+        if (profile != null && mounted) {
           _applyProfile(pubkey, profile);
         }
       } catch (_) {}
@@ -292,39 +312,8 @@ class _NoteWidgetState extends State<NoteWidget> {
     }
   }
 
-  void _setupUserListener() {
-    try {
-      widget.notesNotifier.addListener(_onNotesChange);
-    } catch (e) {
-      debugPrint('[NoteWidget] Setup listener error: $e');
-    }
-  }
-
-  void _onNotesChange() {
-    if (!mounted || _isDisposed) return;
-
-    try {
-      final notes = widget.notesNotifier.value;
-      if (notes.isEmpty) return;
-
-      bool hasRelevantChange = notes.any((note) {
-        final noteId = note['id'] as String? ?? '';
-        final rootId = widget.note['rootId'] as String?;
-        final quotedNoteId = widget.note['quotedNoteId'] as String?;
-        return noteId == _noteId ||
-            (_isRepost && noteId == rootId) ||
-            (_isReply && noteId == _parentId) ||
-            (_isQuote && noteId == quotedNoteId);
-      });
-
-      if (hasRelevantChange) {
-        _updateUserData();
-      }
-    } catch (_) {}
-  }
-
   void _updateUserData() {
-    if (_isDisposed || !mounted) return;
+    if (!mounted) return;
 
     try {
       final currentState = _stateNotifier.value;
@@ -376,7 +365,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       );
 
       if (currentState != newState) {
-        if (mounted && !_isDisposed) {
+        if (mounted) {
           _stateNotifier.value = newState;
         }
       }
@@ -504,19 +493,14 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   @override
   void dispose() {
-    _isDisposed = true;
-    try {
-      widget.notesNotifier.removeListener(_onNotesChange);
-      _stateNotifier.dispose();
-    } catch (e) {
-      debugPrint('[NoteWidget] Dispose error: $e');
-    }
+    _timestampTimer?.cancel();
+    _stateNotifier.dispose();
     super.dispose();
   }
 
   void _navigateToProfile(String npub) {
     try {
-      if (!mounted || _isDisposed || !_isInitialized) return;
+      if (!mounted || !_isInitialized) return;
 
       final user = widget.profiles[npub] ??
           _locallyLoadedProfiles[npub] ??
@@ -553,7 +537,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _navigateToMentionProfile(String id) {
     try {
-      if (mounted && !_isDisposed) {
+      if (mounted) {
         _navigateToProfile(id);
       }
     } catch (_) {}
@@ -561,7 +545,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _navigateToThreadPage() {
     try {
-      if (!mounted || _isDisposed || !_isInitialized) return;
+      if (!mounted || !_isInitialized) return;
 
       if (widget.onNoteTap != null) {
         var rootId = widget.note['rootId'] as String?;
@@ -596,7 +580,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized || _isDisposed || !mounted) {
+    if (!_isInitialized || !mounted) {
       return const SizedBox.shrink();
     }
 
@@ -617,295 +601,89 @@ class _NoteWidgetState extends State<NoteWidget> {
   }
 
   Widget _buildNormalLayout(dynamic colors) {
-    return RepaintBoundary(
-      key: ValueKey(_widgetKey),
-      child: GestureDetector(
-        onTap: _navigateToThreadPage,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          color: widget.containerColor ?? colors.background,
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_isRepost && _reposterId != null)
-                      ValueListenableBuilder<_NoteState>(
-                        valueListenable: _stateNotifier,
-                        builder: (context, state, _) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 0),
-                            child: GestureDetector(
-                              onTap: () {
-                                final reposterId = _reposterId;
-                                _navigateToProfile(reposterId);
-                              },
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    CarbonIcons.renew,
-                                    size: 16,
-                                    color: colors.textSecondary,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  _ProfileAvatar(
-                                    imageUrl: state.reposterUser?['picture']
-                                            as String? ??
-                                        '',
-                                    radius: 12,
-                                    colors: colors,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Reposted by ',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: colors.textSecondary,
-                                    ),
-                                  ),
-                                  Text(
-                                    () {
-                                      final name = state.reposterUser?['name']
-                                              as String? ??
-                                          '';
-                                      if (name.isNotEmpty) {
-                                        return name;
-                                      }
-                                      final pubkeyHex =
-                                          state.reposterUser?['pubkey']
-                                                  as String? ??
-                                              '';
-                                      return pubkeyHex.length > 8
-                                          ? pubkeyHex.substring(0, 8)
-                                          : (pubkeyHex.isEmpty
-                                              ? 'Anonymous'
-                                              : pubkeyHex);
-                                    }(),
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: colors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _SafeProfileSection(
-                          stateNotifier: _stateNotifier,
-                          isRepost: _isRepost,
-                          onAuthorTap: () => _navigateToProfile(_authorId),
-                          onReposterTap: _reposterId != null
-                              ? () {
-                                  final reposterId = _reposterId;
-                                  _navigateToProfile(reposterId);
-                                }
-                              : null,
-                          colors: colors,
-                          widgetKey: _widgetKey,
-                          isExpanded: false,
-                          formattedTimestamp: _formattedTimestamp,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _SafeUserInfoSection(
-                                stateNotifier: _stateNotifier,
-                                formattedTimestamp: _formattedTimestamp,
-                                colors: colors,
-                              ),
-                              Transform.translate(
-                                offset: const Offset(0, -4),
-                                child: RepaintBoundary(
-                                  child: _SafeContentSection(
-                                    parsedContent: _shouldTruncate
-                                        ? _truncatedContent!
-                                        : _parsedContent,
-                                    onMentionTap: _navigateToMentionProfile,
-                                    onShowMoreTap: _shouldTruncate
-                                        ? (_) => _navigateToThreadPage()
-                                        : null,
-                                    notesListProvider: widget.notesListProvider,
-                                    noteId: _noteId,
-                                    authorProfileImageUrl: _stateNotifier.value
-                                        .authorUser?['picture'] as String?,
-                                    authorId: _authorId,
-                                    isSelectable: widget.isSelectable,
-                                    profiles: widget.profiles,
-                                    embeddedNotes: widget.note['embeddedNotes']
-                                        as Map<String, dynamic>?,
-                                    embeddedArticles:
-                                        widget.note['embeddedArticles']
-                                            as Map<String, dynamic>?,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              RepaintBoundary(
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 4),
-                                  child: widget.currentUserHex.isNotEmpty &&
-                                          widget.isVisible
-                                      ? InteractionBar(
-                                          noteId: _getInteractionNoteId(),
-                                          currentUserHex: widget.currentUserHex,
-                                          note: widget.note,
-                                        )
-                                      : const SizedBox(height: 32),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExpandedLayout(dynamic colors) {
-    return RepaintBoundary(
-      key: ValueKey(_widgetKey),
-      child: GestureDetector(
-        onTap: _navigateToThreadPage,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          color: widget.containerColor ?? colors.background,
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+    return GestureDetector(
+      onTap: _navigateToThreadPage,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: widget.containerColor ?? colors.background,
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isRepost && _reposterId != null)
                     ValueListenableBuilder<_NoteState>(
                       valueListenable: _stateNotifier,
                       builder: (context, state, _) {
-                        final hasRepost = _isRepost && _reposterId != null;
-                        final hasReply = state.replyText != null;
-
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (hasRepost)
-                              Padding(
-                                padding: EdgeInsets.only(
-                                  top: 4,
-                                  bottom: hasReply ? 0 : 0,
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 0),
+                          child: GestureDetector(
+                            onTap: () {
+                              final reposterId = _reposterId;
+                              _navigateToProfile(reposterId);
+                            },
+                            child: Row(
+                              children: [
+                                Icon(
+                                  CarbonIcons.renew,
+                                  size: 16,
+                                  color: colors.textSecondary,
                                 ),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    final reposterId = _reposterId;
-                                    _navigateToProfile(reposterId);
-                                  },
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        CarbonIcons.renew,
-                                        size: 16,
-                                        color: colors.textSecondary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      _ProfileAvatar(
-                                        imageUrl: state.reposterUser?['picture']
-                                                as String? ??
-                                            '',
-                                        radius: 10,
-                                        colors: colors,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'Reposted by ',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: colors.textSecondary,
-                                        ),
-                                      ),
-                                      Text(
-                                        () {
-                                          final name =
-                                              state.reposterUser?['name']
-                                                      as String? ??
-                                                  '';
-                                          if (name.isNotEmpty) {
-                                            return name;
-                                          }
-                                          final pubkeyHex =
-                                              state.reposterUser?['pubkey']
-                                                      as String? ??
-                                                  '';
-                                          return pubkeyHex.length > 8
-                                              ? pubkeyHex.substring(0, 8)
-                                              : (pubkeyHex.isEmpty
-                                                  ? 'Anonymous'
-                                                  : pubkeyHex);
-                                        }(),
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: colors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
+                                const SizedBox(width: 6),
+                                _ProfileAvatar(
+                                  imageUrl: state.reposterUser?['picture']
+                                          as String? ??
+                                      '',
+                                  radius: 12,
+                                  colors: colors,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Reposted by ',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: colors.textSecondary,
                                   ),
                                 ),
-                              ),
-                            if (hasReply)
-                              Padding(
-                                padding: EdgeInsets.only(
-                                  top: hasRepost ? 0 : 4,
-                                  bottom: 4,
+                                Text(
+                                  () {
+                                    final name = state.reposterUser?['name']
+                                            as String? ??
+                                        '';
+                                    if (name.isNotEmpty) {
+                                      return name;
+                                    }
+                                    final pubkeyHex =
+                                        state.reposterUser?['pubkey']
+                                                as String? ??
+                                            '';
+                                    return pubkeyHex.length > 8
+                                        ? pubkeyHex.substring(0, 8)
+                                        : (pubkeyHex.isEmpty
+                                            ? 'Anonymous'
+                                            : pubkeyHex);
+                                  }(),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: colors.textSecondary,
+                                  ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.reply,
-                                      size: 14,
-                                      color: colors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      state.replyText!,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: colors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
+                              ],
+                            ),
+                          ),
                         );
                       },
                     ),
-                    Padding(
-                      padding: EdgeInsets.only(
-                          top: (_isRepost || _isReply || _isQuote) ? 8 : 4),
-                      child: _SafeProfileSection(
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SafeProfileSection(
                         stateNotifier: _stateNotifier,
                         isRepost: _isRepost,
                         onAuthorTap: () => _navigateToProfile(_authorId),
@@ -917,61 +695,260 @@ class _NoteWidgetState extends State<NoteWidget> {
                             : null,
                         colors: colors,
                         widgetKey: _widgetKey,
-                        isExpanded: true,
+                        isExpanded: false,
                         formattedTimestamp: _formattedTimestamp,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Transform.translate(
-                      offset: const Offset(0, -4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: RepaintBoundary(
-                          child: _SafeContentSection(
-                            parsedContent: _shouldTruncate
-                                ? _truncatedContent!
-                                : _parsedContent,
-                            onMentionTap: _navigateToMentionProfile,
-                            onShowMoreTap: _shouldTruncate
-                                ? (_) => _navigateToThreadPage()
-                                : null,
-                            notesListProvider: widget.notesListProvider,
-                            noteId: _noteId,
-                            authorProfileImageUrl: _stateNotifier
-                                .value.authorUser?['picture'] as String?,
-                            authorId: _authorId,
-                            isSelectable: widget.isSelectable,
-                            profiles: widget.profiles,
-                            embeddedNotes: widget.note['embeddedNotes']
-                                as Map<String, dynamic>?,
-                            embeddedArticles: widget.note['embeddedArticles']
-                                as Map<String, dynamic>?,
-                          ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _SafeUserInfoSection(
+                              stateNotifier: _stateNotifier,
+                              formattedTimestamp: _formattedTimestamp,
+                              colors: colors,
+                            ),
+                            Transform.translate(
+                              offset: const Offset(0, -4),
+                              child: RepaintBoundary(
+                                child: _SafeContentSection(
+                                  parsedContent: _shouldTruncate
+                                      ? _truncatedContent!
+                                      : _parsedContent,
+                                  onMentionTap: _navigateToMentionProfile,
+                                  onShowMoreTap: _shouldTruncate
+                                      ? (_) => _navigateToThreadPage()
+                                      : null,
+                                  notesListProvider: widget.notesListProvider,
+                                  noteId: _noteId,
+                                  authorProfileImageUrl: _stateNotifier
+                                      .value.authorUser?['picture'] as String?,
+                                  authorId: _authorId,
+                                  isSelectable: widget.isSelectable,
+                                  profiles: widget.profiles,
+                                  embeddedNotes: widget.note['embeddedNotes']
+                                      as Map<String, dynamic>?,
+                                  embeddedArticles:
+                                      widget.note['embeddedArticles']
+                                          as Map<String, dynamic>?,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            RepaintBoundary(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                child: widget.currentUserHex.isNotEmpty &&
+                                        widget.isVisible
+                                    ? InteractionBar(
+                                        noteId: _getInteractionNoteId(),
+                                        currentUserHex: widget.currentUserHex,
+                                        note: widget.note,
+                                      )
+                                    : const SizedBox(height: 32),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpandedLayout(dynamic colors) {
+    return GestureDetector(
+      onTap: _navigateToThreadPage,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: widget.containerColor ?? colors.background,
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ValueListenableBuilder<_NoteState>(
+                    valueListenable: _stateNotifier,
+                    builder: (context, state, _) {
+                      final hasRepost = _isRepost && _reposterId != null;
+                      final hasReply = state.replyText != null;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasRepost)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                top: 4,
+                                bottom: hasReply ? 0 : 0,
+                              ),
+                              child: GestureDetector(
+                                onTap: () {
+                                  final reposterId = _reposterId;
+                                  _navigateToProfile(reposterId);
+                                },
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      CarbonIcons.renew,
+                                      size: 16,
+                                      color: colors.textSecondary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    _ProfileAvatar(
+                                      imageUrl: state.reposterUser?['picture']
+                                              as String? ??
+                                          '',
+                                      radius: 10,
+                                      colors: colors,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Reposted by ',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                    Text(
+                                      () {
+                                        final name = state.reposterUser?['name']
+                                                as String? ??
+                                            '';
+                                        if (name.isNotEmpty) {
+                                          return name;
+                                        }
+                                        final pubkeyHex =
+                                            state.reposterUser?['pubkey']
+                                                    as String? ??
+                                                '';
+                                        return pubkeyHex.length > 8
+                                            ? pubkeyHex.substring(0, 8)
+                                            : (pubkeyHex.isEmpty
+                                                ? 'Anonymous'
+                                                : pubkeyHex);
+                                      }(),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          if (hasReply)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                top: hasRepost ? 0 : 4,
+                                bottom: 4,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.reply,
+                                    size: 14,
+                                    color: colors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    state.replyText!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(
+                        top: (_isRepost || _isReply || _isQuote) ? 8 : 4),
+                    child: _SafeProfileSection(
+                      stateNotifier: _stateNotifier,
+                      isRepost: _isRepost,
+                      onAuthorTap: () => _navigateToProfile(_authorId),
+                      onReposterTap: _reposterId != null
+                          ? () {
+                              final reposterId = _reposterId;
+                              _navigateToProfile(reposterId);
+                            }
+                          : null,
+                      colors: colors,
+                      widgetKey: _widgetKey,
+                      isExpanded: true,
+                      formattedTimestamp: _formattedTimestamp,
                     ),
-                    const SizedBox(height: 2),
-                    Padding(
+                  ),
+                  const SizedBox(height: 12),
+                  Transform.translate(
+                    offset: const Offset(0, -4),
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       child: RepaintBoundary(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: widget.currentUserHex.isNotEmpty &&
-                                  widget.isVisible
-                              ? InteractionBar(
-                                  noteId: _getInteractionNoteId(),
-                                  currentUserHex: widget.currentUserHex,
-                                  note: widget.note,
-                                )
-                              : const SizedBox(height: 32),
+                        child: _SafeContentSection(
+                          parsedContent: _shouldTruncate
+                              ? _truncatedContent!
+                              : _parsedContent,
+                          onMentionTap: _navigateToMentionProfile,
+                          onShowMoreTap: _shouldTruncate
+                              ? (_) => _navigateToThreadPage()
+                              : null,
+                          notesListProvider: widget.notesListProvider,
+                          noteId: _noteId,
+                          authorProfileImageUrl: _stateNotifier
+                              .value.authorUser?['picture'] as String?,
+                          authorId: _authorId,
+                          isSelectable: widget.isSelectable,
+                          profiles: widget.profiles,
+                          embeddedNotes: widget.note['embeddedNotes']
+                              as Map<String, dynamic>?,
+                          embeddedArticles: widget.note['embeddedArticles']
+                              as Map<String, dynamic>?,
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 2),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: RepaintBoundary(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child:
+                            widget.currentUserHex.isNotEmpty && widget.isVisible
+                                ? InteractionBar(
+                                    noteId: _getInteractionNoteId(),
+                                    currentUserHex: widget.currentUserHex,
+                                    note: widget.note,
+                                  )
+                                : const SizedBox(height: 32),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

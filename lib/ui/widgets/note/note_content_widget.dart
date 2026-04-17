@@ -58,12 +58,12 @@ class NoteContentWidget extends StatefulWidget {
 }
 
 class _NoteContentWidgetState extends State<NoteContentWidget> {
-  late final List<dynamic> _textParts;
-  late final List<String> _mediaUrls;
-  late final Map<String, String> _mediaDimensions;
-  late final List<String> _linkUrls;
-  late final List<String> _quoteIds;
-  late final List<String> _articleIds;
+  late List<dynamic> _textParts;
+  late List<String> _mediaUrls;
+  late Map<String, String> _mediaDimensions;
+  late List<String> _linkUrls;
+  late List<String> _quoteIds;
+  late List<String> _articleIds;
 
   final Map<String, bool> _mentionLoadingStates = {};
   final List<TapGestureRecognizer> _gestureRecognizers = [];
@@ -75,6 +75,17 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   void initState() {
     super.initState();
     _processParsedContent();
+  }
+
+  @override
+  void didUpdateWidget(NoteContentWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.parsedContent != widget.parsedContent ||
+        oldWidget.noteId != widget.noteId) {
+      _cachedSpans = null;
+      _cachedSpansHash = 0;
+      _processParsedContent();
+    }
   }
 
   @override
@@ -480,8 +491,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                               padding: const EdgeInsets.only(top: 8, bottom: 2),
                               child: QuoteWidget(
                                 bech32: quoteId,
-                                preloadedNote:
-                                    _resolveEmbeddedNote(quoteId),
+                                preloadedNote: _resolveEmbeddedNote(quoteId),
                               ),
                             ))
                         .toList(),

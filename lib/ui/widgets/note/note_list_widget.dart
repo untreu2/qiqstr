@@ -48,7 +48,6 @@ class NoteListWidget extends StatefulWidget {
 
 class _NoteListWidgetState extends State<NoteListWidget> {
   bool _hasTriggeredEmptyRefresh = false;
-  Timer? _updateTimer;
   Timer? _interactionSyncTimer;
   final Set<String> _syncedNoteIds = {};
   bool _isSyncing = false;
@@ -94,24 +93,13 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   void dispose() {
-    _updateTimer?.cancel();
     _interactionSyncTimer?.cancel();
     widget.scrollController?.removeListener(_onScroll);
     super.dispose();
   }
 
   void _onScroll() {
-    _scheduleUpdate();
     _scheduleInteractionSync();
-  }
-
-  void _scheduleUpdate() {
-    _updateTimer?.cancel();
-    _updateTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() {});
-      }
-    });
   }
 
   void _scheduleInitialInteractionSync() {
@@ -288,7 +276,7 @@ class _NoteListContent extends StatelessWidget {
           );
         },
         childCount: allCount + (showFooter ? 1 : 0) + 1,
-        addAutomaticKeepAlives: true,
+        addAutomaticKeepAlives: false,
         addRepaintBoundaries: false,
         addSemanticIndexes: false,
       ),
@@ -379,15 +367,9 @@ class _NoteItemWidget extends StatefulWidget {
   State<_NoteItemWidget> createState() => _NoteItemWidgetState();
 }
 
-class _NoteItemWidgetState extends State<_NoteItemWidget>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
+class _NoteItemWidgetState extends State<_NoteItemWidget> {
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
