@@ -20,7 +20,7 @@ class NotificationRepository {
 
   Stream<List<NotificationItem>> watchNotifications(String userPubkey,
       {int limit = 100}) {
-    return _events.onChange
+    return _events.onNotificationChange
         .debounceTime(const Duration(milliseconds: 300))
         .startWith(null)
         .asyncMap((_) => getNotifications(userPubkey, limit: limit));

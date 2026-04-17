@@ -51,7 +51,7 @@ class InteractionService {
       _instance ??= InteractionService._internal();
 
   InteractionService._internal() {
-    _dbChangeSubscription = _db.onChange.listen((_) {
+    _dbChangeSubscription = _db.onInteractionChange.listen((_) {
       _refreshActiveStreams();
     });
   }

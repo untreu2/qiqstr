@@ -20,7 +20,7 @@ class FeedRepository {
   String? get _currentUserHex => AuthService.instance.currentUserPubkeyHex;
 
   Stream<T> _onChange<T>(Future<T> Function() fetch, {int debounceMs = 300}) {
-    return _events.onChange
+    return _events.onFeedChange
         .debounceTime(Duration(milliseconds: debounceMs))
         .startWith(null)
         .asyncMap((_) => fetch());
@@ -43,7 +43,7 @@ class FeedRepository {
     final initial = await _fetchFeed(userPubkey, authors, limit);
     if (initial.isNotEmpty) yield initial;
 
-    yield* _events.onChange
+    yield* _events.onFeedChange
         .debounceTime(const Duration(milliseconds: 300))
         .startWith(null)
         .asyncMap((_) => _fetchFeed(userPubkey, authors, limit));

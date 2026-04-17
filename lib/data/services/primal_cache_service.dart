@@ -19,7 +19,6 @@ class PrimalCacheService {
   bool _connecting = false;
   final Map<String, Completer<Map<String, int>>> _pendingCountRequests = {};
   int _subscriptionCounter = 0;
-  StreamSubscription? _subscription; // ignore: unused_field
 
   Future<WebSocket?> _ensureConnection() async {
     if (_ws != null && _ws!.readyState == WebSocket.open) return _ws;
@@ -35,7 +34,7 @@ class PrimalCacheService {
     try {
       _ws = await WebSocket.connect(primalCacheUrl)
           .timeout(const Duration(seconds: 5));
-      _subscription = _ws!.listen(
+      _ws!.listen(
         (data) {
           try {
             final decoded = jsonDecode(data as String) as List<dynamic>;
@@ -44,11 +43,9 @@ class PrimalCacheService {
         },
         onDone: () {
           _ws = null;
-          _subscription = null;
         },
         onError: (_) {
           _ws = null;
-          _subscription = null;
         },
       );
       return _ws;
@@ -127,6 +124,11 @@ class PrimalCacheService {
     }
   }
 
+  Future<int> fetchFollowerCount(String pubkeyHex) async {
+    final result = await fetchFollowerCounts([pubkeyHex]);
+    return result[pubkeyHex] ?? 0;
+  }
+
   Future<Map<String, int>> fetchFollowerCounts(List<String> pubkeyHexes) async {
     if (pubkeyHexes.isEmpty) return {};
 
@@ -154,10 +156,11 @@ class PrimalCacheService {
       }
 
       final result = await completer.future.timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 8),
         onTimeout: () {
           _pendingCountRequests.remove(subscriptionId);
-          return <String, int>{};
+          _closeSubscription(subscriptionId);
+          return {};
         },
       );
 
@@ -165,16 +168,10 @@ class PrimalCacheService {
       return result;
     } catch (e) {
       _pendingCountRequests.remove(subscriptionId);
-      _closeSubscription(subscriptionId);
       if (kDebugMode) {
-        print('[PrimalCacheService] Request error: $e');
+        print('[PrimalCacheService] fetchFollowerCounts error: $e');
       }
       return {};
     }
-  }
-
-  Future<int> fetchFollowerCount(String pubkeyHex) async {
-    final counts = await fetchFollowerCounts([pubkeyHex]);
-    return counts[pubkeyHex] ?? 0;
   }
 }

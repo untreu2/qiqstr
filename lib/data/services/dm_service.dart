@@ -17,6 +17,7 @@ class DmService {
       _messageStreams = {};
   final Set<String> _failedUnwrapIds = {};
   final Map<String, Map<String, dynamic>?> _decryptedEventCache = {};
+  static const int _maxDecryptedCacheSize = 500;
   StreamSubscription<Map<String, dynamic>>? _realtimeSubscription;
   Timer? _reconnectTimer;
   Timer? _chatPollTimer;
@@ -127,6 +128,14 @@ class DmService {
     }
     final result = _unwrapGiftWrap(eventData, privateKey);
     if (eventId.isNotEmpty) {
+      if (_decryptedEventCache.length >= _maxDecryptedCacheSize) {
+        final keysToRemove = _decryptedEventCache.keys
+            .take(_maxDecryptedCacheSize ~/ 4)
+            .toList();
+        for (final key in keysToRemove) {
+          _decryptedEventCache.remove(key);
+        }
+      }
       _decryptedEventCache[eventId] = result;
     }
     return result;
@@ -590,7 +599,9 @@ class DmService {
 
       final senderMessage = _unwrapGiftWrapCached(senderWrap, privateKey);
       final optimisticMessage = <String, dynamic>{
-        'id': senderMessage?['id'] as String? ?? recipientWrap['id'] as String? ?? '',
+        'id': senderMessage?['id'] as String? ??
+            recipientWrap['id'] as String? ??
+            '',
         'senderPubkeyHex': _currentUserPubkeyHex!,
         'recipientPubkeyHex': recipientPubkeyHex,
         'content': content,
@@ -670,7 +681,9 @@ class DmService {
 
       final senderMessage = _unwrapGiftWrapCached(senderWrap, privateKey);
       final optimisticMessage = <String, dynamic>{
-        'id': senderMessage?['id'] as String? ?? recipientWrap['id'] as String? ?? '',
+        'id': senderMessage?['id'] as String? ??
+            recipientWrap['id'] as String? ??
+            '',
         'senderPubkeyHex': _currentUserPubkeyHex!,
         'recipientPubkeyHex': recipientPubkeyHex,
         'content': encryptedFileUrl,
@@ -784,8 +797,7 @@ class DmService {
   void _startChatPolling(String otherUserPubkeyHex) {
     _stopChatPolling();
     _activeChatPubkeyHex = otherUserPubkeyHex;
-    _chatPollTimer =
-        Timer.periodic(const Duration(seconds: 8), (_) {
+    _chatPollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (_activeChatPubkeyHex != null) {
         _fetchMessagesInBackground(_activeChatPubkeyHex!);
       }
@@ -833,8 +845,7 @@ class DmService {
     _realtimeSubscription = null;
 
     try {
-      final since =
-          DateTime.now().millisecondsSinceEpoch ~/ 1000 - 259200;
+      final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 259200;
       final filter = {
         'kinds': [1059],
         '#p': [_currentUserPubkeyHex!],
@@ -868,8 +879,7 @@ class DmService {
     });
   }
 
-  void _handleRealtimeEvent(
-      Map<String, dynamic> eventData, String privateKey) {
+  void _handleRealtimeEvent(Map<String, dynamic> eventData, String privateKey) {
     try {
       final message = _unwrapGiftWrapCached(eventData, privateKey);
       if (message == null) return;
@@ -915,8 +925,8 @@ class DmService {
         '#p': [userPubkey],
         'limit': limit ?? 100,
       });
-      final json =
-          await rust_db.dbQueryEvents(filterJson: filterJson, limit: limit ?? 100);
+      final json = await rust_db.dbQueryEvents(
+          filterJson: filterJson, limit: limit ?? 100);
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {

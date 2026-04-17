@@ -13,6 +13,7 @@ class EncryptedMuteService {
   List<String> _mutedPubkeys = [];
   Set<String> _mutedPubkeySet = {};
   List<String> _mutedWords = [];
+  RegExp? _mutedWordsRegex;
   bool _initialized = false;
 
   List<String> get mutedPubkeys => List.unmodifiable(_mutedPubkeys);
@@ -23,8 +24,19 @@ class EncryptedMuteService {
 
   bool containsMutedWord(String content) {
     if (_mutedWords.isEmpty) return false;
-    final lowerContent = content.toLowerCase();
-    return _mutedWords.any((word) => lowerContent.contains(word));
+    final regex = _mutedWordsRegex;
+    if (regex == null) return false;
+    return regex.hasMatch(content.toLowerCase());
+  }
+
+  void _rebuildMutedWordsRegex() {
+    if (_mutedWords.isEmpty) {
+      _mutedWordsRegex = null;
+      return;
+    }
+    final pattern =
+        _mutedWords.map((w) => RegExp.escape(w.toLowerCase())).join('|');
+    _mutedWordsRegex = RegExp(pattern);
   }
 
   bool shouldFilterEvent(Map<String, dynamic> event) {
@@ -38,10 +50,7 @@ class EncryptedMuteService {
     if (kind == 6) {
       final tags = event['tags'] as List<dynamic>? ?? [];
       for (final tag in tags) {
-        if (tag is List &&
-            tag.isNotEmpty &&
-            tag[0] == 'p' &&
-            tag.length > 1) {
+        if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
           final originalAuthor = tag[1] as String?;
           if (originalAuthor != null && isUserMuted(originalAuthor)) {
             return true;
@@ -92,6 +101,7 @@ class EncryptedMuteService {
         }
       }
       _mutedPubkeySet = _mutedPubkeys.toSet();
+      _rebuildMutedWordsRegex();
       _initialized = true;
     } catch (_) {
       _initialized = true;
@@ -101,8 +111,8 @@ class EncryptedMuteService {
   void _extractFromPublicTags(Map<String, dynamic> event) {
     final tags = event['tags'] as List<dynamic>? ?? [];
     _mutedPubkeys = tags
-        .where(
-            (tag) => tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1)
+        .where((tag) =>
+            tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1)
         .map((tag) => (tag as List)[1] as String)
         .toList();
     _mutedWords = tags
@@ -115,8 +125,8 @@ class EncryptedMuteService {
   void _extractFromPrivateTags(String decryptedJson) {
     final privateTags = jsonDecode(decryptedJson) as List<dynamic>;
     _mutedPubkeys = privateTags
-        .where(
-            (tag) => tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1)
+        .where((tag) =>
+            tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1)
         .map((tag) => (tag as List)[1] as String)
         .toList();
     _mutedWords = privateTags
@@ -154,6 +164,7 @@ class EncryptedMuteService {
     _mutedPubkeys = List.from(mutedPubkeys);
     _mutedPubkeySet = _mutedPubkeys.toSet();
     _mutedWords = List.from(mutedWords);
+    _rebuildMutedWordsRegex();
     _initialized = true;
 
     return jsonDecode(eventJson) as Map<String, dynamic>;

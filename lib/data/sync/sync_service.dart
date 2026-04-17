@@ -11,6 +11,7 @@ import '../services/follow_set_service.dart';
 import 'publishers/event_publisher.dart';
 import '../../domain/entities/article.dart';
 import '../../src/rust/api/database.dart' as rust_db;
+import '../../src/rust/api/relay.dart' as rust_relay;
 
 final _relayService = RustRelayService.instance;
 
@@ -33,27 +34,18 @@ class SyncService {
   final EventPublisher _publisher;
 
   Timer? _periodicTimer;
+  Timer? _lastSyncCleanupTimer;
   final _syncStatusController =
       StreamController<SyncOperationStatus>.broadcast();
   final Map<String, DateTime> _lastSyncTime = {};
   static const _minSyncInterval = Duration(minutes: 3);
+  static const _lastSyncMaxAge = Duration(hours: 2);
 
   StreamSubscription<Map<String, dynamic>>? _feedSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   final _recentEventIds = <String>{};
-  static const _maxCachedIds = 10000;
-
-  final _pendingRefIds = <String>{};
-  Timer? _refFetchTimer;
-  final _pendingAncestorIds = <String>{};
-  Timer? _ancestorFetchTimer;
-  final _pendingProfilePubkeys = <String>{};
-  Timer? _profileSyncTimer;
-  final _pendingQuoteIds = <String>{};
-  Timer? _quotePrefetchTimer;
-  final _pendingNaddrPubkeys = <String>{};
-  Timer? _naddrPrefetchTimer;
+  static const _maxCachedIds = 2000;
 
   Stream<SyncOperationStatus> get syncStatus => _syncStatusController.stream;
 
@@ -118,7 +110,7 @@ class SyncService {
       ]);
 
       await rust_db.dbProcessDeletionEvents();
-      _notifyDbChanged();
+      _db.notifyFeedChange();
       _queueMissingRepostOriginals(since);
       final noteEvents = results[0];
       if (noteEvents.isNotEmpty) {
@@ -262,13 +254,11 @@ class SyncService {
 
       await rust_db.dbProcessDeletionEvents();
       _notifyDbChanged();
-      _schedulePendingProfileSync(pubkeys);
+      if (pubkeys.isNotEmpty) {
+        _fetchMissingProfilesInBackground(pubkeys.toList());
+      }
       if (repostRefIds.isNotEmpty) {
-        _pendingRefIds.addAll(repostRefIds);
-        _refFetchTimer?.cancel();
-        _refFetchTimer = Timer(const Duration(seconds: 2), () {
-          _processPendingRefs();
-        });
+        _fetchRepostOriginalsInBackground(repostRefIds.toList());
       }
       _markSynced(key);
 
@@ -332,7 +322,7 @@ class SyncService {
         'limit': 100,
       };
       await _fetchAndStore(filter);
-      _notifyDbChanged();
+      _db.notifyNotificationChange();
 
       final mute = EncryptedMuteService.instance;
       final notificationsJson = await rust_db.dbGetHydratedNotifications(
@@ -915,11 +905,24 @@ class SyncService {
         syncNotifications(userPubkey),
       ]);
     });
+    _lastSyncCleanupTimer?.cancel();
+    _lastSyncCleanupTimer = Timer.periodic(const Duration(hours: 1), (_) {
+      _cleanupLastSyncTime();
+    });
   }
 
   void stopPeriodicSync() {
     _periodicTimer?.cancel();
     _periodicTimer = null;
+    _lastSyncCleanupTimer?.cancel();
+    _lastSyncCleanupTimer = null;
+  }
+
+  void _cleanupLastSyncTime() {
+    final now = DateTime.now();
+    _lastSyncTime.removeWhere(
+      (_, time) => now.difference(time) > _lastSyncMaxAge,
+    );
   }
 
   Future<void> startRealtimeSubscriptions(String userPubkey) async {
@@ -1017,50 +1020,28 @@ class SyncService {
 
   void prefetchQuotedNotes(List<String> eventIds) {
     if (eventIds.isEmpty) return;
-    _pendingQuoteIds.addAll(eventIds);
-    _quotePrefetchTimer?.cancel();
-    _quotePrefetchTimer = Timer(const Duration(milliseconds: 800), () {
-      _processPendingQuotes();
+    Future.microtask(() async {
+      try {
+        var ids = eventIds;
+        if (ids.length > 50) ids = ids.sublist(0, 50);
+        final fetched = await _relayService.fetchMissingReferences(ids);
+        if (fetched > 0) _notifyDbChanged();
+      } catch (_) {}
     });
-  }
-
-  Future<void> _processPendingQuotes() async {
-    var ids = _pendingQuoteIds.toList();
-    _pendingQuoteIds.clear();
-    if (ids.isEmpty) return;
-    if (ids.length > 50) ids = ids.sublist(0, 50);
-    try {
-      final fetched = await _relayService.fetchMissingReferences(ids);
-      if (fetched > 0) _notifyDbChanged();
-    } catch (_) {}
   }
 
   void prefetchArticlesByAuthors(List<String> pubkeys) {
     if (pubkeys.isEmpty) return;
-    _pendingNaddrPubkeys.addAll(pubkeys);
-    _naddrPrefetchTimer?.cancel();
-    _naddrPrefetchTimer = Timer(const Duration(milliseconds: 800), () {
-      _processPendingNaddrAuthors();
+    Future.microtask(() async {
+      try {
+        await syncArticles(authors: pubkeys, limit: 20);
+      } catch (_) {}
     });
-  }
-
-  Future<void> _processPendingNaddrAuthors() async {
-    final pubkeys = _pendingNaddrPubkeys.toList();
-    _pendingNaddrPubkeys.clear();
-    if (pubkeys.isEmpty) return;
-    try {
-      await syncArticles(authors: pubkeys, limit: 20);
-    } catch (_) {}
   }
 
   void dispose() {
     stopPeriodicSync();
     stopRealtimeSubscriptions();
-    _refFetchTimer?.cancel();
-    _ancestorFetchTimer?.cancel();
-    _profileSyncTimer?.cancel();
-    _quotePrefetchTimer?.cancel();
-    _naddrPrefetchTimer?.cancel();
     _syncStatusController.close();
   }
 
@@ -1177,25 +1158,41 @@ class SyncService {
   }
 
   void _syncMissingProfilesInBackground(List<Map<String, dynamic>> events) {
-    _schedulePendingProfileSync(_extractAllPubkeys(events));
+    final pubkeys = _extractAllPubkeys(events);
+    if (pubkeys.isEmpty) return;
+    _fetchMissingProfilesInBackground(pubkeys.toList());
   }
 
-  void _schedulePendingProfileSync(Set<String> pubkeys) {
+  void _fetchMissingProfilesInBackground(List<String> pubkeys) {
     if (pubkeys.isEmpty) return;
-    _pendingProfilePubkeys.addAll(pubkeys);
-    _profileSyncTimer?.cancel();
-    _profileSyncTimer = Timer(const Duration(seconds: 5), () {
-      _processPendingProfiles();
+    Future.microtask(() async {
+      try {
+        final eventsJson = jsonEncode(
+          pubkeys.map((pk) => {'pubkey': pk}).toList(),
+        );
+        await rust_relay.fetchMissingProfilesForEvents(eventsJson: eventsJson);
+        _db.notifyProfileChange(ids: pubkeys);
+      } catch (_) {
+        try {
+          await _syncMissingProfiles(pubkeys.toSet());
+          _db.notifyProfileChange(ids: pubkeys);
+        } catch (_) {}
+      }
     });
   }
 
-  Future<void> _processPendingProfiles() async {
-    final pubkeys = _pendingProfilePubkeys.toSet();
-    _pendingProfilePubkeys.clear();
-    if (pubkeys.isEmpty) return;
-    try {
-      await _syncMissingProfiles(pubkeys);
-    } catch (_) {}
+  void _fetchRepostOriginalsInBackground(List<String> eventIds) {
+    if (eventIds.isEmpty) return;
+    Future.microtask(() async {
+      try {
+        var ids = eventIds;
+        if (ids.length > 50) ids = ids.sublist(0, 50);
+        final fetched = await rust_relay.fetchRepostOriginals(
+          repostEventIdsJson: jsonEncode(ids),
+        );
+        if (fetched > 0) _notifyDbChanged();
+      } catch (_) {}
+    });
   }
 
   Future<void> _saveEventsAndProfiles(List<Map<String, dynamic>> events) async {
@@ -1230,22 +1227,14 @@ class SyncService {
     }
     if (replyEventIds.isEmpty) return;
 
-    _pendingAncestorIds.addAll(replyEventIds);
-    _ancestorFetchTimer?.cancel();
-    _ancestorFetchTimer = Timer(const Duration(milliseconds: 400), () {
-      _processPendingAncestors();
+    Future.microtask(() async {
+      try {
+        var ids = replyEventIds;
+        if (ids.length > 40) ids = ids.sublist(0, 40);
+        final fetched = await _relayService.fetchThreadAncestors(ids);
+        if (fetched > 0) _notifyDbChanged();
+      } catch (_) {}
     });
-  }
-
-  Future<void> _processPendingAncestors() async {
-    var ids = _pendingAncestorIds.toList();
-    _pendingAncestorIds.clear();
-    if (ids.isEmpty) return;
-    if (ids.length > 40) ids = ids.sublist(0, 40);
-    try {
-      final fetched = await _relayService.fetchThreadAncestors(ids);
-      if (fetched > 0) _notifyDbChanged();
-    } catch (_) {}
   }
 
   void _fetchReferencedNoteForRepost(Map<String, dynamic> repostEvent) {
@@ -1254,11 +1243,7 @@ class SyncService {
       if (tag is List && tag.length > 1 && tag[0] == 'e') {
         final originalId = tag[1] as String?;
         if (originalId != null && originalId.isNotEmpty) {
-          _pendingRefIds.add(originalId);
-          _refFetchTimer?.cancel();
-          _refFetchTimer = Timer(const Duration(seconds: 2), () {
-            _processPendingRefs();
-          });
+          _fetchRepostOriginalsInBackground([originalId]);
           return;
         }
       }
@@ -1282,11 +1267,7 @@ class SyncService {
       }
     }
     if (repostOriginalIds.isEmpty) return;
-    _pendingRefIds.addAll(repostOriginalIds);
-    _refFetchTimer?.cancel();
-    _refFetchTimer = Timer(const Duration(seconds: 2), () {
-      _processPendingRefs();
-    });
+    _fetchRepostOriginalsInBackground(repostOriginalIds.toList());
   }
 
   Future<void> _queueMissingRepostOriginals(int sinceTimestamp) async {
@@ -1300,28 +1281,6 @@ class SyncService {
       final repostEvents = (jsonDecode(repostEventsJson) as List<dynamic>)
           .cast<Map<String, dynamic>>();
       _fetchReferencedEventsInBackground(repostEvents);
-    } catch (_) {}
-  }
-
-  Future<void> _processPendingRefs() async {
-    var ids = _pendingRefIds.toList();
-    _pendingRefIds.clear();
-    if (ids.isEmpty) return;
-    if (ids.length > 50) {
-      ids = ids.sublist(0, 50);
-    }
-    try {
-      final fetched = await _relayService.fetchEvents(
-        {
-          'ids': ids,
-          'kinds': [1],
-          'limit': ids.length
-        },
-        timeoutSecs: 8,
-      );
-      if (fetched.isNotEmpty) {
-        _notifyDbChanged();
-      }
     } catch (_) {}
   }
 
