@@ -195,3 +195,15 @@ Future<String> fetchFullThread(
 
 Future<BigInt> getDatabaseSizeMb() =>
     RustLib.instance.api.crateApiRelayGetDatabaseSizeMb();
+
+Future<int> fetchMissingProfilesForEvents({required String eventsJson}) =>
+    RustLib.instance.api
+        .crateApiRelayFetchMissingProfilesForEvents(eventsJson: eventsJson);
+
+Future<int> fetchRepostOriginals({required String repostEventIdsJson}) =>
+    RustLib.instance.api.crateApiRelayFetchRepostOriginals(
+        repostEventIdsJson: repostEventIdsJson);
+
+Future<String> fetchFollowerCounts({required List<String> pubkeyHexes}) =>
+    RustLib.instance.api
+        .crateApiRelayFetchFollowerCounts(pubkeyHexes: pubkeyHexes);

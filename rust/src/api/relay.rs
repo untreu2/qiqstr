@@ -2584,11 +2584,10 @@ pub async fn fetch_full_thread(
 
 pub async fn get_database_size_mb() -> Result<u64> {
     let db_path_lock = db_path_state().read().await;
-    
+
     if let Some(path) = db_path_lock.as_ref() {
-        // LMDB data.mdb dosyasının boyutunu kontrol et
         let data_file = format!("{}/data.mdb", path);
-        
+
         match fs::metadata(&data_file) {
             Ok(metadata) => {
                 let size_bytes = metadata.len();
@@ -2600,4 +2599,194 @@ pub async fn get_database_size_mb() -> Result<u64> {
     } else {
         Ok(0)
     }
+}
+
+pub async fn fetch_missing_profiles_for_events(events_json: String) -> Result<u32> {
+    let client = get_client().await?;
+    let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
+
+    let mut pubkeys: HashSet<PublicKey> = HashSet::new();
+    for event in &events {
+        if let Some(pk_str) = event["pubkey"].as_str() {
+            if let Ok(pk) = PublicKey::from_hex(pk_str) {
+                pubkeys.insert(pk);
+            }
+        }
+        let kind = event["kind"].as_u64().unwrap_or(1);
+        if kind == 6 {
+            if let Some(tags) = event["tags"].as_array() {
+                for tag in tags {
+                    if let Some(arr) = tag.as_array() {
+                        if arr.len() >= 2 && arr[0].as_str() == Some("p") {
+                            if let Some(pk_str) = arr[1].as_str() {
+                                if let Ok(pk) = PublicKey::from_hex(pk_str) {
+                                    pubkeys.insert(pk);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if pubkeys.is_empty() {
+        return Ok(0);
+    }
+
+    let pk_list: Vec<PublicKey> = pubkeys.into_iter().collect();
+    let existing_filter = Filter::new()
+        .authors(pk_list.clone())
+        .kind(Kind::Metadata)
+        .limit(pk_list.len());
+    let existing = client.database().query(existing_filter).await.unwrap_or_default();
+    let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
+    let missing: Vec<PublicKey> = pk_list.into_iter().filter(|pk| !existing_pks.contains(pk)).collect();
+
+    if missing.is_empty() {
+        return Ok(0);
+    }
+
+    let fetched_count = missing.len() as u32;
+    let profile_filter = Filter::new()
+        .authors(missing)
+        .kind(Kind::Metadata)
+        .limit(fetched_count as usize);
+    let _ = client.fetch_events(profile_filter, Duration::from_secs(5)).await;
+
+    Ok(fetched_count)
+}
+
+pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32> {
+    let client = get_client().await?;
+    let event_ids: Vec<String> = serde_json::from_str(&repost_event_ids_json)?;
+
+    if event_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let mut missing_ids: Vec<EventId> = Vec::new();
+    for id_hex in &event_ids {
+        if let Ok(eid) = EventId::from_hex(id_hex) {
+            let status = client.database().check_id(&eid).await;
+            if !matches!(status, Ok(DatabaseEventStatus::Saved)) {
+                missing_ids.push(eid);
+            }
+        }
+    }
+
+    if missing_ids.is_empty() {
+        return Ok(0);
+    }
+
+    if missing_ids.len() > 50 {
+        missing_ids.truncate(50);
+    }
+
+    let filter = Filter::new().ids(missing_ids).limit(50);
+    let fetched = client.fetch_events(filter, Duration::from_secs(6)).await.unwrap_or_default();
+    let fetched_count = fetched.len() as u32;
+
+    if fetched_count > 0 {
+        let mut missing_pks: HashSet<PublicKey> = HashSet::new();
+        for ev in fetched.iter() {
+            let pk_filter = Filter::new().author(ev.pubkey).kind(Kind::Metadata).limit(1);
+            let profile = client.database().query(pk_filter).await.unwrap_or_default();
+            if profile.is_empty() {
+                missing_pks.insert(ev.pubkey);
+            }
+        }
+        if !missing_pks.is_empty() {
+            let profile_filter = Filter::new()
+                .authors(missing_pks.into_iter().collect::<Vec<_>>())
+                .kind(Kind::Metadata)
+                .limit(50);
+            let _ = client.fetch_events(profile_filter, Duration::from_secs(5)).await;
+        }
+    }
+
+    Ok(fetched_count)
+}
+
+pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> {
+    use tokio_tungstenite::{connect_async, tungstenite::Message};
+    use futures::{SinkExt, StreamExt};
+
+    if pubkey_hexes.is_empty() {
+        return Ok("{}".to_string());
+    }
+
+    let primal_url = "wss://cache2.primal.net/v1";
+    let sub_id = format!("primal_fc_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0));
+
+    let request = serde_json::json!([
+        "REQ",
+        sub_id,
+        {
+            "cache": [
+                "user_infos",
+                {"pubkeys": pubkey_hexes}
+            ]
+        }
+    ]);
+
+    let (ws_stream, _) = match tokio::time::timeout(
+        Duration::from_secs(5),
+        connect_async(primal_url),
+    ).await {
+        Ok(Ok(s)) => s,
+        _ => return Ok("{}".to_string()),
+    };
+
+    let (mut write, mut read) = ws_stream.split();
+    let _ = write.send(Message::Text(request.to_string())).await;
+
+    let mut follower_counts: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+
+    let timeout = tokio::time::sleep(Duration::from_secs(5));
+    tokio::pin!(timeout);
+
+    loop {
+        tokio::select! {
+            _ = &mut timeout => break,
+            msg = read.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(decoded) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if let Some(arr) = decoded.as_array() {
+                                if arr.len() >= 1 {
+                                    let msg_type = arr[0].as_str().unwrap_or("");
+                                    if msg_type == "EOSE" {
+                                        break;
+                                    }
+                                    if msg_type == "EVENT" && arr.len() >= 3 {
+                                        let event = &arr[2];
+                                        let kind = event["kind"].as_u64().unwrap_or(0);
+                                        if kind == 10000133 {
+                                            if let Ok(content) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(
+                                                event["content"].as_str().unwrap_or("{}")
+                                            ) {
+                                                for (k, v) in content {
+                                                    if v.is_number() {
+                                                        follower_counts.insert(k, v);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => break,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::to_string(&follower_counts)?)
 }
