@@ -114,8 +114,7 @@ class _ThreadPageState extends State<ThreadPage> {
             final prevCount = previous.userProfiles.length;
             final currCount = current.userProfiles.length;
             if (currCount != prevCount) {
-              if (prevCount == 0 || (currCount - prevCount) >= 3) return true;
-              return false;
+              return true;
             }
             return false;
           }
@@ -374,12 +373,17 @@ class _ThreadPageState extends State<ThreadPage> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'Add a reply...',
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 16,
-                  ),
+                child: Builder(
+                  builder: (context) {
+                    final l10n = AppLocalizations.of(context)!;
+                    return Text(
+                      l10n.addAReply,
+                      style: TextStyle(
+                        color: context.colors.textSecondary,
+                        fontSize: 16,
+                      ),
+                    );
+                  },
                 ),
               ),
             ],

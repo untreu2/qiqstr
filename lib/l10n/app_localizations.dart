@@ -3687,6 +3687,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'quotes'**
   String get quotePlural;
+
+  /// No description provided for @loadingYourFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading your feed...'**
+  String get loadingYourFeed;
+
+  /// No description provided for @addAReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a reply...'**
+  String get addAReply;
+
+  /// No description provided for @tryDifferentSearchTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Try searching with a different term.'**
+  String get tryDifferentSearchTerm;
 }
 
 class _AppLocalizationsDelegate

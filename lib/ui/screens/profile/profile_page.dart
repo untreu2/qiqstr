@@ -105,6 +105,16 @@ class _ProfilePageState extends State<ProfilePage> {
         return bloc;
       },
       child: BlocBuilder<ProfileBloc, ProfileState>(
+        buildWhen: (previous, current) {
+          if (previous.runtimeType != current.runtimeType) return true;
+          if (previous is ProfileLoaded && current is ProfileLoaded) {
+            return previous.user != current.user ||
+                previous.notes.length != current.notes.length ||
+                previous.replies.length != current.replies.length ||
+                previous.isLoadingMore != current.isLoadingMore;
+          }
+          return true;
+        },
         builder: (context, state) {
           if (state is! ProfileLoaded) {
             if (state is ProfileLoading) {

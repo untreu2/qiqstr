@@ -960,5 +960,8 @@
   "dmYouPrefix": "You: ",
   "quotes": "Quotes",
   "noQuotesFound": "No quotes found",
-  "quotePlural": "quotes"
+  "quotePlural": "quotes",
+  "loadingYourFeed": "Loading your feed...",
+  "addAReply": "Add a reply...",
+  "tryDifferentSearchTerm": "Try searching with a different term."
 }

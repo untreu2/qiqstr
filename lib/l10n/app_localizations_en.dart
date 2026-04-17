@@ -2036,4 +2036,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get quotePlural => 'quotes';
+
+  @override
+  String get loadingYourFeed => 'Loading your feed...';
+
+  @override
+  String get addAReply => 'Add a reply...';
+
+  @override
+  String get tryDifferentSearchTerm => 'Try searching with a different term.';
 }

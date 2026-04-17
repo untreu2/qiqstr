@@ -59,7 +59,7 @@ class FeedPageState extends State<FeedPage> {
 
   final ValueNotifier<List<Map<String, dynamic>>> _notesNotifier =
       ValueNotifier([]);
-  Timer? _relayCountTimer;
+  StreamSubscription<Map<String, dynamic>>? _relayStatusSubscription;
   Timer? _searchDebounceTimer;
   StreamSubscription<FollowSetState>? _followSetSubscription;
   final ValueNotifier<int> _connectedRelaysCount = ValueNotifier(0);
@@ -99,9 +99,7 @@ class FeedPageState extends State<FeedPage> {
     _feedBloc
         .add(FeedInitialized(userHex: widget.userHex, hashtag: widget.hashtag));
 
-    _updateRelayCount();
-    _relayCountTimer =
-        Timer.periodic(const Duration(seconds: 1), (_) => _updateRelayCount());
+    _startRelayStatusStream();
     _loadLoggedInUserProfile();
     _loadFavoriteLists();
     _followSetSubscription = AppDI.get<FollowSetBloc>().stream.listen((state) {
@@ -249,26 +247,24 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
-  void _updateRelayCount() async {
-    if (!mounted) return;
-    try {
-      final status = await AppDI.get<SyncService>().getRelayStatus();
+  void _startRelayStatusStream() {
+    _relayStatusSubscription?.cancel();
+    _relayStatusSubscription =
+        AppDI.get<SyncService>().streamRelayStatus().listen((status) {
       if (!mounted) return;
       final summary = status['summary'] as Map<String, dynamic>? ?? {};
       final total = summary['totalRelays'] as int? ?? 0;
       final connected = summary['connectedRelays'] as int? ?? 0;
-      if (mounted) {
+      if (_totalRelays != total || _connectedRelays != connected) {
         setState(() {
           _totalRelays = total;
           _connectedRelays = connected;
         });
-        if (_connectedRelaysCount.value != connected) {
-          _connectedRelaysCount.value = connected;
-        }
       }
-    } catch (e) {
-      debugPrint('[FeedPage] Error updating relay count: $e');
-    }
+      if (_connectedRelaysCount.value != connected) {
+        _connectedRelaysCount.value = connected;
+      }
+    });
   }
 
   void _scrollListener() {
@@ -302,7 +298,7 @@ class FeedPageState extends State<FeedPage> {
   @override
   void dispose() {
     ScrollToTopNotifier.feed.removeListener(_onScrollToTopNotified);
-    _relayCountTimer?.cancel();
+    _relayStatusSubscription?.cancel();
     _searchDebounceTimer?.cancel();
     _followSetSubscription?.cancel();
     _scrollController.removeListener(_scrollListener);
@@ -852,9 +848,6 @@ class FeedPageState extends State<FeedPage> {
         Builder(
           builder: (context) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_notesNotifier.value != notes) {
-                _notesNotifier.value = notes;
-              }
               if (_scrollToTopOnNextBuild) {
                 _scrollToTopOnNextBuild = false;
                 if (_scrollController.hasClients) {
@@ -868,6 +861,7 @@ class FeedPageState extends State<FeedPage> {
               }
             });
 
+            final l10n = AppLocalizations.of(context)!;
             final user = _loggedInUserProfile ?? profiles[currentUserHex];
 
             return Listener(
@@ -927,7 +921,7 @@ class FeedPageState extends State<FeedPage> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'Loading your feed...',
+                                l10n.loadingYourFeed,
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: colors.textSecondary,
@@ -1174,21 +1168,29 @@ class FeedPageState extends State<FeedPage> {
                                   color: context.colors.textSecondary,
                                 ),
                                 const SizedBox(height: 16),
-                                Text(
-                                  'No results found',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: context.colors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Try searching with a different term.',
-                                  style: TextStyle(
-                                      color: context.colors.textSecondary),
-                                  textAlign: TextAlign.center,
-                                ),
+                                Builder(builder: (ctx) {
+                                  final l = AppLocalizations.of(ctx)!;
+                                  return Column(
+                                    children: [
+                                      Text(
+                                        l.noResultsFound,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                          color: context.colors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        l.tryDifferentSearchTerm,
+                                        style: TextStyle(
+                                            color:
+                                                context.colors.textSecondary),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  );
+                                }),
                               ],
                             ),
                           ),
