@@ -20,6 +20,23 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
   StreamSubscription<InteractionCounts>? _subscription;
 
+  static const _optimisticTtl = Duration(seconds: 10);
+  DateTime? _optimisticReactedAt;
+  DateTime? _optimisticRepostedAt;
+  DateTime? _optimisticZappedAt;
+
+  bool get _isOptimisticReactActive =>
+      _optimisticReactedAt != null &&
+      DateTime.now().difference(_optimisticReactedAt!) < _optimisticTtl;
+
+  bool get _isOptimisticRepostActive =>
+      _optimisticRepostedAt != null &&
+      DateTime.now().difference(_optimisticRepostedAt!) < _optimisticTtl;
+
+  bool get _isOptimisticZapActive =>
+      _optimisticZappedAt != null &&
+      DateTime.now().difference(_optimisticZappedAt!) < _optimisticTtl;
+
   InteractionBloc({
     required SyncService syncService,
     required FeedRepository feedRepository,
@@ -134,15 +151,18 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     final currentState =
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
 
-    final hasZapped = event.counts.hasZapped ||
-        _interactionService.hasZapped(noteId) ||
-        (currentState?.hasZapped ?? false);
-    final hasReacted = event.counts.hasReacted ||
+    final hasReacted = _isOptimisticReactActive ||
+        event.counts.hasReacted ||
         _interactionService.hasReacted(noteId) ||
         (currentState?.hasReacted ?? false);
-    final hasReposted = event.counts.hasReposted ||
+    final hasReposted = _isOptimisticRepostActive ||
+        event.counts.hasReposted ||
         _interactionService.hasReposted(noteId) ||
         (currentState?.hasReposted ?? false);
+    final hasZapped = _isOptimisticZapActive ||
+        event.counts.hasZapped ||
+        _interactionService.hasZapped(noteId) ||
+        (currentState?.hasZapped ?? false);
 
     if (currentState != null && currentState.zapProcessing) {
       emit(currentState.copyWith(
@@ -185,6 +205,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null || currentState.hasReacted) return;
     if (_interactionService.hasReacted(noteId)) return;
 
+    _optimisticReactedAt = DateTime.now();
     _interactionService.markReacted(noteId);
 
     emit(currentState.copyWith(
@@ -193,8 +214,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     ));
 
     try {
-      final noteAuthor =
-          note?['pubkey'] as String? ?? '';
+      final noteAuthor = note?['pubkey'] as String? ?? '';
       await _syncService.publishReaction(
         targetEventId: noteId,
         targetAuthor: noteAuthor,
@@ -212,6 +232,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null || currentState.hasReposted) return;
     if (_interactionService.hasReposted(noteId)) return;
 
+    _optimisticRepostedAt = DateTime.now();
     _interactionService.markReposted(noteId);
 
     emit(currentState.copyWith(
@@ -220,8 +241,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     ));
 
     try {
-      final noteAuthor =
-          note?['pubkey'] as String? ?? '';
+      final noteAuthor = note?['pubkey'] as String? ?? '';
       String originalContent = '';
       final noteModel = await _feedRepository.getNote(noteId);
       if (noteModel != null) {
@@ -259,6 +279,8 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
     if (currentState == null) return;
 
+    _optimisticZappedAt = DateTime.now();
+
     emit(currentState.copyWith(
       zapProcessing: true,
       hasZapped: true,
@@ -272,6 +294,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
     if (currentState == null) return;
 
+    _optimisticZappedAt = DateTime.now();
     _interactionService.markZapped(noteId, event.amount);
 
     emit(currentState.copyWith(
@@ -285,6 +308,8 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     final currentState =
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
     if (currentState == null) return;
+
+    _optimisticZappedAt = null;
 
     emit(currentState.copyWith(
       zapProcessing: false,

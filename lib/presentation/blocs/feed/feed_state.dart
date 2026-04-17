@@ -1,4 +1,5 @@
 import '../../../core/bloc/base/base_state.dart';
+import '../../../domain/entities/feed_note.dart';
 
 enum FeedSortMode {
   latest,
@@ -19,6 +20,7 @@ class FeedLoading extends FeedState {
 
 class FeedLoaded extends FeedState {
   final List<Map<String, dynamic>> notes;
+  final List<FeedNote> feedNotes;
   final Map<String, Map<String, dynamic>> profiles;
   final String currentUserHex;
   final bool canLoadMore;
@@ -33,6 +35,7 @@ class FeedLoaded extends FeedState {
 
   const FeedLoaded({
     required this.notes,
+    this.feedNotes = const [],
     required this.profiles,
     required this.currentUserHex,
     this.canLoadMore = true,
@@ -49,6 +52,7 @@ class FeedLoaded extends FeedState {
   @override
   List<Object?> get props => [
         notes,
+        feedNotes,
         profiles,
         currentUserHex,
         canLoadMore,
@@ -64,6 +68,7 @@ class FeedLoaded extends FeedState {
 
   FeedLoaded copyWith({
     List<Map<String, dynamic>>? notes,
+    List<FeedNote>? feedNotes,
     Map<String, Map<String, dynamic>>? profiles,
     String? currentUserHex,
     bool? canLoadMore,
@@ -79,6 +84,7 @@ class FeedLoaded extends FeedState {
   }) {
     return FeedLoaded(
       notes: notes ?? this.notes,
+      feedNotes: feedNotes ?? this.feedNotes,
       profiles: profiles ?? this.profiles,
       currentUserHex: currentUserHex ?? this.currentUserHex,
       canLoadMore: canLoadMore ?? this.canLoadMore,
@@ -88,8 +94,10 @@ class FeedLoaded extends FeedState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isSyncing: isSyncing ?? this.isSyncing,
       pendingNotesCount: pendingNotesCount ?? this.pendingNotesCount,
-      activeListId: clearActiveList ? null : (activeListId ?? this.activeListId),
-      activeListTitle: clearActiveList ? null : (activeListTitle ?? this.activeListTitle),
+      activeListId:
+          clearActiveList ? null : (activeListId ?? this.activeListId),
+      activeListTitle:
+          clearActiveList ? null : (activeListTitle ?? this.activeListTitle),
     );
   }
 }

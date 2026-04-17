@@ -23,7 +23,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   StreamSubscription<List<FeedNote>>? _feedSubscription;
   bool _isLoadingMore = false;
   int _currentLimit = 50;
-  List<Map<String, dynamic>> _bufferedNotes = [];
+  List<FeedNote> _bufferedNotes = [];
   bool _acceptNextUpdate = false;
   int _latestDisplayedTimestamp = 0;
 
@@ -130,14 +130,18 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       );
 
   void _syncHashtagInBackground(String hashtag, Emitter<FeedState>? emit) {
-    _syncService.syncHashtag(hashtag).then((_) {
-      if (isClosed) return;
-      _watchHashtagFeed(hashtag);
-    }).catchError((_) {}).whenComplete(() {
-      if (!isClosed && state is FeedLoaded) {
-        add(feed_event.FeedSyncCompleted());
-      }
-    });
+    _syncService
+        .syncHashtag(hashtag)
+        .then((_) {
+          if (isClosed) return;
+          _watchHashtagFeed(hashtag);
+        })
+        .catchError((_) {})
+        .whenComplete(() {
+          if (!isClosed && state is FeedLoaded) {
+            add(feed_event.FeedSyncCompleted());
+          }
+        });
   }
 
   void _onFeedNotesUpdated(
@@ -151,6 +155,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     final sortedNotes = _feedNotesToMaps(event.notes);
     _sortNotes(sortedNotes, currentState.sortMode);
+    final sortedFeedNotes = List<FeedNote>.from(event.notes)
+      ..sort((a, b) {
+        final aTime = a.repostCreatedAt ?? a.createdAt;
+        final bTime = b.repostCreatedAt ?? b.createdAt;
+        return bTime.compareTo(aTime);
+      });
 
     if (currentState.notes.isEmpty ||
         _acceptNextUpdate ||
@@ -158,7 +168,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       _acceptNextUpdate = false;
       _bufferedNotes = [];
       _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
-      emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
+      emit(currentState.copyWith(
+        notes: sortedNotes,
+        feedNotes: sortedFeedNotes,
+        pendingNotesCount: 0,
+      ));
       _loadProfilesForNotes(sortedNotes);
       _prefetchEmbeddedContent(sortedNotes);
       return;
@@ -180,7 +194,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
 
     if (othersCount > 0) {
-      _bufferedNotes = sortedNotes;
+      _bufferedNotes = sortedFeedNotes;
       if (hasOwnNew) {
         final displayedIds = <String>{};
         for (final n in currentState.notes) {
@@ -196,8 +210,15 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
               displayedIds.contains(id) ||
               pubkey == _currentUserHex;
         }).toList();
+        final ownFeedNotes = sortedFeedNotes.where((n) {
+          final noteTime = n.repostCreatedAt ?? n.createdAt;
+          return noteTime <= _latestDisplayedTimestamp ||
+              displayedIds.contains(n.id) ||
+              n.pubkey == _currentUserHex;
+        }).toList();
         emit(currentState.copyWith(
           notes: ownNotes,
+          feedNotes: ownFeedNotes,
           pendingNotesCount: othersCount,
         ));
       } else {
@@ -206,10 +227,18 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     } else if (hasOwnNew) {
       _bufferedNotes = [];
       _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
-      emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
+      emit(currentState.copyWith(
+        notes: sortedNotes,
+        feedNotes: sortedFeedNotes,
+        pendingNotesCount: 0,
+      ));
     } else {
       _bufferedNotes = [];
-      emit(currentState.copyWith(notes: sortedNotes, pendingNotesCount: 0));
+      emit(currentState.copyWith(
+        notes: sortedNotes,
+        feedNotes: sortedFeedNotes,
+        pendingNotesCount: 0,
+      ));
     }
     _loadProfilesForNotes(sortedNotes);
     _prefetchEmbeddedContent(sortedNotes);
@@ -223,8 +252,13 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final currentState = state as FeedLoaded;
 
     if (_bufferedNotes.isNotEmpty) {
-      _latestDisplayedTimestamp = _getLatestTimestamp(_bufferedNotes);
-      emit(currentState.copyWith(notes: _bufferedNotes, pendingNotesCount: 0));
+      final bufferedMaps = _feedNotesToMaps(_bufferedNotes);
+      _latestDisplayedTimestamp = _getLatestTimestamp(bufferedMaps);
+      emit(currentState.copyWith(
+        notes: bufferedMaps,
+        feedNotes: _bufferedNotes,
+        pendingNotesCount: 0,
+      ));
       _bufferedNotes = [];
     } else {
       emit(currentState.copyWith(pendingNotesCount: 0));
@@ -248,11 +282,13 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       _syncService.syncProfile(userHex),
       _syncService.syncFollowingList(userHex),
       _syncService.syncMuteList(userHex),
-      _syncService.syncFeed(userHex, force: true),
-    ]).timeout(
+      _syncService.syncFeed(userHex),
+    ])
+        .timeout(
       const Duration(seconds: 2),
       onTimeout: () => [],
-    ).then((_) async {
+    )
+        .then((_) async {
       if (isClosed) return;
 
       _watchFeed(userHex);
@@ -293,11 +329,16 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     final currentState = state;
     if (currentState is FeedLoaded) {
-      final notesToShow =
-          _bufferedNotes.isNotEmpty ? _bufferedNotes : currentState.notes;
+      final notesToShow = _bufferedNotes.isNotEmpty
+          ? _feedNotesToMaps(_bufferedNotes)
+          : currentState.notes;
+      final feedNotesToShow = _bufferedNotes.isNotEmpty
+          ? List<FeedNote>.from(_bufferedNotes)
+          : currentState.feedNotes;
       _bufferedNotes = [];
       emit(currentState.copyWith(
         notes: notesToShow,
+        feedNotes: feedNotesToShow,
         isSyncing: true,
         pendingNotesCount: 0,
       ));
@@ -309,7 +350,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         final listPubkeys = service?.pubkeysForList(currentState.activeListId!);
         if (listPubkeys != null && listPubkeys.isNotEmpty) {
           _watchListFeed(listPubkeys);
-          _syncService.syncListFeed(listPubkeys, force: true).catchError((_) {}).whenComplete(() {
+          _syncService
+              .syncListFeed(listPubkeys, force: true)
+              .catchError((_) {})
+              .whenComplete(() {
             if (!isClosed && state is FeedLoaded) {
               add(feed_event.FeedSyncCompleted());
             }
@@ -317,7 +361,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         }
       } else {
         _watchFeed(_currentUserHex!);
-        _syncService.syncFeed(_currentUserHex!, force: true).catchError((_) {}).whenComplete(() {
+        _syncService
+            .syncFeed(_currentUserHex!, force: true)
+            .catchError((_) {})
+            .whenComplete(() {
           if (!isClosed && state is FeedLoaded) {
             add(feed_event.FeedSyncCompleted());
           }
@@ -383,7 +430,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       final sortedNotes = List<Map<String, dynamic>>.from(currentState.notes);
       _sortNotes(sortedNotes, event.mode);
       if (_bufferedNotes.isNotEmpty) {
-        _sortNotes(_bufferedNotes, event.mode);
+        _bufferedNotes.sort((a, b) {
+          final aTime = a.repostCreatedAt ?? a.createdAt;
+          final bTime = b.repostCreatedAt ?? b.createdAt;
+          return bTime.compareTo(aTime);
+        });
       }
       emit(currentState.copyWith(notes: sortedNotes, sortMode: event.mode));
     }
@@ -481,8 +532,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     if (authorIds.isEmpty) return;
 
     try {
-      final profiles =
-          await _profileRepository.getProfiles(authorIds.toList());
+      final profiles = await _profileRepository.getProfiles(authorIds.toList());
       if (isClosed) return;
 
       final updatedProfiles = <String, Map<String, dynamic>>{};
@@ -505,7 +555,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         try {
           await _syncService
               .syncProfiles(missingPubkeys)
-              .timeout(const Duration(seconds: 2));
+              .timeout(const Duration(seconds: 5));
         } catch (_) {}
         if (isClosed) return;
 
@@ -609,13 +659,17 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         activeListTitle: event.listTitle,
       ));
 
-      _syncService.syncListFeed(event.pubkeys!).then((_) {
-        if (!isClosed) _watchListFeed(event.pubkeys!);
-      }).catchError((_) {}).whenComplete(() {
-        if (!isClosed && state is FeedLoaded) {
-          add(feed_event.FeedSyncCompleted());
-        }
-      });
+      _syncService
+          .syncListFeed(event.pubkeys!)
+          .then((_) {
+            if (!isClosed) _watchListFeed(event.pubkeys!);
+          })
+          .catchError((_) {})
+          .whenComplete(() {
+            if (!isClosed && state is FeedLoaded) {
+              add(feed_event.FeedSyncCompleted());
+            }
+          });
     }
   }
 
