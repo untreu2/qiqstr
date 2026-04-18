@@ -606,8 +606,9 @@ class AppRouter {
   static Future<String?> _handleRedirect(
       BuildContext context, GoRouterState state) async {
     final authService = AppDI.get<AuthService>();
-    final isAuthResult = await authService.isAuthenticated();
-    final isAuthenticated = isAuthResult.isSuccess && isAuthResult.data == true;
+
+    final cachedNpub = authService.currentUserNpub;
+    final isAuthenticated = cachedNpub != null && cachedNpub.isNotEmpty;
 
     final isWelcomeRoute = state.matchedLocation == '/welcome';
     final isLoginRoute = state.matchedLocation == '/login';
@@ -628,18 +629,16 @@ class AppRouter {
         isOnboardingCoinosRoute;
 
     if (!isAuthenticated && !isAuthFlow) {
-      return '/welcome';
+      final isAuthResult = await authService.isAuthenticated();
+      final isAuthenticatedFull =
+          isAuthResult.isSuccess && isAuthResult.data == true;
+      if (!isAuthenticatedFull) return '/welcome';
     }
 
     if (isAuthenticated && (isWelcomeRoute || isLoginRoute || isSignupRoute)) {
       final isAddAccount = state.uri.queryParameters['addAccount'] == 'true';
-      if (!isAddAccount) {
-        final npubResult = await authService.getCurrentUserNpub();
-        if (npubResult.isSuccess &&
-            npubResult.data != null &&
-            npubResult.data!.isNotEmpty) {
-          return '/home/feed?npub=${Uri.encodeComponent(npubResult.data!)}';
-        }
+      if (!isAddAccount && cachedNpub.isNotEmpty) {
+        return '/home/feed?npub=${Uri.encodeComponent(cachedNpub)}';
       }
     }
 
