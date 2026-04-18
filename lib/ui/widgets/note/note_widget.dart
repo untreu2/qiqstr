@@ -5,11 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../../utils/string_optimizer.dart';
-import '../../../core/di/app_di.dart';
-import '../../../data/repositories/profile_repository.dart';
-import '../../../data/sync/sync_service.dart';
 import '../../../utils/thread_chain.dart';
 import '../../theme/theme_manager.dart';
+import '../../../l10n/app_localizations.dart';
 import 'note_content_widget.dart';
 import 'interaction_bar_widget.dart';
 
@@ -63,7 +61,6 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   final ValueNotifier<_NoteState> _stateNotifier =
       ValueNotifier(_NoteState.initial());
-  final Map<String, Map<String, dynamic>> _locallyLoadedProfiles = {};
   Timer? _timestampTimer;
 
   bool _isInitialized = false;
@@ -74,7 +71,6 @@ class _NoteWidgetState extends State<NoteWidget> {
     try {
       _precomputeImmutableData();
       _loadInitialUserDataSync();
-      _initializeAsync();
       _scheduleTimestampUpdates();
     } catch (e) {
       debugPrint('[NoteWidget] InitState error: $e');
@@ -145,12 +141,9 @@ class _NoteWidgetState extends State<NoteWidget> {
     try {
       final currentState = _stateNotifier.value;
 
-      Map<String, dynamic>? authorUser =
-          widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
-      Map<String, dynamic>? reposterUser = _reposterId != null
-          ? (widget.profiles[_reposterId] ??
-              _locallyLoadedProfiles[_reposterId])
-          : null;
+      Map<String, dynamic>? authorUser = widget.profiles[_authorId];
+      Map<String, dynamic>? reposterUser =
+          _reposterId != null ? widget.profiles[_reposterId] : null;
 
       authorUser ??= {
         'pubkey': _authorId,
@@ -182,13 +175,12 @@ class _NoteWidgetState extends State<NoteWidget> {
         };
       }
 
-      final replyText =
-          _isReply && !_isQuote && _parentId != null ? 'Reply to...' : null;
+      final isReplyNote = _isReply && !_isQuote && _parentId != null;
 
       final newState = _NoteState(
         authorUser: authorUser,
         reposterUser: reposterUser,
-        replyText: replyText,
+        isReplyNote: isReplyNote,
       );
 
       if (currentState != newState) {
@@ -199,93 +191,6 @@ class _NoteWidgetState extends State<NoteWidget> {
     }
   }
 
-  void _initializeAsync() {
-    Future.microtask(() {
-      if (!mounted) return;
-
-      try {
-        _loadUsersAsync();
-      } catch (e) {
-        debugPrint('[NoteWidget] Async init error: $e');
-      }
-    });
-  }
-
-  Future<void> _loadUsersAsync() async {
-    if (!mounted) return;
-
-    try {
-      final profileRepo = AppDI.get<ProfileRepository>();
-      final syncService = AppDI.get<SyncService>();
-
-      await _loadAndSyncProfile(profileRepo, syncService, _authorId);
-
-      if (_reposterId != null) {
-        await _loadAndSyncProfile(profileRepo, syncService, _reposterId);
-      }
-    } catch (e) {
-      debugPrint('[NoteWidget] Load users async error: $e');
-    }
-  }
-
-  Future<void> _loadAndSyncProfile(ProfileRepository profileRepo,
-      SyncService syncService, String pubkey) async {
-    if (!mounted) return;
-
-    final current = widget.profiles[pubkey] ?? _locallyLoadedProfiles[pubkey];
-    final hasName = (current?['name'] as String? ?? '').isNotEmpty &&
-        (current?['name'] as String? ?? '') !=
-            pubkey.substring(0, pubkey.length > 8 ? 8 : pubkey.length);
-    final hasImage = (current?['picture'] as String? ?? '').isNotEmpty;
-
-    if (current == null || !hasName || !hasImage) {
-      final profile = await profileRepo.getProfile(pubkey);
-      if (profile != null && mounted) {
-        _applyProfile(pubkey, profile);
-      }
-
-      final profileLoaded = profile != null &&
-          (profile.picture ?? '').isNotEmpty &&
-          (profile.name ?? '').isNotEmpty;
-
-      if (!profileLoaded) {
-        _syncProfileInBackground(syncService, pubkey);
-      }
-    }
-  }
-
-  void _applyProfile(String pubkey, dynamic profile) {
-    _locallyLoadedProfiles[pubkey] = {
-      'pubkey': profile.pubkey,
-      'name': profile.name ?? '',
-      'about': profile.about ?? '',
-      'picture': profile.picture ?? '',
-      'banner': profile.banner ?? '',
-      'website': profile.website ?? '',
-      'nip05': profile.nip05 ?? '',
-      'lud16': profile.lud16 ?? '',
-      'updatedAt': DateTime.now(),
-      'nip05Verified': false,
-    };
-    _updateUserData();
-  }
-
-  void _syncProfileInBackground(SyncService syncService, String pubkey) {
-    Future.microtask(() async {
-      if (!mounted) return;
-      try {
-        await syncService.syncProfile(pubkey);
-        if (!mounted) return;
-
-        final profileRepo = AppDI.get<ProfileRepository>();
-        final profile = await profileRepo.getProfile(pubkey);
-        if (profile != null && mounted) {
-          _applyProfile(pubkey, profile);
-        }
-      } catch (_) {}
-    });
-  }
-
   @override
   void didUpdateWidget(NoteWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -293,18 +198,12 @@ class _NoteWidgetState extends State<NoteWidget> {
     if (oldWidget.profiles != widget.profiles) {
       _updateUserData();
     } else {
-      final oldAuthor =
-          oldWidget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
-      final newAuthor =
-          widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
-      final oldReposter = _reposterId != null
-          ? (oldWidget.profiles[_reposterId] ??
-              _locallyLoadedProfiles[_reposterId])
-          : null;
-      final newReposter = _reposterId != null
-          ? (widget.profiles[_reposterId] ??
-              _locallyLoadedProfiles[_reposterId])
-          : null;
+      final oldAuthor = oldWidget.profiles[_authorId];
+      final newAuthor = widget.profiles[_authorId];
+      final oldReposter =
+          _reposterId != null ? oldWidget.profiles[_reposterId] : null;
+      final newReposter =
+          _reposterId != null ? widget.profiles[_reposterId] : null;
 
       if (oldAuthor != newAuthor || oldReposter != newReposter) {
         _updateUserData();
@@ -318,12 +217,9 @@ class _NoteWidgetState extends State<NoteWidget> {
     try {
       final currentState = _stateNotifier.value;
 
-      Map<String, dynamic>? authorUser =
-          widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
-      Map<String, dynamic>? reposterUser = _reposterId != null
-          ? (widget.profiles[_reposterId] ??
-              _locallyLoadedProfiles[_reposterId])
-          : null;
+      Map<String, dynamic>? authorUser = widget.profiles[_authorId];
+      Map<String, dynamic>? reposterUser =
+          _reposterId != null ? widget.profiles[_reposterId] : null;
 
       authorUser ??= {
         'pubkey': _authorId,
@@ -355,13 +251,12 @@ class _NoteWidgetState extends State<NoteWidget> {
         };
       }
 
-      final replyText =
-          _isReply && !_isQuote && _parentId != null ? 'Reply to...' : null;
+      final isReplyNote = _isReply && !_isQuote && _parentId != null;
 
       final newState = _NoteState(
         authorUser: authorUser,
         reposterUser: reposterUser,
-        replyText: replyText,
+        isReplyNote: isReplyNote,
       );
 
       if (currentState != newState) {
@@ -503,7 +398,6 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (!mounted || !_isInitialized) return;
 
       final user = widget.profiles[npub] ??
-          _locallyLoadedProfiles[npub] ??
           {
             'pubkey': npub,
             'name': npub.length > 8 ? npub.substring(0, 8) : npub,
@@ -785,7 +679,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                     valueListenable: _stateNotifier,
                     builder: (context, state, _) {
                       final hasRepost = _isRepost && _reposterId != null;
-                      final hasReply = state.replyText != null;
+                      final hasReply = state.isReplyNote;
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -867,7 +761,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    state.replyText!,
+                                    AppLocalizations.of(context)!.replyTo,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: colors.textSecondary,
@@ -958,19 +852,19 @@ class _NoteWidgetState extends State<NoteWidget> {
 class _NoteState {
   final Map<String, dynamic>? authorUser;
   final Map<String, dynamic>? reposterUser;
-  final String? replyText;
+  final bool isReplyNote;
 
   const _NoteState({
     this.authorUser,
     this.reposterUser,
-    this.replyText,
+    this.isReplyNote = false,
   });
 
   factory _NoteState.initial() {
     return const _NoteState(
       authorUser: null,
       reposterUser: null,
-      replyText: null,
+      isReplyNote: false,
     );
   }
 
@@ -991,7 +885,7 @@ class _NoteState {
               (other.reposterUser?['name'] as String? ?? '') &&
           (reposterUser?['picture'] as String? ?? '') ==
               (other.reposterUser?['picture'] as String? ?? '') &&
-          replyText == other.replyText;
+          isReplyNote == other.isReplyNote;
 
   @override
   int get hashCode => Object.hash(
@@ -1001,7 +895,7 @@ class _NoteState {
         reposterUser?['pubkey'] as String?,
         reposterUser?['name'] as String?,
         reposterUser?['picture'] as String?,
-        replyText,
+        isReplyNote,
       );
 }
 
@@ -1152,33 +1046,39 @@ class _ProfileAvatar extends StatelessWidget {
           width: radius * 2,
           height: radius * 2,
           color: Colors.transparent,
-          child: CachedNetworkImage(
-            key: ValueKey('avatar_${imageUrl.hashCode}_$radius'),
-            imageUrl: imageUrl,
-            width: radius * 2,
-            height: radius * 2,
-            fit: BoxFit.cover,
-            fadeInDuration: Duration.zero,
-            fadeOutDuration: Duration.zero,
-            memCacheWidth: (radius * 5).toInt(),
-            maxWidthDiskCache: (radius * 5).toInt(),
-            maxHeightDiskCache: (radius * 5).toInt(),
-            placeholder: (context, url) => Container(
-              color: colors.surfaceTransparent,
-              child: Icon(
-                Icons.person,
-                size: radius,
-                color: colors.textSecondary,
-              ),
-            ),
-            errorWidget: (context, url, error) => Container(
-              color: colors.surfaceTransparent,
-              child: Icon(
-                Icons.person,
-                size: radius,
-                color: colors.textSecondary,
-              ),
-            ),
+          child: Builder(
+            builder: (context) {
+              final dpr = MediaQuery.devicePixelRatioOf(context);
+              final cacheDim = (radius * 2 * dpr).ceil();
+              return CachedNetworkImage(
+                key: ValueKey('avatar_${imageUrl.hashCode}_$radius'),
+                imageUrl: imageUrl,
+                width: radius * 2,
+                height: radius * 2,
+                fit: BoxFit.cover,
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
+                memCacheWidth: cacheDim,
+                maxWidthDiskCache: cacheDim,
+                maxHeightDiskCache: cacheDim,
+                placeholder: (context, url) => Container(
+                  color: colors.surfaceTransparent,
+                  child: Icon(
+                    Icons.person,
+                    size: radius,
+                    color: colors.textSecondary,
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: colors.surfaceTransparent,
+                  child: Icon(
+                    Icons.person,
+                    size: radius,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -1238,11 +1138,11 @@ class _SafeUserInfoSection extends StatelessWidget {
                   ),
                 ],
               ),
-              if (state.replyText != null)
+              if (state.isReplyNote)
                 Transform.translate(
                   offset: const Offset(0, -4),
                   child: Text(
-                    state.replyText!,
+                    AppLocalizations.of(context)!.replyTo,
                     style: TextStyle(
                       fontSize: 12,
                       color: colors.textSecondary,
