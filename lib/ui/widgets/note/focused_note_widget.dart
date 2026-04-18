@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../core/di/app_di.dart';
-import '../../../data/repositories/profile_repository.dart';
 import '../../../utils/string_optimizer.dart';
 import '../../theme/theme_manager.dart';
+import '../../../l10n/app_localizations.dart';
 import 'note_content_widget.dart';
 import 'interaction_bar_widget.dart';
 
@@ -46,14 +45,11 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
   late final bool _isReply;
   late final bool _isRepost;
   late final DateTime _timestamp;
-  late final String _content;
   late final String _widgetKey;
-
   late final Map<String, dynamic> _parsedContent;
 
-  final ValueNotifier<_FocusedNoteState> _stateNotifier =
-      ValueNotifier(_FocusedNoteState.initial());
-  final Map<String, Map<String, dynamic>> _locallyLoadedProfiles = {};
+  final ValueNotifier<_AuthorState> _stateNotifier =
+      ValueNotifier(_AuthorState.empty());
 
   bool _isInitialized = false;
 
@@ -61,233 +57,17 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
   void initState() {
     super.initState();
     try {
-      _precomputeImmutableData();
-      _initializeAsync();
+      _precompute();
+      _resolveAuthors();
     } catch (e) {
-      debugPrint('[FocusedNoteWidget] InitState error: $e');
-      _isInitialized = false;
+      debugPrint('[FocusedNoteWidget] initState error: $e');
     }
   }
 
-  void _precomputeImmutableData() {
-    _noteId = widget.note['id'] as String? ?? '';
-    _authorId = widget.note['pubkey'] as String? ??
-        widget.note['pubkey'] as String? ??
-        '';
-    _reposterId = widget.note['repostedBy'] as String?;
-    _parentId = widget.note['parentId'] as String?;
-    _isReply = widget.note['isReply'] as bool? ?? false;
-    _isRepost = widget.note['isRepost'] as bool? ?? false;
-    final createdAt = widget.note['created_at'];
-    if (createdAt is int) {
-      _timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-    } else {
-      _timestamp = widget.note['timestamp'] as DateTime? ?? DateTime.now();
-    }
-    _content = widget.note['content'] as String? ?? '';
-    _widgetKey = '${_noteId}_${_authorId}_focused';
-
-    try {
-      _parsedContent = stringOptimizer.parseContentOptimized(_content);
-      final tags = widget.note['tags'] as List<dynamic>? ?? [];
-      final mediaDimensions = _extractImetaDimensions(tags);
-      if (mediaDimensions.isNotEmpty) {
-        _parsedContent['mediaDimensions'] = mediaDimensions;
-      }
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] ParseContent error: $e');
-      _parsedContent = {
-        'textParts': [
-          {'type': 'text', 'text': _content}
-        ],
-        'mediaUrls': <String>[],
-        'linkUrls': <String>[],
-        'quoteIds': <String>[],
-        'articleIds': <String>[],
-      };
-    }
-
-    _isInitialized = true;
-  }
-
-  static Map<String, String> _extractImetaDimensions(List<dynamic> tags) {
-    final dimensions = <String, String>{};
-    for (final tag in tags) {
-      if (tag is! List || tag.isEmpty) continue;
-      if (tag[0].toString() != 'imeta') continue;
-
-      String? url;
-      String? dim;
-      for (int i = 1; i < tag.length; i++) {
-        final entry = tag[i].toString();
-        if (entry.startsWith('url ')) {
-          url = entry.substring(4);
-        } else if (entry.startsWith('dim ')) {
-          dim = entry.substring(4);
-        }
-      }
-      if (url != null && dim != null) {
-        dimensions[url] = dim;
-      }
-    }
-    return dimensions;
-  }
-
-  void _initializeAsync() {
-    Future.microtask(() {
-      if (!mounted) return;
-
-      try {
-        _loadInitialUserData();
-        _loadUsersAsync();
-      } catch (e) {
-        debugPrint('[FocusedNoteWidget] Async init error: $e');
-      }
-    });
-  }
-
-  void _loadInitialUserData() {
-    try {
-      _updateUserData();
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Load initial user data error: $e');
-    }
-  }
-
-  void _updateUserData() {
-    if (!mounted) return;
-
-    try {
-      final currentState = _stateNotifier.value;
-
-      Map<String, dynamic>? authorUser =
-          widget.profiles[_authorId] ?? _locallyLoadedProfiles[_authorId];
-      Map<String, dynamic>? reposterUser = _reposterId != null
-          ? (widget.profiles[_reposterId] ??
-              _locallyLoadedProfiles[_reposterId])
-          : null;
-
-      authorUser ??= {
-        'pubkey': _authorId,
-        'name': _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
-        'about': '',
-        'picture': '',
-        'banner': '',
-        'website': '',
-        'nip05': '',
-        'lud16': '',
-        'updatedAt': DateTime.now(),
-        'nip05Verified': false,
-      };
-
-      if (_reposterId != null && reposterUser == null) {
-        final reposterId = _reposterId;
-        reposterUser = {
-          'pubkey': reposterId,
-          'name':
-              reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
-          'about': '',
-          'picture': '',
-          'banner': '',
-          'website': '',
-          'nip05': '',
-          'lud16': '',
-          'updatedAt': DateTime.now(),
-          'nip05Verified': false,
-        };
-      }
-
-      final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
-
-      final newState = _FocusedNoteState(
-        authorUser: authorUser,
-        reposterUser: reposterUser,
-        replyText: replyText,
-      );
-
-      if (currentState != newState) {
-        _stateNotifier.value = newState;
-      }
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Update user data error: $e');
-    }
-  }
-
-  Future<void> _loadUsersAsync() async {
-    if (!mounted) return;
-
-    try {
-      if (widget.notesListProvider != null) {
-        final authorPreloaded =
-            widget.notesListProvider.getPreloadedUser(_authorId);
-        final reposterPreloaded = _reposterId != null
-            ? widget.notesListProvider.getPreloadedUser(_reposterId)
-            : null;
-
-        if (authorPreloaded != null &&
-            (authorPreloaded['name'] as String? ?? '') != 'Anonymous' &&
-            (_reposterId == null ||
-                (reposterPreloaded != null &&
-                    (reposterPreloaded['name'] as String? ?? '') !=
-                        'Anonymous'))) {
-          return;
-        }
-      }
-
-      final profileRepo = AppDI.get<ProfileRepository>();
-      final author = await profileRepo.getProfile(_authorId);
-      if (author != null && mounted) {
-        _locallyLoadedProfiles[_authorId] = {
-          'pubkey': author.pubkey,
-          'name': author.name ?? '',
-          'about': author.about ?? '',
-          'picture': author.picture ?? '',
-          'banner': author.banner ?? '',
-          'website': author.website ?? '',
-          'nip05': author.nip05 ?? '',
-          'lud16': author.lud16 ?? '',
-          'updatedAt': DateTime.now(),
-          'nip05Verified': false,
-        };
-        _updateUserData();
-      }
-
-      if (_reposterId != null) {
-        final reposterId = _reposterId;
-        final reposter = await profileRepo.getProfile(reposterId);
-        if (reposter != null && mounted) {
-          _locallyLoadedProfiles[reposterId] = {
-            'pubkey': reposter.pubkey,
-            'name': reposter.name ?? '',
-            'about': reposter.about ?? '',
-            'picture': reposter.picture ?? '',
-            'banner': reposter.banner ?? '',
-            'website': reposter.website ?? '',
-            'nip05': reposter.nip05 ?? '',
-            'lud16': reposter.lud16 ?? '',
-            'updatedAt': DateTime.now(),
-            'nip05Verified': false,
-          };
-          _updateUserData();
-        }
-      }
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Load users async error: $e');
-    }
-  }
-
-  String _formatFullDateTime(DateTime timestamp) {
-    try {
-      final year = timestamp.year;
-      final month = timestamp.month.toString().padLeft(2, '0');
-      final day = timestamp.day.toString().padLeft(2, '0');
-      final hour = timestamp.hour.toString().padLeft(2, '0');
-      final minute = timestamp.minute.toString().padLeft(2, '0');
-      return '$hour:$minute — $year-$month-$day';
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Format full date time error: $e');
-      return '';
-    }
+  @override
+  void didUpdateWidget(FocusedNoteWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profiles != widget.profiles) _resolveAuthors();
   }
 
   @override
@@ -296,367 +76,367 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
     super.dispose();
   }
 
-  void _navigateToProfile(String npub) {
-    try {
-      if (mounted) {
-        debugPrint(
-            '[FocusedNoteWidget] Attempting to navigate to profile: $npub');
+  // ── data ──────────────────────────────────────────────────────────────────
 
-        final user = widget.profiles[npub] ??
-            _locallyLoadedProfiles[npub] ??
-            {
-              'pubkey': npub,
-              'name': npub.length > 8 ? npub.substring(0, 8) : npub,
-              'about': '',
-              'picture': '',
-              'banner': '',
-              'website': '',
-              'nip05': '',
-              'lud16': '',
-              'updatedAt': DateTime.now(),
-              'nip05Verified': false,
-            };
+  void _precompute() {
+    _noteId = widget.note['id'] as String? ?? '';
+    _authorId = widget.note['pubkey'] as String? ?? '';
+    _reposterId = widget.note['repostedBy'] as String?;
+    _parentId = widget.note['parentId'] as String? ??
+        widget.note['rootId'] as String?;
+    _isReply = widget.note['isReply'] as bool? ??
+        (_parentId != null && _parentId.isNotEmpty);
+    _isRepost = widget.note['isRepost'] as bool? ?? false;
 
-        final userNpub = user['npub'] as String? ?? npub;
-        final userPubkeyHex = user['pubkey'] as String? ?? npub;
-        final currentLocation = GoRouterState.of(context).matchedLocation;
-        if (currentLocation.startsWith('/home/feed')) {
-          context.push(
-              '/home/feed/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
-        } else if (currentLocation.startsWith('/home/notifications')) {
-          context.push(
-              '/home/notifications/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
-        } else {
-          context.push(
-              '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
-        }
-      }
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Navigate to profile error: $e');
-    }
+    final createdAt = widget.note['created_at'];
+    _timestamp = createdAt is int
+        ? DateTime.fromMillisecondsSinceEpoch(createdAt * 1000)
+        : (widget.note['timestamp'] as DateTime? ?? DateTime.now());
+
+    _widgetKey = '${_noteId}_${_authorId}_focused';
+
+    final content = widget.note['content'] as String? ?? '';
+    _parsedContent = stringOptimizer.parseContentOptimized(content);
+    final tags = widget.note['tags'] as List<dynamic>? ?? [];
+    final dims = _extractDimensions(tags);
+    if (dims.isNotEmpty) _parsedContent['mediaDimensions'] = dims;
+
+    _isInitialized = true;
   }
 
-  void _navigateToMentionProfile(String id) {
-    try {
-      if (mounted) {
-        _navigateToProfile(id);
-      }
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Navigate to mention profile error: $e');
+  void _resolveAuthors() {
+    Map<String, dynamic>? author = widget.profiles[_authorId];
+    Map<String, dynamic>? reposter =
+        _reposterId != null ? widget.profiles[_reposterId] : null;
+
+    author ??= {
+      'pubkey': _authorId,
+      'name': _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
+      'picture': '',
+    };
+
+    if (_reposterId != null && reposter == null) {
+      final rid = _reposterId;
+      reposter = {
+        'pubkey': rid,
+        'name': rid.length > 8 ? rid.substring(0, 8) : rid,
+        'picture': '',
+      };
     }
+
+    final next = _AuthorState(author: author, reposter: reposter);
+    if (_stateNotifier.value != next) _stateNotifier.value = next;
+  }
+
+  static Map<String, String> _extractDimensions(List<dynamic> tags) {
+    final out = <String, String>{};
+    for (final tag in tags) {
+      if (tag is! List || tag.isEmpty || tag[0].toString() != 'imeta') continue;
+      String? url, dim;
+      for (int i = 1; i < tag.length; i++) {
+        final e = tag[i].toString();
+        if (e.startsWith('url ')) url = e.substring(4);
+        if (e.startsWith('dim ')) dim = e.substring(4);
+      }
+      if (url != null && dim != null) out[url] = dim;
+    }
+    return out;
+  }
+
+  // ── timestamp helpers ─────────────────────────────────────────────────────
+
+  String _relativeTimestamp() {
+    final d = DateTime.now().difference(_timestamp);
+    if (d.inSeconds < 5) return 'now';
+    if (d.inSeconds < 60) return '${d.inSeconds}s ago';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    if (d.inDays < 7) return '${d.inDays}d ago';
+    if (d.inDays < 30) return '${(d.inDays / 7).floor()}w ago';
+    if (d.inDays < 365) return '${(d.inDays / 30).floor()}mo ago';
+    return '${(d.inDays / 365).floor()}y ago';
+  }
+
+  String _absoluteTimestamp() {
+    final h = _timestamp.hour.toString().padLeft(2, '0');
+    final min = _timestamp.minute.toString().padLeft(2, '0');
+    final y = _timestamp.year;
+    final mo = _timestamp.month.toString().padLeft(2, '0');
+    final d = _timestamp.day.toString().padLeft(2, '0');
+    return '$h:$min  ·  $y-$mo-$d';
+  }
+
+  // ── navigation ────────────────────────────────────────────────────────────
+
+  void _navigateToProfile(String pubkey) {
+    if (!mounted) return;
+    final user = widget.profiles[pubkey] ?? {'pubkey': pubkey};
+    final npub = user['npub'] as String? ?? pubkey;
+    final hex = user['pubkey'] as String? ?? pubkey;
+    final loc = GoRouterState.of(context).matchedLocation;
+    final path = loc.startsWith('/home/feed')
+        ? '/home/feed/profile'
+        : loc.startsWith('/home/notifications')
+            ? '/home/notifications/profile'
+            : '/profile';
+    context.push(
+        '$path?npub=${Uri.encodeComponent(npub)}&pubkey=${Uri.encodeComponent(hex)}');
   }
 
   String _getInteractionNoteId() {
     final rootId = widget.note['rootId'] as String?;
-    if (_isRepost && rootId != null && rootId.isNotEmpty) {
-      return rootId;
-    }
+    if (_isRepost && rootId != null && rootId.isNotEmpty) return rootId;
     return _noteId;
   }
+
+  // ── build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (!_isInitialized) return const SizedBox.shrink();
 
-    if (!_isInitialized || !mounted) {
-      return const SizedBox.shrink();
-    }
+    final colors = context.colors;
+    final l10n = AppLocalizations.of(context)!;
 
-    try {
-      final colors = context.colors;
-
-      return RepaintBoundary(
-        key: ValueKey(_widgetKey),
-        child: Card(
-          margin: EdgeInsets.zero,
-          color: colors.background,
-          elevation: 0,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.only(top: 16.0, bottom: 12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _FocusedProfileSection(
-                  stateNotifier: _stateNotifier,
-                  isRepost: _isRepost,
-                  onAuthorTap: () => _navigateToProfile(_authorId),
-                  onReposterTap: _reposterId != null
-                      ? () => _navigateToProfile(_reposterId)
-                      : null,
-                  colors: colors,
-                  widgetKey: _widgetKey,
-                ),
-                const SizedBox(height: 8),
-                _FocusedUserInfoSection(
-                  stateNotifier: _stateNotifier,
-                  colors: colors,
-                ),
-                RepaintBoundary(
-                  child: _FocusedContentSection(
-                    parsedContent: _parsedContent,
-                    onMentionTap: _navigateToMentionProfile,
-                    notesListProvider: widget.notesListProvider,
-                    noteId: _noteId,
-                    authorProfileImageUrl:
-                        _stateNotifier.value.authorUser?['picture'] as String?,
-                    authorId: _authorId,
-                    isSelectable: widget.isSelectable,
-                    embeddedNotes:
-                        widget.note['embeddedNotes'] as Map<String, dynamic>?,
-                    embeddedArticles: widget.note['embeddedArticles']
-                        as Map<String, dynamic>?,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5.0),
-                  child: Text(
-                    _formatFullDateTime(_timestamp),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colors.textSecondary,
+    return RepaintBoundary(
+      key: ValueKey(_widgetKey),
+      child: Card(
+        margin: EdgeInsets.zero,
+        color: colors.background,
+        elevation: 0,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Author row
+              ValueListenableBuilder<_AuthorState>(
+                valueListenable: _stateNotifier,
+                builder: (context, state, _) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: GestureDetector(
+                    onTap: () => _navigateToProfile(_authorId),
+                    child: Row(
+                      children: [
+                        _Avatar(
+                          imageUrl:
+                              state.author?['picture'] as String? ?? '',
+                          radius: 21,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                () {
+                                  final name =
+                                      state.author?['name'] as String? ??
+                                          '';
+                                  return name.isNotEmpty
+                                      ? name
+                                      : (_authorId.length > 8
+                                          ? _authorId.substring(0, 8)
+                                          : _authorId);
+                                }(),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.textPrimary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (_isReply && _parentId != null)
+                                Text(
+                                  l10n.replyTo,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colors.textSecondary,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                RepaintBoundary(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5.0),
-                    child: widget.currentUserHex.isNotEmpty
-                        ? InteractionBar(
-                            noteId: _getInteractionNoteId(),
-                            currentUserHex: widget.currentUserHex,
-                            note: widget.note,
-                            isBigSize: true,
-                          )
-                        : const SizedBox(height: 36),
-                  ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Content
+              RepaintBoundary(
+                child: _FocusedContentSection(
+                  parsedContent: _parsedContent,
+                  onMentionTap: (id) => _navigateToProfile(id),
+                  notesListProvider: widget.notesListProvider,
+                  noteId: _noteId,
+                  authorProfileImageUrl: widget.profiles[_authorId]
+                      ?['picture'] as String?,
+                  authorId: _authorId,
+                  isSelectable: widget.isSelectable,
+                  embeddedNotes:
+                      widget.note['embeddedNotes'] as Map<String, dynamic>?,
+                  embeddedArticles: widget.note['embeddedArticles']
+                      as Map<String, dynamic>?,
                 ),
-                if (widget.quoteCount > 0 && widget.onQuotesTap != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 5.0, top: 4.0),
-                    child: GestureDetector(
-                      onTap: widget.onQuotesTap,
+              ),
+
+              const SizedBox(height: 10),
+
+              // Timestamp — relative + absolute together
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: Row(
+                  children: [
+                    Text(
+                      _relativeTimestamp(),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
                       child: Text(
-                        widget.quoteCount == 1
-                            ? '1 quote'
-                            : '${widget.quoteCount} quotes',
+                        _absoluteTimestamp(),
                         style: TextStyle(
-                          fontSize: 14,
-                          color: context.colors.accent,
-                          decoration: TextDecoration.underline,
-                          decorationColor: context.colors.accent,
+                          fontSize: 12,
+                          color: colors.textSecondary.withValues(alpha: 0.6),
                         ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Interaction bar
+              RepaintBoundary(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: widget.currentUserHex.isNotEmpty
+                      ? InteractionBar(
+                          noteId: _getInteractionNoteId(),
+                          currentUserHex: widget.currentUserHex,
+                          note: widget.note,
+                          isBigSize: true,
+                        )
+                      : const SizedBox(height: 36),
+                ),
+              ),
+
+              if (widget.quoteCount > 0 && widget.onQuotesTap != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 5, top: 4),
+                  child: GestureDetector(
+                    onTap: widget.onQuotesTap,
+                    child: Text(
+                      widget.quoteCount == 1
+                          ? '1 ${l10n.quote}'
+                          : '${widget.quoteCount} ${l10n.quotePlural}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: colors.accent,
+                        decoration: TextDecoration.underline,
+                        decorationColor: colors.accent,
+                      ),
+                    ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
-      );
-    } catch (e) {
-      debugPrint('[FocusedNoteWidget] Build error: $e');
-      return const SizedBox.shrink();
-    }
+      ),
+    );
   }
 }
 
-class _FocusedNoteState {
-  final Map<String, dynamic>? authorUser;
-  final Map<String, dynamic>? reposterUser;
-  final String? replyText;
+// ── author state ─────────────────────────────────────────────────────────────
 
-  const _FocusedNoteState({
-    this.authorUser,
-    this.reposterUser,
-    this.replyText,
-  });
+class _AuthorState {
+  final Map<String, dynamic>? author;
+  final Map<String, dynamic>? reposter;
 
-  factory _FocusedNoteState.initial() {
-    return const _FocusedNoteState(
-      authorUser: null,
-      reposterUser: null,
-      replyText: null,
-    );
-  }
+  const _AuthorState({this.author, this.reposter});
+
+  factory _AuthorState.empty() => const _AuthorState();
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _FocusedNoteState &&
-          runtimeType == other.runtimeType &&
-          authorUser?.hashCode == other.authorUser?.hashCode &&
-          reposterUser?.hashCode == other.reposterUser?.hashCode &&
-          replyText == other.replyText;
+      other is _AuthorState &&
+          (author?['pubkey'] == other.author?['pubkey']) &&
+          (author?['name'] == other.author?['name']) &&
+          (author?['picture'] == other.author?['picture']) &&
+          (reposter?['pubkey'] == other.reposter?['pubkey']);
 
   @override
-  int get hashCode =>
-      (authorUser?.hashCode ?? 0) ^
-      (reposterUser?.hashCode ?? 0) ^
-      (replyText?.hashCode ?? 0);
+  int get hashCode => Object.hash(
+        author?['pubkey'],
+        author?['name'],
+        author?['picture'],
+        reposter?['pubkey'],
+      );
 }
 
-class _FocusedProfileSection extends StatelessWidget {
-  final ValueNotifier<_FocusedNoteState> stateNotifier;
-  final bool isRepost;
-  final VoidCallback onAuthorTap;
-  final VoidCallback? onReposterTap;
-  final dynamic colors;
-  final String widgetKey;
+// ── avatar ───────────────────────────────────────────────────────────────────
 
-  static final Map<String, Widget> _avatarCache = <String, Widget>{};
+class _Avatar extends StatelessWidget {
+  final String imageUrl;
+  final double radius;
 
-  const _FocusedProfileSection({
-    required this.stateNotifier,
-    required this.isRepost,
-    required this.onAuthorTap,
-    required this.onReposterTap,
-    required this.colors,
-    required this.widgetKey,
-  });
+  const _Avatar({required this.imageUrl, required this.radius});
 
-  Widget _getCachedAvatar(String imageUrl, double radius, String cacheKey) {
-    return _avatarCache.putIfAbsent(cacheKey, () {
-      try {
-        if (imageUrl.isEmpty) {
-          return CircleAvatar(
-            radius: radius,
-            backgroundColor: colors.surfaceTransparent,
-            child: Icon(
-              Icons.person,
-              size: radius * 0.8,
-              color: colors.textSecondary,
-            ),
-          );
-        }
-
-        return CircleAvatar(
-          radius: radius,
-          backgroundColor: colors.surfaceTransparent,
-          child: ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
-              width: radius * 2,
-              height: radius * 2,
-              fit: BoxFit.cover,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              placeholder: (context, url) => Icon(
-                Icons.person,
-                size: radius * 0.8,
-                color: colors.textSecondary,
-              ),
-              errorWidget: (context, url, error) => Icon(
-                Icons.person,
-                size: radius * 0.8,
-                color: colors.textSecondary,
-              ),
-            ),
-          ),
-        );
-      } catch (e) {
-        debugPrint('[FocusedProfileSection] Avatar cache error: $e');
-        return CircleAvatar(
-          radius: radius,
-          backgroundColor: colors.surfaceTransparent,
-          child: Icon(
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: colors.surfaceTransparent,
+        child: Icon(Icons.person, size: radius, color: colors.textSecondary),
+      );
+    }
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final cacheDim = (radius * 2 * dpr).ceil();
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: colors.surfaceTransparent,
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          memCacheWidth: cacheDim,
+          maxWidthDiskCache: cacheDim,
+          maxHeightDiskCache: cacheDim,
+          placeholder: (_, __) => Icon(
             Icons.person,
-            size: radius * 0.8,
+            size: radius,
             color: colors.textSecondary,
           ),
-        );
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<_FocusedNoteState>(
-      valueListenable: stateNotifier,
-      builder: (context, state, _) {
-        try {
-          return GestureDetector(
-            onTap: onAuthorTap,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTap: onAuthorTap,
-                  child: _getCachedAvatar(
-                    state.authorUser?['picture'] as String? ?? '',
-                    21,
-                    '${widgetKey}_author_${(state.authorUser?['picture'] as String? ?? '').hashCode}',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          () {
-                            final name =
-                                state.authorUser?['name'] as String? ?? '';
-                            if (name.isNotEmpty) {
-                              return name;
-                            }
-                            final npub =
-                                state.authorUser?['npub'] as String? ?? '';
-                            return npub.length > 8
-                                ? npub.substring(0, 8)
-                                : (npub.isEmpty ? 'Anonymous' : npub);
-                          }(),
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: colors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        } catch (e) {
-          debugPrint('[FocusedProfileSection] Build error: $e');
-          return const SizedBox(width: 56, height: 56);
-        }
-      },
+          errorWidget: (_, __, ___) => Icon(
+            Icons.person,
+            size: radius,
+            color: colors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _FocusedUserInfoSection extends StatelessWidget {
-  final ValueNotifier<_FocusedNoteState> stateNotifier;
-  final dynamic colors;
-
-  const _FocusedUserInfoSection({
-    required this.stateNotifier,
-    required this.colors,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<_FocusedNoteState>(
-      valueListenable: stateNotifier,
-      builder: (context, state, _) {
-        try {
-          return const SizedBox.shrink();
-        } catch (e) {
-          debugPrint('[FocusedUserInfoSection] Build error: $e');
-          return const SizedBox.shrink();
-        }
-      },
-    );
-  }
-}
+// ── content ───────────────────────────────────────────────────────────────────
 
 class _FocusedContentSection extends StatelessWidget {
   final Map<String, dynamic> parsedContent;
@@ -683,20 +463,15 @@ class _FocusedContentSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    try {
-      return NoteContentWidget(
-        parsedContent: parsedContent,
-        noteId: noteId,
-        onNavigateToMentionProfile: onMentionTap,
-        size: NoteContentSize.big,
-        authorProfileImageUrl: authorProfileImageUrl,
-        isSelectable: isSelectable,
-        embeddedNotes: embeddedNotes,
-        embeddedArticles: embeddedArticles,
-      );
-    } catch (e) {
-      debugPrint('[FocusedContentSection] Build error: $e');
-      return const SizedBox.shrink();
-    }
+    return NoteContentWidget(
+      parsedContent: parsedContent,
+      noteId: noteId,
+      onNavigateToMentionProfile: onMentionTap,
+      size: NoteContentSize.big,
+      authorProfileImageUrl: authorProfileImageUrl,
+      isSelectable: isSelectable,
+      embeddedNotes: embeddedNotes,
+      embeddedArticles: embeddedArticles,
+    );
   }
 }
