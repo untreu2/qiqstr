@@ -195,12 +195,7 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     if (state is ThreadLoading) {
-      return Center(
-        child: CircularProgressIndicator(
-          color: context.colors.primary,
-          strokeWidth: 2,
-        ),
-      );
+      return _ThreadLoadingSkeleton();
     }
 
     return const SizedBox.shrink();
@@ -864,5 +859,97 @@ class _ThreadPageState extends State<ThreadPage> {
     } catch (e) {
       debugPrint('[ThreadPage] Share error: $e');
     }
+  }
+}
+
+class _ThreadLoadingSkeleton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Padding(
+        padding: EdgeInsets.only(top: topPadding + 68, left: 16, right: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SkeletonBox(width: 40, height: 40, borderRadius: 20, colors: colors),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SkeletonBox(width: 120, height: 14, borderRadius: 4, colors: colors),
+                      const SizedBox(height: 8),
+                      _SkeletonBox(width: double.infinity, height: 14, borderRadius: 4, colors: colors),
+                      const SizedBox(height: 6),
+                      _SkeletonBox(width: double.infinity, height: 14, borderRadius: 4, colors: colors),
+                      const SizedBox(height: 6),
+                      _SkeletonBox(width: 200, height: 14, borderRadius: 4, colors: colors),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _SkeletonBox(width: double.infinity, height: 1, borderRadius: 0, colors: colors),
+            const SizedBox(height: 24),
+            for (int i = 0; i < 3; i++) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SkeletonBox(width: 36, height: 36, borderRadius: 18, colors: colors),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SkeletonBox(width: 100, height: 12, borderRadius: 4, colors: colors),
+                        const SizedBox(height: 6),
+                        _SkeletonBox(width: double.infinity, height: 12, borderRadius: 4, colors: colors),
+                        const SizedBox(height: 4),
+                        _SkeletonBox(width: 160, height: 12, borderRadius: 4, colors: colors),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  final double width;
+  final double height;
+  final double borderRadius;
+  final dynamic colors;
+
+  const _SkeletonBox({
+    required this.width,
+    required this.height,
+    required this.borderRadius,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: colors.surfaceTransparent,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+    );
   }
 }
