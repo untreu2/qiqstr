@@ -148,8 +148,18 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     feed_event.FeedNotesUpdated event,
     Emitter<FeedState> emit,
   ) {
-    if (state is! FeedLoaded) return;
-    final currentState = state as FeedLoaded;
+    FeedLoaded currentState;
+    if (state is FeedLoaded) {
+      currentState = state as FeedLoaded;
+    } else if (state is FeedEmpty && event.notes.isNotEmpty && _currentUserHex != null) {
+      currentState = FeedLoaded(
+        notes: const [],
+        profiles: const {},
+        currentUserHex: _currentUserHex!,
+      );
+    } else {
+      return;
+    }
 
     InteractionService.instance.populateFromNotes(event.notes);
 
@@ -162,6 +172,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         return bTime.compareTo(aTime);
       });
 
+    final canLoadMore = sortedNotes.length >= _currentLimit;
+
     if (currentState.notes.isEmpty ||
         _acceptNextUpdate ||
         currentState.isSyncing) {
@@ -171,6 +183,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(
         notes: sortedNotes,
         feedNotes: sortedFeedNotes,
+        canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
       _loadProfilesForNotes(sortedNotes);
@@ -219,10 +232,16 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         emit(currentState.copyWith(
           notes: ownNotes,
           feedNotes: ownFeedNotes,
+          canLoadMore: canLoadMore,
           pendingNotesCount: othersCount,
         ));
       } else {
-        emit(currentState.copyWith(pendingNotesCount: othersCount));
+        emit(currentState.copyWith(
+          notes: sortedNotes,
+          feedNotes: sortedFeedNotes,
+          canLoadMore: canLoadMore,
+          pendingNotesCount: othersCount,
+        ));
       }
     } else if (hasOwnNew) {
       _bufferedNotes = [];
@@ -230,6 +249,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(
         notes: sortedNotes,
         feedNotes: sortedFeedNotes,
+        canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
     } else {
@@ -237,6 +257,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(
         notes: sortedNotes,
         feedNotes: sortedFeedNotes,
+        canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
     }
@@ -610,13 +631,32 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   }
 
   void _sortNotes(List<Map<String, dynamic>> notes, FeedSortMode mode) {
-    notes.sort((a, b) {
-      final aTime =
-          a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
-      final bTime =
-          b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
-      return bTime.compareTo(aTime);
-    });
+    if (mode == FeedSortMode.mostInteracted) {
+      notes.sort((a, b) {
+        final aScore = (a['reactionCount'] as int? ?? 0) +
+            (a['repostCount'] as int? ?? 0) +
+            (a['replyCount'] as int? ?? 0) +
+            (a['zapCount'] as int? ?? 0);
+        final bScore = (b['reactionCount'] as int? ?? 0) +
+            (b['repostCount'] as int? ?? 0) +
+            (b['replyCount'] as int? ?? 0) +
+            (b['zapCount'] as int? ?? 0);
+        if (bScore != aScore) return bScore.compareTo(aScore);
+        final aTime =
+            a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
+        final bTime =
+            b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
+    } else {
+      notes.sort((a, b) {
+        final aTime =
+            a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
+        final bTime =
+            b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
+    }
   }
 
   void _watchListFeed(List<String> pubkeys, {int? limit}) => _watch(
