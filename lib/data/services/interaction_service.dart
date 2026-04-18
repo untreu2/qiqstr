@@ -58,6 +58,7 @@ class InteractionService {
 
   final RustDatabaseService _db = RustDatabaseService.instance;
   final Map<String, StreamController<InteractionCounts>> _streams = {};
+  final Map<String, int> _streamRefCounts = {};
   final Map<String, InteractionCounts> _cache = {};
   static const int _maxCacheSize = 500;
 
@@ -83,6 +84,7 @@ class InteractionService {
       {InteractionCounts? initialCounts}) {
     if (!_streams.containsKey(noteId)) {
       _streams[noteId] = StreamController<InteractionCounts>.broadcast();
+      _streamRefCounts[noteId] = 1;
       if (_cache.containsKey(noteId)) {
         final cached = _cache[noteId]!;
         if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
@@ -103,6 +105,7 @@ class InteractionService {
         _scheduleBatchLoad(noteId);
       }
     } else if (_cache.containsKey(noteId)) {
+      _streamRefCounts[noteId] = (_streamRefCounts[noteId] ?? 0) + 1;
       final cached = _cache[noteId]!;
       if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
         final merged = _mergeCounts(cached, initialCounts);
@@ -112,10 +115,12 @@ class InteractionService {
         Future.microtask(() => _emit(noteId, cached));
       }
     } else if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
+      _streamRefCounts[noteId] = (_streamRefCounts[noteId] ?? 0) + 1;
       _cache[noteId] = initialCounts;
       Future.microtask(() => _emit(noteId, initialCounts));
       _scheduleBatchLoad(noteId);
     } else {
+      _streamRefCounts[noteId] = (_streamRefCounts[noteId] ?? 0) + 1;
       _scheduleBatchLoad(noteId);
     }
     return _streams[noteId]!.stream;
@@ -376,8 +381,14 @@ class InteractionService {
   bool hasZapped(String noteId) => _localZaps.contains(noteId);
 
   void disposeStream(String noteId) {
-    _streams[noteId]?.close();
-    _streams.remove(noteId);
+    final remaining = (_streamRefCounts[noteId] ?? 1) - 1;
+    if (remaining <= 0) {
+      _streams[noteId]?.close();
+      _streams.remove(noteId);
+      _streamRefCounts.remove(noteId);
+    } else {
+      _streamRefCounts[noteId] = remaining;
+    }
   }
 
   void clearCache() {
@@ -404,6 +415,7 @@ class InteractionService {
       controller.close();
     }
     _streams.clear();
+    _streamRefCounts.clear();
     _cache.clear();
     _localReactions.clear();
     _localReposts.clear();
