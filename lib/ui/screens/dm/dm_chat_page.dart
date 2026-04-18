@@ -58,6 +58,22 @@ class _DmChatPageState extends State<DmChatPage> {
   static final _hexHashPattern = RegExp(r'/[0-9a-f]{64}$');
   static const int _maxFileSizeBytes = 50 * 1024 * 1024;
 
+  void _loadOtherUserProfile() {
+    AppDI.get<ProfileRepository>()
+        .getProfile(widget.pubkeyHex)
+        .then((profile) {
+      if (mounted && profile != null) {
+        setState(() {
+          _userCache[widget.pubkeyHex] = {
+            'pubkey': profile.pubkey,
+            'name': profile.name ?? '',
+            'picture': profile.picture ?? '',
+          };
+        });
+      }
+    });
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -204,6 +220,7 @@ class _DmChatPageState extends State<DmChatPage> {
     _dmBloc = AppDI.get<DmBloc>();
     _dmBloc!.add(DmConversationOpened(widget.pubkeyHex));
     _scrollController.addListener(_onScroll);
+    _loadOtherUserProfile();
   }
 
   void _onScroll() {
@@ -242,23 +259,6 @@ class _DmChatPageState extends State<DmChatPage> {
   ) {
     final l10n = AppLocalizations.of(context)!;
     final otherUser = _userCache[otherUserPubkeyHex];
-
-    if (otherUser == null && !_userCache.containsKey(otherUserPubkeyHex)) {
-      _userCache[otherUserPubkeyHex] = null;
-      AppDI.get<ProfileRepository>()
-          .getProfile(otherUserPubkeyHex)
-          .then((profile) {
-        if (mounted && profile != null) {
-          setState(() {
-            _userCache[otherUserPubkeyHex] = {
-              'pubkey': profile.pubkey,
-              'name': profile.name ?? '',
-              'picture': profile.picture ?? '',
-            };
-          });
-        }
-      });
-    }
 
     final double topPadding = MediaQuery.of(context).padding.top;
 
