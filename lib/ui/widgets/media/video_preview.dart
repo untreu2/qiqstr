@@ -9,7 +9,26 @@ import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
 
 // ---------------------------------------------------------------------------
-// Inline video player (feed / note view)
+// Global position cache — survives widget rebuilds and page transitions
+// ---------------------------------------------------------------------------
+
+class VideoPositionCache {
+  VideoPositionCache._();
+  static final VideoPositionCache instance = VideoPositionCache._();
+
+  final Map<String, Duration> _positions = {};
+
+  Duration get(String url) => _positions[url] ?? Duration.zero;
+
+  void save(String url, Duration position) {
+    if (position > Duration.zero) _positions[url] = position;
+  }
+
+  void clear() => _positions.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Inline video player — always muted, always auto-plays, tap → fullscreen
 // ---------------------------------------------------------------------------
 
 class VP extends StatefulWidget {
@@ -31,18 +50,17 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   bool _isInitialized = false;
   bool _isLoading = false;
 
-  // ── lifecycle ──────────────────────────────────────────────────────────────
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _initController();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.removeListener(_onControllerUpdate);
+    _controller?.removeListener(_onUpdate);
     _controller?.dispose();
     super.dispose();
   }
@@ -58,6 +76,8 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       _controller?.pause();
+    } else if (state == AppLifecycleState.resumed) {
+      if (_isInitialized) _controller?.play();
     }
   }
 
@@ -65,15 +85,24 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
 
   void _initController() {
     if (_isLoading || _isInitialized) return;
-    setState(() => _isLoading = true);
+    _isLoading = true;
 
     final ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     _controller = ctrl;
 
     ctrl.initialize().then((_) {
       if (!mounted || _controller != ctrl) return;
-      ctrl.addListener(_onControllerUpdate);
+
+      ctrl.setVolume(0);
+      ctrl.setLooping(true);
+
+      // Resume from saved position if any
+      final saved = VideoPositionCache.instance.get(widget.url);
+      if (saved > Duration.zero) ctrl.seekTo(saved);
+
       ctrl.play();
+      ctrl.addListener(_onUpdate);
+
       setState(() {
         _isInitialized = true;
         _isLoading = false;
@@ -83,41 +112,32 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     });
   }
 
-  void _onControllerUpdate() {
+  void _onUpdate() {
     if (mounted) setState(() {});
   }
 
-  // ── actions ────────────────────────────────────────────────────────────────
-
-  void _togglePlayPause() {
-    if (!_isInitialized) {
-      _initController();
-      return;
-    }
-    final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) return;
-    ctrl.value.isPlaying ? ctrl.pause() : ctrl.play();
-  }
+  // ── open fullscreen ─────────────────────────────────────────────────────────
 
   void _openFullScreen() {
     final ctrl = _controller;
-    final position = ctrl?.value.position ?? Duration.zero;
-    ctrl?.pause();
+
+    // Save current position before handing off
+    if (ctrl != null && ctrl.value.isInitialized) {
+      VideoPositionCache.instance.save(widget.url, ctrl.value.position);
+      ctrl.pause();
+    }
 
     Navigator.of(context, rootNavigator: true)
-        .push(
-          _FullScreenRoute(
-            child: FullScreenVideoPlayer(
-              url: widget.url,
-              existingController:
-                  (_isInitialized && ctrl != null) ? ctrl : null,
-              startPosition: position,
-            ),
-          ),
-        )
+        .push(_FullScreenRoute(
+          child: FullScreenVideoPlayer(url: widget.url),
+        ))
         .then((_) {
-      // Resume inline player if it was playing before fullscreen
-      if (mounted && _isInitialized) {
+      // When fullscreen closes, resume muted inline from wherever fullscreen left off
+      if (!mounted) return;
+      final position = VideoPositionCache.instance.get(widget.url);
+      if (_isInitialized && ctrl != null) {
+        if (position > Duration.zero) ctrl.seekTo(position);
+        ctrl.play();
         setState(() {});
       }
     });
@@ -135,9 +155,11 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final ctrl = _controller;
     final ready = _isInitialized && ctrl != null && ctrl.value.isInitialized;
-    final isPlaying = ready && ctrl.value.isPlaying;
     final duration = ready ? ctrl.value.duration : Duration.zero;
     final position = ready ? ctrl.value.position : Duration.zero;
+    final progress = (duration.inMilliseconds > 0)
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
     final remaining = duration - position;
 
     return RepaintBoundary(
@@ -145,13 +167,13 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(12),
         child: AspectRatio(
           aspectRatio: 1,
-          child: ready
-              ? Stack(
-                  children: [
-                    // Video
-                    Positioned.fill(
-                      child: GestureDetector(
-                        onTap: _togglePlayPause,
+          child: GestureDetector(
+            onTap: _openFullScreen,
+            child: ready
+                ? Stack(
+                    children: [
+                      // Video frame
+                      Positioned.fill(
                         child: FittedBox(
                           fit: BoxFit.cover,
                           clipBehavior: Clip.hardEdge,
@@ -162,127 +184,112 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
-                    ),
 
-                    // Fullscreen button
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: GestureDetector(
-                        onTap: _openFullScreen,
+                      // Mute badge (top-left)
+                      Positioned(
+                        top: 8,
+                        left: 8,
                         child: Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5),
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.volume_off_rounded,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+
+                      // Fullscreen hint (top-right)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
                             CarbonIcons.maximize,
                             color: Colors.white,
-                            size: 18,
+                            size: 16,
                           ),
                         ),
                       ),
-                    ),
 
-                    // Bottom bar
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.65),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
-                        child: Row(
-                          children: [
-                            GestureDetector(
-                              onTap: _togglePlayPause,
-                              child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(
-                                  isPlaying
-                                      ? CarbonIcons.pause
-                                      : CarbonIcons.play,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
+                      // Bottom: thin progress bar + remaining time
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.6),
+                                Colors.transparent,
+                              ],
                             ),
-                            const Spacer(),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.only(left: 8, right: 4),
-                              child: Text(
+                          ),
+                          padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
                                 _fmt(remaining),
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 13,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Pause overlay — flash icon on tap
-                    if (!isPlaying)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Center(
-                            child: AnimatedOpacity(
-                              opacity: isPlaying ? 0 : 0.8,
-                              duration: const Duration(milliseconds: 150),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: const BoxDecoration(
-                                  color: Colors.black45,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  CarbonIcons.play_filled,
-                                  color: Colors.white,
-                                  size: 32,
+                              const SizedBox(height: 4),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 2.5,
+                                  backgroundColor:
+                                      Colors.white.withValues(alpha: 0.25),
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                       ),
-                  ],
-                )
-              : GestureDetector(
-                  onTap: _togglePlayPause,
-                  child: Container(
+                    ],
+                  )
+                : Container(
                     color: Colors.grey.shade900,
                     child: Center(
                       child: _isLoading
                           ? const SizedBox(
-                              width: 28,
-                              height: 28,
+                              width: 26,
+                              height: 26,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
                                 color: Colors.white,
                               ),
                             )
                           : const Icon(
-                              CarbonIcons.play_filled,
-                              color: Colors.white,
-                              size: 52,
+                              Icons.play_circle_outline_rounded,
+                              color: Colors.white54,
+                              size: 48,
                             ),
                     ),
                   ),
-                ),
+          ),
         ),
       ),
     );
@@ -290,7 +297,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
 }
 
 // ---------------------------------------------------------------------------
-// Custom route — hero-like expand / collapse transition
+// Custom route — fade + scale transition, transparent background
 // ---------------------------------------------------------------------------
 
 class _FullScreenRoute extends PageRouteBuilder {
@@ -298,8 +305,8 @@ class _FullScreenRoute extends PageRouteBuilder {
       : super(
           opaque: false,
           barrierColor: Colors.transparent,
-          transitionDuration: const Duration(milliseconds: 280),
-          reverseTransitionDuration: const Duration(milliseconds: 220),
+          transitionDuration: const Duration(milliseconds: 260),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
           pageBuilder: (_, __, ___) => child,
           transitionsBuilder: (_, animation, __, child) {
             final fade = CurvedAnimation(
@@ -307,7 +314,7 @@ class _FullScreenRoute extends PageRouteBuilder {
               curve: Curves.easeOut,
               reverseCurve: Curves.easeIn,
             );
-            final scale = Tween<double>(begin: 0.94, end: 1.0).animate(
+            final scale = Tween<double>(begin: 0.95, end: 1.0).animate(
               CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
             );
             return FadeTransition(
@@ -319,20 +326,13 @@ class _FullScreenRoute extends PageRouteBuilder {
 }
 
 // ---------------------------------------------------------------------------
-// Full-screen video player
+// Full-screen video player — always with sound, resumes from cache position
 // ---------------------------------------------------------------------------
 
 class FullScreenVideoPlayer extends StatefulWidget {
   final String url;
-  final VideoPlayerController? existingController;
-  final Duration startPosition;
 
-  const FullScreenVideoPlayer({
-    super.key,
-    required this.url,
-    this.existingController,
-    this.startPosition = Duration.zero,
-  });
+  const FullScreenVideoPlayer({super.key, required this.url});
 
   @override
   State<FullScreenVideoPlayer> createState() => _FullScreenVideoPlayerState();
@@ -342,11 +342,9 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     with SingleTickerProviderStateMixin {
   late VideoPlayerController _controller;
   bool _isInitialized = false;
-  bool _ownsController = false;
   bool _showControls = true;
   bool _isDownloading = false;
   double _dragOffset = 0;
-
   late final AnimationController _controlsAnim;
 
   @override
@@ -355,7 +353,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
 
     _controlsAnim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 200),
       value: 1,
     );
 
@@ -370,47 +368,48 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   }
 
   void _initVideo() {
-    final existing = widget.existingController;
-    if (existing != null && existing.value.isInitialized) {
-      _controller = existing;
-      _ownsController = false;
-      _isInitialized = true;
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+
+      // Always resume from saved position
+      final saved = VideoPositionCache.instance.get(widget.url);
+      if (saved > Duration.zero) _controller.seekTo(saved);
+
       _controller.setVolume(1);
+      _controller.setLooping(true);
       _controller.play();
-      _controller.addListener(_onControllerUpdate);
+      _controller.addListener(_onUpdate);
+
+      setState(() => _isInitialized = true);
       _scheduleHide();
-    } else {
-      _ownsController = true;
-      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-      _controller.initialize().then((_) {
-        if (!mounted) return;
-        if (widget.startPosition > Duration.zero) {
-          _controller.seekTo(widget.startPosition);
-        }
-        _controller.setVolume(1);
-        _controller.play();
-        _controller.addListener(_onControllerUpdate);
-        setState(() => _isInitialized = true);
-        _scheduleHide();
-      });
+    });
+  }
+
+  void _onUpdate() {
+    if (!mounted) return;
+    // Continuously persist position so any dismiss path saves it
+    if (_controller.value.isInitialized) {
+      VideoPositionCache.instance.save(
+        widget.url,
+        _controller.value.position,
+      );
     }
+    setState(() {});
   }
 
-  void _onControllerUpdate() {
-    if (mounted) setState(() {});
-  }
-
-  // ── controls visibility ────────────────────────────────────────────────────
+  // ── controls ───────────────────────────────────────────────────────────────
 
   void _scheduleHide() {
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted && _showControls && _controller.value.isPlaying) {
-        _hideControls();
+        setState(() => _showControls = false);
+        _controlsAnim.reverse();
       }
     });
   }
 
-  void _showControlsTemporarily() {
+  void _bringUpControls() {
     if (!_showControls) {
       setState(() => _showControls = true);
       _controlsAnim.forward();
@@ -418,27 +417,30 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     _scheduleHide();
   }
 
-  void _hideControls() {
-    if (!mounted) return;
-    setState(() => _showControls = false);
-    _controlsAnim.reverse();
-  }
-
-  // ── drag to dismiss ────────────────────────────────────────────────────────
+  // ── drag to dismiss ─────────────────────────────────────────────────────────
 
   void _onDragUpdate(DragUpdateDetails d) =>
       setState(() => _dragOffset += d.primaryDelta ?? 0);
 
   void _onDragEnd(DragEndDetails d) {
-    if (_dragOffset.abs() > 90 ||
-        (d.primaryVelocity != null && d.primaryVelocity!.abs() > 600)) {
+    final fast = d.primaryVelocity != null && d.primaryVelocity!.abs() > 500;
+    if (_dragOffset.abs() > 90 || fast) {
       _dismiss();
     } else {
       setState(() => _dragOffset = 0);
     }
   }
 
-  void _dismiss() => Navigator.of(context, rootNavigator: true).pop();
+  void _dismiss() {
+    // Final position save before pop
+    if (_controller.value.isInitialized) {
+      VideoPositionCache.instance.save(
+        widget.url,
+        _controller.value.position,
+      );
+    }
+    Navigator.of(context, rootNavigator: true).pop();
+  }
 
   // ── download ───────────────────────────────────────────────────────────────
 
@@ -459,19 +461,19 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     }
   }
 
-  // ── lifecycle ──────────────────────────────────────────────────────────────
+  // ── lifecycle ───────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
     _controlsAnim.dispose();
-    _controller.removeListener(_onControllerUpdate);
-    if (_ownsController) _controller.dispose();
+    _controller.removeListener(_onUpdate);
+    _controller.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
-  // ── helpers ────────────────────────────────────────────────────────────────
+  // ── helpers ─────────────────────────────────────────────────────────────────
 
   String _fmt(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -479,7 +481,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     return '$m:$s';
   }
 
-  // ── build ──────────────────────────────────────────────────────────────────
+  // ── build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -498,13 +500,13 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: bgAlpha),
       body: GestureDetector(
-        onTap: _showControlsTemporarily,
+        onTap: _bringUpControls,
         onVerticalDragUpdate: _onDragUpdate,
         onVerticalDragEnd: _onDragEnd,
         child: Stack(
           children: [
-            // ── video ────────────────────────────────────────────────────────
-            Positioned.fill(child: Container(color: Colors.black)),
+            // ── video ─────────────────────────────────────────────────────────
+            Positioned.fill(child: const ColoredBox(color: Colors.black)),
 
             if (_isInitialized)
               Transform.translate(
@@ -521,7 +523,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                 child: CircularProgressIndicator(color: Colors.white),
               ),
 
-            // ── controls overlay ─────────────────────────────────────────────
+            // ── controls ──────────────────────────────────────────────────────
             if (_isInitialized)
               Positioned(
                 bottom: MediaQuery.of(context).padding.bottom + 24,
@@ -529,7 +531,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                 right: 0,
                 child: AnimatedOpacity(
                   opacity: _showControls ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 220),
+                  duration: const Duration(milliseconds: 200),
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     child: ClipRRect(
@@ -557,7 +559,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                               ),
                               const SizedBox(width: 4),
 
-                              // Play/pause
+                              // Play / pause
                               IconButton(
                                 padding: EdgeInsets.zero,
                                 icon: Icon(
@@ -571,7 +573,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                   isPlaying
                                       ? _controller.pause()
                                       : _controller.play();
-                                  _showControlsTemporarily();
+                                  _bringUpControls();
                                 },
                               ),
 
@@ -610,14 +612,14 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                         _controller.seekTo(
                                           Duration(milliseconds: v.toInt()),
                                         );
-                                        _showControlsTemporarily();
+                                        _bringUpControls();
                                       },
                                     ),
                                   ),
                                 ),
                               ),
 
-                              // Remaining
+                              // Duration
                               Text(
                                 _fmt(duration),
                                 style: TextStyle(
