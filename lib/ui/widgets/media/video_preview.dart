@@ -49,6 +49,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _isLoading = false;
+  bool _isMuted = true;
 
   @override
   void initState() {
@@ -96,7 +97,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
       ctrl.setVolume(0);
       ctrl.setLooping(true);
 
-      // Resume from saved position if any
       final saved = VideoPositionCache.instance.get(widget.url);
       if (saved > Duration.zero) ctrl.seekTo(saved);
 
@@ -116,14 +116,25 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  // ── toggle mute ────────────────────────────────────────────────────────────
+
+  void _toggleMute() {
+    if (!_isInitialized || _controller == null) return;
+    setState(() {
+      _isMuted = !_isMuted;
+      _controller!.setVolume(_isMuted ? 0 : 1);
+    });
+  }
+
   // ── open fullscreen ─────────────────────────────────────────────────────────
 
   void _openFullScreen() {
     final ctrl = _controller;
 
-    // Save current position before handing off
     if (ctrl != null && ctrl.value.isInitialized) {
       VideoPositionCache.instance.save(widget.url, ctrl.value.position);
+      ctrl.setVolume(0);
+      _isMuted = true;
       ctrl.pause();
     }
 
@@ -132,11 +143,11 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
           child: FullScreenVideoPlayer(url: widget.url),
         ))
         .then((_) {
-      // When fullscreen closes, resume muted inline from wherever fullscreen left off
       if (!mounted) return;
       final position = VideoPositionCache.instance.get(widget.url);
       if (_isInitialized && ctrl != null) {
         if (position > Duration.zero) ctrl.seekTo(position);
+        ctrl.setVolume(0);
         ctrl.play();
         setState(() {});
       }
@@ -145,35 +156,28 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
 
   // ── build ──────────────────────────────────────────────────────────────────
 
-  String _fmt(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
   @override
   Widget build(BuildContext context) {
     final ctrl = _controller;
     final ready = _isInitialized && ctrl != null && ctrl.value.isInitialized;
     final duration = ready ? ctrl.value.duration : Duration.zero;
     final position = ready ? ctrl.value.position : Duration.zero;
-    final progress = (duration.inMilliseconds > 0)
+    final progress = duration.inMilliseconds > 0
         ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
-    final remaining = duration - position;
 
     return RepaintBoundary(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: AspectRatio(
           aspectRatio: 1,
-          child: GestureDetector(
-            onTap: _openFullScreen,
-            child: ready
-                ? Stack(
-                    children: [
-                      // Video frame
-                      Positioned.fill(
+          child: ready
+              ? Stack(
+                  children: [
+                    // Video — tap to open fullscreen
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: _openFullScreen,
                         child: FittedBox(
                           fit: BoxFit.cover,
                           clipBehavior: Clip.hardEdge,
@@ -184,93 +188,53 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
+                    ),
 
-                      // Mute badge (top-left)
-                      Positioned(
-                        top: 8,
-                        left: 8,
+                    // Mute toggle (top-left)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: GestureDetector(
+                        onTap: _toggleMute,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.volume_off_rounded,
-                            color: Colors.white,
-                            size: 14,
-                          ),
-                        ),
-                      ),
-
-                      // Fullscreen hint (top-right)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
+                          padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.55),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            CarbonIcons.maximize,
+                          child: Icon(
+                            _isMuted
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded,
                             color: Colors.white,
                             size: 16,
                           ),
                         ),
                       ),
+                    ),
 
-                      // Bottom: thin progress bar + remaining time
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.6),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                          padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                _fmt(remaining),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(2),
-                                child: LinearProgressIndicator(
-                                  value: progress,
-                                  minHeight: 2.5,
-                                  backgroundColor:
-                                      Colors.white.withValues(alpha: 0.25),
-                                  valueColor:
-                                      const AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
+                    // Progress bar — sits above the very bottom edge
+                    Positioned(
+                      bottom: 10,
+                      left: 10,
+                      right: 10,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 3,
+                          backgroundColor:
+                              Colors.white.withValues(alpha: 0.25),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.white),
                         ),
                       ),
-                    ],
-                  )
-                : Container(
+                    ),
+                  ],
+                )
+              : GestureDetector(
+                  onTap: _openFullScreen,
+                  child: Container(
                     color: Colors.grey.shade900,
                     child: Center(
                       child: _isLoading
@@ -289,7 +253,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                             ),
                     ),
                   ),
-          ),
+                ),
         ),
       ),
     );

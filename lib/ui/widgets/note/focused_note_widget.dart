@@ -145,18 +145,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
   // ── timestamp helpers ─────────────────────────────────────────────────────
 
-  String _relativeTimestamp() {
-    final d = DateTime.now().difference(_timestamp);
-    if (d.inSeconds < 5) return 'now';
-    if (d.inSeconds < 60) return '${d.inSeconds}s ago';
-    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-    if (d.inHours < 24) return '${d.inHours}h ago';
-    if (d.inDays < 7) return '${d.inDays}d ago';
-    if (d.inDays < 30) return '${(d.inDays / 7).floor()}w ago';
-    if (d.inDays < 365) return '${(d.inDays / 30).floor()}mo ago';
-    return '${(d.inDays / 365).floor()}y ago';
-  }
-
   String _absoluteTimestamp() {
     final h = _timestamp.hour.toString().padLeft(2, '0');
     final min = _timestamp.minute.toString().padLeft(2, '0');
@@ -288,30 +276,15 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
               const SizedBox(height: 10),
 
-              // Timestamp — relative + absolute together
+              // Timestamp — absolute only
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 5),
-                child: Row(
-                  children: [
-                    Text(
-                      _relativeTimestamp(),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text(
-                        _absoluteTimestamp(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  _absoluteTimestamp(),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colors.textSecondary,
+                  ),
                 ),
               ),
 
