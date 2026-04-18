@@ -83,8 +83,8 @@ void main() {
       await dotenv.load(fileName: '.env');
     } catch (_) {}
 
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
-    PaintingBinding.instance.imageCache.maximumSize = 600;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
+    PaintingBinding.instance.imageCache.maximumSize = 300;
 
     debugProfileBuildsEnabled = false;
     debugPrintRebuildDirtyWidgets = false;
@@ -209,8 +209,12 @@ class _QiqstrAppState extends State<QiqstrApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<LocaleBloc, LocaleState>(
+      buildWhen: (previous, current) => previous.locale != current.locale,
       builder: (context, localeState) {
         return BlocBuilder<ThemeBloc, ThemeState>(
+          buildWhen: (previous, current) =>
+              previous.isDarkMode != current.isDarkMode ||
+              previous.colors != current.colors,
           builder: (context, themeState) {
             final colors = themeState.colors;
             final isDark = themeState.isDarkMode;
