@@ -259,15 +259,20 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
     bool useAspectRatio = true,
     bool limitResolution = true,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final maxDimension =
+        limitResolution ? (screenWidth * devicePixelRatio).round() : null;
+
     Widget image = CachedNetworkImage(
       key: ValueKey('media_${url.hashCode}_$index'),
       imageUrl: url,
       fit: fit,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      maxHeightDiskCache: limitResolution ? 1500 : null,
-      maxWidthDiskCache: limitResolution ? 1500 : null,
-      memCacheWidth: limitResolution ? 1500 : null,
+      maxHeightDiskCache: maxDimension,
+      maxWidthDiskCache: maxDimension,
+      memCacheWidth: maxDimension,
       placeholder: (context, url) => AspectRatio(
         aspectRatio: aspectRatio ?? 1.0,
         child: Container(
