@@ -69,7 +69,6 @@ class FeedPageState extends State<FeedPage> {
   final FocusNode _searchFocusNode = FocusNode();
   UserSearchBloc? _searchBloc;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  Map<String, dynamic>? _loggedInUserProfile;
   List<_FavoriteListInfo> _favoriteLists = [];
   String? _activeListId;
   Offset? _swipeStartPosition;
@@ -100,7 +99,6 @@ class FeedPageState extends State<FeedPage> {
         .add(FeedInitialized(userHex: widget.userHex, hashtag: widget.hashtag));
 
     _startRelayStatusStream();
-    _loadLoggedInUserProfile();
     _loadFavoriteLists();
     _followSetSubscription = AppDI.get<FollowSetBloc>().stream.listen((state) {
       if (state is FollowSetLoaded && mounted) {
@@ -112,32 +110,6 @@ class FeedPageState extends State<FeedPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
-  }
-
-  Future<void> _loadLoggedInUserProfile() async {
-    final authService = AppDI.get<AuthService>();
-    final hex = authService.currentUserPubkeyHex;
-    if (hex == null || hex.isEmpty) return;
-    final profileRepo = AppDI.get<ProfileRepository>();
-    final cachedProfile = await profileRepo.getProfile(hex);
-    if (cachedProfile != null && mounted) {
-      setState(() {
-        _loggedInUserProfile = cachedProfile.toMap();
-      });
-      return;
-    }
-
-    try {
-      final syncService = AppDI.get<SyncService>();
-      await syncService.syncProfile(hex);
-      if (!mounted) return;
-      final syncedProfile = await profileRepo.getProfile(hex);
-      if (syncedProfile != null && mounted) {
-        setState(() {
-          _loggedInUserProfile = syncedProfile.toMap();
-        });
-      }
-    } catch (_) {}
   }
 
   void _loadFavoriteLists() {
@@ -735,7 +707,6 @@ class FeedPageState extends State<FeedPage> {
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    _refreshFavoriteLists();
     final bool hasListSelector =
         !_isSearchMode && widget.hashtag == null && _favoriteLists.isNotEmpty;
     final double headerHeight = _isSearchMode
@@ -862,7 +833,7 @@ class FeedPageState extends State<FeedPage> {
             });
 
             final l10n = AppLocalizations.of(context)!;
-            final user = _loggedInUserProfile ?? profiles[currentUserHex];
+            final user = profiles[currentUserHex];
 
             return Listener(
               onPointerDown: (event) {
@@ -981,12 +952,40 @@ class FeedPageState extends State<FeedPage> {
             ],
           ),
         ),
-      FeedEmpty() => Center(
-          child: Text(
-            'Your feed is empty',
-            style: TextStyle(color: colors.textSecondary),
-            textAlign: TextAlign.center,
-          ),
+      FeedEmpty() => Builder(
+          builder: (context) {
+            final l10n = AppLocalizations.of(context)!;
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.noNotesYet,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.followSomeoneToSeePosts,
+                      style: TextStyle(color: colors.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    TextButton(
+                      onPressed: () => context.read<FeedBloc>().add(const FeedRefreshed()),
+                      child: Text(l10n.refresh),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       _ => Center(
           child: CircularProgressIndicator(color: colors.accent),
@@ -1001,7 +1000,8 @@ class FeedPageState extends State<FeedPage> {
   ) {
     final l10n = AppLocalizations.of(context)!;
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
-    final double bottom = bottomPadding + 16;
+    const double navBarHeight = 55.0;
+    final double bottom = bottomPadding + navBarHeight + 16;
     return Positioned(
       bottom: bottom,
       left: 0,
