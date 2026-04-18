@@ -25,6 +25,7 @@ class VP extends StatefulWidget {
 class _VPState extends State<VP> with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
+  bool _isLoading = false;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -33,6 +34,11 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  void _initController() {
+    if (_isLoading || _isInitialized) return;
+    _isLoading = true;
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..initialize().then((_) {
         if (mounted) {
@@ -40,12 +46,17 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
             if (mounted) {
               setState(() {
                 _isInitialized = true;
+                _isLoading = false;
                 _duration = _controller!.value.duration;
               });
               _controller!.addListener(_updatePosition);
+              _controller!.play();
+              _isPlaying = true;
             }
           });
         }
+      }).catchError((_) {
+        if (mounted) setState(() => _isLoading = false);
       });
   }
 
@@ -108,6 +119,10 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   }
 
   void _togglePlayPause() {
+    if (!_isInitialized) {
+      _initController();
+      return;
+    }
     if (_controller == null || !_controller!.value.isInitialized) return;
     setState(() {
       if (_controller!.value.isPlaying) {
@@ -136,7 +151,11 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 200),
-        pageBuilder: (_, __, ___) => FullScreenVideoPlayer(url: widget.url),
+        pageBuilder: (_, __, ___) => FullScreenVideoPlayer(
+          url: widget.url,
+          existingController:
+              (_isInitialized && _controller != null) ? _controller : null,
+        ),
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,
@@ -265,16 +284,25 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                   )
                 : AspectRatio(
                     aspectRatio: 1,
-                    child: Container(
-                      color: Colors.grey.shade800,
-                      child: const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                    child: GestureDetector(
+                      onTap: _togglePlayPause,
+                      child: Container(
+                        color: Colors.grey.shade800,
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  CarbonIcons.play_filled,
+                                  color: Colors.white,
+                                  size: 48,
+                                ),
                         ),
                       ),
                     ),
@@ -288,8 +316,13 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
 
 class FullScreenVideoPlayer extends StatefulWidget {
   final String url;
+  final VideoPlayerController? existingController;
 
-  const FullScreenVideoPlayer({super.key, required this.url});
+  const FullScreenVideoPlayer({
+    super.key,
+    required this.url,
+    this.existingController,
+  });
 
   @override
   State<FullScreenVideoPlayer> createState() => _FullScreenVideoPlayerState();
@@ -298,6 +331,7 @@ class FullScreenVideoPlayer extends StatefulWidget {
 class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   late VideoPlayerController _controller;
   bool _isInitialized = false;
+  bool _ownsController = false;
   Duration _position = Duration.zero;
   double _dragOffset = 0;
   bool _showControls = true;
@@ -307,14 +341,28 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize().then((_) {
-        setState(() => _isInitialized = true);
-        _controller.setVolume(1);
-        _controller.play();
-        _controller.addListener(_updatePosition);
-        _startHideTimer();
-      });
+    if (widget.existingController != null &&
+        widget.existingController!.value.isInitialized) {
+      _controller = widget.existingController!;
+      _ownsController = false;
+      _isInitialized = true;
+      _controller.setVolume(1);
+      _controller.play();
+      _controller.addListener(_updatePosition);
+      _startHideTimer();
+    } else {
+      _ownsController = true;
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() => _isInitialized = true);
+            _controller.setVolume(1);
+            _controller.play();
+            _controller.addListener(_updatePosition);
+            _startHideTimer();
+          }
+        });
+    }
   }
 
   DateTime? _lastPositionUpdate;
@@ -363,7 +411,9 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   @override
   void dispose() {
     _controller.removeListener(_updatePosition);
-    _controller.dispose();
+    if (_ownsController) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 
@@ -548,14 +598,20 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                     style: TextStyle(color: colors.textPrimary),
                                   ),
                                   const SizedBox(width: 8),
-                                  IconActionButton(
-                                    icon: _isDownloading
-                                        ? CarbonIcons.download
-                                        : CarbonIcons.download,
-                                    onPressed:
-                                        _isDownloading ? null : _downloadVideo,
-                                    size: ButtonSize.small,
-                                  ),
+                                  _isDownloading
+                                      ? SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: colors.textPrimary,
+                                          ),
+                                        )
+                                      : IconActionButton(
+                                          icon: CarbonIcons.download,
+                                          onPressed: _downloadVideo,
+                                          size: ButtonSize.small,
+                                        ),
                                 ],
                               ),
                             ),
