@@ -1999,4 +1999,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get tryDifferentSearchTerm => 'Try searching with a different term.';
+
+  @override
+  String get noNotesYet => 'Henüz not yok';
+
+  @override
+  String get followSomeoneToSeePosts =>
+      'Gönderilerini görmek için birini takip edin.';
+
+  @override
+  String get replyTo => 'Yanıt: ...';
 }

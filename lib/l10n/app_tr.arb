@@ -760,5 +760,8 @@
   "dmYouPrefix": "Sen: ",
   "quotes": "Alıntılar",
   "noQuotesFound": "Alıntı bulunamadı",
-  "quotePlural": "alıntılar"
+  "quotePlural": "alıntılar",
+  "noNotesYet": "Henüz not yok",
+  "followSomeoneToSeePosts": "Gönderilerini görmek için birini takip edin.",
+  "replyTo": "Yanıt: ..."
 }

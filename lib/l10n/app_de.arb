@@ -760,5 +760,8 @@
   "dmYouPrefix": "Du: ",
   "quotes": "Zitate",
   "noQuotesFound": "Keine Zitate gefunden",
-  "quotePlural": "Zitate"
+  "quotePlural": "Zitate",
+  "noNotesYet": "Noch keine Beiträge",
+  "followSomeoneToSeePosts": "Folge jemandem, um seine Beiträge hier zu sehen.",
+  "replyTo": "Antwort an..."
 }

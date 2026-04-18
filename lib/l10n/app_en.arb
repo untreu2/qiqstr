@@ -963,5 +963,8 @@
   "quotePlural": "quotes",
   "loadingYourFeed": "Loading your feed...",
   "addAReply": "Add a reply...",
-  "tryDifferentSearchTerm": "Try searching with a different term."
+  "tryDifferentSearchTerm": "Try searching with a different term.",
+  "noNotesYet": "No notes yet",
+  "followSomeoneToSeePosts": "Follow someone to see their posts here.",
+  "replyTo": "Reply to..."
 }

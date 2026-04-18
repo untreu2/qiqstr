@@ -3705,6 +3705,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Try searching with a different term.'**
   String get tryDifferentSearchTerm;
+
+  /// No description provided for @noNotesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes yet'**
+  String get noNotesYet;
+
+  /// No description provided for @followSomeoneToSeePosts.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow someone to see their posts here.'**
+  String get followSomeoneToSeePosts;
+
+  /// No description provided for @replyTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply to...'**
+  String get replyTo;
 }
 
 class _AppLocalizationsDelegate

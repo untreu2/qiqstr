@@ -2080,4 +2080,14 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get tryDifferentSearchTerm => 'Try searching with a different term.';
+
+  @override
+  String get noNotesYet => 'Noch keine Beiträge';
+
+  @override
+  String get followSomeoneToSeePosts =>
+      'Folge jemandem, um seine Beiträge hier zu sehen.';
+
+  @override
+  String get replyTo => 'Antwort an...';
 }
