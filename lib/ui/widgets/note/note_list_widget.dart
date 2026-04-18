@@ -161,7 +161,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     final viewportTop = controller.offset;
     final viewportBottom = viewportTop + controller.position.viewportDimension;
-    const estimatedNoteHeight = 200.0;
+    const estimatedNoteHeight = 300.0;
 
     final firstVisible = (viewportTop / estimatedNoteHeight).floor();
     final lastVisible = (viewportBottom / estimatedNoteHeight).ceil();
@@ -189,8 +189,14 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       );
     }
 
-    if (widget.notes.isEmpty) {
+    if (widget.notes.isEmpty && !widget.isLoading) {
       _checkAndTriggerEmptyRefresh();
+      return const SliverToBoxAdapter(
+        child: _EmptyState(),
+      );
+    }
+
+    if (widget.notes.isEmpty) {
       return const SliverToBoxAdapter(
         child: _LoadingState(),
       );
@@ -343,7 +349,7 @@ class _LoadMoreTriggerState extends State<_LoadMoreTrigger> {
   }
 }
 
-class _NoteItemWidget extends StatefulWidget {
+class _NoteItemWidget extends StatelessWidget {
   final Map<String, dynamic> note;
   final String currentUserHex;
   final ValueNotifier<List<Map<String, dynamic>>> notesNotifier;
@@ -364,28 +370,23 @@ class _NoteItemWidget extends StatefulWidget {
   });
 
   @override
-  State<_NoteItemWidget> createState() => _NoteItemWidgetState();
-}
-
-class _NoteItemWidgetState extends State<_NoteItemWidget> {
-  @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (widget.isPinned) _PinnedBadge(),
+        if (isPinned) _PinnedBadge(),
         NoteWidget(
-          note: widget.note,
-          currentUserHex: widget.currentUserHex,
-          notesNotifier: widget.notesNotifier,
-          profiles: widget.profiles,
+          note: note,
+          currentUserHex: currentUserHex,
+          notesNotifier: notesNotifier,
+          profiles: profiles,
           containerColor: null,
           isSmallView: true,
           scrollController: null,
-          notesListProvider: widget.notesListProvider,
+          notesListProvider: notesListProvider,
           isVisible: true,
         ),
-        if (widget.showSeparator) const ListSeparatorWidget(),
+        if (showSeparator) const ListSeparatorWidget(),
       ],
     );
   }
@@ -412,6 +413,49 @@ class _PinnedBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final colors = context.colors;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CarbonIcons.activity,
+              size: 48,
+              color: colors.textSecondary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l10n.noNotesYet,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.followSomeoneToSeePosts,
+              style: TextStyle(
+                fontSize: 14,
+                color: colors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
