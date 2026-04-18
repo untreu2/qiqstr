@@ -40,8 +40,6 @@ class _HomeNavigatorState extends State<HomeNavigator>
     with TickerProviderStateMixin {
   late AnimationController _iconAnimationController;
   late AnimationController _exploreRotationController;
-  bool _isFirstBuild = true;
-
   @override
   void initState() {
     super.initState();
@@ -221,23 +219,6 @@ class _HomeNavigatorState extends State<HomeNavigator>
   }) {
     final iconSize = _iconSize;
     final currentIconPath = isSelected ? iconSelectedPath : iconPath;
-
-    if (_isFirstBuild) {
-      return SizedBox(
-        width: iconSize,
-        height: iconSize,
-        child: SvgPicture.asset(
-          currentIconPath,
-          width: iconSize,
-          height: iconSize,
-          fit: BoxFit.contain,
-          colorFilter: ColorFilter.mode(
-            context.colors.textPrimary,
-            BlendMode.srcIn,
-          ),
-        ),
-      );
-    }
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
@@ -450,16 +431,6 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
   @override
   Widget build(BuildContext context) {
-    if (_isFirstBuild) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _isFirstBuild = false;
-          });
-        }
-      });
-    }
-
     final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
 
     return BlocProvider<NotificationIndicatorBloc>.value(
