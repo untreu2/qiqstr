@@ -4,6 +4,10 @@ abstract class WalletEvent extends BaseEvent {
   const WalletEvent();
 }
 
+class WalletInitialized extends WalletEvent {
+  const WalletInitialized();
+}
+
 class WalletBalanceRequested extends WalletEvent {
   const WalletBalanceRequested();
 }
@@ -30,33 +34,17 @@ class WalletTransactionsLoaded extends WalletEvent {
   const WalletTransactionsLoaded();
 }
 
-class WalletAutoConnectRequested extends WalletEvent {
-  final String? recaptchaToken;
 
-  const WalletAutoConnectRequested({this.recaptchaToken});
 
-  @override
-  List<Object?> get props => [recaptchaToken];
+class WalletLightningAddressRequested extends WalletEvent {
+  const WalletLightningAddressRequested();
 }
 
-class WalletConnectWithNostrRequested extends WalletEvent {
-  final String? recaptchaToken;
+class WalletLightningAddressRegistered extends WalletEvent {
+  final String username;
 
-  const WalletConnectWithNostrRequested({this.recaptchaToken});
-
-  @override
-  List<Object?> get props => [recaptchaToken];
-}
-
-class WalletPriceRequested extends WalletEvent {
-  const WalletPriceRequested();
-}
-
-class WalletApiKeySet extends WalletEvent {
-  final String apiKey;
-
-  const WalletApiKeySet(this.apiKey);
+  const WalletLightningAddressRegistered(this.username);
 
   @override
-  List<Object?> get props => [apiKey];
+  List<Object?> get props => [username];
 }

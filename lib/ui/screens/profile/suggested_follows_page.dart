@@ -339,7 +339,7 @@ class SuggestedFollowsPage extends StatelessWidget {
   }
 
   void _navigateToHome(BuildContext context) {
-    context.go('/onboarding-coinos?npub=${Uri.encodeComponent(npub)}');
+    context.go('/onboarding-spark?npub=${Uri.encodeComponent(npub)}');
   }
 }
 

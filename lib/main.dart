@@ -24,6 +24,7 @@ import 'core/router/app_router.dart';
 import 'core/bloc/observers/app_bloc_observer.dart';
 
 import 'src/rust/frb_generated.dart';
+import 'package:breez_sdk_spark_flutter/breez_sdk_spark.dart';
 import 'l10n/app_localizations.dart';
 import 'constants/database.dart';
 
@@ -79,6 +80,7 @@ void main() {
 
     await _sanitizeLmdbBeforeRust();
     await RustLib.init();
+    await BreezSdkSparkLib.init();
     try {
       await dotenv.load(fileName: '.env');
     } catch (_) {}

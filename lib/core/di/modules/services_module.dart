@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../app_di.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/validation_service.dart';
-import '../../../data/services/coinos_service.dart';
+import '../../../data/services/spark_service.dart';
 import '../../../data/services/nwc_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/rust_database_service.dart';
@@ -22,7 +22,7 @@ class ServicesModule extends DIModule {
     AppDI.registerLazySingleton<AuthService>(() => AuthService.instance);
     AppDI.registerLazySingleton<ValidationService>(
         () => ValidationService.instance);
-    AppDI.registerLazySingleton<CoinosService>(() => CoinosService());
+    AppDI.registerLazySingleton<SparkService>(() => SparkService());
     AppDI.registerLazySingleton<NwcService>(() => NwcService());
     AppDI.registerLazySingleton<DmService>(() => DmService(
           authService: AppDI.get<AuthService>(),
@@ -38,7 +38,7 @@ class ServicesModule extends DIModule {
 
     final currentNpub = AuthService.instance.currentUserNpub;
     if (currentNpub != null) {
-      AppDI.get<CoinosService>().setActiveAccount(currentNpub);
+      AppDI.get<SparkService>().setActiveAccount(currentNpub);
       AppDI.get<NwcService>().setActiveAccount(currentNpub);
       await AppDI.get<NwcService>().warmCache();
     }
@@ -98,6 +98,14 @@ class ServicesModule extends DIModule {
   static Future<void> reinitializeForAccountSwitch() async {
     try {
       final authService = AuthService.instance;
+      await authService.refreshCache();
+
+      final currentNpub = authService.currentUserNpub;
+      if (currentNpub != null && currentNpub.isNotEmpty) {
+        AppDI.get<SparkService>().setActiveAccount(currentNpub);
+        AppDI.get<NwcService>().setActiveAccount(currentNpub);
+      }
+
       String? privateKeyHex;
       String? userPubkeyHex;
 

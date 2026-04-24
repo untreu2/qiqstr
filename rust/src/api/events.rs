@@ -188,8 +188,3 @@ pub fn create_relay_list_event_with_markers(
     create_signed_event(10002, String::new(), tags, private_key_hex)
 }
 
-#[frb(sync)]
-pub fn create_coinos_auth_event(challenge: String, private_key_hex: String) -> Result<String> {
-    let tags = vec![vec!["challenge".into(), challenge]];
-    create_signed_event(27235, String::new(), tags, private_key_hex)
-}

@@ -1496,16 +1496,51 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get connectWalletDescription =>
-      'Melden Sie sich mit Ihrer Nostr-Identität an,\num Coinos zu nutzen';
+      'Richten Sie Ihre selbstverwaltende Lightning-Wallet\nvon Spark ein';
 
   @override
-  String get connectWallet => 'Wallet verbinden';
+  String get connectWallet => 'Wallet einrichten';
+
+  @override
+  String get lightningAddress => 'Lightning-Adresse';
+
+  @override
+  String get lightningAddressSetup => 'Lightning-Adresse einrichten';
+
+  @override
+  String get lightningAddressHint => 'ihrname';
+
+  @override
+  String get lightningAddressRegister => 'Registrieren';
+
+  @override
+  String get lightningAddressChecking => 'Verfügbarkeit wird geprüft...';
+
+  @override
+  String get lightningAddressAvailable => 'Verfügbar';
+
+  @override
+  String get lightningAddressTaken => 'Bereits vergeben';
+
+  @override
+  String get lightningAddressCopied => 'Lightning-Adresse kopiert';
+
+  @override
+  String get lightningAddressRegistered => 'Lightning-Adresse registriert!';
 
   @override
   String get noTransactionsYet => 'Noch keine Transaktionen';
 
   @override
   String get recentTransactions => 'Kürzlich';
+
+  @override
+  String showAllTransactions(int count) {
+    return 'Alle $count Transaktionen anzeigen';
+  }
+
+  @override
+  String get showLess => 'Weniger anzeigen';
 
   @override
   String get received => 'Empfangen';
@@ -1710,10 +1745,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingCoinosSubtitle =>
-      'Richten Sie eine integrierte Lightning-Wallet ein, um sofort Sats zu senden, zu empfangen und zu zappen.';
+      'Richten Sie eine selbstverwaltende Lightning-Wallet ein, um sofort Sats zu senden, zu empfangen und zu zappen.';
 
   @override
-  String get onboardingCoinosConnect => 'Wallet verbinden';
+  String get onboardingCoinosConnect => 'Wallet einrichten';
 
   @override
   String get onboardingCoinosFeatureSend =>
@@ -1729,15 +1764,34 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingCoinosDisclaimer =>
-      'Diese Wallet wird von coinos.io bereitgestellt. Wir verwahren, kontrollieren oder haben keinen Zugriff auf Ihre Gelder. Die gesamte Verantwortung für den Wallet-Dienst liegt bei coinos.io.';
+      'Ihre Wallet ist selbstverwaltend und wird von Spark betrieben. Ihre Schlüssel werden nur sicher auf Ihrem Gerät gespeichert. Sichern Sie Ihre Wiederherstellungsphrase, um den Zugang zu Ihren Geldern zu behalten.';
 
   @override
   String get onboardingCoinosAccept => 'Ich verstehe und stimme zu';
 
   @override
-  String onboardingCoinosConnected(String username) {
-    return 'Verbunden als $username@coinos.io';
-  }
+  String get onboardingCoinosConnected => 'Wallet bereit';
+
+  @override
+  String get onboardingSparkTitle => 'Bitcoin Wallet';
+
+  @override
+  String get onboardingSparkSubtitle =>
+      'Richten Sie eine selbstverwaltende Lightning-Wallet ein, die von Spark betrieben wird.';
+
+  @override
+  String get onboardingSparkSetup => 'Wallet einrichten';
+
+  @override
+  String get onboardingSparkFeatureSelfCustody =>
+      'Selbstverwaltend — nur Sie kontrollieren Ihre Schlüssel';
+
+  @override
+  String get onboardingSparkDisclaimer =>
+      'Ihre Wallet ist selbstverwaltend und wird von Spark betrieben. Ihre Schlüssel werden nur sicher auf Ihrem Gerät gespeichert.';
+
+  @override
+  String get onboardingSparkReady => 'Wallet erfolgreich eingerichtet';
 
   @override
   String get welcomeTitle => 'qiqstr';
@@ -1840,6 +1894,29 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get commentOptional => 'Kommentar (Optional)';
+
+  @override
+  String get sparkBackupTitle => 'Wallet-Sicherung';
+
+  @override
+  String get sparkBackupSubtitle =>
+      'Sichern Sie Ihre Wiederherstellungsphrase, um bei Geräteverlust auf Ihre Gelder zugreifen zu können.';
+
+  @override
+  String get sparkBackupReveal => 'Wiederherstellungsphrase anzeigen';
+
+  @override
+  String get sparkBackupHide => 'Wiederherstellungsphrase verbergen';
+
+  @override
+  String get sparkBackupWarning =>
+      'Teilen Sie Ihre Wiederherstellungsphrase niemals mit jemandem. Jeder, der sie hat, kann auf Ihre Gelder zugreifen.';
+
+  @override
+  String get sparkBackupCopied => 'Wiederherstellungsphrase kopiert';
+
+  @override
+  String get sparkBackupCopy => 'In Zwischenablage kopieren';
 
   @override
   String get nwcSectionTitle => 'WALLET CONNECT';

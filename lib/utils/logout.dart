@@ -1,9 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/services/auth_service.dart';
-import '../data/services/coinos_service.dart';
+import '../data/services/spark_service.dart';
 import '../data/services/pinned_notes_service.dart';
 import '../core/di/app_di.dart';
 import '../src/rust/api/database.dart' as rust_db;
@@ -52,20 +51,18 @@ class Logout {
 
   static Future<void> _cleanupCurrentSession() async {
     try {
-      final coinosService = AppDI.get<CoinosService>();
-      await coinosService.clearAuthData();
+      await AppDI.get<SparkService>().disconnectSdk();
     } catch (e) {
-      if (kDebugMode) print('Error clearing Coinos data: $e');
+      if (kDebugMode) print('Error disconnecting Spark SDK: $e');
     }
     PinnedNotesService.instance.clear();
   }
 
   static Future<void> _cleanupEverything(AuthService authService) async {
     try {
-      final coinosService = AppDI.get<CoinosService>();
-      await coinosService.clearAuthData();
+      await AppDI.get<SparkService>().disconnectSdk();
     } catch (e) {
-      if (kDebugMode) print('Error clearing Coinos data: $e');
+      if (kDebugMode) print('Error disconnecting Spark SDK: $e');
     }
 
     PinnedNotesService.instance.clear();
@@ -81,8 +78,5 @@ class Logout {
     }
 
     await authService.logout();
-
-    const storage = FlutterSecureStorage();
-    await storage.deleteAll();
   }
 }

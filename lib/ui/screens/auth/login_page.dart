@@ -79,7 +79,7 @@ class _LoginPageState extends State<LoginPage> {
 
   void _navigateAfterLogin(String npub) {
     if (mounted) {
-      context.go('/onboarding-coinos?npub=${Uri.encodeComponent(npub)}');
+      context.go('/onboarding-spark?npub=${Uri.encodeComponent(npub)}');
     }
   }
 

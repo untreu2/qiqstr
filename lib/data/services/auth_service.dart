@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/base/result.dart';
-import '../../core/di/app_di.dart';
-import 'coinos_service.dart';
 import 'rust_nostr_bridge.dart';
 import 'validation_service.dart';
 
@@ -692,62 +690,4 @@ class AuthService {
     }
   }
 
-  Future<Result<Map<String, dynamic>>> authenticateWithCoinos() async {
-    try {
-      final coinosService = AppDI.get<CoinosService>();
-      final authResult = await coinosService.authenticateWithNostr();
-      if (authResult.isError) {
-        return Result.error(authResult.error!);
-      }
-      return Result.success(authResult.data!);
-    } catch (e) {
-      return Result.error(
-          'Coinos Nostr authentication failed: ${e.toString()}');
-    }
-  }
-
-  Future<Result<Map<String, dynamic>>> autoLoginCoinos() async {
-    try {
-      final coinosService = AppDI.get<CoinosService>();
-      final authResult = await coinosService.autoLogin();
-      if (authResult.isError) {
-        return Result.error(authResult.error!);
-      }
-      return Result.success(authResult.data!);
-    } catch (e) {
-      return Result.error('Coinos auto-login failed: ${e.toString()}');
-    }
-  }
-
-  Future<Result<bool>> isCoinosAuthenticated() async {
-    try {
-      final coinosService = AppDI.get<CoinosService>();
-      return await coinosService.isAuthenticated();
-    } catch (e) {
-      return Result.error(
-          'Failed to check Coinos authentication: ${e.toString()}');
-    }
-  }
-
-  Future<Result<Map<String, dynamic>?>> getCoinosUser() async {
-    try {
-      final coinosService = AppDI.get<CoinosService>();
-      final userResult = await coinosService.getStoredUser();
-      if (userResult.isError) {
-        return Result.error(userResult.error!);
-      }
-      return Result.success(userResult.data);
-    } catch (e) {
-      return Result.error('Failed to get Coinos user: ${e.toString()}');
-    }
-  }
-
-  Future<Result<void>> clearCoinosData() async {
-    try {
-      final coinosService = AppDI.get<CoinosService>();
-      return await coinosService.clearAuthData();
-    } catch (e) {
-      return Result.error('Failed to clear Coinos data: ${e.toString()}');
-    }
-  }
 }

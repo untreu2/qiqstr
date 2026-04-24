@@ -10,7 +10,7 @@ class AppColors {
   static const Color textSecondary = Color(0xFFE0E0E0);
 
   static const Color error = Color(0xFFFF6B6B);
-  static const Color success = Color(0xFF51CF66);
+  static const Color success = Color(0xFF2E9E4F);
   static const Color warning = Color(0xFFFFA726);
 
   static const Color border = Color(0xFF333333);
@@ -24,9 +24,9 @@ class AppColors {
 
   static const Color reaction = Color(0xFFFF6B6B);
   static const Color reply = Color(0xFF74C0FC);
-  static const Color repost = Color(0xFF51CF66);
+  static const Color repost = Color(0xFF2E9E4F);
   static const Color zap = Color(0xFFECB200);
-  static const Color switchActive = Color(0xFF66BB6A);
+  static const Color switchActive = Color(0xFF2E9E4F);
 }
 
 class AppColorsLight {
@@ -39,7 +39,7 @@ class AppColorsLight {
   static const Color textSecondary = Colors.black54;
 
   static const Color error = Colors.redAccent;
-  static const Color success = Colors.greenAccent;
+  static const Color success = Color(0xFF2E9E4F);
   static const Color warning = Colors.amber;
 
   static const Color border = Colors.black12;
@@ -53,7 +53,7 @@ class AppColorsLight {
 
   static const Color reaction = Color(0xFFFF6B6B);
   static const Color reply = Color(0xFF74C0FC);
-  static const Color repost = Color(0xFF51CF66);
+  static const Color repost = Color(0xFF2E9E4F);
   static const Color zap = Color(0xFFECB200);
-  static const Color switchActive = Color(0xFF43A047);
+  static const Color switchActive = Color(0xFF2E9E4F);
 }

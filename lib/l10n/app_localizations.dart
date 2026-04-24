@@ -2755,14 +2755,68 @@ abstract class AppLocalizations {
   /// No description provided for @connectWalletDescription.
   ///
   /// In en, this message translates to:
-  /// **'Sign in with your Nostr identity\nto start using Coinos'**
+  /// **'Set up your self-custodial Lightning wallet\npowered by Spark'**
   String get connectWalletDescription;
 
   /// No description provided for @connectWallet.
   ///
   /// In en, this message translates to:
-  /// **'Connect Wallet'**
+  /// **'Set Up Wallet'**
   String get connectWallet;
+
+  /// No description provided for @lightningAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightning Address'**
+  String get lightningAddress;
+
+  /// No description provided for @lightningAddressSetup.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up Lightning Address'**
+  String get lightningAddressSetup;
+
+  /// No description provided for @lightningAddressHint.
+  ///
+  /// In en, this message translates to:
+  /// **'yourname'**
+  String get lightningAddressHint;
+
+  /// No description provided for @lightningAddressRegister.
+  ///
+  /// In en, this message translates to:
+  /// **'Register'**
+  String get lightningAddressRegister;
+
+  /// No description provided for @lightningAddressChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking availability...'**
+  String get lightningAddressChecking;
+
+  /// No description provided for @lightningAddressAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Available'**
+  String get lightningAddressAvailable;
+
+  /// No description provided for @lightningAddressTaken.
+  ///
+  /// In en, this message translates to:
+  /// **'Already taken'**
+  String get lightningAddressTaken;
+
+  /// No description provided for @lightningAddressCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightning address copied'**
+  String get lightningAddressCopied;
+
+  /// No description provided for @lightningAddressRegistered.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightning address registered!'**
+  String get lightningAddressRegistered;
 
   /// No description provided for @noTransactionsYet.
   ///
@@ -2775,6 +2829,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recent'**
   String get recentTransactions;
+
+  /// No description provided for @showAllTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count} transactions'**
+  String showAllTransactions(int count);
+
+  /// No description provided for @showLess.
+  ///
+  /// In en, this message translates to:
+  /// **'Show less'**
+  String get showLess;
 
   /// No description provided for @received.
   ///
@@ -3115,7 +3181,7 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingCoinosSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Set up a built-in Lightning wallet to send, receive, and zap sats instantly.'**
+  /// **'Set up a self-custodial Lightning wallet to send, receive, and zap sats instantly.'**
   String get onboardingCoinosSubtitle;
 
   /// No description provided for @onboardingCoinosConnect.
@@ -3145,7 +3211,7 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingCoinosDisclaimer.
   ///
   /// In en, this message translates to:
-  /// **'This wallet is provided by coinos.io. We do not hold, control, or have access to your funds. All responsibility regarding the wallet service lies with coinos.io.'**
+  /// **'Your wallet is self-custodial and powered by Spark. Your keys are stored securely on your device only. Back up your recovery phrase to keep access to your funds.'**
   String get onboardingCoinosDisclaimer;
 
   /// No description provided for @onboardingCoinosAccept.
@@ -3157,8 +3223,44 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingCoinosConnected.
   ///
   /// In en, this message translates to:
-  /// **'Connected as {username}@coinos.io'**
-  String onboardingCoinosConnected(String username);
+  /// **'Wallet ready'**
+  String get onboardingCoinosConnected;
+
+  /// No description provided for @onboardingSparkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bitcoin Wallet'**
+  String get onboardingSparkTitle;
+
+  /// No description provided for @onboardingSparkSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up a self-custodial Lightning wallet powered by Spark.'**
+  String get onboardingSparkSubtitle;
+
+  /// No description provided for @onboardingSparkSetup.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Up Wallet'**
+  String get onboardingSparkSetup;
+
+  /// No description provided for @onboardingSparkFeatureSelfCustody.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-custodial — only you control your keys'**
+  String get onboardingSparkFeatureSelfCustody;
+
+  /// No description provided for @onboardingSparkDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Your wallet is self-custodial and powered by Spark. Your keys are stored securely on your device only. Back up your recovery phrase to keep access to your funds.'**
+  String get onboardingSparkDisclaimer;
+
+  /// No description provided for @onboardingSparkReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet set up successfully'**
+  String get onboardingSparkReady;
 
   /// No description provided for @welcomeTitle.
   ///
@@ -3309,6 +3411,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Comment (Optional)'**
   String get commentOptional;
+
+  /// No description provided for @sparkBackupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet Backup'**
+  String get sparkBackupTitle;
+
+  /// No description provided for @sparkBackupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up your recovery phrase to keep access to your funds if you lose this device.'**
+  String get sparkBackupSubtitle;
+
+  /// No description provided for @sparkBackupReveal.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Recovery Phrase'**
+  String get sparkBackupReveal;
+
+  /// No description provided for @sparkBackupHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Recovery Phrase'**
+  String get sparkBackupHide;
+
+  /// No description provided for @sparkBackupWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Never share your recovery phrase with anyone. Anyone who has it can access your funds.'**
+  String get sparkBackupWarning;
+
+  /// No description provided for @sparkBackupCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery phrase copied'**
+  String get sparkBackupCopied;
+
+  /// No description provided for @sparkBackupCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy to Clipboard'**
+  String get sparkBackupCopy;
 
   /// No description provided for @nwcSectionTitle.
   ///

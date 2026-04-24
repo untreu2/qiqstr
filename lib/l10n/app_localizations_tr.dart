@@ -1431,16 +1431,51 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get connectWalletDescription =>
-      'Coinos\'u kullanmaya başlamak için\nNostr kimliğinizle giriş yapın';
+      'Spark destekli kendi kendini saklayan\nLightning cüzdanınızı kurun';
 
   @override
-  String get connectWallet => 'Cüzdanı Bağla';
+  String get connectWallet => 'Cüzdanı Kur';
+
+  @override
+  String get lightningAddress => 'Lightning Adresi';
+
+  @override
+  String get lightningAddressSetup => 'Lightning Adresi Oluştur';
+
+  @override
+  String get lightningAddressHint => 'adınız';
+
+  @override
+  String get lightningAddressRegister => 'Kaydet';
+
+  @override
+  String get lightningAddressChecking => 'Müsaitlik kontrol ediliyor...';
+
+  @override
+  String get lightningAddressAvailable => 'Müsait';
+
+  @override
+  String get lightningAddressTaken => 'Kullanımda';
+
+  @override
+  String get lightningAddressCopied => 'Lightning adresi kopyalandı';
+
+  @override
+  String get lightningAddressRegistered => 'Lightning adresi kaydedildi!';
 
   @override
   String get noTransactionsYet => 'Henüz işlem yok';
 
   @override
   String get recentTransactions => 'Son İşlemler';
+
+  @override
+  String showAllTransactions(int count) {
+    return '$count işlemin tümünü göster';
+  }
+
+  @override
+  String get showLess => 'Daha az göster';
 
   @override
   String get received => 'Alındı';
@@ -1639,14 +1674,14 @@ class AppLocalizationsTr extends AppLocalizations {
   String get addAnotherFeed => '+ Akış ekle';
 
   @override
-  String get onboardingCoinosTitle => 'Bitcoin Wallet';
+  String get onboardingCoinosTitle => 'Bitcoin Cüzdanı';
 
   @override
   String get onboardingCoinosSubtitle =>
-      'Anında sat göndermek, almak ve zap yapmak için yerleşik bir Lightning cüzdanı kurun.';
+      'Anında sat göndermek, almak ve zap yapmak için kendi kendini saklayan bir Lightning cüzdanı kurun.';
 
   @override
-  String get onboardingCoinosConnect => 'Cüzdanı Bağla';
+  String get onboardingCoinosConnect => 'Cüzdanı Kur';
 
   @override
   String get onboardingCoinosFeatureSend =>
@@ -1662,15 +1697,34 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingCoinosDisclaimer =>
-      'Bu cüzdan coinos.io tarafından sağlanmaktadır. Biz fonlarınızı tutmaz, kontrol etmez veya erişim sağlamayız. Cüzdan hizmetine ilişkin tüm sorumluluk coinos.io\'ya aittir.';
+      'Cüzdanınız Spark tarafından desteklenen, kendi kendini saklayan bir cüzdandır. Anahtarlarınız yalnızca cihazınızda güvenli şekilde saklanır. Fonlarınıza erişimi korumak için kurtarma ifadenizi yedekleyin.';
 
   @override
   String get onboardingCoinosAccept => 'Anladım ve kabul ediyorum';
 
   @override
-  String onboardingCoinosConnected(String username) {
-    return '$username@coinos.io olarak bağlandı';
-  }
+  String get onboardingCoinosConnected => 'Cüzdan hazır';
+
+  @override
+  String get onboardingSparkTitle => 'Bitcoin Cüzdanı';
+
+  @override
+  String get onboardingSparkSubtitle =>
+      'Spark destekli kendi kendini saklayan bir Lightning cüzdanı kurun.';
+
+  @override
+  String get onboardingSparkSetup => 'Cüzdanı Kur';
+
+  @override
+  String get onboardingSparkFeatureSelfCustody =>
+      'Kendi kendini saklayan — anahtarlarınızı yalnızca siz kontrol edersiniz';
+
+  @override
+  String get onboardingSparkDisclaimer =>
+      'Cüzdanınız Spark tarafından desteklenen, kendi kendini saklayan bir cüzdandır. Anahtarlarınız yalnızca cihazınızda güvenli şekilde saklanır.';
+
+  @override
+  String get onboardingSparkReady => 'Cüzdan başarıyla kuruldu';
 
   @override
   String get welcomeTitle => 'qiqstr';
@@ -1761,6 +1815,29 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get commentOptional => 'Yorum (İsteğe bağlı)';
+
+  @override
+  String get sparkBackupTitle => 'Cüzdan Yedekleme';
+
+  @override
+  String get sparkBackupSubtitle =>
+      'Bu cihazı kaybetmeniz durumunda fonlarınıza erişimi korumak için kurtarma ifadenizi yedekleyin.';
+
+  @override
+  String get sparkBackupReveal => 'Kurtarma İfadesini Göster';
+
+  @override
+  String get sparkBackupHide => 'Kurtarma İfadesini Gizle';
+
+  @override
+  String get sparkBackupWarning =>
+      'Kurtarma ifadenizi asla kimseyle paylaşmayın. Sahip olan herkes fonlarınıza erişebilir.';
+
+  @override
+  String get sparkBackupCopied => 'Kurtarma ifadesi kopyalandı';
+
+  @override
+  String get sparkBackupCopy => 'Panoya Kopyala';
 
   @override
   String get nwcSectionTitle => 'WALLET CONNECT';

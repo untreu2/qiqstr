@@ -13,42 +13,51 @@ class WalletLoading extends WalletState {
 }
 
 class WalletLoaded extends WalletState {
-  final Map<String, dynamic>? user;
-  final Map<String, dynamic>? balance;
+  final bool isConnected;
+  final int? balanceSats;
   final List<Map<String, dynamic>>? transactions;
   final bool isLoadingTransactions;
-  final double? btcPriceUsd;
   final bool isNwcMode;
+  final String? lightningAddress;
 
   const WalletLoaded({
-    this.user,
-    this.balance,
+    this.isConnected = false,
+    this.balanceSats,
     this.transactions,
     this.isLoadingTransactions = false,
-    this.btcPriceUsd,
     this.isNwcMode = false,
+    this.lightningAddress,
   });
 
   @override
-  List<Object?> get props =>
-      [user, balance, transactions, isLoadingTransactions, btcPriceUsd, isNwcMode];
+  List<Object?> get props => [
+        isConnected,
+        balanceSats,
+        transactions,
+        isLoadingTransactions,
+        isNwcMode,
+        lightningAddress,
+      ];
 
   WalletLoaded copyWith({
-    Map<String, dynamic>? user,
-    Map<String, dynamic>? balance,
+    bool? isConnected,
+    int? balanceSats,
     List<Map<String, dynamic>>? transactions,
     bool? isLoadingTransactions,
-    double? btcPriceUsd,
     bool? isNwcMode,
+    String? lightningAddress,
+    bool clearLightningAddress = false,
   }) {
     return WalletLoaded(
-      user: user ?? this.user,
-      balance: balance ?? this.balance,
+      isConnected: isConnected ?? this.isConnected,
+      balanceSats: balanceSats ?? this.balanceSats,
       transactions: transactions ?? this.transactions,
       isLoadingTransactions:
           isLoadingTransactions ?? this.isLoadingTransactions,
-      btcPriceUsd: btcPriceUsd ?? this.btcPriceUsd,
       isNwcMode: isNwcMode ?? this.isNwcMode,
+      lightningAddress: clearLightningAddress
+          ? null
+          : lightningAddress ?? this.lightningAddress,
     );
   }
 }

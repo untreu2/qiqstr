@@ -616,10 +616,28 @@
   "addAccount": "Add account",
   "switchAccount": "Switch account",
   "connectYourWallet": "Connect Your Wallet",
-  "connectWalletDescription": "Sign in with your Nostr identity\nto start using Coinos",
-  "connectWallet": "Connect Wallet",
+  "connectWalletDescription": "Set up your self-custodial Lightning wallet\npowered by Spark",
+  "connectWallet": "Set Up Wallet",
+  "lightningAddress": "Lightning Address",
+  "lightningAddressSetup": "Set up Lightning Address",
+  "lightningAddressHint": "yourname",
+  "lightningAddressRegister": "Register",
+  "lightningAddressChecking": "Checking availability...",
+  "lightningAddressAvailable": "Available",
+  "lightningAddressTaken": "Already taken",
+  "lightningAddressCopied": "Lightning address copied",
+  "lightningAddressRegistered": "Lightning address registered!",
   "noTransactionsYet": "No transactions yet",
   "recentTransactions": "Recent",
+  "showAllTransactions": "Show all {count} transactions",
+  "@showAllTransactions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "showLess": "Show less",
   "received": "Received",
   "sent": "Sent",
   "pasteInvoiceHere": "Paste invoice here...",
@@ -704,21 +722,20 @@
   "removeFromFeed": "Remove from feed",
   "addAnotherFeed": "+ Add feed",
   "onboardingCoinosTitle": "Bitcoin Wallet",
-  "onboardingCoinosSubtitle": "Set up a built-in Lightning wallet to send, receive, and zap sats instantly.",
+  "onboardingCoinosSubtitle": "Set up a self-custodial Lightning wallet to send, receive, and zap sats instantly.",
   "onboardingCoinosConnect": "Connect Wallet",
   "onboardingCoinosFeatureSend": "Send Bitcoin payments instantly via Lightning Network",
   "onboardingCoinosFeatureReceive": "Receive Bitcoin with your own Lightning address",
   "onboardingCoinosFeatureZap": "Send Bitcoin to your favorite posts and creators",
-  "onboardingCoinosDisclaimer": "This wallet is provided by coinos.io. We do not hold, control, or have access to your funds. All responsibility regarding the wallet service lies with coinos.io.",
+  "onboardingCoinosDisclaimer": "Your wallet is self-custodial and powered by Spark. Your keys are stored securely on your device only. Back up your recovery phrase to keep access to your funds.",
   "onboardingCoinosAccept": "I understand and agree",
-  "onboardingCoinosConnected": "Connected as {username}@coinos.io",
-  "@onboardingCoinosConnected": {
-    "placeholders": {
-      "username": {
-        "type": "String"
-      }
-    }
-  },
+  "onboardingCoinosConnected": "Wallet ready",
+  "onboardingSparkTitle": "Bitcoin Wallet",
+  "onboardingSparkSubtitle": "Set up a self-custodial Lightning wallet powered by Spark.",
+  "onboardingSparkSetup": "Set Up Wallet",
+  "onboardingSparkFeatureSelfCustody": "Self-custodial — only you control your keys",
+  "onboardingSparkDisclaimer": "Your wallet is self-custodial and powered by Spark. Your keys are stored securely on your device only. Back up your recovery phrase to keep access to your funds.",
+  "onboardingSparkReady": "Wallet set up successfully",
   "welcomeTitle": "qiqstr",
   "welcomeSubtitle": "A decentralized social network built on Nostr. Fully open source.",
   "welcomeFeatureDecentralized": "No central servers, no CEOs. Nobody can ban you.",
@@ -761,6 +778,13 @@
   "failedToZap": "Failed to zap",
   "userNoLightningAddress": "User does not have a lightning address configured.",
   "commentOptional": "Comment (Optional)",
+  "sparkBackupTitle": "Wallet Backup",
+  "sparkBackupSubtitle": "Back up your recovery phrase to keep access to your funds if you lose this device.",
+  "sparkBackupReveal": "Show Recovery Phrase",
+  "sparkBackupHide": "Hide Recovery Phrase",
+  "sparkBackupWarning": "Never share your recovery phrase with anyone. Anyone who has it can access your funds.",
+  "sparkBackupCopied": "Recovery phrase copied",
+  "sparkBackupCopy": "Copy to Clipboard",
   "nwcSectionTitle": "WALLET CONNECT",
   "nwcTitle": "Nostr Wallet Connect",
   "nwcDescription": "Connect an external wallet via NWC protocol. Enabling this will replace the built-in wallet.",

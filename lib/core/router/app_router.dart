@@ -10,7 +10,7 @@ import '../../ui/screens/home_navigator.dart';
 import '../../ui/screens/profile/profile_page.dart';
 import '../../ui/screens/profile/following_page.dart';
 import '../../ui/screens/profile/suggested_follows_page.dart';
-import '../../ui/screens/onboarding/onboarding_coinos_page.dart';
+import '../../ui/screens/onboarding/onboarding_spark_page.dart';
 import '../../ui/screens/profile/edit_profile.dart';
 import '../../ui/screens/note/feed_page.dart';
 import '../../ui/screens/note/thread_page.dart';
@@ -81,11 +81,11 @@ class AppRouter {
         },
       ),
       GoRoute(
-        path: '/onboarding-coinos',
-        name: 'onboarding-coinos',
+        path: '/onboarding-spark',
+        name: 'onboarding-spark',
         builder: (context, state) {
           final npub = state.uri.queryParameters['npub'] ?? '';
-          return OnboardingCoinosPage(npub: npub);
+          return OnboardingSparkPage(npub: npub);
         },
       ),
       StatefulShellRoute.indexedStack(
@@ -617,8 +617,8 @@ class AppRouter {
     final isProfileSetupRoute = state.matchedLocation == '/profile-setup';
     final isSuggestedFollowsRoute =
         state.matchedLocation == '/suggested-follows';
-    final isOnboardingCoinosRoute =
-        state.matchedLocation == '/onboarding-coinos';
+    final isOnboardingSparkRoute =
+        state.matchedLocation == '/onboarding-spark';
 
     final isAuthFlow = isWelcomeRoute ||
         isLoginRoute ||
@@ -626,7 +626,7 @@ class AppRouter {
         isKeysInfoRoute ||
         isProfileSetupRoute ||
         isSuggestedFollowsRoute ||
-        isOnboardingCoinosRoute;
+        isOnboardingSparkRoute;
 
     if (!isAuthenticated && !isAuthFlow) {
       final isAuthResult = await authService.isAuthenticated();

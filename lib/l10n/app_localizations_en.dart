@@ -1467,16 +1467,51 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectWalletDescription =>
-      'Sign in with your Nostr identity\nto start using Coinos';
+      'Set up your self-custodial Lightning wallet\npowered by Spark';
 
   @override
-  String get connectWallet => 'Connect Wallet';
+  String get connectWallet => 'Set Up Wallet';
+
+  @override
+  String get lightningAddress => 'Lightning Address';
+
+  @override
+  String get lightningAddressSetup => 'Set up Lightning Address';
+
+  @override
+  String get lightningAddressHint => 'yourname';
+
+  @override
+  String get lightningAddressRegister => 'Register';
+
+  @override
+  String get lightningAddressChecking => 'Checking availability...';
+
+  @override
+  String get lightningAddressAvailable => 'Available';
+
+  @override
+  String get lightningAddressTaken => 'Already taken';
+
+  @override
+  String get lightningAddressCopied => 'Lightning address copied';
+
+  @override
+  String get lightningAddressRegistered => 'Lightning address registered!';
 
   @override
   String get noTransactionsYet => 'No transactions yet';
 
   @override
   String get recentTransactions => 'Recent';
+
+  @override
+  String showAllTransactions(int count) {
+    return 'Show all $count transactions';
+  }
+
+  @override
+  String get showLess => 'Show less';
 
   @override
   String get received => 'Received';
@@ -1678,7 +1713,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingCoinosSubtitle =>
-      'Set up a built-in Lightning wallet to send, receive, and zap sats instantly.';
+      'Set up a self-custodial Lightning wallet to send, receive, and zap sats instantly.';
 
   @override
   String get onboardingCoinosConnect => 'Connect Wallet';
@@ -1697,15 +1732,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingCoinosDisclaimer =>
-      'This wallet is provided by coinos.io. We do not hold, control, or have access to your funds. All responsibility regarding the wallet service lies with coinos.io.';
+      'Your wallet is self-custodial and powered by Spark. Your keys are stored securely on your device only. Back up your recovery phrase to keep access to your funds.';
 
   @override
   String get onboardingCoinosAccept => 'I understand and agree';
 
   @override
-  String onboardingCoinosConnected(String username) {
-    return 'Connected as $username@coinos.io';
-  }
+  String get onboardingCoinosConnected => 'Wallet ready';
+
+  @override
+  String get onboardingSparkTitle => 'Bitcoin Wallet';
+
+  @override
+  String get onboardingSparkSubtitle =>
+      'Set up a self-custodial Lightning wallet powered by Spark.';
+
+  @override
+  String get onboardingSparkSetup => 'Set Up Wallet';
+
+  @override
+  String get onboardingSparkFeatureSelfCustody =>
+      'Self-custodial — only you control your keys';
+
+  @override
+  String get onboardingSparkDisclaimer =>
+      'Your wallet is self-custodial and powered by Spark. Your keys are stored securely on your device only. Back up your recovery phrase to keep access to your funds.';
+
+  @override
+  String get onboardingSparkReady => 'Wallet set up successfully';
 
   @override
   String get welcomeTitle => 'qiqstr';
@@ -1807,6 +1861,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commentOptional => 'Comment (Optional)';
+
+  @override
+  String get sparkBackupTitle => 'Wallet Backup';
+
+  @override
+  String get sparkBackupSubtitle =>
+      'Back up your recovery phrase to keep access to your funds if you lose this device.';
+
+  @override
+  String get sparkBackupReveal => 'Show Recovery Phrase';
+
+  @override
+  String get sparkBackupHide => 'Hide Recovery Phrase';
+
+  @override
+  String get sparkBackupWarning =>
+      'Never share your recovery phrase with anyone. Anyone who has it can access your funds.';
+
+  @override
+  String get sparkBackupCopied => 'Recovery phrase copied';
+
+  @override
+  String get sparkBackupCopy => 'Copy to Clipboard';
 
   @override
   String get nwcSectionTitle => 'WALLET CONNECT';

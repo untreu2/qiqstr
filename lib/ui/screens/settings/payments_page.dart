@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
@@ -12,6 +13,7 @@ import '../../../presentation/blocs/theme/theme_event.dart';
 import '../../../presentation/blocs/theme/theme_state.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/services/nwc_service.dart';
+import '../../../data/services/spark_service.dart';
 import '../../../l10n/app_localizations.dart';
 
 class PaymentsPage extends StatefulWidget {
@@ -29,6 +31,9 @@ class _PaymentsPageState extends State<PaymentsPage> {
   bool _hasNwcConnection = false;
   bool _isNwcSaving = false;
   bool _acceptedNwcDisclaimer = false;
+  bool _backupRevealed = false;
+  String? _backupPhrase;
+  bool _backupLoading = false;
 
   @override
   void initState() {
@@ -108,6 +113,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
           if (themeState.oneTapZap) ...[
             _buildDefaultAmountItem(context, themeState, l10n),
           ],
+          const SizedBox(height: 24),
+          _buildSparkBackupItem(context, l10n),
           const SizedBox(height: 24),
           _hasNwcConnection
               ? _buildNwcConnectedItem(context, l10n)
@@ -469,6 +476,206 @@ class _PaymentsPageState extends State<PaymentsPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildSparkBackupItem(BuildContext context, AppLocalizations l10n) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: context.colors.overlayLight,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                CarbonIcons.wallet,
+                size: 22,
+                color: context.colors.textPrimary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l10n.sparkBackupTitle,
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l10n.sparkBackupSubtitle,
+            style: TextStyle(
+              fontSize: 13,
+              color: context.colors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_backupRevealed && _backupPhrase != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: context.colors.background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: context.colors.border,
+                  width: 1,
+                ),
+              ),
+              child: _buildPhraseGrid(context, _backupPhrase!),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.colors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    CarbonIcons.warning,
+                    size: 16,
+                    color: context.colors.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.sparkBackupWarning,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.colors.error,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: SecondaryButton(
+                label: l10n.sparkBackupCopy,
+                onPressed: () => _copyBackupPhrase(l10n),
+                size: ButtonSize.medium,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: _backupRevealed
+                  ? l10n.sparkBackupHide
+                  : l10n.sparkBackupReveal,
+              onPressed: _backupLoading ? null : _toggleBackup,
+              isLoading: _backupLoading,
+              size: ButtonSize.medium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhraseGrid(BuildContext context, String phrase) {
+    // Split into 8-character chunks for readable display
+    final chunks = <String>[];
+    for (var i = 0; i < phrase.length; i += 8) {
+      chunks.add(phrase.substring(
+          i, i + 8 > phrase.length ? phrase.length : i + 8));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var row = 0; row < chunks.length; row += 4)
+          Padding(
+            padding: EdgeInsets.only(
+                bottom: row + 4 < chunks.length ? 8 : 0),
+            child: Row(
+              children: [
+                for (var col = 0;
+                    col < 4 && row + col < chunks.length;
+                    col++) ...[
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: context.colors.background,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        chunks[row + col],
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.colors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'monospace',
+                          letterSpacing: 1,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  if (col < 3 && row + col + 1 < chunks.length)
+                    const SizedBox(width: 6),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _toggleBackup() async {
+    if (_backupRevealed) {
+      setState(() {
+        _backupRevealed = false;
+        _backupPhrase = null;
+      });
+      return;
+    }
+
+    setState(() => _backupLoading = true);
+
+    try {
+      final sparkService = AppDI.get<SparkService>();
+      final result = await sparkService.getOrCreateMnemonic();
+
+      if (!mounted) return;
+
+      result.fold(
+        (phrase) => setState(() {
+          _backupPhrase = phrase;
+          _backupRevealed = true;
+        }),
+        (error) => AppSnackbar.error(
+          context,
+          AppLocalizations.of(context)!.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _backupLoading = false);
+    }
+  }
+
+  void _copyBackupPhrase(AppLocalizations l10n) {
+    if (_backupPhrase == null) return;
+    Clipboard.setData(ClipboardData(text: _backupPhrase!));
+    AppSnackbar.success(context, l10n.sparkBackupCopied);
   }
 
   Future<void> _saveNwcConnection() async {

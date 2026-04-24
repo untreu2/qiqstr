@@ -19,7 +19,7 @@ import '../../presentation/blocs/dm/dm_event.dart' as dm_events;
 import '../../presentation/blocs/dm_indicator/dm_indicator_bloc.dart';
 import '../../presentation/blocs/dm_indicator/dm_indicator_event.dart';
 import '../../presentation/blocs/dm_indicator/dm_indicator_state.dart';
-import '../../data/services/coinos_service.dart';
+import '../../data/services/spark_service.dart';
 import '../../core/scroll_to_top_notifier.dart';
 
 class HomeNavigator extends StatefulWidget {
@@ -386,15 +386,14 @@ class _HomeNavigatorState extends State<HomeNavigator>
         }
       }
     } else if (originalIndex == 2) {
-      final coinosService = AppDI.get<CoinosService>();
-      final tokenResult = await coinosService.getStoredToken();
-      final hasToken = tokenResult.isSuccess &&
-          tokenResult.data != null &&
-          tokenResult.data!.isNotEmpty;
+      final sparkService = AppDI.get<SparkService>();
+      final isConnectedResult = await sparkService.isConnected();
+      final isConnected =
+          isConnectedResult.isSuccess && isConnectedResult.data == true;
       if (!mounted) return;
-      if (!hasToken) {
+      if (!isConnected) {
         context.push(
-            '/onboarding-coinos?npub=${Uri.encodeComponent(widget.npub)}');
+            '/onboarding-spark?npub=${Uri.encodeComponent(widget.npub)}');
         return;
       }
       _iconAnimationController.reset();

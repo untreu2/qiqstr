@@ -1,4 +1,6 @@
 PODS:
+  - breez_sdk_spark_flutter (0.13.2-dev5):
+    - Flutter
   - Flutter (1.0.0)
   - flutter_secure_storage (6.0.0):
     - Flutter
@@ -8,12 +10,15 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - breez_sdk_spark_flutter (from `.symlinks/plugins/breez_sdk_spark_flutter/ios`)
   - Flutter (from `Flutter`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
   - gallery_saver_plus (from `.symlinks/plugins/gallery_saver_plus/ios`)
   - rust_lib_qiqstr (from `.symlinks/plugins/rust_lib_qiqstr/ios`)
 
 EXTERNAL SOURCES:
+  breez_sdk_spark_flutter:
+    :path: ".symlinks/plugins/breez_sdk_spark_flutter/ios"
   Flutter:
     :path: Flutter
   flutter_secure_storage:
@@ -24,6 +29,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/rust_lib_qiqstr/ios"
 
 SPEC CHECKSUMS:
+  breez_sdk_spark_flutter: 7240c76074b6922ebbeabfd712472b299df7be2f
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
   gallery_saver_plus: c4b59c605df1049a02d036ef81d82972b6dfd606

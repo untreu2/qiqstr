@@ -7,8 +7,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
-import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
+import '../../../data/services/spark_service.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../src/rust/api/events.dart' as rust_events;
 import '../../../data/services/auth_service.dart';
@@ -30,7 +30,7 @@ Future<bool> _payZapWithWallet(
     return _payZapWithNwc(context, user, note, sats, comment);
   }
 
-  return _payZapWithCoinos(context, user, note, sats, comment);
+  return _payZapWithSpark(context, user, note, sats, comment);
 }
 
 Future<bool> _payZapWithNwc(
@@ -68,85 +68,8 @@ Future<bool> _payZapWithNwc(
       throw Exception('Private key not found.');
     }
 
-    final lud16 = user['lud16'] as String? ?? '';
-    if (!lud16.contains('@')) {
-      throw Exception('Invalid lightning address format.');
-    }
-
-    final parts = lud16.split('@');
-    if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
-      throw Exception('Invalid lightning address format.');
-    }
-
-    final displayName = parts[0];
-    final domain = parts[1];
-
-    final uri = Uri.parse('https://$domain/.well-known/lnurlp/$displayName');
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception('LNURL fetch failed with status: ${response.statusCode}');
-    }
-
-    final lnurlJson = jsonDecode(response.body);
-    if (lnurlJson['allowsNostr'] != true || lnurlJson['nostrPubkey'] == null) {
-      throw Exception('Recipient does not support zaps.');
-    }
-
-    final callback = lnurlJson['callback'];
-    if (callback == null || callback.isEmpty) {
-      throw Exception('Zap callback is missing.');
-    }
-
-    final lnurlBech32 = lnurlJson['lnurl'] ?? '';
-    final amountMillisats = (sats * 1000).toString();
-    final relays = AppDI.get<SyncService>().relayUrls;
-
-    if (relays.isEmpty) {
-      throw Exception('No relays available for zap.');
-    }
-
-    final userPubkeyHex = user['pubkey'] as String? ?? '';
-    final String recipientPubkeyHex = userPubkeyHex.startsWith('npub1')
-        ? (AuthService.instance.npubToHex(userPubkeyHex) ?? userPubkeyHex)
-        : userPubkeyHex;
-
-    final List<List<String>> tags = [
-      ['relays', ...relays.map((e) => e.toString())],
-      ['amount', amountMillisats],
-      ['p', recipientPubkeyHex],
-    ];
-
-    if (lnurlBech32.isNotEmpty) {
-      tags.add(['lnurl', lnurlBech32]);
-    }
-
-    final noteId = note['id'] as String? ?? '';
-    if (noteId.isNotEmpty) {
-      tags.add(['e', noteId]);
-    }
-
-    final zapRequestJson = rust_events.createZapRequestEvent(
-      tags: tags,
-      content: comment,
-      privateKeyHex: privateKey,
-    );
-    final zapRequest = jsonDecode(zapRequestJson) as Map<String, dynamic>;
-
-    final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest));
-    final zapUrl = Uri.parse(
-      '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
-    );
-
-    final invoiceResponse = await http.get(zapUrl);
-    if (invoiceResponse.statusCode != 200) {
-      throw Exception('Zap callback failed: ${invoiceResponse.body}');
-    }
-
-    final invoiceJson = jsonDecode(invoiceResponse.body);
-    final invoice = invoiceJson['pr'];
-    if (invoice == null || invoice.toString().isEmpty) {
-      throw Exception('Invoice not returned by zap server.');
-    }
+    final invoice = await _buildZapInvoice(user, note, sats, comment);
+    if (invoice == null) return false;
 
     debugPrint(
         '[ZapDialog] Paying invoice via NWC: ${invoice.substring(0, 20)}...');
@@ -166,8 +89,15 @@ Future<bool> _payZapWithNwc(
           duration: const Duration(seconds: 2));
     }
 
-    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex,
-        note, comment, privateKey, sats, paymentResult));
+    unawaited(_publishZapEventsAsync(
+        await _buildZapRequest(user, note, sats, comment),
+        invoice,
+        _toHex(user['pubkey'] as String? ?? ''),
+        note,
+        comment,
+        await secureStorage.read(key: 'privateKey') ?? '',
+        sats,
+        paymentResult));
 
     return true;
   } catch (e) {
@@ -180,20 +110,21 @@ Future<bool> _payZapWithNwc(
   }
 }
 
-Future<bool> _payZapWithCoinos(
+Future<bool> _payZapWithSpark(
   BuildContext context,
   Map<String, dynamic> user,
   Map<String, dynamic> note,
   int sats,
   String comment,
 ) async {
-  final coinosService = AppDI.get<CoinosService>();
+  final sparkService = AppDI.get<SparkService>();
   const secureStorage = FlutterSecureStorage();
 
   try {
     final l10n = AppLocalizations.of(context);
-    final isAuthResult = await coinosService.isAuthenticated();
-    if (!isAuthResult.isSuccess || isAuthResult.data != true) {
+
+    final isConnectedResult = await sparkService.isConnected();
+    if (!isConnectedResult.isSuccess || isConnectedResult.data != true) {
       if (context.mounted) {
         AppSnackbar.warning(
             context,
@@ -214,101 +145,16 @@ Future<bool> _payZapWithCoinos(
       throw Exception('Private key not found.');
     }
 
-    final lud16 = user['lud16'] as String? ?? '';
-    if (!lud16.contains('@')) {
-      throw Exception('Invalid lightning address format.');
-    }
-
-    final parts = lud16.split('@');
-    if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
-      throw Exception('Invalid lightning address format.');
-    }
-
-    final displayName = parts[0];
-    final domain = parts[1];
-
-    final uri = Uri.parse('https://$domain/.well-known/lnurlp/$displayName');
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception('LNURL fetch failed with status: ${response.statusCode}');
-    }
-
-    final lnurlJson = jsonDecode(response.body);
-    if (lnurlJson['allowsNostr'] != true || lnurlJson['nostrPubkey'] == null) {
-      throw Exception('Recipient does not support zaps.');
-    }
-
-    final callback = lnurlJson['callback'];
-    if (callback == null || callback.isEmpty) {
-      throw Exception('Zap callback is missing.');
-    }
-
-    final lnurlBech32 = lnurlJson['lnurl'] ?? '';
-    final amountMillisats = (sats * 1000).toString();
-    final relays = AppDI.get<SyncService>().relayUrls;
-
-    if (relays.isEmpty) {
-      throw Exception('No relays available for zap.');
-    }
-
-    final userPubkeyHex = user['pubkey'] as String? ?? '';
-    final String recipientPubkeyHex = userPubkeyHex.startsWith('npub1')
-        ? (AuthService.instance.npubToHex(userPubkeyHex) ?? userPubkeyHex)
-        : userPubkeyHex;
-
-    final List<List<String>> tags = [
-      ['relays', ...relays.map((e) => e.toString())],
-      ['amount', amountMillisats],
-      ['p', recipientPubkeyHex],
-    ];
-
-    if (lnurlBech32.isNotEmpty) {
-      tags.add(['lnurl', lnurlBech32]);
-    }
-
-    final noteId = note['id'] as String? ?? '';
-    if (noteId.isNotEmpty) {
-      tags.add(['e', noteId]);
-      if (kDebugMode) {
-        print('[ZapDialog] Added note reference to zap: $noteId');
-      }
-    }
-
-    final zapRequestJson = rust_events.createZapRequestEvent(
-      tags: tags,
-      content: comment,
-      privateKeyHex: privateKey,
-    );
-    final zapRequest = jsonDecode(zapRequestJson) as Map<String, dynamic>;
-
-    final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest));
-    final zapUrl = Uri.parse(
-      '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
-    );
-
-    final invoiceResponse = await http.get(zapUrl);
-    if (invoiceResponse.statusCode != 200) {
-      throw Exception('Zap callback failed: ${invoiceResponse.body}');
-    }
-
-    final invoiceJson = jsonDecode(invoiceResponse.body);
-    final invoice = invoiceJson['pr'];
-    if (invoice == null || invoice.toString().isEmpty) {
-      throw Exception('Invoice not returned by zap server.');
-    }
+    final invoice = await _buildZapInvoice(user, note, sats, comment);
+    if (invoice == null) return false;
 
     debugPrint(
-        '[ZapDialog] About to pay invoice: ${invoice.substring(0, 20)}...');
-    final paymentResult = await coinosService.payInvoice(invoice);
+        '[ZapDialog] Paying invoice via Spark: ${invoice.substring(0, 20)}...');
+    final paymentResult = await sparkService.payLightningInvoice(invoice);
 
-    debugPrint(
-        '[ZapDialog] Payment result: ${paymentResult.isSuccess ? 'SUCCESS' : 'FAILED'}');
     if (paymentResult.isError) {
-      debugPrint('[ZapDialog] Payment error: ${paymentResult.error}');
       throw Exception(paymentResult.error);
     }
-
-    debugPrint('[ZapDialog] Payment successful, result: ${paymentResult.data}');
 
     if (context.mounted) {
       final userName = user['name'] as String? ?? (l10n?.user ?? 'User');
@@ -320,9 +166,15 @@ Future<bool> _payZapWithCoinos(
           duration: const Duration(seconds: 2));
     }
 
-    // Publish Nostr events in the background without affecting success status
-    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex,
-        note, comment, privateKey, sats, paymentResult));
+    unawaited(_publishZapEventsAsync(
+        await _buildZapRequest(user, note, sats, comment),
+        invoice,
+        _toHex(user['pubkey'] as String? ?? ''),
+        note,
+        comment,
+        privateKey,
+        sats,
+        paymentResult));
 
     return true;
   } catch (e) {
@@ -335,8 +187,138 @@ Future<bool> _payZapWithCoinos(
   }
 }
 
+String _toHex(String pubkey) {
+  if (pubkey.startsWith('npub1')) {
+    return AuthService.instance.npubToHex(pubkey) ?? pubkey;
+  }
+  return pubkey;
+}
+
+Future<Map<String, dynamic>?> _buildZapRequest(
+  Map<String, dynamic> user,
+  Map<String, dynamic> note,
+  int sats,
+  String comment,
+) async {
+  const secureStorage = FlutterSecureStorage();
+  final privateKey = await secureStorage.read(key: 'privateKey');
+  if (privateKey == null || privateKey.isEmpty) return null;
+
+  final lud16 = user['lud16'] as String? ?? '';
+  if (!lud16.contains('@')) return null;
+
+  final parts = lud16.split('@');
+  final displayName = parts[0];
+  final domain = parts[1];
+
+  final uri = Uri.parse('https://$domain/.well-known/lnurlp/$displayName');
+  final response = await http.get(uri);
+  if (response.statusCode != 200) return null;
+
+  final lnurlJson = jsonDecode(response.body) as Map<String, dynamic>;
+  final lnurlBech32 = lnurlJson['lnurl'] as String? ?? '';
+  final amountMillisats = (sats * 1000).toString();
+  final relays = AppDI.get<SyncService>().relayUrls;
+
+  final recipientPubkeyHex = _toHex(user['pubkey'] as String? ?? '');
+
+  final List<List<String>> tags = [
+    ['relays', ...relays.map((e) => e.toString())],
+    ['amount', amountMillisats],
+    ['p', recipientPubkeyHex],
+  ];
+
+  if (lnurlBech32.isNotEmpty) {
+    tags.add(['lnurl', lnurlBech32]);
+  }
+
+  final noteId = note['id'] as String? ?? '';
+  if (noteId.isNotEmpty) {
+    tags.add(['e', noteId]);
+  }
+
+  final zapRequestJson = rust_events.createZapRequestEvent(
+    tags: tags,
+    content: comment,
+    privateKeyHex: privateKey,
+  );
+  return jsonDecode(zapRequestJson) as Map<String, dynamic>;
+}
+
+Future<String?> _buildZapInvoice(
+  Map<String, dynamic> user,
+  Map<String, dynamic> note,
+  int sats,
+  String comment,
+) async {
+  final lud16 = user['lud16'] as String? ?? '';
+  if (!lud16.contains('@')) return null;
+
+  final parts = lud16.split('@');
+  if (parts.length != 2 || parts.any((p) => p.isEmpty)) return null;
+
+  final displayName = parts[0];
+  final domain = parts[1];
+
+  final uri = Uri.parse('https://$domain/.well-known/lnurlp/$displayName');
+  final response = await http.get(uri);
+  if (response.statusCode != 200) return null;
+
+  final lnurlJson = jsonDecode(response.body) as Map<String, dynamic>;
+  if (lnurlJson['allowsNostr'] != true || lnurlJson['nostrPubkey'] == null) {
+    return null;
+  }
+
+  final callback = lnurlJson['callback'] as String?;
+  if (callback == null || callback.isEmpty) return null;
+
+  final lnurlBech32 = lnurlJson['lnurl'] as String? ?? '';
+  final amountMillisats = (sats * 1000).toString();
+  final relays = AppDI.get<SyncService>().relayUrls;
+  if (relays.isEmpty) return null;
+
+  const secureStorage = FlutterSecureStorage();
+  final privateKey = await secureStorage.read(key: 'privateKey');
+  if (privateKey == null || privateKey.isEmpty) return null;
+
+  final recipientPubkeyHex = _toHex(user['pubkey'] as String? ?? '');
+
+  final List<List<String>> tags = [
+    ['relays', ...relays.map((e) => e.toString())],
+    ['amount', amountMillisats],
+    ['p', recipientPubkeyHex],
+  ];
+
+  if (lnurlBech32.isNotEmpty) {
+    tags.add(['lnurl', lnurlBech32]);
+  }
+
+  final noteId = note['id'] as String? ?? '';
+  if (noteId.isNotEmpty) {
+    tags.add(['e', noteId]);
+  }
+
+  final zapRequestJson = rust_events.createZapRequestEvent(
+    tags: tags,
+    content: comment,
+    privateKeyHex: privateKey,
+  );
+  final zapRequest = jsonDecode(zapRequestJson) as Map<String, dynamic>;
+
+  final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest));
+  final zapUrl = Uri.parse(
+    '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
+  );
+
+  final invoiceResponse = await http.get(zapUrl);
+  if (invoiceResponse.statusCode != 200) return null;
+
+  final invoiceJson = jsonDecode(invoiceResponse.body) as Map<String, dynamic>;
+  return invoiceJson['pr'] as String?;
+}
+
 Future<void> _publishZapEventsAsync(
-  Map<String, dynamic> zapRequest,
+  Map<String, dynamic>? zapRequest,
   String invoice,
   String recipientPubkeyHex,
   Map<String, dynamic> note,
@@ -345,17 +327,14 @@ Future<void> _publishZapEventsAsync(
   int sats,
   dynamic paymentResult,
 ) async {
+  if (zapRequest == null) return;
   try {
     final noteId = note['id'] as String? ?? '';
-
     await AppDI.get<SyncService>().broadcastEvent(zapRequest);
 
     if (kDebugMode) {
       print(
           '[ZapDialog] Zap request event (kind 9734) published for note: $noteId');
-      final paymentData = paymentResult.data as Map<String, dynamic>?;
-      final preimage = paymentData?['preimage'] as String?;
-      print('[ZapDialog] Zap amount: $sats sats, preimage: $preimage');
     }
   } catch (e) {
     if (kDebugMode) {

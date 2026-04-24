@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
+import '../../../data/services/spark_service.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
@@ -25,7 +25,7 @@ class ReceiveDialog extends StatefulWidget {
 
 class _ReceiveDialogState extends State<ReceiveDialog> {
   final TextEditingController _amountController = TextEditingController();
-  final CoinosService _coinosService = AppDI.get<CoinosService>();
+
 
   bool _isUpdating = false;
   String? _invoice;
@@ -99,17 +99,17 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
           });
         }
       } else {
-        final result = await _coinosService.createInvoice(
-          amount: amountValue,
-          type: 'lightning',
+        final sparkService = AppDI.get<SparkService>();
+        final result = await sparkService.createLightningInvoice(
+          amountSats: amountValue,
         );
 
         if (mounted) {
           setState(() {
             _isUpdating = false;
             result.fold(
-              (invoiceResult) {
-                _invoice = invoiceResult['hash'] as String?;
+              (invoice) {
+                _invoice = invoice;
               },
               (errorResult) {
                 _error = AppLocalizations.of(context)!

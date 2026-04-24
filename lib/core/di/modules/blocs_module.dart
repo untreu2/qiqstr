@@ -25,9 +25,9 @@ import '../../../presentation/blocs/note_content/note_content_bloc.dart';
 import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
 import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
-import '../../../presentation/blocs/onboarding_coinos/onboarding_coinos_bloc.dart';
+import '../../../presentation/blocs/onboarding_spark/onboarding_spark_bloc.dart';
 import '../../../data/services/auth_service.dart';
-import '../../../data/services/coinos_service.dart';
+import '../../../data/services/spark_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/nwc_service.dart';
 import '../../../data/services/validation_service.dart';
@@ -84,8 +84,11 @@ class BlocsModule extends DIModule {
         ));
 
     AppDI.registerLazySingleton<WalletBloc>(() => WalletBloc(
-          coinosService: AppDI.get<CoinosService>(),
+          sparkService: AppDI.get<SparkService>(),
           nwcService: AppDI.get<NwcService>(),
+          authService: AppDI.get<AuthService>(),
+          profileRepository: AppDI.get<ProfileRepository>(),
+          syncService: AppDI.get<SyncService>(),
         ));
 
     AppDI.registerFactory<ThreadBloc>(() => ThreadBloc(
@@ -211,11 +214,9 @@ class BlocsModule extends DIModule {
           authService: AppDI.get<AuthService>(),
         ));
 
-    AppDI.registerFactory<OnboardingCoinosBloc>(() => OnboardingCoinosBloc(
-          coinosService: AppDI.get<CoinosService>(),
+    AppDI.registerFactory<OnboardingSparkBloc>(() => OnboardingSparkBloc(
+          sparkService: AppDI.get<SparkService>(),
           authService: AppDI.get<AuthService>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
         ));
   }
 }

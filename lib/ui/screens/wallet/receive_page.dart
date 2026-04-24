@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/di/app_di.dart';
-import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
+import '../../../data/services/spark_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/snackbar_widget.dart';
@@ -25,7 +25,6 @@ class _ReceivePageState extends State<ReceivePage> {
   final TextEditingController _amountController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<bool> _showTitleBubble = ValueNotifier(true);
-  final CoinosService _coinosService = AppDI.get<CoinosService>();
 
   bool _isUpdating = false;
   String? _invoice;
@@ -105,15 +104,15 @@ class _ReceivePageState extends State<ReceivePage> {
           });
         }
       } else {
-        final result = await _coinosService.createInvoice(
-          amount: amountValue,
-          type: 'lightning',
+        final sparkService = AppDI.get<SparkService>();
+        final result = await sparkService.createLightningInvoice(
+          amountSats: amountValue,
         );
         if (mounted) {
           setState(() {
             _isUpdating = false;
             result.fold(
-              (invoiceResult) => _invoice = invoiceResult['hash'] as String?,
+              (invoice) => _invoice = invoice,
               (err) {
                 _error = AppLocalizations.of(context)!
                     .failedToCreateInvoice(err.toString());

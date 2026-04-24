@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/di/app_di.dart';
-import '../../../data/services/coinos_service.dart';
 import '../../../data/services/nwc_service.dart';
+import '../../../data/services/spark_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
 import '../common/snackbar_widget.dart';
@@ -27,7 +27,6 @@ class SendDialog extends StatefulWidget {
 class _SendDialogState extends State<SendDialog> {
   final TextEditingController _inputController = TextEditingController();
   final TextEditingController _lnAmountController = TextEditingController();
-  final CoinosService _coinosService = AppDI.get<CoinosService>();
 
   bool _isLoading = false;
   bool _isResolvingAddress = false;
@@ -330,7 +329,8 @@ class _SendDialogState extends State<SendDialog> {
           );
         }
       } else {
-        final result = await _coinosService.payInvoice(invoice);
+        final sparkService = AppDI.get<SparkService>();
+        final result = await sparkService.payLightningInvoice(invoice);
         if (mounted) {
           setState(() => _isLoading = false);
           result.fold(
