@@ -84,7 +84,7 @@ class _OnboardingSparkPageState extends State<OnboardingSparkPage> {
         _buildDisclaimer(context, l10n),
         const SizedBox(height: 20),
         _buildAcceptCheckbox(context, l10n),
-        const SizedBox(height: 72),
+        const SizedBox(height: 24),
         _buildBottomSection(context, state, l10n),
       ],
     );
@@ -164,11 +164,12 @@ class _OnboardingSparkPageState extends State<OnboardingSparkPage> {
   }
 
   Widget _buildAcceptCheckbox(BuildContext context, AppLocalizations l10n) {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: GestureDetector(
         onTap: () => setState(() => _acceptedDisclaimer = !_acceptedDisclaimer),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
               width: 24,
@@ -183,11 +184,13 @@ class _OnboardingSparkPageState extends State<OnboardingSparkPage> {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              l10n.onboardingCoinosAccept,
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 14,
+            Flexible(
+              child: Text(
+                l10n.onboardingCoinosAccept,
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 14,
+                ),
               ),
             ),
           ],
