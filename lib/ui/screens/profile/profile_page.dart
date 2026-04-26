@@ -109,6 +109,7 @@ class _ProfilePageState extends State<ProfilePage> {
           if (previous.runtimeType != current.runtimeType) return true;
           if (previous is ProfileLoaded && current is ProfileLoaded) {
             return previous.user != current.user ||
+                previous.isSyncing != current.isSyncing ||
                 previous.notes.length != current.notes.length ||
                 previous.replies.length != current.replies.length ||
                 previous.isLoadingMore != current.isLoadingMore;
@@ -422,7 +423,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildProfileNotes(BuildContext context, ProfileState state) {
     if (state is ProfileLoaded) {
-      if (state.notes.isEmpty && state.isSyncing) {
+      if (state.isSyncing) {
         return const SliverToBoxAdapter(
           child: Center(
             child: Padding(
@@ -466,7 +467,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildProfileReplies(BuildContext context, ProfileState state) {
     if (state is ProfileLoaded) {
-      if (state.replies.isEmpty && state.isSyncing) {
+      if (state.isSyncing) {
         return const SliverToBoxAdapter(
           child: Center(
             child: Padding(

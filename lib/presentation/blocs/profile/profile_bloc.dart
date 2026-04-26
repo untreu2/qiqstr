@@ -432,10 +432,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
       final updatedNotes = newNotes.isEmpty
           ? freshState.notes
-          : [...freshState.notes, ...newNotes];
+          : _sortByTimestamp([...freshState.notes, ...newNotes]);
       final updatedReplies = newReplies.isEmpty
           ? freshState.replies
-          : [...freshState.replies, ...newReplies];
+          : _sortByTimestamp([...freshState.replies, ...newReplies]);
 
       emit(freshState.copyWith(
         notes: updatedNotes,
@@ -509,6 +509,19 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     return oldest;
   }
 
+  List<Map<String, dynamic>> _sortByTimestamp(
+      List<Map<String, dynamic>> notes) {
+    final sorted = [...notes];
+    sorted.sort((a, b) {
+      final aTime =
+          a['repostCreatedAt'] as int? ?? a['created_at'] as int? ?? 0;
+      final bTime =
+          b['repostCreatedAt'] as int? ?? b['created_at'] as int? ?? 0;
+      return bTime.compareTo(aTime);
+    });
+    return sorted;
+  }
+
   Future<void> _onProfileLoadMoreNotesRequested(
     ProfileLoadMoreNotesRequested event,
     Emitter<ProfileState> emit,
@@ -556,7 +569,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       }).toList();
 
       if (uniqueNewNotes.isNotEmpty) {
-        final allNotes = [...freshState.notes, ...uniqueNewNotes];
+        final allNotes =
+            _sortByTimestamp([...freshState.notes, ...uniqueNewNotes]);
         emit(freshState.copyWith(notes: allNotes, isLoadingMore: false));
         _loadProfilesForNotes(uniqueNewNotes, emit);
       } else {
@@ -710,7 +724,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
       if (appendOnly.isEmpty) return;
 
-      final updated = [...currentState.notes, ...appendOnly];
+      final updated = _sortByTimestamp([...currentState.notes, ...appendOnly]);
       emit(currentState.copyWith(notes: updated, canLoadMore: true));
     }
 
@@ -754,7 +768,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
       if (appendOnly.isEmpty) return;
 
-      final updated = [...currentState.replies, ...appendOnly];
+      final updated =
+          _sortByTimestamp([...currentState.replies, ...appendOnly]);
       emit(currentState.copyWith(
           replies: updated, canLoadMoreReplies: true));
     }
@@ -789,7 +804,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
             .toList();
         if (newNotes.isNotEmpty) {
           updated = updated.copyWith(
-              notes: [...updated.notes, ...newNotes], canLoadMore: true);
+              notes: _sortByTimestamp([...updated.notes, ...newNotes]),
+              canLoadMore: true);
         }
       }
     }
@@ -809,7 +825,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
             .toList();
         if (newReplies.isNotEmpty) {
           updated = updated.copyWith(
-              replies: [...updated.replies, ...newReplies],
+              replies: _sortByTimestamp([...updated.replies, ...newReplies]),
               canLoadMoreReplies: true);
         }
       }
@@ -872,7 +888,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       }).toList();
 
       if (uniqueNewReplies.isNotEmpty) {
-        final allReplies = [...freshState.replies, ...uniqueNewReplies];
+        final allReplies =
+            _sortByTimestamp([...freshState.replies, ...uniqueNewReplies]);
         emit(freshState.copyWith(
             replies: allReplies, isLoadingMoreReplies: false));
         _loadProfilesForNotes(uniqueNewReplies, emit);
