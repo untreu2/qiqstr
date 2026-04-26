@@ -40,7 +40,7 @@ class FollowingRepository {
       final set = following.toSet()..add(userPubkey);
       await rust_db.dbSaveFollowingList(
           pubkeyHex: userPubkey, followsHex: set.toList());
-      _events.notifyChange();
+      _events.notifyFeedChange();
     } catch (e) {
       if (kDebugMode) print('[FollowingRepository] saveFollowing error: $e');
     }

@@ -97,7 +97,7 @@ class ProfileRepository {
     try {
       await rust_db.dbSaveProfile(
           pubkeyHex: pubkey, profileJson: jsonEncode(profileData));
-      _events.notifyChange();
+      _events.notifyProfileChange();
     } catch (e) {
       if (kDebugMode) print('[ProfileRepository] saveProfile error: $e');
     }
@@ -107,7 +107,7 @@ class ProfileRepository {
     if (profiles.isEmpty) return;
     try {
       await rust_db.dbSaveProfilesBatch(profilesJson: jsonEncode(profiles));
-      _events.notifyChange();
+      _events.notifyProfileChange();
     } catch (e) {
       if (kDebugMode) print('[ProfileRepository] saveProfiles error: $e');
     }

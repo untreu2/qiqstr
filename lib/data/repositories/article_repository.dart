@@ -76,7 +76,7 @@ class ArticleRepository {
     if (articles.isEmpty) return;
     try {
       await rust_db.dbSaveEvents(eventsJson: jsonEncode(articles));
-      _events.notifyChange();
+      _events.notifyFeedChange();
     } catch (e) {
       if (kDebugMode) print('[ArticleRepository] save error: $e');
     }

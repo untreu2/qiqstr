@@ -315,7 +315,7 @@ class FeedRepository {
     try {
       final json = jsonEncode(notes);
       await rust_db.dbSaveEvents(eventsJson: json);
-      _events.notifyChange();
+      _events.notifyFeedChange();
     } catch (e) {
       if (kDebugMode) print('[FeedRepository] save error: $e');
     }

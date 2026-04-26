@@ -138,7 +138,7 @@ class SyncService {
 
       final noteEvents = await _fetchAndStore(notesFilter);
       await rust_db.dbProcessDeletionEvents();
-      _notifyDbChanged();
+      _notifyFeedChanged();
       _queueMissingRepostOriginals(since);
       if (noteEvents.isNotEmpty) {
         _fetchThreadAncestorsInBackground(noteEvents);
@@ -159,7 +159,7 @@ class SyncService {
         'limit': 1
       };
       await _queryRelays(filter);
-      _notifyDbChanged();
+      _notifyProfileChanged();
       _markSynced(key);
     });
   }
@@ -191,7 +191,7 @@ class SyncService {
       final noteEvents = results[1];
 
       await rust_db.dbProcessDeletionEvents();
-      _notifyDbChanged();
+      _notifyFeedChanged();
       _syncMissingProfilesInBackground(noteEvents);
       _fetchReferencedEventsInBackground(noteEvents);
       _fetchThreadAncestorsInBackground(noteEvents);
@@ -247,13 +247,13 @@ class SyncService {
 
         count++;
         if (count == 1 || count % 50 == 0) {
-          _notifyDbChanged();
+          _notifyFeedChanged();
           yield count;
         }
       }
 
       await rust_db.dbProcessDeletionEvents();
-      _notifyDbChanged();
+      _notifyFeedChanged();
       if (pubkeys.isNotEmpty) {
         _fetchMissingProfilesInBackground(pubkeys.toList());
       }
@@ -266,7 +266,7 @@ class SyncService {
           operation: 'profile_notes_stream',
           state: SyncOperationState.completed));
     } catch (e) {
-      _notifyDbChanged();
+      _notifyFeedChanged();
       _syncStatusController.add(SyncOperationStatus(
           operation: 'profile_notes_stream',
           state: SyncOperationState.error,
@@ -290,7 +290,7 @@ class SyncService {
         if (since != null) 'since': since,
       };
       await _queryRelays(filter);
-      _notifyDbChanged();
+      _notifyInteractionChanged();
       _markSynced(key);
     });
   }
@@ -304,7 +304,7 @@ class SyncService {
         'limit': pubkeys.length
       };
       await _queryRelays(filter);
-      _notifyDbChanged();
+      _notifyProfileChanged();
     });
   }
 
@@ -345,7 +345,7 @@ class SyncService {
       }
       if (missingPubkeys.isNotEmpty) {
         await _syncMissingProfiles(missingPubkeys);
-        _notifyDbChanged();
+        _notifyProfileChanged();
       }
 
       _markSynced(key);
@@ -385,7 +385,7 @@ class SyncService {
         }
       }
 
-      _notifyDbChanged();
+      _notifyFeedChanged();
       _markSynced(key);
     });
   }
@@ -560,7 +560,7 @@ class SyncService {
         'limit': limit,
       };
       await _fetchAndStore(filter);
-      _notifyDbChanged();
+      _notifyFeedChanged();
       _markSynced(key);
     });
   }
@@ -579,7 +579,7 @@ class SyncService {
       final fetched = await _relayService.fetchEvents(filter, timeoutSecs: 10);
       if (fetched.isEmpty) return null;
       await rust_db.dbSaveEvents(eventsJson: jsonEncode(fetched));
-      _notifyDbChanged();
+      _notifyFeedChanged();
 
       Future<Map<String, dynamic>?> fetchProfile() async {
         final pJson = await rust_db.dbGetProfile(pubkeyHex: pubkey);
@@ -673,7 +673,7 @@ class SyncService {
         'limit': 100,
       };
       await _fetchAndStore(filter);
-      _notifyDbChanged();
+      _notifyFeedChanged();
       _markSynced(key);
     });
   }
@@ -712,14 +712,14 @@ class SyncService {
     if (noteIds.isEmpty) return;
     try {
       final fetched = await _relayService.fetchThreadAncestors(noteIds);
-      if (fetched > 0) _notifyDbChanged();
+      if (fetched > 0) _notifyFeedChanged();
     } catch (_) {}
   }
 
   Future<void> syncReplies(String noteId) async {
     await _sync('replies', () async {
       await _relayService.syncRepliesRecursive(noteId, maxDepth: 3);
-      _notifyDbChanged();
+      _notifyFeedChanged();
     });
   }
 
@@ -771,7 +771,7 @@ class SyncService {
       mutedPubkeys: mute.mutedPubkeys,
       mutedWords: mute.mutedWords,
     );
-    _notifyDbChanged();
+    _notifyFeedChanged();
     return result;
   }
 
@@ -958,7 +958,7 @@ class SyncService {
               return;
             }
             if (muteService.shouldFilterEvent(eventData)) return;
-            _notifyDbChanged();
+            _notifyFeedChanged();
             _syncMissingProfilesInBackground([eventData]);
             if (kind == 6) {
               _fetchReferencedNoteForRepost(eventData);
@@ -993,7 +993,7 @@ class SyncService {
             final eventId = eventData['id'] as String?;
             if (_isDuplicate(eventId)) return;
             if (muteService.shouldFilterEvent(eventData)) return;
-            _notifyDbChanged();
+            _notifyNotificationChange();
             _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}
         },
@@ -1025,7 +1025,7 @@ class SyncService {
         var ids = eventIds;
         if (ids.length > 50) ids = ids.sublist(0, 50);
         final fetched = await _relayService.fetchMissingReferences(ids);
-        if (fetched > 0) _notifyDbChanged();
+        if (fetched > 0) _notifyFeedChanged();
       } catch (_) {}
     });
   }
@@ -1114,8 +1114,20 @@ class SyncService {
     return await _relayService.fetchEvents(filterMap);
   }
 
-  void _notifyDbChanged() {
-    _db.notifyChange();
+  void _notifyFeedChanged() {
+    _db.notifyFeedChange();
+  }
+
+  void _notifyProfileChanged() {
+    _db.notifyProfileChange();
+  }
+
+  void _notifyInteractionChanged() {
+    _db.notifyInteractionChange();
+  }
+
+  void _notifyNotificationChange() {
+    _db.notifyNotificationChange();
   }
 
   Set<String> _extractAllPubkeys(List<Map<String, dynamic>> events) {
@@ -1190,7 +1202,7 @@ class SyncService {
         final fetched = await rust_relay.fetchRepostOriginals(
           repostEventIdsJson: jsonEncode(ids),
         );
-        if (fetched > 0) _notifyDbChanged();
+        if (fetched > 0) _notifyFeedChanged();
       } catch (_) {}
     });
   }
@@ -1198,7 +1210,7 @@ class SyncService {
   Future<void> _saveEventsAndProfiles(List<Map<String, dynamic>> events) async {
     if (events.isEmpty) return;
 
-    _notifyDbChanged();
+    _notifyFeedChanged();
     _syncMissingProfilesInBackground(events);
     _fetchReferencedEventsInBackground(events);
     _fetchThreadAncestorsInBackground(events);
@@ -1232,7 +1244,7 @@ class SyncService {
         var ids = replyEventIds;
         if (ids.length > 40) ids = ids.sublist(0, 40);
         final fetched = await _relayService.fetchThreadAncestors(ids);
-        if (fetched > 0) _notifyDbChanged();
+        if (fetched > 0) _notifyFeedChanged();
       } catch (_) {}
     });
   }

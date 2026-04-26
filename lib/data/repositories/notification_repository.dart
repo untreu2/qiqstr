@@ -53,7 +53,7 @@ class NotificationRepository {
     if (notifications.isEmpty) return;
     try {
       await rust_db.dbSaveEvents(eventsJson: jsonEncode(notifications));
-      _events.notifyChange();
+      _events.notifyNotificationChange();
     } catch (e) {
       if (kDebugMode) print('[NotificationRepository] save error: $e');
     }
