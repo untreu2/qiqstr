@@ -794,5 +794,14 @@
   "quotePlural": "Zitate",
   "noNotesYet": "Noch keine Beiträge",
   "followSomeoneToSeePosts": "Folge jemandem, um seine Beiträge hier zu sehen.",
-  "replyTo": "Antwort an..."
+  "replyTo": "Antwort an...",
+  "loadingYourFeed": "Feed wird geladen...",
+  "addAReply": "Antwort hinzufügen...",
+  "tryDifferentSearchTerm": "Versuchen Sie einen anderen Suchbegriff.",
+  "restoreWallet": "Wallet wiederherstellen",
+  "restoreWalletSubtitle": "Geben Sie Ihren Wiederherstellungscode ein, um Ihre bestehende Wallet wiederherzustellen.",
+  "restoreWalletHint": "Wiederherstellungscode eingeben...",
+  "restoreWalletButton": "Wallet wiederherstellen",
+  "restoreWalletInvalidPhrase": "Ungültiger Wiederherstellungscode. Bitte überprüfen und erneut versuchen.",
+  "restoreWalletSuccess": "Wallet erfolgreich wiederhergestellt"
 }

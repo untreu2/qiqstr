@@ -2132,4 +2132,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get replyTo => 'Reply to...';
+
+  @override
+  String get restoreWallet => 'Restore Wallet';
+
+  @override
+  String get restoreWalletSubtitle =>
+      'Enter your recovery phrase to restore your existing wallet.';
+
+  @override
+  String get restoreWalletHint => 'Enter your recovery phrase...';
+
+  @override
+  String get restoreWalletButton => 'Restore Wallet';
+
+  @override
+  String get restoreWalletInvalidPhrase =>
+      'Invalid recovery phrase. Please check and try again.';
+
+  @override
+  String get restoreWalletSuccess => 'Wallet restored successfully';
 }

@@ -3867,6 +3867,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reply to...'**
   String get replyTo;
+
+  /// No description provided for @restoreWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore Wallet'**
+  String get restoreWallet;
+
+  /// No description provided for @restoreWalletSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your recovery phrase to restore your existing wallet.'**
+  String get restoreWalletSubtitle;
+
+  /// No description provided for @restoreWalletHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your recovery phrase...'**
+  String get restoreWalletHint;
+
+  /// No description provided for @restoreWalletButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore Wallet'**
+  String get restoreWalletButton;
+
+  /// No description provided for @restoreWalletInvalidPhrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid recovery phrase. Please check and try again.'**
+  String get restoreWalletInvalidPhrase;
+
+  /// No description provided for @restoreWalletSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet restored successfully'**
+  String get restoreWalletSuccess;
 }
 
 class _AppLocalizationsDelegate

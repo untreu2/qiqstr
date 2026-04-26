@@ -19,6 +19,7 @@ class OnboardingSparkBloc
         super(const OnboardingSparkInitial()) {
     on<OnboardingSparkWalletSetupRequested>(_onWalletSetupRequested);
     on<OnboardingSparkSkipped>(_onSkipped);
+    on<OnboardingSparkRestoreRequested>(_onRestoreRequested);
   }
 
   Future<void> _onWalletSetupRequested(
@@ -53,5 +54,31 @@ class OnboardingSparkBloc
     Emitter<OnboardingSparkState> emit,
   ) {
     emit(const OnboardingSparkSkippedState());
+  }
+
+  Future<void> _onRestoreRequested(
+    OnboardingSparkRestoreRequested event,
+    Emitter<OnboardingSparkState> emit,
+  ) async {
+    emit(const OnboardingSparkLoading());
+
+    try {
+      final npub = _authService.currentUserNpub;
+      if (npub != null && npub.isNotEmpty) {
+        _sparkService.setActiveAccount(npub);
+      }
+
+      final result = await _sparkService.restoreWallet(event.entropyHex);
+
+      if (result.isError) {
+        emit(OnboardingSparkError(result.error ?? 'Failed to restore wallet'));
+        return;
+      }
+
+      emit(const OnboardingSparkReady(shouldNavigate: true));
+    } catch (e) {
+      debugPrint('[OnboardingSparkBloc] Restore error: $e');
+      emit(OnboardingSparkError('Wallet restore failed: $e'));
+    }
   }
 }

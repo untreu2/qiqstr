@@ -794,5 +794,14 @@
   "quotePlural": "alıntılar",
   "noNotesYet": "Henüz not yok",
   "followSomeoneToSeePosts": "Gönderilerini görmek için birini takip edin.",
-  "replyTo": "Yanıt: ..."
+  "replyTo": "Yanıt: ...",
+  "loadingYourFeed": "Feed yükleniyor...",
+  "addAReply": "Yanıt ekle...",
+  "tryDifferentSearchTerm": "Farklı bir arama terimi deneyin.",
+  "restoreWallet": "Cüzdanı Geri Yükle",
+  "restoreWalletSubtitle": "Mevcut cüzdanınızı geri yüklemek için kurtarma ifadenizi girin.",
+  "restoreWalletHint": "Kurtarma ifadenizi girin...",
+  "restoreWalletButton": "Cüzdanı Geri Yükle",
+  "restoreWalletInvalidPhrase": "Geçersiz kurtarma ifadesi. Lütfen kontrol edip tekrar deneyin.",
+  "restoreWalletSuccess": "Cüzdan başarıyla geri yüklendi"
 }

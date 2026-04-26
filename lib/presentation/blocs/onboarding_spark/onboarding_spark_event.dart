@@ -11,3 +11,11 @@ class OnboardingSparkWalletSetupRequested extends OnboardingSparkEvent {
 class OnboardingSparkSkipped extends OnboardingSparkEvent {
   const OnboardingSparkSkipped();
 }
+
+class OnboardingSparkRestoreRequested extends OnboardingSparkEvent {
+  final String entropyHex;
+  const OnboardingSparkRestoreRequested(this.entropyHex);
+
+  @override
+  List<Object?> get props => [entropyHex];
+}

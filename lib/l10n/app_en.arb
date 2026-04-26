@@ -990,5 +990,11 @@
   "tryDifferentSearchTerm": "Try searching with a different term.",
   "noNotesYet": "No notes yet",
   "followSomeoneToSeePosts": "Follow someone to see their posts here.",
-  "replyTo": "Reply to..."
+  "replyTo": "Reply to...",
+  "restoreWallet": "Restore Wallet",
+  "restoreWalletSubtitle": "Enter your recovery phrase to restore your existing wallet.",
+  "restoreWalletHint": "Enter your recovery phrase...",
+  "restoreWalletButton": "Restore Wallet",
+  "restoreWalletInvalidPhrase": "Invalid recovery phrase. Please check and try again.",
+  "restoreWalletSuccess": "Wallet restored successfully"
 }

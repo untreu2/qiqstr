@@ -2150,13 +2150,14 @@ class AppLocalizationsDe extends AppLocalizations {
   String get quotePlural => 'Zitate';
 
   @override
-  String get loadingYourFeed => 'Loading your feed...';
+  String get loadingYourFeed => 'Feed wird geladen...';
 
   @override
-  String get addAReply => 'Add a reply...';
+  String get addAReply => 'Antwort hinzufügen...';
 
   @override
-  String get tryDifferentSearchTerm => 'Try searching with a different term.';
+  String get tryDifferentSearchTerm =>
+      'Versuchen Sie einen anderen Suchbegriff.';
 
   @override
   String get noNotesYet => 'Noch keine Beiträge';
@@ -2167,4 +2168,24 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get replyTo => 'Antwort an...';
+
+  @override
+  String get restoreWallet => 'Wallet wiederherstellen';
+
+  @override
+  String get restoreWalletSubtitle =>
+      'Geben Sie Ihren Wiederherstellungscode ein, um Ihre bestehende Wallet wiederherzustellen.';
+
+  @override
+  String get restoreWalletHint => 'Wiederherstellungscode eingeben...';
+
+  @override
+  String get restoreWalletButton => 'Wallet wiederherstellen';
+
+  @override
+  String get restoreWalletInvalidPhrase =>
+      'Ungültiger Wiederherstellungscode. Bitte überprüfen und erneut versuchen.';
+
+  @override
+  String get restoreWalletSuccess => 'Wallet erfolgreich wiederhergestellt';
 }

@@ -11,6 +11,7 @@ import '../../../presentation/blocs/onboarding_spark/onboarding_spark_bloc.dart'
 import '../../../presentation/blocs/onboarding_spark/onboarding_spark_event.dart';
 import '../../../presentation/blocs/onboarding_spark/onboarding_spark_state.dart';
 import '../../../core/di/modules/services_module.dart';
+import 'restore_wallet_page.dart';
 
 class OnboardingSparkPage extends StatefulWidget {
   final String npub;
@@ -110,12 +111,6 @@ class _OnboardingSparkPageState extends State<OnboardingSparkPage> {
             context,
             Icons.favorite,
             l10n.onboardingCoinosFeatureZap,
-          ),
-          const SizedBox(height: 24),
-          _buildFeatureItem(
-            context,
-            Icons.lock,
-            l10n.onboardingSparkFeatureSelfCustody,
           ),
         ],
       ),
@@ -243,6 +238,17 @@ class _OnboardingSparkPageState extends State<OnboardingSparkPage> {
             ),
           ),
           const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: l10n.restoreWallet,
+              onPressed: isLoading
+                  ? null
+                  : () => _openRestorePage(context),
+              size: ButtonSize.large,
+            ),
+          ),
+          const SizedBox(height: 12),
           GestureDetector(
             onTap: isLoading
                 ? null
@@ -273,5 +279,25 @@ class _OnboardingSparkPageState extends State<OnboardingSparkPage> {
     if (context.mounted) {
       context.go('/home/feed?npub=${Uri.encodeComponent(widget.npub)}');
     }
+  }
+
+  void _openRestorePage(BuildContext context) {
+    final bloc = context.read<OnboardingSparkBloc>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BlocProvider.value(
+          value: bloc,
+          child: BlocListener<OnboardingSparkBloc, OnboardingSparkState>(
+            listener: (ctx, state) {
+              if (state is OnboardingSparkReady && state.shouldNavigate) {
+                Navigator.of(ctx).pop();
+                _navigateToHome(context);
+              }
+            },
+            child: const RestoreWalletPage(),
+          ),
+        ),
+      ),
+    );
   }
 }

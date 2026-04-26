@@ -142,6 +142,37 @@ class SparkService {
     return Result.success(hex.encode(result.data!));
   }
 
+  Future<Result<void>> restoreWallet(String entropyHex) async {
+    try {
+      if (_activeAccountId == null || _activeAccountId!.isEmpty) {
+        return const Result.error('No active account set');
+      }
+
+      final cleaned = entropyHex.trim().replaceAll(' ', '').toLowerCase();
+      if (cleaned.length != 64) {
+        return const Result.error('Invalid recovery phrase length');
+      }
+
+      hex.decode(cleaned);
+
+      await disconnectSdk();
+      _sdk = null;
+
+      await _secureStorage.write(key: _entropyKey, value: cleaned);
+
+      final connectResult = await _getOrConnect();
+      if (connectResult.isError) {
+        await _secureStorage.delete(key: _entropyKey);
+        return Result.error(connectResult.error!);
+      }
+
+      return const Result.success(null);
+    } catch (e) {
+      debugPrint('[SparkService] restoreWallet error: $e');
+      return Result.error('Failed to restore wallet: $e');
+    }
+  }
+
   Future<Result<String?>> getLightningAddress() async {
     try {
       final sdkResult = await _getOrConnect();

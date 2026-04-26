@@ -2069,13 +2069,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get quotePlural => 'alıntılar';
 
   @override
-  String get loadingYourFeed => 'Loading your feed...';
+  String get loadingYourFeed => 'Feed yükleniyor...';
 
   @override
-  String get addAReply => 'Add a reply...';
+  String get addAReply => 'Yanıt ekle...';
 
   @override
-  String get tryDifferentSearchTerm => 'Try searching with a different term.';
+  String get tryDifferentSearchTerm => 'Farklı bir arama terimi deneyin.';
 
   @override
   String get noNotesYet => 'Henüz not yok';
@@ -2086,4 +2086,24 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get replyTo => 'Yanıt: ...';
+
+  @override
+  String get restoreWallet => 'Cüzdanı Geri Yükle';
+
+  @override
+  String get restoreWalletSubtitle =>
+      'Mevcut cüzdanınızı geri yüklemek için kurtarma ifadenizi girin.';
+
+  @override
+  String get restoreWalletHint => 'Kurtarma ifadenizi girin...';
+
+  @override
+  String get restoreWalletButton => 'Cüzdanı Geri Yükle';
+
+  @override
+  String get restoreWalletInvalidPhrase =>
+      'Geçersiz kurtarma ifadesi. Lütfen kontrol edip tekrar deneyin.';
+
+  @override
+  String get restoreWalletSuccess => 'Cüzdan başarıyla geri yüklendi';
 }
