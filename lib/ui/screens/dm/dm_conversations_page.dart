@@ -85,7 +85,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   Widget _buildHeader(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 100, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 100, 16, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
