@@ -163,14 +163,13 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     InteractionService.instance.populateFromNotes(event.notes);
 
+    final notesByIdMap = {for (final n in event.notes) n.id: n};
     final sortedNotes = _feedNotesToMaps(event.notes);
     _sortNotes(sortedNotes, currentState.sortMode);
-    final sortedFeedNotes = List<FeedNote>.from(event.notes)
-      ..sort((a, b) {
-        final aTime = a.repostCreatedAt ?? a.createdAt;
-        final bTime = b.repostCreatedAt ?? b.createdAt;
-        return bTime.compareTo(aTime);
-      });
+    final sortedFeedNotes = sortedNotes
+        .map((m) => notesByIdMap[m['id'] as String? ?? ''])
+        .whereType<FeedNote>()
+        .toList();
 
     final canLoadMore = sortedNotes.length >= _currentLimit;
 
@@ -450,6 +449,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       final currentState = state as FeedLoaded;
       final sortedNotes = List<Map<String, dynamic>>.from(currentState.notes);
       _sortNotes(sortedNotes, event.mode);
+      final feedNoteById = {for (final n in currentState.feedNotes) n.id: n};
+      final sortedFeedNotes = sortedNotes
+          .map((m) => feedNoteById[m['id'] as String? ?? ''])
+          .whereType<FeedNote>()
+          .toList();
       if (_bufferedNotes.isNotEmpty) {
         _bufferedNotes.sort((a, b) {
           final aTime = a.repostCreatedAt ?? a.createdAt;
@@ -457,7 +461,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           return bTime.compareTo(aTime);
         });
       }
-      emit(currentState.copyWith(notes: sortedNotes, sortMode: event.mode));
+      emit(currentState.copyWith(
+          notes: sortedNotes,
+          feedNotes: sortedFeedNotes,
+          sortMode: event.mode));
     }
   }
 

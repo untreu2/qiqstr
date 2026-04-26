@@ -52,6 +52,7 @@ class FeedLoaded extends FeedState {
   @override
   List<Object?> get props => [
         notes,
+        feedNotes,
         profiles,
         currentUserHex,
         canLoadMore,

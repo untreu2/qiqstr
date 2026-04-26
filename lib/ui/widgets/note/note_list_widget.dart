@@ -159,12 +159,21 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       return (0, (widget.notes.length - 1).clamp(0, 9));
     }
 
-    final viewportTop = controller.offset;
-    final viewportBottom = viewportTop + controller.position.viewportDimension;
-    const estimatedNoteHeight = 300.0;
+    final position = controller.position;
+    final viewportTop = position.pixels;
+    final viewportDimension = position.viewportDimension;
+    final viewportBottom = viewportTop + viewportDimension;
+    final totalExtent = position.maxScrollExtent + viewportDimension;
 
-    final firstVisible = (viewportTop / estimatedNoteHeight).floor();
-    final lastVisible = (viewportBottom / estimatedNoteHeight).ceil();
+    if (totalExtent <= 0 || widget.notes.isEmpty) {
+      return (0, (widget.notes.length - 1).clamp(0, 9));
+    }
+
+    final avgNoteHeight = totalExtent / widget.notes.length;
+    final effectiveAvg = avgNoteHeight < 100.0 ? 400.0 : avgNoteHeight;
+
+    final firstVisible = (viewportTop / effectiveAvg).floor();
+    final lastVisible = (viewportBottom / effectiveAvg).ceil();
 
     return (
       firstVisible.clamp(0, widget.notes.length - 1),

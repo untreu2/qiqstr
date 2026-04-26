@@ -63,8 +63,7 @@ class FeedPageState extends State<FeedPage> {
   Timer? _searchDebounceTimer;
   StreamSubscription<FollowSetState>? _followSetSubscription;
   final ValueNotifier<int> _connectedRelaysCount = ValueNotifier(0);
-  int _totalRelays = 0;
-  int _connectedRelays = 0;
+  final ValueNotifier<int> _totalRelaysCount = ValueNotifier(0);
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   UserSearchBloc? _searchBloc;
@@ -227,11 +226,8 @@ class FeedPageState extends State<FeedPage> {
       final summary = status['summary'] as Map<String, dynamic>? ?? {};
       final total = summary['totalRelays'] as int? ?? 0;
       final connected = summary['connectedRelays'] as int? ?? 0;
-      if (_totalRelays != total || _connectedRelays != connected) {
-        setState(() {
-          _totalRelays = total;
-          _connectedRelays = connected;
-        });
+      if (_totalRelaysCount.value != total) {
+        _totalRelaysCount.value = total;
       }
       if (_connectedRelaysCount.value != connected) {
         _connectedRelaysCount.value = connected;
@@ -278,6 +274,7 @@ class FeedPageState extends State<FeedPage> {
     _listSelectorController.dispose();
     _notesNotifier.dispose();
     _connectedRelaysCount.dispose();
+    _totalRelaysCount.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     if (_isLocalBloc) {
@@ -563,13 +560,23 @@ class FeedPageState extends State<FeedPage> {
                                     color: colors.textSecondary,
                                   ),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    '$_connectedRelays/$_totalRelays',
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: colors.textSecondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                   ValueListenableBuilder<int>(
+                                    valueListenable: _connectedRelaysCount,
+                                    builder: (context, connected, _) {
+                                      return ValueListenableBuilder<int>(
+                                        valueListenable: _totalRelaysCount,
+                                        builder: (context, total, _) {
+                                          return Text(
+                                            '$connected/$total',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              color: colors.textSecondary,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -908,7 +915,7 @@ class FeedPageState extends State<FeedPage> {
                         currentUserHex: currentUserHex,
                         notesNotifier: _notesNotifier,
                         profiles: profiles,
-                        isLoading: isLoadingMore,
+                        isLoading: isLoadingMore || isSyncing,
                         canLoadMore: canLoadMore,
                         onLoadMore: () {
                           context
@@ -1001,7 +1008,7 @@ class FeedPageState extends State<FeedPage> {
     final l10n = AppLocalizations.of(context)!;
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
     const double navBarHeight = 55.0;
-    final double bottom = bottomPadding + navBarHeight + 16;
+    final double bottom = bottomPadding + navBarHeight;
     return Positioned(
       bottom: bottom,
       left: 0,
