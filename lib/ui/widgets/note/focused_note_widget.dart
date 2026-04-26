@@ -41,8 +41,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
   late final String _noteId;
   late final String _authorId;
   late final String? _reposterId;
-  late final String? _parentId;
-  late final bool _isReply;
   late final bool _isRepost;
   late final DateTime _timestamp;
   late final String _widgetKey;
@@ -82,10 +80,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
     _noteId = widget.note['id'] as String? ?? '';
     _authorId = widget.note['pubkey'] as String? ?? '';
     _reposterId = widget.note['repostedBy'] as String?;
-    _parentId = widget.note['parentId'] as String? ??
-        widget.note['rootId'] as String?;
-    _isReply = widget.note['isReply'] as bool? ??
-        (_parentId != null && _parentId.isNotEmpty);
     _isRepost = widget.note['isRepost'] as bool? ?? false;
 
     final createdAt = widget.note['created_at'];
@@ -203,53 +197,36 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
               // Author row
               ValueListenableBuilder<_AuthorState>(
                 valueListenable: _stateNotifier,
-                builder: (context, state, _) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: GestureDetector(
-                    onTap: () => _navigateToProfile(_authorId),
-                    child: Row(
-                      children: [
-                        _Avatar(
-                          imageUrl:
-                              state.author?['picture'] as String? ?? '',
-                          radius: 21,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                () {
-                                  final name =
-                                      state.author?['name'] as String? ??
-                                          '';
-                                  return name.isNotEmpty
-                                      ? name
-                                      : (_authorId.length > 8
-                                          ? _authorId.substring(0, 8)
-                                          : _authorId);
-                                }(),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.textPrimary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (_isReply && _parentId != null)
-                                Text(
-                                  l10n.replyTo,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: colors.textSecondary,
-                                  ),
-                                ),
-                            ],
+                builder: (context, state, _) => GestureDetector(
+                  onTap: () => _navigateToProfile(_authorId),
+                  child: Row(
+                    children: [
+                      _Avatar(
+                        imageUrl:
+                            state.author?['picture'] as String? ?? '',
+                        radius: 21,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          () {
+                            final name =
+                                state.author?['name'] as String? ?? '';
+                            return name.isNotEmpty
+                                ? name
+                                : (_authorId.length > 8
+                                    ? _authorId.substring(0, 8)
+                                    : _authorId);
+                          }(),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -277,14 +254,11 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
               const SizedBox(height: 10),
 
               // Timestamp — absolute only
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                child: Text(
-                  _absoluteTimestamp(),
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: colors.textSecondary,
-                  ),
+              Text(
+                _absoluteTimestamp(),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: colors.textSecondary,
                 ),
               ),
 
@@ -292,22 +266,19 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget>
 
               // Interaction bar
               RepaintBoundary(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: widget.currentUserHex.isNotEmpty
-                      ? InteractionBar(
-                          noteId: _getInteractionNoteId(),
-                          currentUserHex: widget.currentUserHex,
-                          note: widget.note,
-                          isBigSize: true,
-                        )
-                      : const SizedBox(height: 36),
-                ),
+                child: widget.currentUserHex.isNotEmpty
+                    ? InteractionBar(
+                        noteId: _getInteractionNoteId(),
+                        currentUserHex: widget.currentUserHex,
+                        note: widget.note,
+                        isBigSize: true,
+                      )
+                    : const SizedBox(height: 36),
               ),
 
               if (widget.quoteCount > 0 && widget.onQuotesTap != null)
                 Padding(
-                  padding: const EdgeInsets.only(left: 5, top: 4),
+                  padding: const EdgeInsets.only(top: 4),
                   child: GestureDetector(
                     onTap: widget.onQuotesTap,
                     child: Text(
@@ -370,23 +341,30 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final size = radius * 2;
     if (imageUrl.isEmpty) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundColor: colors.surfaceTransparent,
-        child: Icon(Icons.person, size: radius, color: colors.textSecondary),
+      return SizedBox(
+        width: size,
+        height: size,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: colors.surfaceTransparent,
+          ),
+          child: Icon(Icons.person, size: radius, color: colors.textSecondary),
+        ),
       );
     }
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    final cacheDim = (radius * 2 * dpr).ceil();
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: colors.surfaceTransparent,
+    final cacheDim = (size * dpr).ceil();
+    return SizedBox(
+      width: size,
+      height: size,
       child: ClipOval(
         child: CachedNetworkImage(
           imageUrl: imageUrl,
-          width: radius * 2,
-          height: radius * 2,
+          width: size,
+          height: size,
           fit: BoxFit.cover,
           fadeInDuration: Duration.zero,
           fadeOutDuration: Duration.zero,
