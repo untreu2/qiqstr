@@ -422,6 +422,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildProfileNotes(BuildContext context, ProfileState state) {
     if (state is ProfileLoaded) {
+      if (state.notes.isEmpty && state.isSyncing) {
+        return const SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        );
+      }
+
       _notesNotifier.value = state.notes;
 
       return widgets.NoteListWidget(
@@ -455,6 +466,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildProfileReplies(BuildContext context, ProfileState state) {
     if (state is ProfileLoaded) {
+      if (state.replies.isEmpty && state.isSyncing) {
+        return const SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        );
+      }
+
       _repliesNotifier.value = state.replies;
 
       return widgets.NoteListWidget(

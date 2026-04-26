@@ -978,14 +978,24 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  _formatCount(state.followerCount),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.textPrimary,
+                if (state.isLoadingCounts)
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: context.colors.textSecondary,
+                    ),
+                  )
+                else
+                  Text(
+                    _formatCount(state.followerCount),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
                   ),
-                ),
                 Text(
                   ' ${l10n.followers}',
                   style: TextStyle(

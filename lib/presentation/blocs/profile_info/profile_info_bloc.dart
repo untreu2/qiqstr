@@ -72,7 +72,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     emit(ProfileInfoLoaded(
       user: event.user ?? {},
       currentUserHex: currentUserHex,
-      isLoadingCounts: false,
+      isLoadingCounts: true,
       followingCount: followingCount,
     ));
 
@@ -157,10 +157,15 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   }
 
   void _syncCountsInBackground(ProfileInfoLoaded currentState) {
-    final pubkeyHex = currentState.user['pubkey'] as String? ??
-        currentState.user['pubkey'] as String? ??
-        userPubkeyHex;
-    if (pubkeyHex.isEmpty) return;
+    final rawPubkey = currentState.user['pubkey'] as String? ?? '';
+    final pubkeyHex = rawPubkey.isNotEmpty ? rawPubkey : userPubkeyHex;
+    if (pubkeyHex.isEmpty) {
+      if (!isClosed && state is ProfileInfoLoaded) {
+        add(_InternalStateUpdate(
+            (state as ProfileInfoLoaded).copyWith(isLoadingCounts: false)));
+      }
+      return;
+    }
 
     Future.wait([
       _profileRepository.getFollowerCount(pubkeyHex),
@@ -173,8 +178,14 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
         followerCount: followerCount,
         followingCount: follows?.length ?? 0,
+        isLoadingCounts: false,
       )));
-    }).catchError((_) {});
+    }).catchError((_) {
+      if (isClosed || state is! ProfileInfoLoaded) return;
+      add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+        isLoadingCounts: false,
+      )));
+    });
 
     _calculateFollowScoreInBackground(pubkeyHex, currentState.currentUserHex);
   }
