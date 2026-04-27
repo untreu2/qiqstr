@@ -70,15 +70,6 @@ class FeedNoteDeleted extends FeedEvent {
   List<Object?> get props => [noteId];
 }
 
-class FeedUserNotePublished extends FeedEvent {
-  final Map<String, dynamic> note;
-
-  const FeedUserNotePublished(this.note);
-
-  @override
-  List<Object?> get props => [note];
-}
-
 class FeedProfilesLoaded extends FeedEvent {
   final Map<String, Map<String, dynamic>> profiles;
 

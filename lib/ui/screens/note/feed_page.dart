@@ -35,6 +35,7 @@ import '../../../data/services/auth_service.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/qr_scanner_widget.dart';
+import '../../../data/services/follow_set_service.dart';
 import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
 import '../../../presentation/blocs/follow_set/follow_set_state.dart';
 
@@ -88,6 +89,7 @@ class FeedPageState extends State<FeedPage> {
         followingRepository: AppDI.get<FollowingRepository>(),
         profileRepository: AppDI.get<ProfileRepository>(),
         syncService: AppDI.get<SyncService>(),
+        followSetService: FollowSetService.instance,
       );
       _isLocalBloc = true;
     } else {
@@ -911,7 +913,7 @@ class FeedPageState extends State<FeedPage> {
                       )
                     else
                       widgets.NoteListWidget(
-                        notes: notes,
+                        notes: notes.map((n) => n.toMap()).toList(),
                         currentUserHex: currentUserHex,
                         notesNotifier: _notesNotifier,
                         profiles: profiles,
