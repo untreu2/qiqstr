@@ -13,7 +13,7 @@ class RepositoriesModule extends DIModule {
     final events = AppDI.get<RustDatabaseService>();
 
     AppDI.registerLazySingleton<FeedRepository>(
-        () => FeedRepository(events: events));
+        () => FeedRepositoryImpl(events: events));
     AppDI.registerLazySingleton<ProfileRepository>(
         () => ProfileRepository(events: events));
     AppDI.registerLazySingleton<NotificationRepository>(

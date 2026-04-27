@@ -10,10 +10,75 @@ import '../services/auth_service.dart';
 import '../services/encrypted_mute_service.dart';
 import '../services/rust_database_service.dart';
 
-class FeedRepository {
+class EmbeddedIdsResult {
+  final List<String> quoteEventIds;
+  final List<String> articleAuthorPubkeys;
+
+  const EmbeddedIdsResult({
+    required this.quoteEventIds,
+    required this.articleAuthorPubkeys,
+  });
+}
+
+abstract interface class FeedRepository {
+  Stream<List<FeedNote>> watchFeed(
+    String userPubkey, {
+    List<String>? authors,
+    int limit,
+    String sortMode,
+  });
+
+  Future<List<FeedNote>> getFeed(
+    String userPubkey, {
+    List<String>? authors,
+    int limit,
+  });
+
+  Stream<List<FeedNote>> watchNotes(String pubkey, {int limit});
+
+  Future<List<FeedNote>> getNotes(String pubkey,
+      {int limit, int? untilTimestamp});
+
+  Stream<List<FeedNote>> watchUserReplies(String pubkey, {int limit});
+
+  Future<List<FeedNote>> getUserReplies(String pubkey,
+      {int limit, int? untilTimestamp});
+
+  Stream<({List<FeedNote> notes, List<FeedNote> replies})>
+      watchProfileNotesAndReplies(
+    String pubkey, {
+    int notesLimit,
+    int repliesLimit,
+    int debounceMs,
+  });
+
+  Stream<List<FeedNote>> watchLikes(String pubkey, {int limit});
+
+  Future<List<FeedNote>> getLikes(String pubkey, {int limit});
+
+  Stream<List<FeedNote>> watchHashtag(String hashtag, {int limit});
+
+  Future<FeedNote?> getNote(String noteId);
+
+  Stream<FeedNote?> watchNote(String noteId);
+
+  Future<List<FeedNote>> getThreadReplies(String noteId, {int limit});
+
+  Stream<List<FeedNote>> watchThreadReplies(String noteId, {int limit});
+
+  Future<List<FeedNote>> getNotesByIds(List<String> noteIds);
+
+  Future<List<FeedNote>> searchNotes(String query, {int limit});
+
+  EmbeddedIdsResult extractEmbeddedIds(List<String> contents);
+
+  Future<void> save(List<Map<String, dynamic>> notes);
+}
+
+class FeedRepositoryImpl implements FeedRepository {
   final RustDatabaseService _events;
 
-  FeedRepository({required RustDatabaseService events}) : _events = events;
+  FeedRepositoryImpl({required RustDatabaseService events}) : _events = events;
 
   List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
   List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
@@ -26,10 +91,12 @@ class FeedRepository {
         .asyncMap((_) => fetch());
   }
 
+  @override
   Stream<List<FeedNote>> watchFeed(
     String userPubkey, {
     List<String>? authors,
     int limit = 100,
+    String sortMode = 'latest',
   }) async* {
     if (userPubkey.isEmpty || userPubkey.length != 64) {
       yield [];
@@ -40,29 +107,29 @@ class FeedRepository {
       return;
     }
 
-    final initial = await _fetchFeed(userPubkey, authors, limit);
+    final initial = await _fetchFeed(userPubkey, authors, limit, sortMode);
     if (initial.isNotEmpty) yield initial;
 
     yield* _events.onFeedChange
         .debounceTime(const Duration(milliseconds: 300))
         .startWith(null)
-        .asyncMap((_) => _fetchFeed(userPubkey, authors, limit));
+        .asyncMap((_) => _fetchFeed(userPubkey, authors, limit, sortMode));
   }
 
   Future<List<FeedNote>> _fetchFeed(
     String userPubkey,
     List<String>? authors,
     int limit,
+    String sortMode,
   ) async {
     try {
-      final json = await rust_db.dbGetHydratedFeedNotes(
+      final json = await rust_db.dbGetHydratedFeedNotesSorted(
         userPubkeyHex: userPubkey,
         authorsHex: authors,
         limit: limit,
-        mutedPubkeys: _mutedPubkeys,
-        mutedWords: _mutedWords,
         filterReplies: true,
         currentUserPubkeyHex: _currentUserHex,
+        sortMode: sortMode,
       );
       final decoded = jsonDecode(json) as List<dynamic>;
       return decoded
@@ -75,13 +142,15 @@ class FeedRepository {
     }
   }
 
+  @override
   Future<List<FeedNote>> getFeed(
     String userPubkey, {
     List<String>? authors,
     int limit = 100,
   }) =>
-      _fetchFeed(userPubkey, authors, limit);
+      _fetchFeed(userPubkey, authors, limit, 'latest');
 
+  @override
   Stream<List<FeedNote>> watchNotes(String pubkey, {int limit = 50}) async* {
     final initial = await _fetchNotes(pubkey, limit);
     if (initial.isNotEmpty) {
@@ -111,6 +180,7 @@ class FeedRepository {
     }
   }
 
+  @override
   Future<List<FeedNote>> getNotes(String pubkey,
       {int limit = 50, int? untilTimestamp}) async {
     final maps =
@@ -118,6 +188,7 @@ class FeedRepository {
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
+  @override
   Stream<List<FeedNote>> watchUserReplies(String pubkey,
       {int limit = 50}) async* {
     final initial = await _fetchUserReplies(pubkey, limit);
@@ -147,6 +218,7 @@ class FeedRepository {
     }
   }
 
+  @override
   Future<List<FeedNote>> getUserReplies(String pubkey,
       {int limit = 50, int? untilTimestamp}) async {
     final maps =
@@ -154,12 +226,16 @@ class FeedRepository {
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
+  @override
   Stream<({List<FeedNote> notes, List<FeedNote> replies})>
-      watchProfileNotesAndReplies(String pubkey,
-          {int notesLimit = 200,
-          int repliesLimit = 200,
-          int debounceMs = 500}) async* {
-    Future<({List<FeedNote> notes, List<FeedNote> replies})> fetchBoth() async {
+      watchProfileNotesAndReplies(
+    String pubkey, {
+    int notesLimit = 200,
+    int repliesLimit = 200,
+    int debounceMs = 500,
+  }) async* {
+    Future<({List<FeedNote> notes, List<FeedNote> replies})>
+        fetchBoth() async {
       final results = await Future.wait([
         _fetchNotes(pubkey, notesLimit),
         _fetchUserReplies(pubkey, repliesLimit),
@@ -178,6 +254,7 @@ class FeedRepository {
         .asyncMap((_) => fetchBoth());
   }
 
+  @override
   Stream<List<FeedNote>> watchLikes(String pubkey, {int limit = 50}) async* {
     final initial = await _fetchLikes(pubkey, limit);
     if (initial.isNotEmpty) {
@@ -205,11 +282,13 @@ class FeedRepository {
     }
   }
 
+  @override
   Future<List<FeedNote>> getLikes(String pubkey, {int limit = 50}) async {
     final maps = await _fetchLikes(pubkey, limit);
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
+  @override
   Stream<List<FeedNote>> watchHashtag(String hashtag, {int limit = 100}) {
     return _onChange(() async {
       try {
@@ -229,6 +308,7 @@ class FeedRepository {
     }).map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
+  @override
   Future<FeedNote?> getNote(String noteId) async {
     try {
       final json = await rust_db.dbGetHydratedNote(
@@ -244,10 +324,12 @@ class FeedRepository {
     }
   }
 
-  Stream<FeedNote?> watchNote(String noteId) async* {
-    yield await getNote(noteId);
+  @override
+  Stream<FeedNote?> watchNote(String noteId) {
+    return _onChange(() => getNote(noteId));
   }
 
+  @override
   Future<List<FeedNote>> getThreadReplies(String noteId,
       {int limit = 500}) async {
     try {
@@ -269,6 +351,7 @@ class FeedRepository {
     }
   }
 
+  @override
   Stream<List<FeedNote>> watchThreadReplies(String noteId, {int limit = 100}) {
     return _events.onChange
         .debounceTime(const Duration(milliseconds: 200))
@@ -276,6 +359,7 @@ class FeedRepository {
         .asyncMap((_) => getThreadReplies(noteId, limit: limit));
   }
 
+  @override
   Future<List<FeedNote>> getNotesByIds(List<String> noteIds) async {
     if (noteIds.isEmpty) return [];
     try {
@@ -296,6 +380,7 @@ class FeedRepository {
     }
   }
 
+  @override
   Future<List<FeedNote>> searchNotes(String query, {int limit = 50}) async {
     try {
       final json = await rust_db.dbSearchNotes(query: query, limit: limit);
@@ -310,6 +395,25 @@ class FeedRepository {
     }
   }
 
+  @override
+  EmbeddedIdsResult extractEmbeddedIds(List<String> contents) {
+    try {
+      final (quoteIds, articlePubkeys) =
+          rust_db.extractEmbeddedIdsBatchTyped(contents: contents);
+      return EmbeddedIdsResult(
+        quoteEventIds: quoteIds,
+        articleAuthorPubkeys: articlePubkeys,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('[FeedRepository] extractEmbeddedIds error: $e');
+      }
+      return const EmbeddedIdsResult(
+          quoteEventIds: [], articleAuthorPubkeys: []);
+    }
+  }
+
+  @override
   Future<void> save(List<Map<String, dynamic>> notes) async {
     if (notes.isEmpty) return;
     try {
