@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
@@ -7,6 +7,76 @@ use nostr_sdk::prelude::*;
 use regex::Regex;
 
 use super::relay::get_client_pub;
+
+// ---------------------------------------------------------------------------
+// Global mute state — set once from Dart, used by all hydrate calls
+// ---------------------------------------------------------------------------
+
+struct MuteState {
+    pubkeys: Vec<String>,
+    words: Vec<String>,
+}
+
+static ACTIVE_MUTE: OnceLock<RwLock<MuteState>> = OnceLock::new();
+
+fn mute_state() -> &'static RwLock<MuteState> {
+    ACTIVE_MUTE.get_or_init(|| {
+        RwLock::new(MuteState {
+            pubkeys: Vec::new(),
+            words: Vec::new(),
+        })
+    })
+}
+
+pub fn set_active_mute_list(muted_pubkeys: Vec<String>, muted_words: Vec<String>) {
+    if let Ok(mut state) = mute_state().write() {
+        state.pubkeys = muted_pubkeys;
+        state.words = muted_words;
+    }
+}
+
+fn active_muted_pubkeys() -> Vec<String> {
+    mute_state()
+        .read()
+        .map(|s| s.pubkeys.clone())
+        .unwrap_or_default()
+}
+
+fn active_muted_words() -> Vec<String> {
+    mute_state()
+        .read()
+        .map(|s| s.words.clone())
+        .unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
+// Realtime deduplication cache
+// ---------------------------------------------------------------------------
+
+static SEEN_EVENT_IDS: OnceLock<RwLock<HashSet<String>>> = OnceLock::new();
+static SEEN_EVENT_IDS_MAX: usize = 2000;
+
+fn seen_ids() -> &'static RwLock<HashSet<String>> {
+    SEEN_EVENT_IDS.get_or_init(|| RwLock::new(HashSet::new()))
+}
+
+#[flutter_rust_bridge::frb(sync)]
+pub fn is_event_new_and_track(event_id: String) -> bool {
+    if event_id.is_empty() {
+        return false;
+    }
+    let Ok(mut set) = seen_ids().write() else {
+        return true;
+    };
+    if set.contains(&event_id) {
+        return false;
+    }
+    if set.len() >= SEEN_EVENT_IDS_MAX {
+        set.clear();
+    }
+    set.insert(event_id);
+    true
+}
 
 fn is_future_dated(event: &Event) -> bool {
     let now = SystemTime::now()
@@ -2996,3 +3066,523 @@ pub async fn db_get_follow_sets(
 
     Ok(serde_json::to_string(&results)?)
 }
+
+// ---------------------------------------------------------------------------
+// #4  sort_mode: hydrate with interaction-score sort inside Rust
+// ---------------------------------------------------------------------------
+
+pub async fn db_get_hydrated_feed_notes_sorted(
+    user_pubkey_hex: String,
+    authors_hex: Option<Vec<String>>,
+    limit: u32,
+    filter_replies: bool,
+    current_user_pubkey_hex: Option<String>,
+    sort_mode: String,
+) -> Result<String> {
+    let muted_pubkeys = active_muted_pubkeys();
+    let muted_words = active_muted_words();
+
+    let client = get_client_pub().await?;
+
+    let resolved_authors: Vec<String> = match authors_hex {
+        Some(list) => list,
+        None => {
+            let pk = PublicKey::from_hex(&user_pubkey_hex)?;
+            let contacts = client.database().contacts_public_keys(pk).await?;
+            contacts.into_iter().map(|k| k.to_hex()).collect()
+        }
+    };
+
+    let authors: Vec<PublicKey> = resolved_authors
+        .iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .collect();
+
+    let filter = Filter::new()
+        .authors(authors)
+        .kinds([Kind::TextNote, Kind::Repost])
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let filtered: Vec<Event> = events
+        .into_iter()
+        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+
+    let json_str =
+        hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
+
+    if sort_mode == "most_interacted" {
+        let mut notes: Vec<serde_json::Value> = serde_json::from_str(&json_str)?;
+        notes.sort_by(|a, b| {
+            let score_a = a["reactionCount"].as_i64().unwrap_or(0)
+                + a["repostCount"].as_i64().unwrap_or(0)
+                + a["replyCount"].as_i64().unwrap_or(0)
+                + a["zapCount"].as_i64().unwrap_or(0);
+            let score_b = b["reactionCount"].as_i64().unwrap_or(0)
+                + b["repostCount"].as_i64().unwrap_or(0)
+                + b["replyCount"].as_i64().unwrap_or(0)
+                + b["zapCount"].as_i64().unwrap_or(0);
+            let time_a = a["repostCreatedAt"]
+                .as_i64()
+                .unwrap_or_else(|| a["created_at"].as_i64().unwrap_or(0));
+            let time_b = b["repostCreatedAt"]
+                .as_i64()
+                .unwrap_or_else(|| b["created_at"].as_i64().unwrap_or(0));
+            score_b.cmp(&score_a).then_with(|| time_b.cmp(&time_a))
+        });
+        Ok(serde_json::to_string(&notes)?)
+    } else {
+        Ok(json_str)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #2  Thread structure builder — replaces _computeThreadStructure in Dart
+// ---------------------------------------------------------------------------
+
+pub async fn db_get_hydrated_thread_structure(
+    root_note_id: String,
+    current_user_pubkey_hex: Option<String>,
+    limit: u32,
+) -> Result<String> {
+    let muted_pubkeys = active_muted_pubkeys();
+    let muted_words = active_muted_words();
+
+    let client = get_client_pub().await?;
+    let root_id = EventId::from_hex(&root_note_id)?;
+
+    let root_event = client.database().event_by_id(&root_id).await?;
+    let root_event = match root_event {
+        Some(e) => e,
+        None => return Ok(serde_json::json!({"error": "not_found"}).to_string()),
+    };
+
+    let reply_filter = Filter::new()
+        .kind(Kind::TextNote)
+        .event(root_id)
+        .limit(limit as usize);
+    let reply_events = client.database().query(reply_filter).await?;
+
+    let mut all_events: Vec<Event> = vec![root_event.clone()];
+    for ev in reply_events.into_iter() {
+        if ev.id != root_event.id
+            && !is_event_muted(&ev, &muted_pubkeys, &muted_words)
+        {
+            all_events.push(ev);
+        }
+    }
+
+    let hydrated_str =
+        hydrate_notes(&client, &all_events, false, current_user_pubkey_hex).await?;
+    let hydrated: Vec<serde_json::Value> = serde_json::from_str(&hydrated_str)?;
+
+    if hydrated.is_empty() {
+        return Ok(serde_json::json!({"error": "empty"}).to_string());
+    }
+
+    let mut notes_map: HashMap<String, serde_json::Value> = HashMap::new();
+    for note in &hydrated {
+        if let Some(id) = note["id"].as_str() {
+            notes_map.insert(id.to_string(), note.clone());
+        }
+    }
+
+    let root_note = notes_map
+        .get(&root_note_id)
+        .cloned()
+        .unwrap_or_else(|| hydrated[0].clone());
+
+    let reply_ids: HashSet<String> = hydrated
+        .iter()
+        .filter_map(|n| n["id"].as_str().map(|s| s.to_string()))
+        .collect();
+
+    let mut children_map: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+    let mut all_replies: Vec<serde_json::Value> = Vec::new();
+    let mut quote_count: usize = 0;
+
+    for note in &hydrated {
+        let note_id = note["id"].as_str().unwrap_or("");
+        if note_id == root_note_id {
+            continue;
+        }
+
+        let is_quote = _is_note_quote_of(note, &root_note_id);
+        if is_quote {
+            quote_count += 1;
+        } else {
+            all_replies.push(note.clone());
+        }
+
+        let parent_id = _resolve_parent_id(note, &root_note_id, &reply_ids);
+        children_map
+            .entry(parent_id)
+            .or_default()
+            .push(note.clone());
+    }
+
+    for children in children_map.values_mut() {
+        children.sort_by(|a, b| {
+            let ta = a["created_at"].as_i64().unwrap_or(0);
+            let tb = b["created_at"].as_i64().unwrap_or(0);
+            ta.cmp(&tb)
+        });
+    }
+
+    let notes_map_val: serde_json::Value =
+        serde_json::Value::Object(notes_map.into_iter().collect());
+    let children_map_val: serde_json::Value = serde_json::Value::Object(
+        children_map
+            .into_iter()
+            .map(|(k, v)| (k, serde_json::json!(v)))
+            .collect(),
+    );
+
+    Ok(serde_json::json!({
+        "rootNote": root_note,
+        "chainNotes": [root_note.clone()],
+        "childrenMap": children_map_val,
+        "notesMap": notes_map_val,
+        "allReplies": all_replies,
+        "quoteCount": quote_count,
+        "totalReplies": all_replies.len(),
+    })
+    .to_string())
+}
+
+fn _is_note_quote_of(note: &serde_json::Value, target_id: &str) -> bool {
+    let Some(tags) = note["tags"].as_array() else {
+        return false;
+    };
+    for tag in tags {
+        let Some(arr) = tag.as_array() else { continue };
+        if arr.len() >= 2 && arr[0].as_str() == Some("e") {
+            let ref_id = arr[1].as_str().unwrap_or("");
+            if ref_id == target_id {
+                let marker = arr.get(3).and_then(|v| v.as_str()).unwrap_or("");
+                if marker == "mention" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn _resolve_parent_id(
+    note: &serde_json::Value,
+    root_note_id: &str,
+    known_ids: &HashSet<String>,
+) -> String {
+    if let Some(pid) = note["parentId"].as_str() {
+        if !pid.is_empty() && (pid == root_note_id || known_ids.contains(pid)) {
+            return pid.to_string();
+        }
+    }
+    if let Some(rid) = note["rootId"].as_str() {
+        if !rid.is_empty() && (rid == root_note_id || known_ids.contains(rid)) {
+            return rid.to_string();
+        }
+    }
+    root_note_id.to_string()
+}
+
+// ---------------------------------------------------------------------------
+// #5  Tag extraction helpers — replace Dart loops in SyncService
+// ---------------------------------------------------------------------------
+
+pub fn extract_pubkeys_from_events(events_json: String) -> Result<Vec<String>> {
+    let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
+    let mut pubkeys: HashSet<String> = HashSet::new();
+
+    for event in &events {
+        if let Some(pk) = event["pubkey"].as_str() {
+            if !pk.is_empty() {
+                pubkeys.insert(pk.to_string());
+            }
+        }
+        let kind = event["kind"].as_i64().unwrap_or(1);
+        if kind == 6 {
+            if let Some(tags) = event["tags"].as_array() {
+                for tag in tags {
+                    if let Some(arr) = tag.as_array() {
+                        if arr.len() > 1 && arr[0].as_str() == Some("p") {
+                            if let Some(pk) = arr[1].as_str() {
+                                if !pk.is_empty() {
+                                    pubkeys.insert(pk.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(pubkeys.into_iter().collect())
+}
+
+pub fn filter_reply_event_ids(events_json: String) -> Result<Vec<String>> {
+    let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
+    let mut ids: Vec<String> = Vec::new();
+
+    for event in &events {
+        let kind = event["kind"].as_i64().unwrap_or(1);
+        if kind != 1 {
+            continue;
+        }
+        let id = event["id"].as_str().unwrap_or("");
+        if id.is_empty() {
+            continue;
+        }
+        let has_parent = event["tags"].as_array().map_or(false, |tags| {
+            tags.iter().any(|tag| {
+                tag.as_array().map_or(false, |arr| {
+                    if arr.len() >= 2 && arr[0].as_str() == Some("e") {
+                        let marker = arr.get(3).and_then(|v| v.as_str()).unwrap_or("");
+                        marker == "root" || marker == "reply" || marker.is_empty()
+                    } else {
+                        false
+                    }
+                })
+            })
+        });
+        if has_parent {
+            ids.push(id.to_string());
+        }
+    }
+
+    Ok(ids)
+}
+
+pub fn extract_repost_original_ids(events_json: String) -> Result<Vec<String>> {
+    let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
+    let mut ids: HashSet<String> = HashSet::new();
+
+    for event in &events {
+        let kind = event["kind"].as_i64().unwrap_or(1);
+        if kind != 6 {
+            continue;
+        }
+        if let Some(tags) = event["tags"].as_array() {
+            for tag in tags {
+                if let Some(arr) = tag.as_array() {
+                    if arr.len() > 1 && arr[0].as_str() == Some("e") {
+                        if let Some(id) = arr[1].as_str() {
+                            if !id.is_empty() {
+                                ids.insert(id.to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(ids.into_iter().collect())
+}
+
+pub async fn queue_missing_repost_originals(since_timestamp: i64) -> Result<Vec<String>> {
+    let client = get_client_pub().await?;
+
+    let filter = Filter::new()
+        .kind(Kind::Repost)
+        .since(Timestamp::from(since_timestamp as u64))
+        .limit(100);
+    let events = client.database().query(filter).await?;
+
+    let mut original_ids: HashSet<String> = HashSet::new();
+    for ev in events.iter() {
+        for tag in ev.tags.iter() {
+            let tag_kind = tag.kind();
+            if matches!(
+                tag_kind,
+                TagKind::SingleLetter(SingleLetterTag {
+                    character: Alphabet::E,
+                    ..
+                })
+            ) {
+                if let Some(ref_id) = tag.content() {
+                    let hex = ref_id.to_string();
+                    if !hex.is_empty() {
+                        original_ids.insert(hex);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut missing: Vec<String> = Vec::new();
+    for id_hex in &original_ids {
+        if let Ok(eid) = EventId::from_hex(id_hex) {
+            let status = client.database().check_id(&eid).await;
+            if !matches!(status, Ok(DatabaseEventStatus::Saved)) {
+                missing.push(id_hex.clone());
+            }
+        }
+    }
+
+    Ok(missing)
+}
+
+// ---------------------------------------------------------------------------
+// #6  extract_embedded_ids_batch_typed — typed return, no JSON round-trip
+// ---------------------------------------------------------------------------
+
+#[flutter_rust_bridge::frb(sync)]
+pub fn extract_embedded_ids_batch_typed(contents: Vec<String>) -> (Vec<String>, Vec<String>) {
+    let quote_re = content_quote_re();
+    let article_re = content_article_re();
+
+    let mut quote_event_ids: HashSet<String> = HashSet::new();
+    let mut article_author_pubkeys: HashSet<String> = HashSet::new();
+
+    for content in &contents {
+        for caps in quote_re.captures_iter(content) {
+            if let Some(m) = caps.get(1) {
+                let bech32 = m.as_str();
+                if bech32.starts_with("note1") {
+                    if let Ok(id) = EventId::from_bech32(bech32) {
+                        quote_event_ids.insert(id.to_hex());
+                    }
+                } else if bech32.starts_with("nevent1") {
+                    if let Ok(nevent) = Nip19Event::from_bech32(bech32) {
+                        quote_event_ids.insert(nevent.event_id.to_hex());
+                    }
+                }
+            }
+        }
+        for caps in article_re.captures_iter(content) {
+            if let Some(m) = caps.get(1) {
+                let bech32 = m.as_str();
+                if let Ok(coord) = Coordinate::from_bech32(bech32) {
+                    if coord.kind == Kind::LongFormTextNote {
+                        article_author_pubkeys.insert(coord.public_key.to_hex());
+                    }
+                }
+            }
+        }
+    }
+
+    (
+        quote_event_ids.into_iter().collect(),
+        article_author_pubkeys.into_iter().collect(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// #8  db_get_mute_list_content — only the content field, not full event JSON
+// ---------------------------------------------------------------------------
+
+pub async fn db_get_mute_list_content(pubkey_hex: String) -> Result<Option<String>> {
+    let client = get_client_pub().await?;
+    let pk = PublicKey::from_hex(&pubkey_hex)?;
+    let filter = Filter::new().author(pk).kind(Kind::MuteList).limit(1);
+    let events = client.database().query(filter).await?;
+    Ok(events.first_owned().map(|e| e.content.clone()))
+}
+
+// ---------------------------------------------------------------------------
+// #10  db_save_following_list_from_event — parse p-tags inside Rust
+// ---------------------------------------------------------------------------
+
+pub async fn db_save_following_list_from_event(
+    event_json: String,
+    self_pubkey_hex: String,
+) -> Result<()> {
+    let client = get_client_pub().await?;
+    let event_val: serde_json::Value = serde_json::from_str(&event_json)?;
+    let self_pk = PublicKey::from_hex(&self_pubkey_hex)?;
+
+    let tags = event_val["tags"].as_array().cloned().unwrap_or_default();
+    let mut follow_pubkeys: HashSet<String> = HashSet::new();
+    follow_pubkeys.insert(self_pubkey_hex.clone());
+
+    for tag in &tags {
+        if let Some(arr) = tag.as_array() {
+            if arr.len() > 1 && arr[0].as_str() == Some("p") {
+                if let Some(pk_hex) = arr[1].as_str() {
+                    if !pk_hex.is_empty() {
+                        follow_pubkeys.insert(pk_hex.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    let contact_tags: Vec<Tag> = follow_pubkeys
+        .iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .map(|pk| Tag::public_key(pk))
+        .collect();
+
+    let event = EventBuilder::new(Kind::ContactList, "")
+        .tags(contact_tags)
+        .custom_created_at(Timestamp::now())
+        .sign_with_keys(&Keys::generate())?;
+
+    let raw: serde_json::Value = serde_json::from_str(&event.as_json())?;
+    let mut raw = raw;
+    raw["pubkey"] = serde_json::Value::String(self_pk.to_hex());
+    if let Ok(patched) = Event::from_json(raw.to_string()) {
+        let _ = client.database().save_event(&patched).await;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// #12  db_get_notifications_missing_profiles
+// ---------------------------------------------------------------------------
+
+pub async fn db_get_notifications_missing_profiles(
+    user_pubkey_hex: String,
+    limit: u32,
+) -> Result<Vec<String>> {
+    let client = get_client_pub().await?;
+    let pk = PublicKey::from_hex(&user_pubkey_hex)?;
+
+    let filter = Filter::new()
+        .pubkey(pk)
+        .kinds([Kind::TextNote, Kind::Repost, Kind::Reaction, Kind::ZapReceipt])
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let mut pubkeys: HashSet<String> = HashSet::new();
+    for ev in events.iter() {
+        let pk_hex = ev.pubkey.to_hex();
+        if pk_hex != user_pubkey_hex {
+            pubkeys.insert(pk_hex);
+        }
+    }
+
+    if pubkeys.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let authors: Vec<PublicKey> = pubkeys
+        .iter()
+        .filter_map(|h| PublicKey::from_hex(h).ok())
+        .collect();
+
+    let profile_filter = Filter::new().authors(authors).kind(Kind::Metadata);
+    let profile_events = client.database().query(profile_filter).await?;
+
+    let existing_profiles: HashSet<String> =
+        profile_events.iter().map(|e| e.pubkey.to_hex()).collect();
+
+    let missing: Vec<String> = pubkeys
+        .into_iter()
+        .filter(|pk| !existing_profiles.contains(pk))
+        .collect();
+
+    Ok(missing)
+}
+
+// ---------------------------------------------------------------------------
+// #1  set_active_mute_list is defined at the top of this file
+// #11 is_event_new_and_track is defined at the top of this file
+// ---------------------------------------------------------------------------
+

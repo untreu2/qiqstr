@@ -6,8 +6,17 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `content_article_re`, `content_link_re`, `content_media_re`, `content_mention_re`, `content_quote_re`, `extract_bolt11_amount_sats`, `extract_content_references`, `extract_note_references`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes_pub`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `is_future_dated`, `json_tags_to_vecs`, `metadata_to_flat_json`, `tags_from_event`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `NoteReferences`
+// These functions are ignored because they are not marked as `pub`: `_is_note_quote_of`, `_resolve_parent_id`, `active_muted_pubkeys`, `active_muted_words`, `content_article_re`, `content_link_re`, `content_media_re`, `content_mention_re`, `content_quote_re`, `extract_bolt11_amount_sats`, `extract_content_references`, `extract_note_references`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes_pub`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `is_future_dated`, `json_tags_to_vecs`, `metadata_to_flat_json`, `mute_state`, `seen_ids`, `tags_from_event`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MuteState`, `NoteReferences`
+
+Future<void> setActiveMuteList(
+        {required List<String> mutedPubkeys,
+        required List<String> mutedWords}) =>
+    RustLib.instance.api.crateApiDatabaseSetActiveMuteList(
+        mutedPubkeys: mutedPubkeys, mutedWords: mutedWords);
+
+bool isEventNewAndTrack({required String eventId}) =>
+    RustLib.instance.api.crateApiDatabaseIsEventNewAndTrack(eventId: eventId);
 
 Future<String?> dbGetProfile({required String pubkeyHex}) =>
     RustLib.instance.api.crateApiDatabaseDbGetProfile(pubkeyHex: pubkeyHex);
@@ -387,3 +396,63 @@ Future<String> dbGetFollowSets(
         required List<String> hiddenDTags}) =>
     RustLib.instance.api.crateApiDatabaseDbGetFollowSets(
         authorsHex: authorsHex, limit: limit, hiddenDTags: hiddenDTags);
+
+Future<String> dbGetHydratedFeedNotesSorted(
+        {required String userPubkeyHex,
+        List<String>? authorsHex,
+        required int limit,
+        required bool filterReplies,
+        String? currentUserPubkeyHex,
+        required String sortMode}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedFeedNotesSorted(
+        userPubkeyHex: userPubkeyHex,
+        authorsHex: authorsHex,
+        limit: limit,
+        filterReplies: filterReplies,
+        currentUserPubkeyHex: currentUserPubkeyHex,
+        sortMode: sortMode);
+
+Future<String> dbGetHydratedThreadStructure(
+        {required String rootNoteId,
+        String? currentUserPubkeyHex,
+        required int limit}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetHydratedThreadStructure(
+        rootNoteId: rootNoteId,
+        currentUserPubkeyHex: currentUserPubkeyHex,
+        limit: limit);
+
+Future<List<String>> extractPubkeysFromEvents({required String eventsJson}) =>
+    RustLib.instance.api
+        .crateApiDatabaseExtractPubkeysFromEvents(eventsJson: eventsJson);
+
+Future<List<String>> filterReplyEventIds({required String eventsJson}) =>
+    RustLib.instance.api
+        .crateApiDatabaseFilterReplyEventIds(eventsJson: eventsJson);
+
+Future<List<String>> extractRepostOriginalIds({required String eventsJson}) =>
+    RustLib.instance.api
+        .crateApiDatabaseExtractRepostOriginalIds(eventsJson: eventsJson);
+
+Future<List<String>> queueMissingRepostOriginals(
+        {required PlatformInt64 sinceTimestamp}) =>
+    RustLib.instance.api.crateApiDatabaseQueueMissingRepostOriginals(
+        sinceTimestamp: sinceTimestamp);
+
+(List<String>, List<String>) extractEmbeddedIdsBatchTyped(
+        {required List<String> contents}) =>
+    RustLib.instance.api
+        .crateApiDatabaseExtractEmbeddedIdsBatchTyped(contents: contents);
+
+Future<String?> dbGetMuteListContent({required String pubkeyHex}) =>
+    RustLib.instance.api
+        .crateApiDatabaseDbGetMuteListContent(pubkeyHex: pubkeyHex);
+
+Future<void> dbSaveFollowingListFromEvent(
+        {required String eventJson, required String selfPubkeyHex}) =>
+    RustLib.instance.api.crateApiDatabaseDbSaveFollowingListFromEvent(
+        eventJson: eventJson, selfPubkeyHex: selfPubkeyHex);
+
+Future<List<String>> dbGetNotificationsMissingProfiles(
+        {required String userPubkeyHex, required int limit}) =>
+    RustLib.instance.api.crateApiDatabaseDbGetNotificationsMissingProfiles(
+        userPubkeyHex: userPubkeyHex, limit: limit);
