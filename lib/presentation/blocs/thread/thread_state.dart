@@ -1,3 +1,5 @@
+import 'package:equatable/equatable.dart';
+
 import '../../../core/bloc/base/base_state.dart';
 
 abstract class ThreadState extends BaseState {
@@ -94,13 +96,13 @@ class ThreadError extends ThreadState {
   List<Object?> get props => [message];
 }
 
-class ThreadStructure {
+class ThreadStructure extends Equatable {
   final Map<String, dynamic> rootNote;
   final Map<String, List<Map<String, dynamic>>> childrenMap;
   final Map<String, Map<String, dynamic>> notesMap;
   final int totalReplies;
 
-  ThreadStructure({
+  const ThreadStructure({
     required this.rootNote,
     required this.childrenMap,
     required this.notesMap,
@@ -118,4 +120,7 @@ class ThreadStructure {
   bool hasChildren(String noteId) {
     return childrenMap.containsKey(noteId) && childrenMap[noteId]!.isNotEmpty;
   }
+
+  @override
+  List<Object?> get props => [rootNote, childrenMap, notesMap, totalReplies];
 }

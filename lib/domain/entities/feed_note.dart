@@ -1,4 +1,6 @@
-class FeedNote {
+import 'package:equatable/equatable.dart';
+
+class FeedNote extends Equatable {
   final String id;
   final String pubkey;
   final String content;
@@ -177,6 +179,37 @@ class FeedNote {
     }
     return result;
   }
+
+  @override
+  List<Object?> get props => [
+        id,
+        pubkey,
+        content,
+        createdAt,
+        tags,
+        isRepost,
+        repostEventId,
+        repostedBy,
+        repostCreatedAt,
+        isReply,
+        isQuote,
+        quotedNoteId,
+        rootId,
+        parentId,
+        authorName,
+        authorImage,
+        authorNip05,
+        reactionCount,
+        repostCount,
+        replyCount,
+        zapCount,
+        hasReacted,
+        hasReposted,
+        hasZapped,
+        quotedNote,
+        embeddedNotes,
+        embeddedArticles,
+      ];
 
   Map<String, dynamic> toMap() {
     return {
