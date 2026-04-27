@@ -44,8 +44,7 @@ class SyncService {
   StreamSubscription<Map<String, dynamic>>? _feedSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
-  final _recentEventIds = <String>{};
-  static const _maxCachedIds = 2000;
+
 
   Stream<SyncOperationStatus> get syncStatus => _syncStatusController.stream;
 
@@ -73,12 +72,7 @@ class SyncService {
 
   bool _isDuplicate(String? eventId) {
     if (eventId == null || eventId.isEmpty) return false;
-    if (_recentEventIds.contains(eventId)) return true;
-    if (_recentEventIds.length >= _maxCachedIds) {
-      _recentEventIds.clear();
-    }
-    _recentEventIds.add(eventId);
-    return false;
+    return !rust_db.isEventNewAndTrack(eventId: eventId);
   }
 
   Future<void> syncFeed(String userPubkey, {bool force = false}) async {
@@ -324,27 +318,12 @@ class SyncService {
       await _fetchAndStore(filter);
       _db.notifyNotificationChange();
 
-      final mute = EncryptedMuteService.instance;
-      final notificationsJson = await rust_db.dbGetHydratedNotifications(
+      final missingPubkeys = await rust_db.dbGetNotificationsMissingProfiles(
         userPubkeyHex: userPubkey,
         limit: 100,
-        mutedPubkeys: mute.mutedPubkeys,
-        mutedWords: mute.mutedWords,
       );
-      final notifications = (jsonDecode(notificationsJson) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
-      final missingPubkeys = <String>{};
-      for (final n in notifications) {
-        final pk = n['fromPubkey'] as String? ?? '';
-        if (pk.isNotEmpty &&
-            pk != userPubkey &&
-            n['fromName'] == null &&
-            n['fromImage'] == null) {
-          missingPubkeys.add(pk);
-        }
-      }
       if (missingPubkeys.isNotEmpty) {
-        await _syncMissingProfiles(missingPubkeys);
+        await _syncMissingProfiles(missingPubkeys.toSet());
         _notifyProfileChanged();
       }
 
@@ -366,15 +345,10 @@ class SyncService {
 
       if (events.isNotEmpty) {
         final event = events.first;
-        final tags = event['tags'] as List<dynamic>? ?? [];
-        final followList = tags
-            .where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'p')
-            .map((tag) => (tag as List)[1] as String)
-            .toList();
-
-        final listWithUser = followList.toSet()..add(userPubkey);
-        await rust_db.dbSaveFollowingList(
-            pubkeyHex: userPubkey, followsHex: listWithUser.toList());
+        await rust_db.dbSaveFollowingListFromEvent(
+          eventJson: jsonEncode(event),
+          selfPubkeyHex: userPubkey,
+        );
       } else {
         final existing =
             await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
@@ -1130,30 +1104,18 @@ class SyncService {
     _db.notifyNotificationChange();
   }
 
-  Set<String> _extractAllPubkeys(List<Map<String, dynamic>> events) {
-    final pubkeys = <String>{};
-    for (final event in events) {
-      final pubkey = event['pubkey'] as String?;
-      if (pubkey != null && pubkey.isNotEmpty) {
-        pubkeys.add(pubkey);
-      }
-      final kind = event['kind'] as int? ?? 1;
-      if (kind == 6) {
-        final tags = event['tags'] as List<dynamic>? ?? [];
-        for (final tag in tags) {
-          if (tag is List &&
-              tag.isNotEmpty &&
-              tag[0] == 'p' &&
-              tag.length > 1) {
-            final originalAuthor = tag[1] as String?;
-            if (originalAuthor != null && originalAuthor.isNotEmpty) {
-              pubkeys.add(originalAuthor);
-            }
-          }
-        }
-      }
+  Future<Set<String>> _extractAllPubkeys(
+      List<Map<String, dynamic>> events) async {
+    try {
+      final ids = await rust_db.extractPubkeysFromEvents(
+          eventsJson: jsonEncode(events));
+      return ids.toSet();
+    } catch (_) {
+      return events
+          .map((e) => e['pubkey'] as String? ?? '')
+          .where((p) => p.isNotEmpty)
+          .toSet();
     }
-    return pubkeys;
   }
 
   Future<void> _syncMissingProfiles(Set<String> pubkeys) async {
@@ -1170,9 +1132,11 @@ class SyncService {
   }
 
   void _syncMissingProfilesInBackground(List<Map<String, dynamic>> events) {
-    final pubkeys = _extractAllPubkeys(events);
-    if (pubkeys.isEmpty) return;
-    _fetchMissingProfilesInBackground(pubkeys.toList());
+    Future.microtask(() async {
+      final pubkeys = await _extractAllPubkeys(events);
+      if (pubkeys.isEmpty) return;
+      _fetchMissingProfilesInBackground(pubkeys.toList());
+    });
   }
 
   void _fetchMissingProfilesInBackground(List<String> pubkeys) {
@@ -1217,33 +1181,15 @@ class SyncService {
   }
 
   void _fetchThreadAncestorsInBackground(List<Map<String, dynamic>> events) {
-    final replyEventIds = <String>[];
-    for (final event in events) {
-      final kind = (event['kind'] as num?)?.toInt() ?? 1;
-      if (kind != 1) continue;
-      final tags = event['tags'] as List<dynamic>? ?? [];
-      var hasParent = false;
-      for (final tag in tags) {
-        if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-          final marker = tag.length >= 4 ? tag[3] as String? : null;
-          if (marker == 'root' || marker == 'reply' || marker == null) {
-            hasParent = true;
-            break;
-          }
-        }
-      }
-      if (hasParent) {
-        final id = event['id'] as String? ?? '';
-        if (id.isNotEmpty) replyEventIds.add(id);
-      }
-    }
-    if (replyEventIds.isEmpty) return;
-
     Future.microtask(() async {
       try {
-        var ids = replyEventIds;
-        if (ids.length > 40) ids = ids.sublist(0, 40);
-        final fetched = await _relayService.fetchThreadAncestors(ids);
+        var replyEventIds = await rust_db.filterReplyEventIds(
+            eventsJson: jsonEncode(events));
+        if (replyEventIds.isEmpty) return;
+        if (replyEventIds.length > 40) {
+          replyEventIds = replyEventIds.sublist(0, 40);
+        }
+        final fetched = await _relayService.fetchThreadAncestors(replyEventIds);
         if (fetched > 0) _notifyFeedChanged();
       } catch (_) {}
     });
@@ -1263,36 +1209,23 @@ class SyncService {
   }
 
   void _fetchReferencedEventsInBackground(List<Map<String, dynamic>> events) {
-    final repostOriginalIds = <String>{};
-    for (final event in events) {
-      final kind = (event['kind'] as num?)?.toInt();
-      if (kind != 6) continue;
-      final tags = event['tags'] as List<dynamic>? ?? [];
-      for (final tag in tags) {
-        if (tag is List && tag.length > 1 && tag[0] == 'e') {
-          final id = tag[1] as String?;
-          if (id != null && id.isNotEmpty) {
-            repostOriginalIds.add(id);
-            break;
-          }
-        }
-      }
-    }
-    if (repostOriginalIds.isEmpty) return;
-    _fetchRepostOriginalsInBackground(repostOriginalIds.toList());
+    Future.microtask(() async {
+      try {
+        final ids = await rust_db.extractRepostOriginalIds(
+            eventsJson: jsonEncode(events));
+        if (ids.isEmpty) return;
+        _fetchRepostOriginalsInBackground(ids);
+      } catch (_) {}
+    });
   }
 
   Future<void> _queueMissingRepostOriginals(int sinceTimestamp) async {
     try {
-      final filterJson = jsonEncode({
-        'kinds': [6],
-        'since': sinceTimestamp,
-      });
-      final repostEventsJson =
-          await rust_db.dbQueryEvents(filterJson: filterJson, limit: 100);
-      final repostEvents = (jsonDecode(repostEventsJson) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
-      _fetchReferencedEventsInBackground(repostEvents);
+      final missing = await rust_db.queueMissingRepostOriginals(
+          sinceTimestamp: sinceTimestamp);
+      if (missing.isNotEmpty) {
+        _fetchRepostOriginalsInBackground(missing);
+      }
     } catch (_) {}
   }
 

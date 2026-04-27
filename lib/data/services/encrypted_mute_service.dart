@@ -67,27 +67,29 @@ class EncryptedMuteService {
     required String privateKeyHex,
   }) async {
     try {
-      final filterJson = jsonEncode({
-        'kinds': [10000],
-        'authors': [userPubkeyHex],
-      });
-      final eventsJson =
-          await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
-      final events = jsonDecode(eventsJson) as List<dynamic>;
+      final content =
+          await rust_db.dbGetMuteListContent(pubkeyHex: userPubkeyHex);
 
-      if (events.isEmpty) {
+      if (content == null) {
         _mutedPubkeys = [];
         _mutedPubkeySet = {};
         _mutedWords = [];
         _initialized = true;
+        _syncToRust();
         return;
       }
 
-      final event = events.first as Map<String, dynamic>;
-      final content = event['content'] as String? ?? '';
-
       if (content.isEmpty) {
-        _extractFromPublicTags(event);
+        final filterJson = jsonEncode({
+          'kinds': [10000],
+          'authors': [userPubkeyHex],
+        });
+        final eventsJson =
+            await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
+        final events = jsonDecode(eventsJson) as List<dynamic>;
+        if (events.isNotEmpty) {
+          _extractFromPublicTags(events.first as Map<String, dynamic>);
+        }
       } else {
         try {
           final decrypted = nip17.nip44Decrypt(
@@ -97,15 +99,32 @@ class EncryptedMuteService {
           );
           _extractFromPrivateTags(decrypted);
         } catch (_) {
-          _extractFromPublicTags(event);
+          final filterJson = jsonEncode({
+            'kinds': [10000],
+            'authors': [userPubkeyHex],
+          });
+          final eventsJson =
+              await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
+          final events = jsonDecode(eventsJson) as List<dynamic>;
+          if (events.isNotEmpty) {
+            _extractFromPublicTags(events.first as Map<String, dynamic>);
+          }
         }
       }
       _mutedPubkeySet = _mutedPubkeys.toSet();
       _rebuildMutedWordsRegex();
       _initialized = true;
+      _syncToRust();
     } catch (_) {
       _initialized = true;
     }
+  }
+
+  void _syncToRust() {
+    rust_db.setActiveMuteList(
+      mutedPubkeys: List.unmodifiable(_mutedPubkeys),
+      mutedWords: List.unmodifiable(_mutedWords),
+    );
   }
 
   void _extractFromPublicTags(Map<String, dynamic> event) {
@@ -166,6 +185,7 @@ class EncryptedMuteService {
     _mutedWords = List.from(mutedWords);
     _rebuildMutedWordsRegex();
     _initialized = true;
+    _syncToRust();
 
     return jsonDecode(eventJson) as Map<String, dynamic>;
   }
@@ -203,6 +223,7 @@ class EncryptedMuteService {
     }
     if (words != null) _mutedWords = List.from(words);
     _initialized = true;
+    _syncToRust();
   }
 
   void clear() {
