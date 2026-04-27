@@ -27,10 +27,13 @@ import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
 import '../../../presentation/blocs/onboarding_spark/onboarding_spark_bloc.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/follow_set_service.dart';
 import '../../../data/services/spark_service.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/nwc_service.dart';
 import '../../../data/services/validation_service.dart';
+import '../../../data/services/encrypted_mute_service.dart';
+import '../../../data/services/interaction_service.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/following_repository.dart';
@@ -52,6 +55,7 @@ class BlocsModule extends DIModule {
           followingRepository: AppDI.get<FollowingRepository>(),
           profileRepository: AppDI.get<ProfileRepository>(),
           syncService: AppDI.get<SyncService>(),
+          followSetService: FollowSetService.instance,
         ));
 
     AppDI.registerFactory<ProfileBloc>(() => ProfileBloc(
@@ -96,6 +100,8 @@ class BlocsModule extends DIModule {
           profileRepository: AppDI.get<ProfileRepository>(),
           syncService: AppDI.get<SyncService>(),
           authService: AppDI.get<AuthService>(),
+          muteService: EncryptedMuteService.instance,
+          interactionService: InteractionService.instance,
         ));
 
     AppDI.registerLazySingleton<NotificationIndicatorBloc>(
