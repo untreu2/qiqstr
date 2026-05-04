@@ -1,4 +1,6 @@
-class Article {
+import 'package:equatable/equatable.dart';
+
+class Article extends Equatable {
   final String id;
   final String pubkey;
   final String title;
@@ -77,6 +79,22 @@ class Article {
     );
   }
 
+  @override
+  List<Object?> get props => [
+        id,
+        pubkey,
+        title,
+        content,
+        image,
+        summary,
+        dTag,
+        publishedAt,
+        createdAt,
+        hashtags,
+        authorName,
+        authorImage,
+      ];
+
   DateTime get publishedAtDateTime {
     return DateTime.fromMillisecondsSinceEpoch(publishedAt * 1000);
   }
@@ -96,8 +114,8 @@ class Article {
       'dTag': dTag,
       'publishedAt': publishedAt,
       'created_at': createdAt,
-      'tTags': hashtags,
-      if (authorName != null) 'author': authorName,
+      'hashtags': hashtags,
+      if (authorName != null) 'authorName': authorName,
       if (authorImage != null) 'authorImage': authorImage,
     };
   }

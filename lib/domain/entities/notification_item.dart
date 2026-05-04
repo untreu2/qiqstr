@@ -1,3 +1,5 @@
+import 'package:equatable/equatable.dart';
+
 enum NotificationType {
   reply,
   mention,
@@ -7,7 +9,7 @@ enum NotificationType {
   zap,
 }
 
-class NotificationItem {
+class NotificationItem extends Equatable {
   final String id;
   final NotificationType type;
   final String fromPubkey;
@@ -77,6 +79,19 @@ class NotificationItem {
       zapAmount: zapAmount ?? this.zapAmount,
     );
   }
+
+  @override
+  List<Object?> get props => [
+        id,
+        type,
+        fromPubkey,
+        targetNoteId,
+        content,
+        createdAt,
+        fromName,
+        fromImage,
+        zapAmount,
+      ];
 
   DateTime get createdAtDateTime {
     return DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);

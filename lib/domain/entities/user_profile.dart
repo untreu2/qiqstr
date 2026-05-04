@@ -1,4 +1,6 @@
-class UserProfile {
+import 'package:equatable/equatable.dart';
+
+class UserProfile extends Equatable {
   final String pubkey;
   final String? name;
   final String? displayName;
@@ -52,6 +54,21 @@ class UserProfile {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  @override
+  List<Object?> get props => [
+        pubkey,
+        name,
+        displayName,
+        about,
+        picture,
+        banner,
+        nip05,
+        lud16,
+        website,
+        location,
+        createdAt,
+      ];
 
   String get displayNameOrName => displayName ?? name ?? '';
 
