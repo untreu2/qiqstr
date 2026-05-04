@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'rust_database_service.dart';
 import '../../domain/entities/feed_note.dart';
 import '../../src/rust/api/database.dart' as rust_db;
@@ -244,7 +245,9 @@ class InteractionService {
           newZaps: (d['zaps'] as num?)?.toInt() ?? 0,
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[InteractionService] $e');
+    }
   }
 
   void populateFromNotes(List<FeedNote> notes) {
@@ -305,7 +308,9 @@ class InteractionService {
           newZaps: (d['zaps'] as num?)?.toInt() ?? 0,
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[InteractionService] $e');
+    }
   }
 
   void markReacted(String noteId) {
@@ -315,6 +320,16 @@ class InteractionService {
         (c) => c.copyWith(
               hasReacted: true,
               reactions: c.reactions + 1,
+            ));
+  }
+
+  void markUnreacted(String noteId) {
+    _localReactions.remove(noteId);
+    _updateCache(
+        noteId,
+        (c) => c.copyWith(
+              hasReacted: false,
+              reactions: c.reactions > 0 ? c.reactions - 1 : 0,
             ));
   }
 

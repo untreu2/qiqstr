@@ -15,10 +15,14 @@ class PrimalCacheService {
 
   PrimalCacheService._internal();
 
+  static const Duration _followerCountTtl = Duration(minutes: 5);
+
   WebSocket? _ws;
   bool _connecting = false;
   final Map<String, Completer<Map<String, int>>> _pendingCountRequests = {};
   int _subscriptionCounter = 0;
+  final Map<String, int> _followerCountCache = {};
+  final Map<String, DateTime> _followerCountCacheTime = {};
 
   Future<WebSocket?> _ensureConnection() async {
     if (_ws != null && _ws!.readyState == WebSocket.open) return _ws;
@@ -132,6 +136,21 @@ class PrimalCacheService {
   Future<Map<String, int>> fetchFollowerCounts(List<String> pubkeyHexes) async {
     if (pubkeyHexes.isEmpty) return {};
 
+    final now = DateTime.now();
+    final result = <String, int>{};
+    final uncached = <String>[];
+
+    for (final pubkey in pubkeyHexes) {
+      final cachedAt = _followerCountCacheTime[pubkey];
+      if (cachedAt != null && now.difference(cachedAt) < _followerCountTtl) {
+        result[pubkey] = _followerCountCache[pubkey] ?? 0;
+      } else {
+        uncached.add(pubkey);
+      }
+    }
+
+    if (uncached.isEmpty) return result;
+
     final subscriptionId =
         'primal_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
     final completer = Completer<Map<String, int>>();
@@ -144,7 +163,7 @@ class PrimalCacheService {
         {
           'cache': [
             'user_infos',
-            {'pubkeys': pubkeyHexes}
+            {'pubkeys': uncached}
           ]
         }
       ];
@@ -152,10 +171,10 @@ class PrimalCacheService {
       final sent = await _send(jsonEncode(request));
       if (!sent) {
         _pendingCountRequests.remove(subscriptionId);
-        return {};
+        return result;
       }
 
-      final result = await completer.future.timeout(
+      final freshCounts = await completer.future.timeout(
         const Duration(seconds: 8),
         onTimeout: () {
           _pendingCountRequests.remove(subscriptionId);
@@ -165,13 +184,21 @@ class PrimalCacheService {
       );
 
       _closeSubscription(subscriptionId);
+
+      final fetchedAt = DateTime.now();
+      freshCounts.forEach((pubkey, count) {
+        _followerCountCache[pubkey] = count;
+        _followerCountCacheTime[pubkey] = fetchedAt;
+        result[pubkey] = count;
+      });
+
       return result;
     } catch (e) {
       _pendingCountRequests.remove(subscriptionId);
       if (kDebugMode) {
         print('[PrimalCacheService] fetchFollowerCounts error: $e');
       }
-      return {};
+      return result;
     }
   }
 }

@@ -35,7 +35,7 @@ class ProfileRepository {
   }
 
   Stream<UserProfile?> watchProfile(String pubkey) {
-    return _events.onChange
+    return _events.onProfileChange
         .debounceTime(const Duration(milliseconds: 250))
         .startWith(null)
         .asyncMap((_) => getProfile(pubkey));
