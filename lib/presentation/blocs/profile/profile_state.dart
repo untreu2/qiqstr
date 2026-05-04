@@ -34,6 +34,7 @@ class ProfileLoaded extends ProfileState {
   final bool isSyncing;
   final String currentProfileHex;
   final String currentUserHex;
+  final String? followError;
 
   const ProfileLoaded({
     required this.user,
@@ -57,6 +58,7 @@ class ProfileLoaded extends ProfileState {
     this.canLoadMoreLikes = true,
     this.isLoadingMoreLikes = false,
     this.isSyncing = false,
+    this.followError,
   });
 
   @override
@@ -82,6 +84,7 @@ class ProfileLoaded extends ProfileState {
         isSyncing,
         currentProfileHex,
         currentUserHex,
+        followError,
       ];
 
   ProfileLoaded copyWith({
@@ -106,6 +109,8 @@ class ProfileLoaded extends ProfileState {
     bool? isSyncing,
     String? currentProfileHex,
     String? currentUserHex,
+    String? followError,
+    bool clearFollowError = false,
   }) {
     return ProfileLoaded(
       user: user ?? this.user,
@@ -130,6 +135,7 @@ class ProfileLoaded extends ProfileState {
       isSyncing: isSyncing ?? this.isSyncing,
       currentProfileHex: currentProfileHex ?? this.currentProfileHex,
       currentUserHex: currentUserHex ?? this.currentUserHex,
+      followError: clearFollowError ? null : followError ?? this.followError,
     );
   }
 }

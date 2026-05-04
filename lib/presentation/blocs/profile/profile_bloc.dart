@@ -73,6 +73,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<ProfileLoadMoreArticlesRequested>(_onProfileLoadMoreArticlesRequested);
     on<ProfilePinnedNotesRequested>(_onProfilePinnedNotesRequested);
     on<ProfilePinnedNotesUpdated>(_onProfilePinnedNotesUpdated);
+    on<ProfileFollowErrorCleared>(_onProfileFollowErrorCleared);
   }
 
   void _onProfileProfilesLoaded(
@@ -262,9 +263,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         }
       }
     } catch (e) {
-      emit(currentState.copyWith(isFollowing: wasFollowing));
-      emit(ProfileError(
-          'Failed to ${wasFollowing ? 'unfollow' : 'follow'} user'));
+      if (isClosed) return;
+      emit(currentState.copyWith(
+        isFollowing: wasFollowing,
+        followError: 'Failed to ${wasFollowing ? 'unfollow' : 'follow'} user',
+      ));
     }
   }
 
@@ -1215,9 +1218,17 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     }
   }
 
+  void _onProfileFollowErrorCleared(
+    ProfileFollowErrorCleared event,
+    Emitter<ProfileState> emit,
+  ) {
+    if (state is ProfileLoaded) {
+      emit((state as ProfileLoaded).copyWith(clearFollowError: true));
+    }
+  }
+
   @override
-  @override
-  Future<void> close() {
+  Future<void> close() async {
     _syncSubscription?.cancel();
     _profileSubscription?.cancel();
     _notesAndRepliesSubscription?.cancel();

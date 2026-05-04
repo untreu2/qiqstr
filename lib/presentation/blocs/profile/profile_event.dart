@@ -125,6 +125,10 @@ class ProfilePinnedNotesRequested extends ProfileEvent {
   List<Object?> get props => [pubkeyHex];
 }
 
+class ProfileFollowErrorCleared extends ProfileEvent {
+  const ProfileFollowErrorCleared();
+}
+
 class ProfilePinnedNotesUpdated extends ProfileEvent {
   final List<String> pinnedNoteIds;
   final List<Map<String, dynamic>> pinnedNotes;
