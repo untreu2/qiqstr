@@ -18,6 +18,7 @@ import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/user/profile_info_widget.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/common/snackbar_widget.dart';
 
 class ProfilePage extends StatefulWidget {
   final String pubkeyHex;
@@ -104,7 +105,25 @@ class _ProfilePageState extends State<ProfilePage> {
         }
         return bloc;
       },
-      child: BlocBuilder<ProfileBloc, ProfileState>(
+      child: BlocListener<ProfileBloc, ProfileState>(
+        listenWhen: (previous, current) {
+          if (previous is ProfileLoaded && current is ProfileLoaded) return true;
+          return false;
+        },
+        listener: (context, state) {
+          if (state is! ProfileLoaded) return;
+          _notesNotifier.value = state.notes;
+          _repliesNotifier.value = state.replies;
+          _likesNotifier.value = state.likedNotes;
+          final videoNotes =
+              _filterByRegExp(_ownNotesSorted(state), _videoRegExp);
+          _videosNotifier.value = videoNotes;
+          if (state.followError != null) {
+            AppSnackbar.error(context, state.followError!);
+            context.read<ProfileBloc>().add(const ProfileFollowErrorCleared());
+          }
+        },
+        child: BlocBuilder<ProfileBloc, ProfileState>(
         buildWhen: (previous, current) {
           if (previous.runtimeType != current.runtimeType) return true;
           if (previous is ProfileLoaded && current is ProfileLoaded) {
@@ -112,7 +131,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 previous.isSyncing != current.isSyncing ||
                 previous.notes.length != current.notes.length ||
                 previous.replies.length != current.replies.length ||
-                previous.isLoadingMore != current.isLoadingMore;
+                previous.isLoadingMore != current.isLoadingMore ||
+                previous.isLoadingMoreReplies != current.isLoadingMoreReplies ||
+                previous.isLoadingMoreLikes != current.isLoadingMoreLikes ||
+                previous.isLoadingMoreArticles != current.isLoadingMoreArticles ||
+                previous.canLoadMore != current.canLoadMore ||
+                previous.canLoadMoreReplies != current.canLoadMoreReplies ||
+                previous.canLoadMoreLikes != current.canLoadMoreLikes ||
+                previous.canLoadMoreArticles != current.canLoadMoreArticles ||
+                previous.articles.length != current.articles.length ||
+                previous.likedNotes.length != current.likedNotes.length ||
+                previous.pinnedNotes.length != current.pinnedNotes.length ||
+                previous.isFollowing != current.isFollowing;
           }
           return true;
         },
@@ -188,7 +218,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               ? name
                               : (nip05.isNotEmpty
                                   ? nip05.split('@').first
-                                  : 'Anonymous');
+                                  : AppLocalizations.of(context)!.anonymous);
                         }(),
                         style: TextStyle(
                           color: colors.background,
@@ -206,12 +236,13 @@ class _ProfilePageState extends State<ProfilePage> {
                       curve: Curves.easeOut,
                     );
                   },
-                  onSharePressed: () => _handleShare(context),
-                ),
-              ],
-            ),
-          );
+                   onSharePressed: () => _handleShare(context),
+                 ),
+               ],
+             ),
+           );
         },
+        ),
       ),
     );
   }
@@ -434,8 +465,6 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       }
 
-      _notesNotifier.value = state.notes;
-
       return widgets.NoteListWidget(
         notes: state.notes,
         currentUserHex: state.currentUserHex,
@@ -477,8 +506,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
       }
-
-      _repliesNotifier.value = state.replies;
 
       return widgets.NoteListWidget(
         notes: state.replies,
@@ -535,7 +562,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Error loading notes',
+                  AppLocalizations.of(context)!.errorLoadingNotes,
                   style: TextStyle(
                     color: context.colors.textPrimary,
                     fontSize: 18,
@@ -550,7 +577,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 16),
                 PrimaryButton(
-                  label: 'Retry',
+                  label: AppLocalizations.of(context)!.retryText,
                   onPressed: () {
                     context.read<ProfileBloc>().add(const ProfileRefreshed());
                   },
@@ -654,7 +681,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildProfileVideos(BuildContext context, ProfileState state) {
     if (state is ProfileLoaded) {
       final videoNotes = _filterByRegExp(_ownNotesSorted(state), _videoRegExp);
-      _videosNotifier.value = videoNotes;
 
       return widgets.NoteListWidget(
         notes: videoNotes,
@@ -679,8 +705,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildProfileLikes(BuildContext context, ProfileState state) {
     if (state is ProfileLoaded) {
-      _likesNotifier.value = state.likedNotes;
-
       return widgets.NoteListWidget(
         notes: state.likedNotes,
         currentUserHex: state.currentUserHex,

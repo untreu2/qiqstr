@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -20,12 +21,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   static const int _pageSize = 50;
   String? _currentUserHex;
   StreamSubscription<List<FeedNote>>? _feedSubscription;
-  bool _isLoadingMore = false;
   int _currentLimit = 50;
   FeedSortMode _currentSortMode = FeedSortMode.latest;
   List<FeedNote> _bufferedNotes = [];
   bool _acceptNextUpdate = false;
   int _latestDisplayedTimestamp = 0;
+  bool _profileLoadInProgress = false;
 
   FeedBloc({
     required FeedRepository feedRepository,
@@ -41,14 +42,20 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         super(const FeedInitial()) {
     on<feed_event.FeedInitialized>(_onFeedInitialized);
     on<feed_event.FeedRefreshed>(_onFeedRefreshed);
-    on<feed_event.FeedLoadMoreRequested>(_onFeedLoadMoreRequested);
+    on<feed_event.FeedLoadMoreRequested>(
+      _onFeedLoadMoreRequested,
+      transformer: droppable(),
+    );
     on<feed_event.FeedViewModeChanged>(_onFeedViewModeChanged);
     on<feed_event.FeedSortModeChanged>(_onFeedSortModeChanged);
     on<feed_event.FeedHashtagChanged>(_onFeedHashtagChanged);
     on<feed_event.FeedUserProfileUpdated>(_onFeedUserProfileUpdated);
     on<feed_event.FeedNoteDeleted>(_onFeedNoteDeleted);
     on<feed_event.FeedProfilesLoaded>(_onFeedProfilesLoaded);
-    on<feed_event.FeedNotesUpdated>(_onFeedNotesUpdated);
+    on<feed_event.FeedNotesUpdated>(
+      _onFeedNotesUpdated,
+      transformer: restartable(),
+    );
     on<feed_event.FeedNewNotesAccepted>(_onFeedNewNotesAccepted);
     on<feed_event.FeedListChanged>(_onFeedListChanged);
     on<feed_event.FeedSyncCompleted>(_onFeedSyncCompleted);
@@ -179,8 +186,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final canLoadMore = sortedNotes.length >= _currentLimit;
 
     if (currentState.notes.isEmpty ||
-        _acceptNextUpdate ||
-        currentState.isSyncing) {
+        _acceptNextUpdate) {
       _acceptNextUpdate = false;
       _bufferedNotes = [];
       _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
@@ -209,27 +215,18 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     if (othersCount > 0) {
       _bufferedNotes = sortedNotes;
-      if (hasOwnNew) {
-        final displayedIds =
-            currentState.notes.map((n) => n.id).toSet();
-        final ownNotes = sortedNotes.where((n) {
-          final noteTime = n.repostCreatedAt ?? n.createdAt;
-          return noteTime <= _latestDisplayedTimestamp ||
-              displayedIds.contains(n.id) ||
-              n.pubkey == _currentUserHex;
-        }).toList();
-        emit(currentState.copyWith(
-          notes: ownNotes,
-          canLoadMore: canLoadMore,
-          pendingNotesCount: othersCount,
-        ));
-      } else {
-        emit(currentState.copyWith(
-          notes: sortedNotes,
-          canLoadMore: canLoadMore,
-          pendingNotesCount: othersCount,
-        ));
-      }
+      final displayedIds = currentState.notes.map((n) => n.id).toSet();
+      final visibleNotes = sortedNotes.where((n) {
+        final noteTime = n.repostCreatedAt ?? n.createdAt;
+        return noteTime <= _latestDisplayedTimestamp ||
+            displayedIds.contains(n.id) ||
+            n.pubkey == _currentUserHex;
+      }).toList();
+      emit(currentState.copyWith(
+        notes: visibleNotes,
+        canLoadMore: canLoadMore,
+        pendingNotesCount: othersCount,
+      ));
     } else if (hasOwnNew) {
       _bufferedNotes = [];
       _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
@@ -379,11 +376,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     if (state is! FeedLoaded) return;
     final currentState = state as FeedLoaded;
 
-    if (_isLoadingMore || !currentState.canLoadMore) {
-      return;
-    }
+    if (!currentState.canLoadMore) return;
 
-    _isLoadingMore = true;
     _acceptNextUpdate = true;
     _bufferedNotes = [];
     emit(currentState.copyWith(isLoadingMore: true, pendingNotesCount: 0));
@@ -406,8 +400,6 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(isLoadingMore: false));
     } catch (e) {
       emit(currentState.copyWith(isLoadingMore: false));
-    } finally {
-      _isLoadingMore = false;
     }
   }
 
@@ -506,7 +498,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   }
 
   void _loadProfilesForNotes(List<FeedNote> notes) async {
-    if (isClosed || state is! FeedLoaded) return;
+    if (isClosed || state is! FeedLoaded || _profileLoadInProgress) return;
 
     final currentState = state as FeedLoaded;
     final authorIds = <String>{};
@@ -525,24 +517,21 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     if (authorIds.isEmpty) return;
 
+    _profileLoadInProgress = true;
     try {
       final profiles = await _profileRepository.getProfiles(authorIds.toList());
       if (isClosed) return;
 
-      final updatedProfiles = <String, Map<String, dynamic>>{};
+      final allProfiles = <String, Map<String, dynamic>>{};
       final missingPubkeys = <String>[];
 
       for (final pubkey in authorIds) {
         final profile = profiles[pubkey];
         if (profile != null) {
-          updatedProfiles[pubkey] = profile.toMap();
+          allProfiles[pubkey] = profile.toMap();
         } else {
           missingPubkeys.add(pubkey);
         }
-      }
-
-      if (updatedProfiles.isNotEmpty) {
-        add(feed_event.FeedProfilesLoaded(updatedProfiles));
       }
 
       if (missingPubkeys.isNotEmpty) {
@@ -556,16 +545,18 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         final synced = await _profileRepository.getProfiles(missingPubkeys);
         if (isClosed) return;
 
-        final syncedProfiles = <String, Map<String, dynamic>>{};
         for (final entry in synced.entries) {
-          syncedProfiles[entry.key] = entry.value.toMap();
-        }
-
-        if (syncedProfiles.isNotEmpty) {
-          add(feed_event.FeedProfilesLoaded(syncedProfiles));
+          allProfiles[entry.key] = entry.value.toMap();
         }
       }
-    } catch (_) {}
+
+      if (allProfiles.isNotEmpty && !isClosed) {
+        add(feed_event.FeedProfilesLoaded(allProfiles));
+      }
+    } catch (_) {
+    } finally {
+      _profileLoadInProgress = false;
+    }
   }
 
   void _prefetchEmbeddedContent(List<FeedNote> notes) {
