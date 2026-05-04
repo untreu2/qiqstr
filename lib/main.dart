@@ -155,6 +155,7 @@ class QiqstrApp extends StatefulWidget {
 
 class _QiqstrAppState extends State<QiqstrApp> with WidgetsBindingObserver {
   bool _wasBackgrounded = false;
+  bool _resumeInFlight = false;
 
   @override
   void initState() {
@@ -181,30 +182,40 @@ class _QiqstrAppState extends State<QiqstrApp> with WidgetsBindingObserver {
   }
 
   void _onAppBackgrounded() {
+    _resumeInFlight = false;
     try {
       AppDI.get<SyncService>().stopRealtimeSubscriptions();
     } catch (_) {}
   }
 
   void _onAppResumed() {
+    if (_resumeInFlight) return;
+    _resumeInFlight = true;
     Future.microtask(() async {
       try {
         final relayService = RustRelayService.instance;
-        if (!relayService.isInitialized) return;
+        if (!relayService.isInitialized || !_resumeInFlight) return;
 
         await relayService.connect();
+        if (!_resumeInFlight) return;
         await relayService.waitForReady(timeoutSecs: 3);
+        if (!_resumeInFlight) return;
 
         final authService = AuthService.instance;
         final pubResult = await authService.getCurrentUserPublicKeyHex();
+        if (!_resumeInFlight) return;
         if (pubResult.isError || pubResult.data == null) return;
 
         final userPubkey = pubResult.data!;
         final syncService = AppDI.get<SyncService>();
         await syncService.startRealtimeSubscriptions(userPubkey);
+        if (!_resumeInFlight) return;
         syncService.syncFeed(userPubkey, force: true);
         syncService.syncNotifications(userPubkey);
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        _resumeInFlight = false;
+      }
     });
   }
 

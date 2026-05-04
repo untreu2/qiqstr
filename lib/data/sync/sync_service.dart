@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../services/rust_database_service.dart';
 import '../services/relay_service.dart';
@@ -43,10 +44,31 @@ class SyncService {
 
   StreamSubscription<Map<String, dynamic>>? _feedSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  String? _realtimeUserPubkey;
+  bool _realtimeStopped = false;
+  Timer? _feedReconnectTimer;
+  Timer? _notificationReconnectTimer;
+  int _feedReconnectAttempts = 0;
+  int _notificationReconnectAttempts = 0;
+  static const List<Duration> _reconnectBackoff = [
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 30),
+  ];
 
 
 
   Stream<SyncOperationStatus> get syncStatus => _syncStatusController.stream;
+
+  Stream<bool> get connectivityStream => Connectivity()
+      .onConnectivityChanged
+      .map((results) => results.any((r) => r != ConnectivityResult.none));
+
+  Future<bool> get isOnline async {
+    final results = await Connectivity().checkConnectivity();
+    return results.any((r) => r != ConnectivityResult.none);
+  }
 
   SyncService({
     required RustDatabaseService db,
@@ -900,6 +922,12 @@ class SyncService {
   }
 
   Future<void> startRealtimeSubscriptions(String userPubkey) async {
+    _realtimeUserPubkey = userPubkey;
+    _realtimeStopped = false;
+    _feedReconnectAttempts = 0;
+    _notificationReconnectAttempts = 0;
+    _feedReconnectTimer?.cancel();
+    _notificationReconnectTimer?.cancel();
     await Future.wait([
       _startFeedSubscription(userPubkey),
       _startNotificationSubscription(userPubkey),
@@ -941,9 +969,11 @@ class SyncService {
         },
         onError: (_) {
           _feedSubscription = null;
+          _scheduleReconnect(isFeed: true);
         },
         onDone: () {
           _feedSubscription = null;
+          _scheduleReconnect(isFeed: true);
         },
       );
     } catch (_) {}
@@ -973,15 +1003,47 @@ class SyncService {
         },
         onError: (_) {
           _notificationSubscription = null;
+          _scheduleReconnect(isFeed: false);
         },
         onDone: () {
           _notificationSubscription = null;
+          _scheduleReconnect(isFeed: false);
         },
       );
     } catch (_) {}
   }
 
+  void _scheduleReconnect({required bool isFeed}) {
+    if (_realtimeStopped || _realtimeUserPubkey == null) return;
+    final attempts =
+        isFeed ? _feedReconnectAttempts : _notificationReconnectAttempts;
+    final backoff = attempts < _reconnectBackoff.length
+        ? _reconnectBackoff[attempts]
+        : _reconnectBackoff.last;
+
+    if (isFeed) {
+      _feedReconnectAttempts++;
+      _feedReconnectTimer?.cancel();
+      _feedReconnectTimer = Timer(backoff, () {
+        if (!_realtimeStopped && _realtimeUserPubkey != null) {
+          _startFeedSubscription(_realtimeUserPubkey!);
+        }
+      });
+    } else {
+      _notificationReconnectAttempts++;
+      _notificationReconnectTimer?.cancel();
+      _notificationReconnectTimer = Timer(backoff, () {
+        if (!_realtimeStopped && _realtimeUserPubkey != null) {
+          _startNotificationSubscription(_realtimeUserPubkey!);
+        }
+      });
+    }
+  }
+
   void stopRealtimeSubscriptions() {
+    _realtimeStopped = true;
+    _feedReconnectTimer?.cancel();
+    _notificationReconnectTimer?.cancel();
     _feedSubscription?.cancel();
     _feedSubscription = null;
     _notificationSubscription?.cancel();
