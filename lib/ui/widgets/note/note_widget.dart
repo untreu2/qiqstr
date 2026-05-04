@@ -123,28 +123,18 @@ class _NoteWidgetState extends State<NoteWidget> {
     _formattedTimestamp = _calculateTimestamp(_timestamp);
 
     final noteContent = widget.note['content'] as String? ?? '';
-    _parsedContent = {};
-    _shouldTruncate = false;
-    _truncatedContent = null;
-    _isInitialized = true;
+    _parsedContent = stringOptimizer.parseContentOptimized(noteContent);
 
-    Future.microtask(() {
-      if (!mounted) return;
-      final parsed = stringOptimizer.parseContentOptimized(noteContent);
-      final tags = widget.note['tags'] as List<dynamic>? ?? [];
-      final mediaDimensions = _extractImetaDimensions(tags);
-      if (mediaDimensions.isNotEmpty) {
-        parsed['mediaDimensions'] = mediaDimensions;
-      }
-      final shouldTruncate = _calculateTruncation(parsed);
-      if (mounted) {
-        setState(() {
-          _parsedContent = parsed;
-          _shouldTruncate = shouldTruncate;
-          _truncatedContent = shouldTruncate ? _createTruncatedContent() : null;
-        });
-      }
-    });
+    final tags = widget.note['tags'] as List<dynamic>? ?? [];
+    final mediaDimensions = _extractImetaDimensions(tags);
+    if (mediaDimensions.isNotEmpty) {
+      _parsedContent['mediaDimensions'] = mediaDimensions;
+    }
+
+    _shouldTruncate = _calculateTruncation(_parsedContent);
+    _truncatedContent = _shouldTruncate ? _createTruncatedContent() : null;
+
+    _isInitialized = true;
   }
 
   void _loadInitialUserDataSync() {

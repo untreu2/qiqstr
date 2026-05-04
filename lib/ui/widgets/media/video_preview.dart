@@ -61,7 +61,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.removeListener(_onUpdate);
     _controller?.dispose();
     super.dispose();
   }
@@ -101,7 +100,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
       if (saved > Duration.zero) ctrl.seekTo(saved);
 
       ctrl.play();
-      ctrl.addListener(_onUpdate);
 
       setState(() {
         _isInitialized = true;
@@ -110,10 +108,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     }).catchError((_) {
       if (mounted) setState(() => _isLoading = false);
     });
-  }
-
-  void _onUpdate() {
-    if (mounted) setState(() {});
   }
 
   // ── toggle mute ────────────────────────────────────────────────────────────
@@ -160,11 +154,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final ctrl = _controller;
     final ready = _isInitialized && ctrl != null && ctrl.value.isInitialized;
-    final duration = ready ? ctrl.value.duration : Duration.zero;
-    final position = ready ? ctrl.value.position : Duration.zero;
-    final progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
 
     return RepaintBoundary(
       child: ClipRRect(
@@ -172,65 +161,78 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
         child: AspectRatio(
           aspectRatio: 1,
           child: ready
-              ? Stack(
-                  children: [
-                    // Video — tap to open fullscreen
-                    Positioned.fill(
-                      child: GestureDetector(
-                        onTap: _openFullScreen,
-                        child: FittedBox(
-                          fit: BoxFit.cover,
-                          clipBehavior: Clip.hardEdge,
-                          child: SizedBox(
-                            width: ctrl.value.size.width,
-                            height: ctrl.value.size.height,
-                            child: VideoPlayer(ctrl),
-                          ),
-                        ),
-                      ),
-                    ),
+              ? ValueListenableBuilder<VideoPlayerValue>(
+                  valueListenable: ctrl,
+                  builder: (context, value, _) {
+                    final duration = value.duration;
+                    final position = value.position;
+                    final progress = duration.inMilliseconds > 0
+                        ? (position.inMilliseconds /
+                                duration.inMilliseconds)
+                            .clamp(0.0, 1.0)
+                        : 0.0;
 
-                    // Mute toggle (top-left)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: GestureDetector(
-                        onTap: _toggleMute,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _isMuted
-                                ? Icons.volume_off_rounded
-                                : Icons.volume_up_rounded,
-                            color: Colors.white,
-                            size: 16,
+                    return Stack(
+                      children: [
+                        // Video — tap to open fullscreen
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: _openFullScreen,
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              clipBehavior: Clip.hardEdge,
+                              child: SizedBox(
+                                width: value.size.width,
+                                height: value.size.height,
+                                child: VideoPlayer(ctrl),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
 
-                    // Progress bar — sits above the very bottom edge
-                    Positioned(
-                      bottom: 10,
-                      left: 10,
-                      right: 10,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 3,
-                          backgroundColor:
-                              Colors.white.withValues(alpha: 0.25),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                              Colors.white),
+                        // Mute toggle (top-left)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: GestureDetector(
+                            onTap: _toggleMute,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.55),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _isMuted
+                                    ? Icons.volume_off_rounded
+                                    : Icons.volume_up_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+
+                        // Progress bar — sits above the very bottom edge
+                        Positioned(
+                          bottom: 10,
+                          left: 10,
+                          right: 10,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 3,
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.25),
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 )
               : GestureDetector(
                   onTap: _openFullScreen,
@@ -343,23 +345,20 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
       _controller.setVolume(1);
       _controller.setLooping(true);
       _controller.play();
-      _controller.addListener(_onUpdate);
+      _controller.addListener(_onPositionSave);
 
       setState(() => _isInitialized = true);
       _scheduleHide();
     });
   }
 
-  void _onUpdate() {
-    if (!mounted) return;
-    // Continuously persist position so any dismiss path saves it
+  void _onPositionSave() {
     if (_controller.value.isInitialized) {
       VideoPositionCache.instance.save(
         widget.url,
         _controller.value.position,
       );
     }
-    setState(() {});
   }
 
   // ── controls ───────────────────────────────────────────────────────────────
@@ -430,7 +429,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   @override
   void dispose() {
     _controlsAnim.dispose();
-    _controller.removeListener(_onUpdate);
+    _controller.removeListener(_onPositionSave);
     _controller.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -451,15 +450,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   Widget build(BuildContext context) {
     final colors = context.colors;
     final bgAlpha = 1.0 - (_dragOffset.abs() / 350).clamp(0.0, 1.0);
-    final isPlaying = _isInitialized && _controller.value.isPlaying;
-    final position =
-        _isInitialized ? _controller.value.position : Duration.zero;
-    final duration =
-        _isInitialized ? _controller.value.duration : Duration.zero;
-    final maxMs = duration.inMilliseconds.toDouble();
-    final posMs = position.inMilliseconds
-        .toDouble()
-        .clamp(0.0, maxMs > 0 ? maxMs : 1.0);
 
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: bgAlpha),
@@ -473,12 +463,15 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
             Positioned.fill(child: const ColoredBox(color: Colors.black)),
 
             if (_isInitialized)
-              Transform.translate(
-                offset: Offset(0, _dragOffset),
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: _controller.value.aspectRatio,
-                    child: VideoPlayer(_controller),
+              ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _controller,
+                builder: (context, value, _) => Transform.translate(
+                  offset: Offset(0, _dragOffset),
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: value.aspectRatio,
+                      child: VideoPlayer(_controller),
+                    ),
                   ),
                 ),
               )
@@ -512,103 +505,118 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                             ),
                             borderRadius: BorderRadius.circular(40),
                           ),
-                          child: Row(
-                            children: [
-                              // Close
-                              IconActionButton(
-                                icon: CarbonIcons.close,
-                                onPressed: _dismiss,
-                                size: ButtonSize.small,
-                                isCircular: true,
-                              ),
-                              const SizedBox(width: 4),
+                          child: ValueListenableBuilder<VideoPlayerValue>(
+                            valueListenable: _controller,
+                            builder: (context, value, _) {
+                              final isPlaying = value.isPlaying;
+                              final position = value.position;
+                              final duration = value.duration;
+                              final maxMs = duration.inMilliseconds.toDouble();
+                              final posMs = position.inMilliseconds
+                                  .toDouble()
+                                  .clamp(0.0, maxMs > 0 ? maxMs : 1.0);
 
-                              // Play / pause
-                              IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: Icon(
-                                  isPlaying
-                                      ? CarbonIcons.pause
-                                      : CarbonIcons.play,
-                                  color: colors.textPrimary,
-                                  size: 22,
-                                ),
-                                onPressed: () {
-                                  isPlaying
-                                      ? _controller.pause()
-                                      : _controller.play();
-                                  _bringUpControls();
-                                },
-                              ),
+                              return Row(
+                                children: [
+                                  // Close
+                                  IconActionButton(
+                                    icon: CarbonIcons.close,
+                                    onPressed: _dismiss,
+                                    size: ButtonSize.small,
+                                    isCircular: true,
+                                  ),
+                                  const SizedBox(width: 4),
 
-                              // Elapsed
-                              Text(
-                                _fmt(position),
-                                style: TextStyle(
-                                  color: colors.textPrimary,
-                                  fontSize: 12,
-                                ),
-                              ),
-
-                              // Scrubber
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8),
-                                  child: SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      activeTrackColor: colors.accent,
-                                      inactiveTrackColor: colors.textSecondary
-                                          .withValues(alpha: 0.3),
-                                      thumbColor: colors.textPrimary,
-                                      thumbShape:
-                                          const RoundSliderThumbShape(
-                                              enabledThumbRadius: 6),
-                                      overlayShape:
-                                          const RoundSliderOverlayShape(
-                                              overlayRadius: 12),
-                                      trackHeight: 3,
+                                  // Play / pause
+                                  IconButton(
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
+                                      isPlaying
+                                          ? CarbonIcons.pause
+                                          : CarbonIcons.play,
+                                      color: colors.textPrimary,
+                                      size: 22,
                                     ),
-                                    child: Slider(
-                                      value: posMs,
-                                      max: maxMs > 0 ? maxMs : 1.0,
-                                      onChanged: (v) {
-                                        _controller.seekTo(
-                                          Duration(milliseconds: v.toInt()),
-                                        );
-                                        _bringUpControls();
-                                      },
+                                    onPressed: () {
+                                      isPlaying
+                                          ? _controller.pause()
+                                          : _controller.play();
+                                      _bringUpControls();
+                                    },
+                                  ),
+
+                                  // Elapsed
+                                  Text(
+                                    _fmt(position),
+                                    style: TextStyle(
+                                      color: colors.textPrimary,
+                                      fontSize: 12,
                                     ),
                                   ),
-                                ),
-                              ),
 
-                              // Duration
-                              Text(
-                                _fmt(duration),
-                                style: TextStyle(
-                                  color: colors.textPrimary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-
-                              // Download
-                              _isDownloading
-                                  ? SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: colors.textPrimary,
+                                  // Scrubber
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      child: SliderTheme(
+                                        data: SliderTheme.of(context).copyWith(
+                                          activeTrackColor: colors.accent,
+                                          inactiveTrackColor:
+                                              colors.textSecondary
+                                                  .withValues(alpha: 0.3),
+                                          thumbColor: colors.textPrimary,
+                                          thumbShape:
+                                              const RoundSliderThumbShape(
+                                                  enabledThumbRadius: 6),
+                                          overlayShape:
+                                              const RoundSliderOverlayShape(
+                                                  overlayRadius: 12),
+                                          trackHeight: 3,
+                                        ),
+                                        child: Slider(
+                                          value: posMs,
+                                          max: maxMs > 0 ? maxMs : 1.0,
+                                          onChanged: (v) {
+                                            _controller.seekTo(
+                                              Duration(
+                                                  milliseconds: v.toInt()),
+                                            );
+                                            _bringUpControls();
+                                          },
+                                        ),
                                       ),
-                                    )
-                                  : IconActionButton(
-                                      icon: CarbonIcons.download,
-                                      onPressed: _downloadVideo,
-                                      size: ButtonSize.small,
                                     ),
-                            ],
+                                  ),
+
+                                  // Duration
+                                  Text(
+                                    _fmt(duration),
+                                    style: TextStyle(
+                                      color: colors.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+
+                                  // Download
+                                  _isDownloading
+                                      ? SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: colors.textPrimary,
+                                          ),
+                                        )
+                                      : IconActionButton(
+                                          icon: CarbonIcons.download,
+                                          onPressed: _downloadVideo,
+                                          size: ButtonSize.small,
+                                        ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ),
