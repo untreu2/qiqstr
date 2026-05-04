@@ -472,6 +472,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get wallet => 'Wallet';
 
   @override
+  String get balanceUnavailable => 'Balance unavailable';
+
+  @override
+  String get noInternetConnection => 'No internet connection';
+
+  @override
+  String get thisUser => 'this user';
+
+  @override
+  String moreReplies(int count) {
+    return '$count more replies...';
+  }
+
+  @override
+  String get copiedNpub => 'Copied npub';
+
+  @override
+  String userVerifiedBy(String domain) {
+    return 'This user is verified by $domain';
+  }
+
+  @override
+  String get errorOpeningLink => 'Error opening link';
+
+  @override
+  String downloadError(String message) {
+    return 'Download error: $message';
+  }
+
+  @override
+  String get noteNotFound => 'Note not found';
+
+  @override
+  String get pendingTransaction => 'Pending';
+
+  @override
   String get notifications => 'Notifications';
 
   @override

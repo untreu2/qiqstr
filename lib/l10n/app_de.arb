@@ -153,6 +153,31 @@
   "home": "Startseite",
   "dm": "DM",
   "wallet": "Wallet",
+  "balanceUnavailable": "Kontostand nicht verfügbar",
+  "noInternetConnection": "Keine Internetverbindung",
+  "thisUser": "diesen Nutzer",
+  "moreReplies": "{count} weitere Antworten...",
+  "@moreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "copiedNpub": "npub kopiert",
+  "userVerifiedBy": "Dieser Nutzer wird von {domain} verifiziert",
+  "@userVerifiedBy": {
+    "placeholders": {
+      "domain": { "type": "String" }
+    }
+  },
+  "errorOpeningLink": "Fehler beim Öffnen des Links",
+  "downloadError": "Download-Fehler: {message}",
+  "@downloadError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "noteNotFound": "Beitrag nicht gefunden",
+  "pendingTransaction": "Ausstehend",
   "notifications": "Benachrichtigungen",
   "navigationBarOrder": "Reihenfolge der Navigationsleiste",
   "pressAndHoldToDrag": "Gedrückt halten, um zu ziehen und neu zu ordnen",

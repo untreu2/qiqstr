@@ -153,6 +153,31 @@
   "home": "Ana Sayfa",
   "dm": "DM",
   "wallet": "Cüzdan",
+  "balanceUnavailable": "Bakiye alınamadı",
+  "noInternetConnection": "İnternet bağlantısı yok",
+  "thisUser": "bu kullanıcı",
+  "moreReplies": "{count} yanıt daha...",
+  "@moreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "copiedNpub": "npub kopyalandı",
+  "userVerifiedBy": "Bu kullanıcı {domain} tarafından doğrulandı",
+  "@userVerifiedBy": {
+    "placeholders": {
+      "domain": { "type": "String" }
+    }
+  },
+  "errorOpeningLink": "Bağlantı açılırken hata oluştu",
+  "downloadError": "İndirme hatası: {message}",
+  "@downloadError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "noteNotFound": "Not bulunamadı",
+  "pendingTransaction": "Beklemede",
   "notifications": "Bildirimler",
   "navigationBarOrder": "Gezinme Çubuğu Sırası",
   "pressAndHoldToDrag": "Sürüklemek ve yeniden sıralamak için basılı tutun",

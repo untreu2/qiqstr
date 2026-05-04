@@ -1018,6 +1018,66 @@ abstract class AppLocalizations {
   /// **'Wallet'**
   String get wallet;
 
+  /// No description provided for @balanceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance unavailable'**
+  String get balanceUnavailable;
+
+  /// No description provided for @noInternetConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'No internet connection'**
+  String get noInternetConnection;
+
+  /// No description provided for @thisUser.
+  ///
+  /// In en, this message translates to:
+  /// **'this user'**
+  String get thisUser;
+
+  /// No description provided for @moreReplies.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more replies...'**
+  String moreReplies(int count);
+
+  /// No description provided for @copiedNpub.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied npub'**
+  String get copiedNpub;
+
+  /// No description provided for @userVerifiedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'This user is verified by {domain}'**
+  String userVerifiedBy(String domain);
+
+  /// No description provided for @errorOpeningLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Error opening link'**
+  String get errorOpeningLink;
+
+  /// No description provided for @downloadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Download error: {message}'**
+  String downloadError(String message);
+
+  /// No description provided for @noteNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Note not found'**
+  String get noteNotFound;
+
+  /// No description provided for @pendingTransaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get pendingTransaction;
+
   /// No description provided for @notifications.
   ///
   /// In en, this message translates to:

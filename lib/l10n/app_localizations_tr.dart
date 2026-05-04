@@ -476,6 +476,42 @@ class AppLocalizationsTr extends AppLocalizations {
   String get wallet => 'Cüzdan';
 
   @override
+  String get balanceUnavailable => 'Bakiye alınamadı';
+
+  @override
+  String get noInternetConnection => 'İnternet bağlantısı yok';
+
+  @override
+  String get thisUser => 'bu kullanıcı';
+
+  @override
+  String moreReplies(int count) {
+    return '$count yanıt daha...';
+  }
+
+  @override
+  String get copiedNpub => 'npub kopyalandı';
+
+  @override
+  String userVerifiedBy(String domain) {
+    return 'Bu kullanıcı $domain tarafından doğrulandı';
+  }
+
+  @override
+  String get errorOpeningLink => 'Bağlantı açılırken hata oluştu';
+
+  @override
+  String downloadError(String message) {
+    return 'İndirme hatası: $message';
+  }
+
+  @override
+  String get noteNotFound => 'Not bulunamadı';
+
+  @override
+  String get pendingTransaction => 'Beklemede';
+
+  @override
   String get notifications => 'Bildirimler';
 
   @override

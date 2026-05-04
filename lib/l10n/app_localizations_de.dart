@@ -489,6 +489,42 @@ class AppLocalizationsDe extends AppLocalizations {
   String get wallet => 'Wallet';
 
   @override
+  String get balanceUnavailable => 'Kontostand nicht verfügbar';
+
+  @override
+  String get noInternetConnection => 'Keine Internetverbindung';
+
+  @override
+  String get thisUser => 'diesen Nutzer';
+
+  @override
+  String moreReplies(int count) {
+    return '$count weitere Antworten...';
+  }
+
+  @override
+  String get copiedNpub => 'npub kopiert';
+
+  @override
+  String userVerifiedBy(String domain) {
+    return 'Dieser Nutzer wird von $domain verifiziert';
+  }
+
+  @override
+  String get errorOpeningLink => 'Fehler beim Öffnen des Links';
+
+  @override
+  String downloadError(String message) {
+    return 'Download-Fehler: $message';
+  }
+
+  @override
+  String get noteNotFound => 'Beitrag nicht gefunden';
+
+  @override
+  String get pendingTransaction => 'Ausstehend';
+
+  @override
   String get notifications => 'Benachrichtigungen';
 
   @override

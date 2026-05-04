@@ -512,7 +512,7 @@ class _ErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Error loading notes',
+              AppLocalizations.of(context)!.errorLoadingNotes,
               style: theme.textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
@@ -523,7 +523,7 @@ class _ErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             PrimaryButton(
-              label: 'Retry',
+              label: AppLocalizations.of(context)!.retryText,
               onPressed: onRetry,
             ),
           ],

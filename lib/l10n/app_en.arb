@@ -153,6 +153,31 @@
   "home": "Home",
   "dm": "DM",
   "wallet": "Wallet",
+  "balanceUnavailable": "Balance unavailable",
+  "noInternetConnection": "No internet connection",
+  "thisUser": "this user",
+  "moreReplies": "{count} more replies...",
+  "@moreReplies": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "copiedNpub": "Copied npub",
+  "userVerifiedBy": "This user is verified by {domain}",
+  "@userVerifiedBy": {
+    "placeholders": {
+      "domain": { "type": "String" }
+    }
+  },
+  "errorOpeningLink": "Error opening link",
+  "downloadError": "Download error: {message}",
+  "@downloadError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "noteNotFound": "Note not found",
+  "pendingTransaction": "Pending",
   "notifications": "Notifications",
   "navigationBarOrder": "Navigation Bar Order",
   "pressAndHoldToDrag": "Press and hold to drag and reorder items",
