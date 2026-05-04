@@ -58,16 +58,38 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
         removingStates: {},
         isSyncing: true,
       ));
-      _syncBookmarksInBackground(currentUserHex, emit);
-    } else if (bookmarkService.isInitialized) {
+    } else {
       emit(const BookmarkLoaded(
         bookmarkedNotes: [],
         removingStates: {},
         isSyncing: true,
       ));
-      _syncBookmarksInBackground(currentUserHex, emit);
-    } else {
-      emit(const BookmarkLoaded(bookmarkedNotes: [], removingStates: {}));
+    }
+
+    try {
+      await _syncService.syncBookmarkList(currentUserHex);
+      if (bookmarkService.bookmarkedEventIds.isNotEmpty) {
+        final notes =
+            await _fetchBookmarkedNotes(bookmarkService.bookmarkedEventIds);
+        if (state is BookmarkLoaded) {
+          final currentState = state as BookmarkLoaded;
+          emit(BookmarkLoaded(
+            bookmarkedNotes: notes,
+            removingStates: currentState.removingStates,
+            isSyncing: false,
+          ));
+        }
+      } else {
+        if (state is BookmarkLoaded) {
+          final currentState = state as BookmarkLoaded;
+          emit(currentState.copyWith(isSyncing: false));
+        }
+      }
+    } catch (_) {
+      if (state is BookmarkLoaded) {
+        final currentState = state as BookmarkLoaded;
+        emit(currentState.copyWith(isSyncing: false));
+      }
     }
   }
 
@@ -98,38 +120,13 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
       }
     }
 
-    return validNotes.map((n) => n.toMap()).toList();
-  }
-
-  void _syncBookmarksInBackground(
-      String currentUserHex, Emitter<BookmarkState> emit) {
-    _syncService.syncBookmarkList(currentUserHex).then((_) async {
-      final bookmarkService = EncryptedBookmarkService.instance;
-      if (bookmarkService.bookmarkedEventIds.isEmpty) {
-        if (state is BookmarkLoaded) {
-          final currentState = state as BookmarkLoaded;
-          emit(currentState.copyWith(isSyncing: false));
-        }
-        return;
-      }
-
-      final notes =
-          await _fetchBookmarkedNotes(bookmarkService.bookmarkedEventIds);
-
-      if (state is BookmarkLoaded) {
-        final currentState = state as BookmarkLoaded;
-        emit(BookmarkLoaded(
-          bookmarkedNotes: notes,
-          removingStates: currentState.removingStates,
-          isSyncing: false,
-        ));
-      }
-    }).catchError((_) {
-      if (state is BookmarkLoaded) {
-        final currentState = state as BookmarkLoaded;
-        emit(currentState.copyWith(isSyncing: false));
-      }
+    final allNotes = validNotes.map((n) => n.toMap()).toList();
+    allNotes.sort((a, b) {
+      final aTime = (a['created_at'] as num?)?.toInt() ?? 0;
+      final bTime = (b['created_at'] as num?)?.toInt() ?? 0;
+      return bTime.compareTo(aTime);
     });
+    return allNotes;
   }
 
   Future<void> _onBookmarkAdded(

@@ -819,7 +819,7 @@ class FeedPageState extends State<FeedPage> {
                   return const SizedBox.shrink();
                 },
               ),
-            _OfflineBanner(topPadding: topPadding),
+
           ],
         ),
       ),
@@ -1598,64 +1598,6 @@ class _FavoriteListInfo {
     required this.title,
     required this.pubkeys,
   });
-}
-
-class _OfflineBanner extends StatefulWidget {
-  final double topPadding;
-  const _OfflineBanner({required this.topPadding});
-
-  @override
-  State<_OfflineBanner> createState() => _OfflineBannerState();
-}
-
-class _OfflineBannerState extends State<_OfflineBanner> {
-  late StreamSubscription<bool> _sub;
-  bool _isOffline = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _sub = AppDI.get<SyncService>().connectivityStream.listen((online) {
-      if (mounted) setState(() => _isOffline = !online);
-    });
-    AppDI.get<SyncService>().isOnline.then((online) {
-      if (mounted) setState(() => _isOffline = !online);
-    });
-  }
-
-  @override
-  void dispose() {
-    _sub.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_isOffline) return const SizedBox.shrink();
-    final l10n = AppLocalizations.of(context)!;
-    return Positioned(
-      top: widget.topPadding,
-      left: 0,
-      right: 0,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          color: context.colors.error.withValues(alpha: 0.9),
-          child: Text(
-            l10n.noInternetConnection,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
