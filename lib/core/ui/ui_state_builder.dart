@@ -11,6 +11,7 @@ class UIStateBuilder<T> extends StatelessWidget {
     this.error,
     this.empty,
     this.initial,
+    this.onRetry,
   });
 
   final UIState<T> state;
@@ -25,14 +26,16 @@ class UIStateBuilder<T> extends StatelessWidget {
 
   final Widget Function()? initial;
 
+  final VoidCallback? onRetry;
+
   @override
   Widget build(BuildContext context) {
     return state.when<Widget>(
       initial: () => initial?.call() ?? _buildDefaultInitial(context),
       loading: (type) => loading?.call() ?? _buildDefaultLoading(context, type),
       loaded: (data) => builder(context, data),
-      error: (message) =>
-          error?.call(message) ?? _buildDefaultError(context, message),
+          error: (message) =>
+          error?.call(message) ?? _buildDefaultError(context, message, onRetry),
       empty: (message) =>
           empty?.call(message) ?? _buildDefaultEmpty(context, message),
     );
@@ -67,7 +70,8 @@ class UIStateBuilder<T> extends StatelessWidget {
     }
   }
 
-  Widget _buildDefaultError(BuildContext context, String message) {
+  Widget _buildDefaultError(
+      BuildContext context, String message, VoidCallback? onRetry) {
     final theme = Theme.of(context);
 
     return Center(
@@ -97,12 +101,14 @@ class UIStateBuilder<T> extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            PrimaryButton(
-              label: 'Try Again',
-              icon: Icons.refresh,
-              onPressed: () {},
-            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Try Again',
+                icon: Icons.refresh,
+                onPressed: onRetry,
+              ),
+            ],
           ],
         ),
       ),

@@ -50,7 +50,7 @@ class SparkService {
     if (_sdk != null) return Result.success(_sdk!);
 
     if (_activeAccountId == null || _activeAccountId!.isEmpty) {
-      return const Result.error('No active account set');
+      return Result.error('No active account set');
     }
 
     if (_isConnecting) {
@@ -145,12 +145,12 @@ class SparkService {
   Future<Result<void>> restoreWallet(String entropyHex) async {
     try {
       if (_activeAccountId == null || _activeAccountId!.isEmpty) {
-        return const Result.error('No active account set');
+        return Result.error('No active account set');
       }
 
       final cleaned = entropyHex.trim().replaceAll(' ', '').toLowerCase();
       if (cleaned.length != 64) {
-        return const Result.error('Invalid recovery phrase length');
+        return Result.error('Invalid recovery phrase length');
       }
 
       hex.decode(cleaned);
@@ -166,7 +166,7 @@ class SparkService {
         return Result.error(connectResult.error!);
       }
 
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       debugPrint('[SparkService] restoreWallet error: $e');
       return Result.error('Failed to restore wallet: $e');
@@ -232,9 +232,9 @@ class SparkService {
   }
 
   Future<Result<bool>> isConnected() async {
-    if (_sdk != null) return const Result.success(true);
+    if (_sdk != null) return Result.success(true);
     if (_activeAccountId == null || _activeAccountId!.isEmpty) {
-      return const Result.success(false);
+      return Result.success(false);
     }
     final stored = await _secureStorage.read(key: _entropyKey);
     return Result.success(stored != null && stored.isNotEmpty);
@@ -300,7 +300,7 @@ class SparkService {
       await sdk.sendPayment(
         request: SendPaymentRequest(prepareResponse: prepareResponse),
       );
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       debugPrint('[SparkService] payLightningInvoice error: $e');
       return Result.error('Payment failed: $e');
@@ -357,7 +357,7 @@ class SparkService {
         _secureStorage.delete(key: _lnAddressKey),
         _cleanupLegacyMnemonic(),
       ]);
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to clear wallet data: $e');
     }

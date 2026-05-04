@@ -232,7 +232,7 @@ class EncryptedMediaService {
         await decryptedCacheDir.delete(recursive: true);
       }
       
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to clear cache: $e');
     }

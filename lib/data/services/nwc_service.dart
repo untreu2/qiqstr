@@ -47,11 +47,11 @@ class NwcService {
   Future<Result<void>> saveConnectionUri(String uri) async {
     try {
       if (!validateUri(uri)) {
-        return const Result.error('Invalid NWC connection string');
+        return Result.error('Invalid NWC connection string');
       }
       await _secureStorage.write(key: _nwcUriKey, value: uri);
       _cachedNwcUri = uri;
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to save NWC connection: $e');
     }
@@ -79,7 +79,7 @@ class NwcService {
     try {
       await _secureStorage.delete(key: _nwcUriKey);
       _cachedNwcUri = null;
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to clear NWC connection: $e');
     }
@@ -89,7 +89,7 @@ class NwcService {
     try {
       final uriResult = await getConnectionUri();
       if (uriResult.isError || uriResult.data == null) {
-        return const Result.error('No NWC connection configured');
+        return Result.error('No NWC connection configured');
       }
 
       debugPrint('[NwcService] Paying invoice via NWC...');
@@ -111,7 +111,7 @@ class NwcService {
     try {
       final uriResult = await getConnectionUri();
       if (uriResult.isError || uriResult.data == null) {
-        return const Result.error('No NWC connection configured');
+        return Result.error('No NWC connection configured');
       }
 
       debugPrint('[NwcService] Getting balance via NWC...');
@@ -136,7 +136,7 @@ class NwcService {
     try {
       final uriResult = await getConnectionUri();
       if (uriResult.isError || uriResult.data == null) {
-        return const Result.error('No NWC connection configured');
+        return Result.error('No NWC connection configured');
       }
 
       final amountMsats = BigInt.from(amountSats) * BigInt.from(1000);
@@ -150,7 +150,7 @@ class NwcService {
       final response = jsonDecode(responseJson) as Map<String, dynamic>;
       final invoice = response['invoice'] as String?;
       if (invoice == null || invoice.isEmpty) {
-        return const Result.error('NWC returned empty invoice');
+        return Result.error('NWC returned empty invoice');
       }
       debugPrint('[NwcService] NWC invoice created');
       return Result.success(invoice);
@@ -167,7 +167,7 @@ class NwcService {
     try {
       final uriResult = await getConnectionUri();
       if (uriResult.isError || uriResult.data == null) {
-        return const Result.error('No NWC connection configured');
+        return Result.error('No NWC connection configured');
       }
 
       debugPrint('[NwcService] Listing transactions via NWC...');

@@ -5,6 +5,24 @@ import '../../core/base/result.dart';
 import 'rust_nostr_bridge.dart';
 import 'validation_service.dart';
 
+class StoredAccountSummary {
+  final String npub;
+  final String pubkeyHex;
+
+  const StoredAccountSummary({
+    required this.npub,
+    required this.pubkeyHex,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StoredAccountSummary && npub == other.npub;
+
+  @override
+  int get hashCode => npub.hashCode;
+}
+
 class StoredAccount {
   final String npub;
   final String privateKeyHex;
@@ -110,6 +128,14 @@ class AuthService {
     }
   }
 
+  Future<List<StoredAccountSummary>> getStoredAccountSummaries() async {
+    final accounts = await getStoredAccounts();
+    return accounts.map((a) {
+      final pubkeyHex = npubToHex(a.npub) ?? '';
+      return StoredAccountSummary(npub: a.npub, pubkeyHex: pubkeyHex);
+    }).toList();
+  }
+
   Future<void> _saveAccountToList(StoredAccount account) async {
     final accounts = await getStoredAccounts();
     accounts.removeWhere((a) => a.npub == account.npub);
@@ -134,7 +160,7 @@ class AuthService {
       final accounts = await getStoredAccounts();
       final target = accounts.where((a) => a.npub == npub).firstOrNull;
       if (target == null) {
-        return const Result.error('Account not found');
+        return Result.error('Account not found');
       }
 
       await Future.wait([
@@ -208,22 +234,22 @@ class AuthService {
   Future<Result<String>> loginWithNsec(String nsec) async {
     try {
       if (nsec.trim().isEmpty) {
-        return const Result.error('NSEC cannot be empty');
+        return Result.error('NSEC cannot be empty');
       }
 
       if (!nsec.startsWith('nsec1')) {
-        return const Result.error('NSEC must start with "nsec1"');
+        return Result.error('NSEC must start with "nsec1"');
       }
 
       if (nsec.length < 63) {
-        return const Result.error('NSEC is too short');
+        return Result.error('NSEC is too short');
       }
 
       String privateKey;
       try {
         privateKey = Nip19.decode(nsec);
       } catch (e) {
-        return const Result.error('Invalid NSEC format');
+        return Result.error('Invalid NSEC format');
       }
 
       String npub;
@@ -231,7 +257,7 @@ class AuthService {
         final publicKey = Bip340.getPublicKey(privateKey);
         npub = Nip19.encodePubKey(publicKey);
       } catch (e) {
-        return const Result.error('Failed to generate public key from NSEC');
+        return Result.error('Failed to generate public key from NSEC');
       }
 
       await Future.wait([
@@ -283,17 +309,17 @@ class AuthService {
   Future<Result<String>> loginWithPrivateKey(String privateKey) async {
     try {
       if (privateKey.trim().isEmpty) {
-        return const Result.error('Private key cannot be empty');
+        return Result.error('Private key cannot be empty');
       }
 
       if (privateKey.length != 64) {
-        return const Result.error('Private key must be 64 characters long');
+        return Result.error('Private key must be 64 characters long');
       }
 
       try {
         int.parse(privateKey, radix: 16);
       } catch (e) {
-        return const Result.error('Private key must be valid hexadecimal');
+        return Result.error('Private key must be valid hexadecimal');
       }
 
       String npub;
@@ -301,7 +327,7 @@ class AuthService {
         final publicKey = Bip340.getPublicKey(privateKey);
         npub = Nip19.encodePubKey(publicKey);
       } catch (e) {
-        return const Result.error(
+        return Result.error(
             'Failed to generate public key from private key');
       }
 
@@ -336,7 +362,7 @@ class AuthService {
       _cachedNpub = null;
       _cachedPubkeyHex = null;
 
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Logout failed: ${e.toString()}');
     }
@@ -356,7 +382,10 @@ class AuthService {
         _secureStorage.write(key: 'privateKey', value: privateKey),
       ]);
 
-      return const Result.success(null);
+      _cachedNpub = npub;
+      _cachedPubkeyHex = npubToHex(npub);
+
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to update credentials: ${e.toString()}');
     }
@@ -375,7 +404,7 @@ class AuthService {
     try {
       final npub = await _secureStorage.read(key: 'npub');
       if (npub == null || npub.isEmpty) {
-        return const Result.success(null);
+        return Result.success(null);
       }
 
       if (npub.startsWith('npub1')) {
@@ -384,7 +413,7 @@ class AuthService {
       } else if (npub.length == 64) {
         return Result.success(npub);
       } else {
-        return const Result.error('Invalid npub format');
+        return Result.error('Invalid npub format');
       }
     } catch (e) {
       return Result.error('Failed to get public key: ${e.toString()}');
@@ -505,7 +534,7 @@ class AuthService {
   Future<Result<void>> clearAllData() async {
     try {
       await _secureStorage.deleteAll();
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to clear all data: ${e.toString()}');
     }
@@ -581,7 +610,7 @@ class AuthService {
     return isAuthResult.fold(
       (isAuthenticated) async {
         if (!isAuthenticated) {
-          return const Result.success(AuthStatus(
+          return Result.success(AuthStatus(
             isAuthenticated: false,
             npub: null,
           ));
@@ -593,7 +622,7 @@ class AuthService {
             isAuthenticated: true,
             npub: npub,
           )),
-          (error) => const Result.success(AuthStatus(
+          (error) => Result.success(AuthStatus(
             isAuthenticated: false,
             npub: null,
           )),
@@ -615,17 +644,17 @@ class AuthService {
   Future<Result<String>> loginWithMnemonic(String mnemonic) async {
     try {
       if (mnemonic.trim().isEmpty) {
-        return const Result.error('Mnemonic cannot be empty');
+        return Result.error('Mnemonic cannot be empty');
       }
 
       final words = mnemonic.trim().split(' ');
       if (words.length != 12) {
-        return const Result.error('Mnemonic must be exactly 12 words');
+        return Result.error('Mnemonic must be exactly 12 words');
       }
 
       final isValid = Bip39Bridge.validateMnemonic(mnemonic.trim());
       if (!isValid) {
-        return const Result.error('Invalid mnemonic phrase');
+        return Result.error('Invalid mnemonic phrase');
       }
 
       final privateKey = Bip39Bridge.mnemonicToPrivateKey(mnemonic.trim());
@@ -635,7 +664,7 @@ class AuthService {
         final publicKey = Bip340.getPublicKey(privateKey);
         npub = Nip19.encodePubKey(publicKey);
       } catch (e) {
-        return const Result.error(
+        return Result.error(
             'Failed to generate public key from mnemonic');
       }
 

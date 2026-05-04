@@ -16,13 +16,9 @@ import '../../../presentation/blocs/suggested_follows/suggested_follows_bloc.dar
 import '../../../presentation/blocs/muted/muted_bloc.dart';
 import '../../../presentation/blocs/bookmark/bookmark_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
-import '../../../presentation/blocs/note_statistics/note_statistics_bloc.dart';
-import '../../../presentation/blocs/edit_new_account_profile/edit_new_account_profile_bloc.dart';
-import '../../../presentation/blocs/user_tile/user_tile_bloc.dart';
-import '../../../presentation/blocs/quote_widget/quote_widget_bloc.dart';
 import '../../../presentation/blocs/article_quote_widget/article_quote_widget_bloc.dart';
 import '../../../presentation/blocs/note_content/note_content_bloc.dart';
-import '../../../presentation/blocs/profile_info/profile_info_bloc.dart';
+
 import '../../../presentation/blocs/article/article_bloc.dart';
 import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
 import '../../../presentation/blocs/onboarding_spark/onboarding_spark_bloc.dart';
@@ -37,7 +33,6 @@ import '../../../data/services/interaction_service.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/following_repository.dart';
-import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/sync/sync_service.dart';
@@ -160,45 +155,9 @@ class BlocsModule extends DIModule {
           syncService: AppDI.get<SyncService>(),
         ));
 
-    AppDI.registerFactory<NoteStatisticsBloc>(() => NoteStatisticsBloc(
-          interactionRepository: AppDI.get<InteractionRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          authService: AppDI.get<AuthService>(),
-          syncService: AppDI.get<SyncService>(),
-          noteId: '',
-        ));
-
-    AppDI.registerFactory<EditNewAccountProfileBloc>(
-        () => EditNewAccountProfileBloc(
-              syncService: AppDI.get<SyncService>(),
-              npub: '',
-            ));
-
-    AppDI.registerFactory<UserTileBloc>(() => UserTileBloc(
-          followingRepository: AppDI.get<FollowingRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-          userNpub: '',
-        ));
-
-    AppDI.registerFactory<QuoteWidgetBloc>(() => QuoteWidgetBloc(
-          feedRepository: AppDI.get<FeedRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          bech32: '',
-        ));
-
     AppDI.registerFactory<NoteContentBloc>(() => NoteContentBloc(
           profileRepository: AppDI.get<ProfileRepository>(),
           authService: AppDI.get<AuthService>(),
-        ));
-
-    AppDI.registerFactory<ProfileInfoBloc>(() => ProfileInfoBloc(
-          followingRepository: AppDI.get<FollowingRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-          userPubkeyHex: '',
         ));
 
     AppDI.registerFactory<ArticleQuoteWidgetBloc>(() => ArticleQuoteWidgetBloc(

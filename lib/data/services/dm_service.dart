@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import '../../core/base/result.dart';
 import 'auth_service.dart';
 import 'relay_service.dart';
@@ -51,7 +52,7 @@ class DmService {
 
   Future<Result<void>> _ensureInitialized() async {
     if (_initialized && _currentUserPubkeyHex != null) {
-      return const Result.success(null);
+      return Result.success(null);
     }
 
     try {
@@ -68,7 +69,7 @@ class DmService {
       }
 
       _initialized = true;
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to initialize: $e');
     }
@@ -397,7 +398,9 @@ class DmService {
         _cachedConversations = conversations;
         _lastConversationsFetch = DateTime.now();
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DmService] $e');
+    }
   }
 
   Future<List<Map<String, dynamic>>> _loadMessagesFromDb(
@@ -530,7 +533,9 @@ class DmService {
         _mergeAndCapMessages(otherUserPubkeyHex, messagesMap.values,
             notify: true);
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DmService] $e');
+    }
   }
 
   List<Map<String, dynamic>> _mergeAndCapMessages(
@@ -619,7 +624,7 @@ class DmService {
 
       _updateConversationCache(recipientPubkeyHex, optimisticMessage);
 
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to send message: $e');
     }
@@ -707,7 +712,7 @@ class DmService {
 
       _updateConversationCache(recipientPubkeyHex, optimisticMessage);
 
-      return const Result.success(null);
+      return Result.success(null);
     } catch (e) {
       return Result.error('Failed to send encrypted media: $e');
     }
@@ -822,7 +827,9 @@ class DmService {
           sink.add(merged);
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DmService] $e');
+    }
     _fetchMessagesInBackground(otherUserPubkeyHex);
   }
 
@@ -906,7 +913,9 @@ class DmService {
       _updateConversationCache(otherUserPubkeyHex, message);
       _notifyConversationsStream();
       _saveEvent(eventData);
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DmService] $e');
+    }
   }
 
   void _notifyConversationsStream() {
