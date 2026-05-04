@@ -114,7 +114,7 @@ class _WalletPageState extends State<WalletPage>
     return buffer.toString();
   }
 
-  String _formatTimestamp(int? timestamp) {
+  String _formatTimestamp(int? timestamp, AppLocalizations l10n) {
     if (timestamp == null) return '';
     final dt = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
     final now = DateTime.now();
@@ -122,8 +122,11 @@ class _WalletPageState extends State<WalletPage>
     if (diff.inDays == 0) {
       return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     }
+    if (diff.inDays == 1) {
+      return l10n.yesterday;
+    }
     if (diff.inDays < 7) {
-      return '${diff.inDays}d ago';
+      return l10n.daysAgo(diff.inDays);
     }
     return '${dt.day}/${dt.month}/${dt.year}';
   }
@@ -149,41 +152,66 @@ class _WalletPageState extends State<WalletPage>
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Flexible(
-              child: Text(
-                _formatSats(sats),
-                style: GoogleFonts.poppins(
-                  fontSize: sats > 9999999 ? 36 : 48,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.textPrimary,
-                  height: 1.1,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: context.colors.overlayLight,
+              borderRadius: BorderRadius.circular(28),
             ),
-            const SizedBox(width: 8),
-            Text(
-              'sats',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w400,
-                color: context.colors.textSecondary,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Flexible(
+                  child: Text(
+                    _formatSats(sats),
+                    style: GoogleFonts.poppins(
+                      fontSize: sats > 9999999 ? 36 : 48,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                      height: 1.1,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'sats',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w400,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (state.balanceError != null) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 14, color: context.colors.error),
+                  const SizedBox(width: 4),
+                  Text(
+                    AppLocalizations.of(context)!.balanceUnavailable,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.colors.error,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -331,7 +359,7 @@ class _WalletPageState extends State<WalletPage>
                 if (timestamp != null || isPending) ...[
                   const SizedBox(height: 2),
                   Text(
-                    isPending ? 'Pending' : _formatTimestamp(timestamp),
+                    isPending ? l10n.pendingTransaction : _formatTimestamp(timestamp, l10n),
                     style: TextStyle(
                       fontSize: 12,
                       color: isPending
