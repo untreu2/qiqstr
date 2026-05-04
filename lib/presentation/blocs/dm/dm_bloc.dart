@@ -100,6 +100,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     emit(const DmLoading());
 
     final result = await _dmService.getConversations();
+    if (isClosed) return;
 
     if (result.isError) {
       emit(DmError(result.error!));
@@ -108,6 +109,8 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
     final conversations = result.data!;
     final enriched = await _enrichConversations(conversations);
+    if (isClosed) return;
+
     _cachedConversations = enriched;
     emit(DmConversationsLoaded(enriched));
 
@@ -244,6 +247,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     );
 
     final result = await _dmService.getMessages(event.pubkeyHex);
+    if (isClosed) return;
     result.fold(
       (messages) {
         _fullMessages = List<Map<String, dynamic>>.from(messages);
@@ -271,7 +275,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     Emitter<DmState> emit,
   ) async {
     final result = await _dmService.sendMessage(event.pubkeyHex, event.content);
-
+    if (isClosed) return;
     result.fold(
       (_) {},
       (error) => emit(DmError(error)),
@@ -292,7 +296,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
       originalHash: event.originalHash,
       fileSize: event.fileSize,
     );
-
+    if (isClosed) return;
     result.fold(
       (_) {},
       (error) => emit(DmError(error)),

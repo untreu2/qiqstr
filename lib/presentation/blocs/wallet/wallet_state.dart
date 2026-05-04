@@ -19,6 +19,7 @@ class WalletLoaded extends WalletState {
   final bool isLoadingTransactions;
   final bool isNwcMode;
   final String? lightningAddress;
+  final String? balanceError;
 
   const WalletLoaded({
     this.isConnected = false,
@@ -27,6 +28,7 @@ class WalletLoaded extends WalletState {
     this.isLoadingTransactions = false,
     this.isNwcMode = false,
     this.lightningAddress,
+    this.balanceError,
   });
 
   @override
@@ -37,6 +39,7 @@ class WalletLoaded extends WalletState {
         isLoadingTransactions,
         isNwcMode,
         lightningAddress,
+        balanceError,
       ];
 
   WalletLoaded copyWith({
@@ -47,6 +50,8 @@ class WalletLoaded extends WalletState {
     bool? isNwcMode,
     String? lightningAddress,
     bool clearLightningAddress = false,
+    String? balanceError,
+    bool clearBalanceError = false,
   }) {
     return WalletLoaded(
       isConnected: isConnected ?? this.isConnected,
@@ -58,6 +63,8 @@ class WalletLoaded extends WalletState {
       lightningAddress: clearLightningAddress
           ? null
           : lightningAddress ?? this.lightningAddress,
+      balanceError:
+          clearBalanceError ? null : balanceError ?? this.balanceError,
     );
   }
 }

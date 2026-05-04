@@ -35,7 +35,6 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     on<WalletInitialized>(_onWalletInitialized);
     on<WalletBalanceRequested>(_onWalletBalanceRequested);
     on<WalletPaymentRequested>(_onWalletPaymentRequested);
-    on<WalletInvoiceGenerated>(_onWalletInvoiceGenerated);
     on<WalletTransactionsLoaded>(_onWalletTransactionsLoaded);
     on<WalletLightningAddressRequested>(_onWalletLightningAddressRequested);
     on<WalletLightningAddressRegistered>(_onWalletLightningAddressRegistered);
@@ -50,9 +49,11 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     emit(const WalletLoading());
 
     final hasNwcConnection = await _nwcService.hasConnection();
+    if (isClosed) return;
 
     if (hasNwcConnection) {
       emit(const WalletLoaded(isConnected: true, isNwcMode: true));
+      if (isClosed) return;
       add(const WalletBalanceRequested());
       add(const WalletTransactionsLoaded());
       _startBalanceTimer();
@@ -60,12 +61,14 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     }
 
     final isConnectedResult = await _sparkService.isConnected();
+    if (isClosed) return;
     final isConnected =
         isConnectedResult.isSuccess && isConnectedResult.data == true;
 
     emit(WalletLoaded(isConnected: isConnected));
 
     if (isConnected) {
+      if (isClosed) return;
       add(const WalletBalanceRequested());
       add(const WalletTransactionsLoaded());
       add(const WalletLightningAddressRequested());
@@ -79,32 +82,46 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   ) async {
     if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
       final result = await _nwcService.getBalance();
+      if (isClosed) return;
       result.fold(
         (balanceMsat) {
           if (state is WalletLoaded) {
             emit((state as WalletLoaded).copyWith(
               balanceSats: balanceMsat ~/ 1000,
+              balanceError: null,
             ));
           }
         },
-        (error) => debugPrint('[WalletBloc] NWC balance error: $error'),
+        (error) {
+          debugPrint('[WalletBloc] NWC balance error: $error');
+          if (state is WalletLoaded) {
+            emit((state as WalletLoaded).copyWith(balanceError: error));
+          }
+        },
       );
       return;
     }
 
     final result = await _sparkService.getBalance();
+    if (isClosed) return;
     result.fold(
       (balanceSats) {
         if (state is WalletLoaded) {
           emit((state as WalletLoaded).copyWith(
             isConnected: true,
             balanceSats: balanceSats,
+            balanceError: null,
           ));
         } else {
           emit(WalletLoaded(isConnected: true, balanceSats: balanceSats));
         }
       },
-      (error) => debugPrint('[WalletBloc] Spark balance error: $error'),
+      (error) {
+        debugPrint('[WalletBloc] Spark balance error: $error');
+        if (state is WalletLoaded) {
+          emit((state as WalletLoaded).copyWith(balanceError: error));
+        }
+      },
     );
   }
 
@@ -114,6 +131,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   ) async {
     if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
       final result = await _nwcService.payInvoice(event.invoice);
+      if (isClosed) return;
       result.fold(
         (_) => add(const WalletBalanceRequested()),
         (error) => emit(WalletError('Payment failed: $error')),
@@ -122,36 +140,10 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     }
 
     final result = await _sparkService.payLightningInvoice(event.invoice);
+    if (isClosed) return;
     result.fold(
       (_) => add(const WalletBalanceRequested()),
       (error) => emit(WalletError('Payment failed: $error')),
-    );
-  }
-
-  Future<void> _onWalletInvoiceGenerated(
-    WalletInvoiceGenerated event,
-    Emitter<WalletState> emit,
-  ) async {
-    if (event.amount <= 0) {
-      emit(const WalletError('Amount must be greater than 0'));
-      return;
-    }
-
-    if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
-      final result = await _nwcService.makeInvoice(amountSats: event.amount);
-      result.fold(
-        (_) {},
-        (error) => emit(WalletError('Invoice generation failed: $error')),
-      );
-      return;
-    }
-
-    final result = await _sparkService.createLightningInvoice(
-      amountSats: event.amount,
-    );
-    result.fold(
-      (_) {},
-      (error) => emit(WalletError('Invoice generation failed: $error')),
     );
   }
 
@@ -165,6 +157,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
 
     if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
       final result = await _nwcService.listTransactions(limit: 20);
+      if (isClosed) return;
       result.fold(
         (transactions) {
           if (state is WalletLoaded) {
@@ -186,6 +179,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     }
 
     final result = await _sparkService.listPayments(limit: 20);
+    if (isClosed) return;
     result.fold(
       (transactions) {
         if (state is WalletLoaded) {
@@ -214,6 +208,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     Emitter<WalletState> emit,
   ) async {
     final result = await _sparkService.getLightningAddress();
+    if (isClosed) return;
     result.fold(
       (address) {
         if (state is WalletLoaded) {
@@ -230,6 +225,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   ) async {
     final result =
         await _sparkService.registerLightningAddress(event.username);
+    if (isClosed) return;
     await result.fold(
       (address) async {
         if (state is WalletLoaded) {

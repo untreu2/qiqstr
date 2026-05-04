@@ -21,15 +21,6 @@ class WalletPaymentRequested extends WalletEvent {
   List<Object?> get props => [invoice];
 }
 
-class WalletInvoiceGenerated extends WalletEvent {
-  final int amount;
-
-  const WalletInvoiceGenerated(this.amount);
-
-  @override
-  List<Object?> get props => [amount];
-}
-
 class WalletTransactionsLoaded extends WalletEvent {
   const WalletTransactionsLoaded();
 }
