@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qiqstr/ui/theme/theme_manager.dart';
@@ -90,8 +91,8 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
             padding: const EdgeInsets.only(left: 17),
             child: Row(
               children: [
-                Icon(
-                  Icons.warning_rounded,
+                PhosphorIcon(
+                  PhosphorIcons.warning(),
                   color: context.colors.error,
                   size: 22,
                 ),

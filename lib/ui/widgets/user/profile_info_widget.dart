@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/theme_manager.dart';
@@ -198,8 +198,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(
-                              CarbonIcons.location,
+                            PhosphorIcon(
+                              PhosphorIcons.mapPin(),
                               size: 14,
                               color: context.colors.textSecondary,
                             ),
@@ -256,8 +256,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       return CircleAvatar(
         radius: radius,
         backgroundColor: context.colors.surfaceTransparent,
-        child: Icon(
-          Icons.person,
+        child: PhosphorIcon(
+          PhosphorIcons.user(),
           size: radius,
           color: context.colors.textSecondary,
         ),
@@ -278,13 +278,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           memCacheWidth: (radius * 5).toInt(),
           maxHeightDiskCache: (radius * 5).toInt(),
           maxWidthDiskCache: (radius * 5).toInt(),
-          placeholder: (context, url) => Icon(
-            Icons.person,
+          placeholder: (context, url) => PhosphorIcon(
+            PhosphorIcons.user(),
             size: radius,
             color: context.colors.textSecondary,
           ),
-          errorWidget: (context, url, error) => Icon(
-            Icons.person,
+          errorWidget: (context, url, error) => PhosphorIcon(
+            PhosphorIcons.user(),
             size: radius,
             color: context.colors.textSecondary,
           ),
@@ -369,8 +369,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => _showVerificationTooltip(context, nip05),
-                      child: Icon(
-                        Icons.verified,
+                      child: PhosphorIcon(
+                        PhosphorIcons.sealCheck(),
                         size: 22,
                         color: context.colors.accent,
                       ),
@@ -389,8 +389,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                           ),
                         );
                       },
-                      child: Icon(
-                        Icons.qr_code,
+                      child: PhosphorIcon(
+                        PhosphorIcons.qrCode(),
                         size: 20,
                         color: context.colors.textSecondary,
                       ),
@@ -422,8 +422,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   Clipboard.setData(ClipboardData(text: npub));
                   AppSnackbar.info(context, 'Copied npub');
                 },
-                child: Icon(
-                  Icons.copy,
+                child: PhosphorIcon(
+                  PhosphorIcons.copy(),
                   size: 14,
                   color: context.colors.textSecondary,
                 ),
@@ -577,17 +577,17 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final items = <AppPopupMenuItem>[
       AppPopupMenuItem(
         value: 'add_to_list',
-        icon: CarbonIcons.list_boxes,
+        icon: PhosphorIcons.listBullets(),
         label: l10n.addToList,
       ),
       AppPopupMenuItem(
         value: 'mute',
-        icon: isMuted ? CarbonIcons.notification_off : CarbonIcons.notification,
+        icon: isMuted ? PhosphorIcons.bellSlash() : PhosphorIcons.bell(),
         label: isMuted ? l10n.unmute : l10n.mute,
       ),
       AppPopupMenuItem(
         value: 'report',
-        icon: CarbonIcons.flag,
+        icon: PhosphorIcons.flag(),
         label: l10n.report,
       ),
     ];
@@ -614,8 +614,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           color: context.colors.overlayLight,
           borderRadius: BorderRadius.circular(40),
         ),
-        child: Icon(
-          Icons.more_horiz,
+        child: PhosphorIcon(
+          PhosphorIcons.dotsThree(),
           size: 20,
           color: context.colors.textPrimary,
         ),
@@ -727,8 +727,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    CarbonIcons.list_boxes,
+                                  PhosphorIcon(
+                                    PhosphorIcons.listBullets(),
                                     size: 20,
                                     color: context.colors.textPrimary,
                                   ),
@@ -747,8 +747,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                                   ),
                                   Icon(
                                     isInList
-                                        ? CarbonIcons.checkmark_filled
-                                        : CarbonIcons.add,
+                                        ? PhosphorIcons.checkCircle()
+                                        : PhosphorIcons.plus(),
                                     size: 20,
                                     color: isInList
                                         ? context.colors.accent
@@ -796,7 +796,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                isFollowing ? PhosphorIcons.userGear() : PhosphorIcons.userPlus(),
                 size: 16,
                 color: isFollowing
                     ? context.colors.textPrimary
@@ -877,16 +877,16 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         fadeOutDuration: Duration.zero,
                         placeholder: (context, url) => Container(
                           color: context.colors.surfaceTransparent,
-                          child: Icon(
-                            Icons.person,
+                          child: PhosphorIcon(
+                            PhosphorIcons.user(),
                             size: 12,
                             color: context.colors.textSecondary,
                           ),
                         ),
                         errorWidget: (context, url, error) => Container(
                           color: context.colors.surfaceTransparent,
-                          child: Icon(
-                            Icons.person,
+                          child: PhosphorIcon(
+                            PhosphorIcons.user(),
                             size: 12,
                             color: context.colors.textSecondary,
                           ),

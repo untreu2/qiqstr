@@ -1,4 +1,4 @@
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -155,19 +155,19 @@ class _WelcomePageState extends State<WelcomePage> {
         children: [
           _buildFeatureItem(
             context,
-            Icons.public,
+            PhosphorIcons.globe(),
             l10n.welcomeFeatureDecentralized,
           ),
           const SizedBox(height: 24),
           _buildFeatureItem(
             context,
-            Icons.vpn_key,
+            PhosphorIcons.key(),
             l10n.welcomeFeatureKeys,
           ),
           const SizedBox(height: 24),
           _buildFeatureItem(
             context,
-            Icons.lock,
+            PhosphorIcons.lock(),
             l10n.welcomeFeatureBitcoin,
           ),
         ],
@@ -176,7 +176,7 @@ class _WelcomePageState extends State<WelcomePage> {
   }
 
   Widget _buildFeatureItem(
-      BuildContext context, IconData icon, String description) {
+      BuildContext context, PhosphorIconData icon, String description) {
     return Row(
       children: [
         Container(
@@ -186,10 +186,12 @@ class _WelcomePageState extends State<WelcomePage> {
             color: context.colors.overlayLight,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            icon,
-            color: context.colors.textPrimary,
-            size: 20,
+          child: Center(
+            child: PhosphorIcon(
+              icon,
+              color: context.colors.textPrimary,
+              size: 20,
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -324,8 +326,8 @@ class _WelcomePageState extends State<WelcomePage> {
             currentLocale: localeState.locale,
           ),
           behavior: HitTestBehavior.opaque,
-          child: Icon(
-            CarbonIcons.language,
+          child: PhosphorIcon(
+            PhosphorIcons.translate(),
             color: context.colors.background,
             size: 20,
           ),

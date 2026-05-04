@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
@@ -414,7 +415,7 @@ class _SendDialogState extends State<SendDialog> {
               color: colors.overlayLight,
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.close, size: 20, color: colors.textPrimary),
+            child: PhosphorIcon(PhosphorIcons.x(), size: 20, color: colors.textPrimary),
           ),
         ),
       ],
@@ -453,13 +454,13 @@ class _SendDialogState extends State<SendDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildIconButton(
-                  icon: Icons.qr_code_scanner,
+                  icon: PhosphorIcons.qrCode(),
                   colors: colors,
                   onTap: _scanQrCode,
                 ),
                 const SizedBox(width: 6),
                 _buildIconButton(
-                  icon: Icons.content_paste,
+                  icon: PhosphorIcons.clipboardText(),
                   colors: colors,
                   onTap: _pasteFromClipboard,
                 ),
@@ -547,7 +548,7 @@ class _SendDialogState extends State<SendDialog> {
         padding: const EdgeInsets.only(top: 10),
         child: Row(
           children: [
-            Icon(Icons.check_circle, size: 14, color: colors.success),
+            PhosphorIcon(PhosphorIcons.checkCircle(), size: 14, color: colors.success),
             const SizedBox(width: 6),
             Text(
               _inputController.text.trim(),

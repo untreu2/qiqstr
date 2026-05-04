@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/edit_profile/edit_profile_bloc.dart';
@@ -216,8 +216,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                           height: bannerHeight,
                           width: screenWidth,
                           color: context.colors.background,
-                          child: Icon(
-                            Icons.image,
+                          child: PhosphorIcon(
+                            PhosphorIcons.image(),
                             color: context.colors.textSecondary,
                             size: 40,
                           ),
@@ -227,8 +227,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                         height: bannerHeight,
                         width: screenWidth,
                         color: context.colors.background,
-                        child: Icon(
-                          Icons.add_photo_alternate,
+                        child: PhosphorIcon(
+                          PhosphorIcons.image(),
                           color: context.colors.textSecondary,
                           size: 40,
                         ),
@@ -245,8 +245,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                       color: context.colors.background.withValues(alpha: 0.9),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      CarbonIcons.camera,
+                    child: PhosphorIcon(
+                      PhosphorIcons.camera(),
                       color: context.colors.textPrimary,
                       size: 24,
                     ),
@@ -295,8 +295,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                           strokeWidth: 2,
                         )
                       : pictureUrl.isEmpty
-                          ? Icon(
-                              Icons.person,
+                          ? PhosphorIcon(
+                              PhosphorIcons.user(),
                               size: avatarRadius,
                               color: context.colors.textSecondary,
                             )
@@ -316,8 +316,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                             color: context.colors.background.withValues(alpha: 0.9),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(
-                            CarbonIcons.camera,
+                          child: PhosphorIcon(
+                            PhosphorIcons.camera(),
                             color: context.colors.textPrimary,
                             size: 20,
                           ),
@@ -563,8 +563,8 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               ),
                             ),
                           )
-                        : Icon(
-                            Icons.check,
+                        : PhosphorIcon(
+                            PhosphorIcons.check(),
                             color: context.colors.background,
                             size: 24,
                           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/theme_manager.dart';
 import 'common_buttons.dart';
@@ -65,7 +66,7 @@ class BackButtonWidget extends StatelessWidget {
         label: semanticsLabel ?? 'Go back to previous screen',
         button: true,
         child: IconActionButton(
-          icon: Icons.arrow_back_ios_new_rounded,
+          icon: PhosphorIcons.arrowLeft(),
           iconColor: iconColor ?? context.colors.textPrimary,
           onPressed: onPressed ?? () => context.pop(),
           tooltip: tooltip ?? 'Go back',
@@ -94,8 +95,8 @@ class BackButtonWidget extends StatelessWidget {
           child: Semantics(
             label: semanticsLabel ?? 'Go back to previous screen',
             button: true,
-            child: Icon(
-              Icons.arrow_back,
+            child: PhosphorIcon(
+              PhosphorIcons.arrowLeft(),
               color: iconColor ?? context.colors.background,
               size: iconSize ?? 20,
             ),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
@@ -133,8 +133,8 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
                         color: context.colors.textPrimary,
                         borderRadius: BorderRadius.circular(22),
                       ),
-                      child: Icon(
-                        Icons.add,
+                      child: PhosphorIcon(
+                        PhosphorIcons.plus(),
                         color: context.colors.background,
                         size: 24,
                       ),
@@ -174,8 +174,8 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(
-                    CarbonIcons.warning,
+                  PhosphorIcon(
+                    PhosphorIcons.warning(),
                     size: 48,
                     color: context.colors.error,
                   ),
@@ -233,8 +233,8 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(
-                    CarbonIcons.list_boxes,
+                  PhosphorIcon(
+                    PhosphorIcons.listBullets(),
                     size: 48,
                     color: context.colors.textSecondary,
                   ),
@@ -308,8 +308,8 @@ class _FollowSetsPageState extends State<FollowSetsPage> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(
-                    CarbonIcons.list_boxes,
+                  PhosphorIcon(
+                    PhosphorIcons.listBullets(),
                     size: 40,
                     color: context.colors.textSecondary,
                   ),
@@ -441,8 +441,8 @@ class _FollowSetCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
-                  CarbonIcons.list_boxes,
+                PhosphorIcon(
+                  PhosphorIcons.listBullets(),
                   size: 22,
                   color: context.colors.textPrimary,
                 ),
@@ -467,8 +467,8 @@ class _FollowSetCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(
-                  CarbonIcons.chevron_right,
+                PhosphorIcon(
+                  PhosphorIcons.caretRight(),
                   size: 16,
                   color: context.colors.textSecondary,
                 ),
@@ -506,8 +506,8 @@ class _FollowSetCard extends StatelessWidget {
                                 width: 20,
                                 height: 20,
                                 color: context.colors.avatarPlaceholder,
-                                child: Icon(
-                                  CarbonIcons.user,
+                                child: PhosphorIcon(
+                                  PhosphorIcons.user(),
                                   size: 10,
                                   color: context.colors.textSecondary,
                                 ),
@@ -516,8 +516,8 @@ class _FollowSetCard extends StatelessWidget {
                                 width: 20,
                                 height: 20,
                                 color: context.colors.avatarPlaceholder,
-                                child: Icon(
-                                  CarbonIcons.user,
+                                child: PhosphorIcon(
+                                  PhosphorIcons.user(),
                                   size: 10,
                                   color: context.colors.textSecondary,
                                 ),
@@ -527,8 +527,8 @@ class _FollowSetCard extends StatelessWidget {
                               width: 20,
                               height: 20,
                               color: context.colors.avatarPlaceholder,
-                              child: Icon(
-                                CarbonIcons.user,
+                              child: PhosphorIcon(
+                                PhosphorIcons.user(),
                                 size: 10,
                                 color: context.colors.textSecondary,
                               ),
@@ -565,8 +565,8 @@ class _FollowSetCard extends StatelessWidget {
                           children: [
                             Icon(
                               isAddedToFeed
-                                  ? Icons.check_rounded
-                                  : Icons.add_rounded,
+                                  ? PhosphorIcons.check()
+                                  : PhosphorIcons.plus(),
                               size: 14,
                               color: isAddedToFeed
                                   ? context.colors.background
@@ -631,16 +631,16 @@ class _FollowSetCard extends StatelessWidget {
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(
                             color: context.colors.avatarPlaceholder,
-                            child: Icon(
-                              CarbonIcons.user,
+                            child: PhosphorIcon(
+                              PhosphorIcons.user(),
                               size: 14,
                               color: context.colors.textSecondary,
                             ),
                           ),
                           errorWidget: (context, url, error) => Container(
                             color: context.colors.avatarPlaceholder,
-                            child: Icon(
-                              CarbonIcons.user,
+                            child: PhosphorIcon(
+                              PhosphorIcons.user(),
                               size: 14,
                               color: context.colors.textSecondary,
                             ),
@@ -648,8 +648,8 @@ class _FollowSetCard extends StatelessWidget {
                         )
                       : Container(
                           color: context.colors.avatarPlaceholder,
-                          child: Icon(
-                            CarbonIcons.user,
+                          child: PhosphorIcon(
+                            PhosphorIcons.user(),
                             size: 14,
                             color: context.colors.textSecondary,
                           ),

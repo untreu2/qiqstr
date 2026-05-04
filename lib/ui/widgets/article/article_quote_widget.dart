@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -82,7 +83,7 @@ class _ArticleQuoteError extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.article_outlined, size: 16, color: colors.textSecondary),
+          PhosphorIcon(PhosphorIcons.article(), size: 16, color: colors.textSecondary),
           const SizedBox(width: 8),
           Text(
             l10n.articleNotFound,
@@ -163,7 +164,7 @@ class _ArticleQuoteCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.article_outlined,
+                      PhosphorIcon(PhosphorIcons.article(),
                           size: 14, color: colors.accent),
                       const SizedBox(width: 6),
                       Text(
@@ -212,7 +213,7 @@ class _ArticleQuoteCard extends StatelessWidget {
                             ? CachedNetworkImageProvider(authorImage)
                             : null,
                         child: authorImage.isEmpty
-                            ? Icon(Icons.person,
+                            ? PhosphorIcon(PhosphorIcons.user(),
                                 size: 12, color: colors.textSecondary)
                             : null,
                       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -135,7 +136,7 @@ class _RestoreWalletPageState extends State<RestoreWalletPage> {
               GestureDetector(
                 onTap: () => setState(() => _obscureText = !_obscureText),
                 child: Icon(
-                  _obscureText ? Icons.visibility_off : Icons.visibility,
+                  _obscureText ? PhosphorIcons.eyeSlash() : PhosphorIcons.eye(),
                   color: colors.textSecondary,
                   size: 22,
                 ),
@@ -150,8 +151,8 @@ class _RestoreWalletPageState extends State<RestoreWalletPage> {
                     color: colors.textPrimary,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.content_paste,
+                  child: PhosphorIcon(
+                    PhosphorIcons.clipboardText(),
                     color: colors.background,
                     size: 20,
                   ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
@@ -134,8 +135,8 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
                 controller: _searchController,
                 hintText: l10n.searchUsers,
                 onChanged: _onSearchChanged,
-                prefixIcon: Icon(
-                  Icons.search,
+                prefixIcon: PhosphorIcon(
+                  PhosphorIcons.magnifyingGlass(),
                   color: colors.textSecondary,
                   size: 20,
                 ),
@@ -240,8 +241,8 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
                     CircleAvatar(
                       radius: 12,
                       backgroundColor: Colors.grey.shade800,
-                      child: Icon(
-                        Icons.person,
+                      child: PhosphorIcon(
+                        PhosphorIcons.user(),
                         size: 14,
                         color: colors.textSecondary,
                       ),
@@ -256,8 +257,8 @@ class _CreateListDialogContentState extends State<_CreateListDialogContent> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(
-                    Icons.close,
+                  PhosphorIcon(
+                    PhosphorIcons.x(),
                     size: 14,
                     color: colors.textSecondary,
                   ),

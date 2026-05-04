@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../../presentation/blocs/theme/theme_event.dart';
@@ -88,10 +87,10 @@ class _DisplayPageState extends State<DisplayPage> {
         ),
         child: Row(
           children: [
-            Icon(
+            PhosphorIcon(
               themeState.isExpandedNoteMode
-                  ? CarbonIcons.expand_all
-                  : CarbonIcons.collapse_all,
+                  ? PhosphorIcons.arrowsOut()
+                  : PhosphorIcons.arrowsIn(),
               size: 22,
               color: context.colors.textPrimary,
             ),
@@ -136,8 +135,8 @@ class _DisplayPageState extends State<DisplayPage> {
         ),
         child: Row(
           children: [
-            Icon(
-              themeState.isDarkMode ? CarbonIcons.asleep : CarbonIcons.light,
+            PhosphorIcon(
+              themeState.isDarkMode ? PhosphorIcons.moon() : PhosphorIcons.sun(),
               size: 22,
               color: context.colors.textPrimary,
             ),
@@ -170,10 +169,10 @@ class _DisplayPageState extends State<DisplayPage> {
   Widget _buildBottomNavOrderSection(
       BuildContext context, ThemeState themeState, AppLocalizations l10n) {
     final navItems = [
-      {'index': 0, 'name': l10n.home, 'icon': 'assets/house.svg'},
-      {'index': 1, 'name': l10n.dm, 'icon': 'assets/chat.svg'},
-      {'index': 2, 'name': l10n.wallet, 'icon': 'assets/wallet.svg'},
-      {'index': 3, 'name': l10n.notifications, 'icon': 'assets/bell.svg'},
+      {'index': 0, 'name': l10n.home, 'icon': PhosphorIcons.house()},
+      {'index': 1, 'name': l10n.dm, 'icon': PhosphorIcons.chatCircle()},
+      {'index': 2, 'name': l10n.wallet, 'icon': PhosphorIcons.wallet()},
+      {'index': 3, 'name': l10n.notifications, 'icon': PhosphorIcons.bell()},
     ];
 
     final currentOrder = themeState.bottomNavOrder;
@@ -191,11 +190,11 @@ class _DisplayPageState extends State<DisplayPage> {
         children: [
           Row(
             children: [
-              Icon(
-                CarbonIcons.list,
-                size: 22,
-                color: context.colors.textPrimary,
-              ),
+            PhosphorIcon(
+              PhosphorIcons.list(),
+              size: 22,
+              color: context.colors.textPrimary,
+            ),
               const SizedBox(width: 8),
               Text(
                 l10n.navigationBarOrder,
@@ -232,13 +231,11 @@ class _DisplayPageState extends State<DisplayPage> {
                         color: context.colors.background,
                         shape: BoxShape.circle,
                       ),
-                      child: SvgPicture.asset(
-                        item['icon'] as String,
-                        width: 21,
-                        height: 21,
-                        colorFilter: ColorFilter.mode(
-                          context.colors.textPrimary,
-                          BlendMode.srcIn,
+                      child: Center(
+                        child: PhosphorIcon(
+                          item['icon'] as PhosphorIconData,
+                          size: 21,
+                          color: context.colors.textPrimary,
                         ),
                       ),
                     ),
@@ -273,14 +270,10 @@ class _DisplayPageState extends State<DisplayPage> {
                               : null,
                         ),
                         child: Center(
-                          child: SvgPicture.asset(
-                            item['icon'] as String,
-                            width: 21,
-                            height: 21,
-                            colorFilter: ColorFilter.mode(
-                              context.colors.textPrimary,
-                              BlendMode.srcIn,
-                            ),
+                          child: PhosphorIcon(
+                            item['icon'] as PhosphorIconData,
+                            size: 21,
+                            color: context.colors.textPrimary,
                           ),
                         ),
                       );

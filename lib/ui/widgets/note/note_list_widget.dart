@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/list_separator_widget.dart';
@@ -411,7 +411,7 @@ class _PinnedBadge extends StatelessWidget {
       padding: const EdgeInsets.only(left: 12, right: 12),
       child: Row(
         children: [
-          Icon(CarbonIcons.pin, size: 16, color: colors.textSecondary),
+          PhosphorIcon(PhosphorIcons.pushPin(), size: 16, color: colors.textSecondary),
           const SizedBox(width: 6),
           Text(
             l10n.pinnedNotes,
@@ -440,8 +440,8 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              CarbonIcons.activity,
+            PhosphorIcon(
+              PhosphorIcons.chartLine(),
               size: 48,
               color: colors.textSecondary,
             ),
@@ -505,8 +505,8 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
+            PhosphorIcon(
+              PhosphorIcons.warning(),
               size: 48,
               color: theme.colorScheme.error,
             ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/theme_manager.dart';
@@ -101,7 +102,7 @@ class _QrScannerWidgetState extends State<QrScannerWidget>
                       borderRadius: BorderRadius.circular(22),
                     ),
                     child: Icon(
-                      torchOn ? Icons.flash_on : Icons.flash_off,
+                      torchOn ? PhosphorIcons.lightning() : PhosphorIcons.lightningSlash(),
                       color: context.colors.background,
                       size: 20,
                     ),

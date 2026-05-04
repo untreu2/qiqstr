@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -220,8 +221,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
+            PhosphorIcon(
+              PhosphorIcons.warning(),
               size: 48,
               color: colors.textSecondary,
             ),
@@ -480,19 +481,19 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 fit: BoxFit.cover,
                 fadeInDuration: Duration.zero,
                 fadeOutDuration: Duration.zero,
-                placeholder: (context, url) => Icon(
-                  Icons.person,
+                placeholder: (context, url) => PhosphorIcon(
+                  PhosphorIcons.user(),
                   size: 20,
                   color: colors.textSecondary,
                 ),
-                errorWidget: (context, url, error) => Icon(
-                  Icons.person,
+                errorWidget: (context, url, error) => PhosphorIcon(
+                  PhosphorIcons.user(),
                   size: 20,
                   color: colors.textSecondary,
                 ),
               )
-            : Icon(
-                Icons.person,
+            : PhosphorIcon(
+                PhosphorIcons.user(),
                 size: 20,
                 color: colors.textSecondary,
               ),

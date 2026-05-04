@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -72,6 +72,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
     super.dispose();
   }
 
+  static const double _iconSize = 25.0;
+
   Widget _buildCustomBottomBar(
       bool hasNewNotifications, bool hasNewDmMessages) {
     final themeState = context.themeState;
@@ -79,28 +81,24 @@ class _HomeNavigatorState extends State<HomeNavigator>
 
     final navItems = [
       {
-        'icon': 'assets/house.svg',
-        'iconSelected': 'assets/house_fill.svg',
-        'index': 0,
-        'type': 'svg'
+        'iconRegular': PhosphorIcons.house(),
+        'iconFill': PhosphorIcons.house(PhosphorIconsStyle.fill),
+        'index': 0
       },
       {
-        'icon': 'assets/chat.svg',
-        'iconSelected': 'assets/chat_fill.svg',
-        'index': 1,
-        'type': 'svg'
+        'iconRegular': PhosphorIcons.chatCircle(),
+        'iconFill': PhosphorIcons.chatCircle(PhosphorIconsStyle.fill),
+        'index': 1
       },
       {
-        'icon': 'assets/wallet.svg',
-        'iconSelected': 'assets/wallet_fill.svg',
-        'index': 2,
-        'type': 'svg'
+        'iconRegular': PhosphorIcons.wallet(),
+        'iconFill': PhosphorIcons.wallet(PhosphorIconsStyle.fill),
+        'index': 2
       },
       {
-        'icon': 'assets/bell.svg',
-        'iconSelected': 'assets/bell_fill.svg',
-        'index': 3,
-        'type': 'svg'
+        'iconRegular': PhosphorIcons.bell(),
+        'iconFill': PhosphorIcons.bell(PhosphorIconsStyle.fill),
+        'index': 3
       },
     ];
 
@@ -109,7 +107,7 @@ class _HomeNavigatorState extends State<HomeNavigator>
     final items = [
       orderedNavItems[0],
       orderedNavItems[1],
-      {'icon': 'add', 'index': -1, 'type': 'add'},
+      {'iconRegular': null, 'iconFill': null, 'index': -1, 'type': 'add'},
       orderedNavItems[2],
       orderedNavItems[3],
     ];
@@ -152,8 +150,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
                               color: context.colors.textPrimary,
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Icon(
-                              Icons.add,
+                            child: PhosphorIcon(
+                              PhosphorIcons.plus(),
                               color: context.colors.background,
                               size: 25,
                             ),
@@ -183,18 +181,13 @@ class _HomeNavigatorState extends State<HomeNavigator>
                       behavior: HitTestBehavior.opaque,
                       child: Center(
                         child: originalIndex == 3
-                            ? _buildNotificationIcon(item['icon'] as String,
-                                isSelected, hasNewNotifications)
+                            ? _buildNotificationIcon(
+                                item, isSelected, hasNewNotifications)
                             : originalIndex == 2
-                                ? _buildWalletIcon(
-                                    item['icon'] as String, isSelected)
+                                ? _buildWalletIcon(item, isSelected)
                                 : originalIndex == 1
                                     ? _buildDmIcon(
-                                        item['icon'] as String,
-                                        item['iconSelected'] as String? ??
-                                            item['icon'] as String,
-                                        isSelected,
-                                        hasNewDmMessages)
+                                        item, isSelected, hasNewDmMessages)
                                     : _buildRegularIcon(item, isSelected),
                       ),
                     ),
@@ -208,18 +201,11 @@ class _HomeNavigatorState extends State<HomeNavigator>
     );
   }
 
-  static const double _iconSize = 21.0;
-
-  Widget _buildIcon({
-    required String iconPath,
-    required String iconSelectedPath,
+  Widget _buildPhosphorIcon({
+    required PhosphorIconData regularIcon,
+    required PhosphorIconData fillIcon,
     required bool isSelected,
-    required int index,
-    String? iconType,
   }) {
-    final iconSize = _iconSize;
-    final currentIconPath = isSelected ? iconSelectedPath : iconPath;
-
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
       switchInCurve: Curves.easeInOut,
@@ -230,32 +216,21 @@ class _HomeNavigatorState extends State<HomeNavigator>
           child: child,
         );
       },
-      child: SizedBox(
-        key: ValueKey('${currentIconPath}_${iconType ?? index}'),
-        width: iconSize,
-        height: iconSize,
-        child: SvgPicture.asset(
-          currentIconPath,
-          width: iconSize,
-          height: iconSize,
-          fit: BoxFit.contain,
-          colorFilter: ColorFilter.mode(
-            context.colors.textPrimary,
-            BlendMode.srcIn,
-          ),
-        ),
+      child: PhosphorIcon(
+        key: ValueKey(isSelected),
+        isSelected ? fillIcon : regularIcon,
+        size: _iconSize,
+        color: context.colors.textPrimary,
       ),
     );
   }
 
   Widget _buildNotificationIcon(
-      String iconPath, bool isSelected, bool hasNewNotifications) {
-    final icon = _buildIcon(
-      iconPath: iconPath,
-      iconSelectedPath: 'assets/bell_fill.svg',
+      Map<String, dynamic> item, bool isSelected, bool hasNewNotifications) {
+    final icon = _buildPhosphorIcon(
+      regularIcon: item['iconRegular'] as PhosphorIconData,
+      fillIcon: item['iconFill'] as PhosphorIconData,
       isSelected: isSelected,
-      index: 3,
-      iconType: 'notification',
     );
 
     if (hasNewNotifications) {
@@ -294,24 +269,20 @@ class _HomeNavigatorState extends State<HomeNavigator>
     return icon;
   }
 
-  Widget _buildWalletIcon(String iconPath, bool isSelected) {
-    return _buildIcon(
-      iconPath: iconPath,
-      iconSelectedPath: 'assets/wallet_fill.svg',
+  Widget _buildWalletIcon(Map<String, dynamic> item, bool isSelected) {
+    return _buildPhosphorIcon(
+      regularIcon: item['iconRegular'] as PhosphorIconData,
+      fillIcon: item['iconFill'] as PhosphorIconData,
       isSelected: isSelected,
-      index: 2,
-      iconType: 'wallet',
     );
   }
 
-  Widget _buildDmIcon(String iconPath, String iconSelectedPath, bool isSelected,
-      bool hasNewDmMessages) {
-    final icon = _buildIcon(
-      iconPath: iconPath,
-      iconSelectedPath: iconSelectedPath,
+  Widget _buildDmIcon(
+      Map<String, dynamic> item, bool isSelected, bool hasNewDmMessages) {
+    final icon = _buildPhosphorIcon(
+      regularIcon: item['iconRegular'] as PhosphorIconData,
+      fillIcon: item['iconFill'] as PhosphorIconData,
       isSelected: isSelected,
-      index: 1,
-      iconType: 'dm',
     );
 
     if (hasNewDmMessages) {
@@ -351,15 +322,10 @@ class _HomeNavigatorState extends State<HomeNavigator>
   }
 
   Widget _buildRegularIcon(Map<String, dynamic> item, bool isSelected) {
-    final String iconPath = item['icon'] as String;
-    final String iconSelectedPath = item['iconSelected'] as String? ?? iconPath;
-    final int index = item['index'] as int;
-
-    return _buildIcon(
-      iconPath: iconPath,
-      iconSelectedPath: iconSelectedPath,
+    return _buildPhosphorIcon(
+      regularIcon: item['iconRegular'] as PhosphorIconData,
+      fillIcon: item['iconFill'] as PhosphorIconData,
       isSelected: isSelected,
-      index: index,
     );
   }
 
@@ -392,8 +358,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
           isConnectedResult.isSuccess && isConnectedResult.data == true;
       if (!mounted) return;
       if (!isConnected) {
-        context.push(
-            '/onboarding-spark?npub=${Uri.encodeComponent(widget.npub)}');
+        context
+            .push('/onboarding-spark?npub=${Uri.encodeComponent(widget.npub)}');
         return;
       }
       _iconAnimationController.reset();
@@ -471,9 +437,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
                   return BlocBuilder<DmIndicatorBloc, DmIndicatorState>(
                     bloc: AppDI.get<DmIndicatorBloc>(),
                     builder: (context, dmState) {
-                      final hasNewDmMessages =
-                          dmState is DmIndicatorLoaded &&
-                              dmState.hasNewMessages;
+                      final hasNewDmMessages = dmState is DmIndicatorLoaded &&
+                          dmState.hasNewMessages;
                       return _buildCustomBottomBar(
                           hasNewNotifications, hasNewDmMessages);
                     },

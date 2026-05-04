@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../../../core/di/app_di.dart';
@@ -205,8 +206,8 @@ class _FollowingRelaysDialogContentState
             color: colors.overlayLight,
             shape: BoxShape.circle,
           ),
-          child: Icon(
-            Icons.close,
+          child: PhosphorIcon(
+            PhosphorIcons.x(),
             size: 20,
             color: colors.textPrimary,
           ),

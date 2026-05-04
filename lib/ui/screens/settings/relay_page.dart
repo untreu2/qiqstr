@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../src/rust/api/events.dart' as rust_events;
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:convert';
 import 'dart:async';
 import '../../theme/theme_manager.dart';
@@ -723,8 +723,8 @@ class _RelayPageState extends State<RelayPage> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         children: [
-          Icon(
-            CarbonIcons.network_3,
+          PhosphorIcon(
+            PhosphorIcons.network(),
             color: context.colors.textSecondary,
             size: 20,
           ),
@@ -878,7 +878,7 @@ class _RelayPageState extends State<RelayPage> {
               Expanded(
                 child: SecondaryButton(
                   label: _isFetchingUserRelays ? l10n.fetching : l10n.fetch,
-                  icon: Icons.download,
+                   icon: PhosphorIcons.downloadSimple(),
                   onPressed: _isFetchingUserRelays ? null : _fetchUserRelays,
                   isLoading: _isFetchingUserRelays,
                   backgroundColor: context.colors.overlayLight,
@@ -890,7 +890,7 @@ class _RelayPageState extends State<RelayPage> {
               Expanded(
                 child: SecondaryButton(
                   label: _isPublishingRelays ? l10n.publishing : l10n.publish,
-                  icon: Icons.upload,
+                   icon: PhosphorIcons.uploadSimple(),
                   onPressed: _isPublishingRelays ? null : _publishRelays,
                   isLoading: _isPublishingRelays,
                   backgroundColor: context.colors.overlayLight,
@@ -906,7 +906,7 @@ class _RelayPageState extends State<RelayPage> {
               Expanded(
                 child: SecondaryButton(
                   label: l10n.addRelay,
-                  icon: Icons.add,
+                   icon: PhosphorIcons.plus(),
                   onPressed: _showAddRelayDialog,
                   backgroundColor: context.colors.overlayLight,
                   foregroundColor: context.colors.textPrimary,
@@ -917,7 +917,7 @@ class _RelayPageState extends State<RelayPage> {
               Expanded(
                 child: SecondaryButton(
                   label: l10n.reset,
-                  icon: Icons.refresh,
+                   icon: PhosphorIcons.arrowClockwise(),
                   onPressed: _resetToDefaults,
                   backgroundColor: context.colors.overlayLight,
                   foregroundColor: context.colors.textPrimary,
@@ -990,8 +990,8 @@ class _RelayPageState extends State<RelayPage> {
                     Row(
                       children: [
                         if (latencyMs > 0) ...[
-                          Icon(
-                            Icons.speed,
+                          PhosphorIcon(
+                            PhosphorIcons.gauge(),
                             size: 11,
                             color: _latencyColor(latencyMs),
                           ),
@@ -1006,8 +1006,8 @@ class _RelayPageState extends State<RelayPage> {
                           const SizedBox(width: 10),
                         ],
                         if (bytesReceived > 0) ...[
-                          Icon(
-                            Icons.download,
+                          PhosphorIcon(
+                            PhosphorIcons.downloadSimple(),
                             size: 11,
                             color: context.colors.textTertiary,
                           ),
@@ -1048,8 +1048,8 @@ class _RelayPageState extends State<RelayPage> {
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _removeRelay(relay, isMainRelay),
-              child: Icon(
-                CarbonIcons.trash_can,
+              child:               PhosphorIcon(
+                PhosphorIcons.trash(),
                 size: 18,
                 color: context.colors.textTertiary,
               ),

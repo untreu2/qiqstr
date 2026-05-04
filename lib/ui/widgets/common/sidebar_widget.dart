@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../presentation/blocs/sidebar/sidebar_bloc.dart';
@@ -173,8 +172,8 @@ class _UserProfileHeader extends StatelessWidget {
                 child: () {
                   final profileImage = user['picture'] as String? ?? '';
                   return profileImage.isEmpty
-                      ? Icon(
-                          Icons.person,
+                      ? PhosphorIcon(
+                          PhosphorIcons.user(),
                           size: 28,
                           color: colors.textSecondary,
                         )
@@ -212,7 +211,7 @@ class _UserProfileHeader extends StatelessWidget {
                           return nip05.isNotEmpty && nip05Verified;
                         }()) ...[
                           const SizedBox(width: 6),
-                          Icon(Icons.verified, size: 20, color: colors.accent),
+                          PhosphorIcon(PhosphorIcons.sealCheck(), size: 20, color: colors.accent),
                         ],
                       ],
                     ),
@@ -324,7 +323,7 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              icon: CarbonIcons.user,
+              icon: PhosphorIcons.user(),
               label: l10n.profile,
               onTap: () {
                 final userNpub = user['npub'] as String? ?? '';
@@ -354,7 +353,7 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              icon: CarbonIcons.document,
+              icon: PhosphorIcons.file(),
               label: l10n.reads,
               onTap: () {
                 Navigator.of(context).pop();
@@ -368,7 +367,7 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              icon: CarbonIcons.list_boxes,
+              icon: PhosphorIcons.listBullets(),
               label: l10n.listsTitle,
               onTap: () {
                 Navigator.of(context).pop();
@@ -382,7 +381,7 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              icon: CarbonIcons.bookmark,
+              icon: PhosphorIcons.bookmarkSimple(),
               label: l10n.bookmarks,
               onTap: () {
                 Navigator.of(context).pop();
@@ -396,7 +395,7 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              icon: CarbonIcons.user_multiple,
+              icon: PhosphorIcons.users(),
               label: l10n.switchAccount,
               onTap: onSwitchAccountTap,
             ),
@@ -407,7 +406,7 @@ class _SidebarContent extends StatelessWidget {
             child: _buildModernSidebarItem(
               context: context,
               colors: colors,
-              icon: CarbonIcons.settings,
+              icon: PhosphorIcons.gear(),
               label: l10n.settings,
               onTap: () => context.push('/settings'),
             ),
@@ -421,8 +420,7 @@ class _SidebarContent extends StatelessWidget {
 Widget _buildModernSidebarItem({
   required BuildContext context,
   required AppThemeColors colors,
-  String? svgAsset,
-  IconData? icon,
+  PhosphorIconData? icon,
   required String label,
   required VoidCallback onTap,
   Color? iconColor,
@@ -441,20 +439,10 @@ Widget _buildModernSidebarItem({
       child: Row(
         children: [
           if (icon != null)
-            Icon(
+            PhosphorIcon(
               icon,
               size: iconSize ?? 22,
               color: iconColor ?? colors.textPrimary,
-            )
-          else if (svgAsset != null)
-            SvgPicture.asset(
-              svgAsset,
-              width: iconSize ?? 22,
-              height: iconSize ?? 22,
-              colorFilter: ColorFilter.mode(
-                iconColor ?? colors.textPrimary,
-                BlendMode.srcIn,
-              ),
             ),
           const SizedBox(width: 8),
           Text(

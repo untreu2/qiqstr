@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../data/services/auth_service.dart';
@@ -174,8 +175,8 @@ class _KeysPageState extends State<KeysPage> {
                   onTap: () => _copyToClipboard(value, keyType),
                   child: Container(
                     padding: const EdgeInsets.all(8),
-                    child: Icon(
-                      isCopied ? Icons.check : Icons.content_copy,
+                    child:                       PhosphorIcon(
+                      isCopied ? PhosphorIcons.check() : PhosphorIcons.copy(),
                       color: isCopied
                           ? context.colors.success
                           : context.colors.iconSecondary,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
@@ -73,8 +74,8 @@ class QuoteWidget extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.link_off,
+                    PhosphorIcon(
+                      PhosphorIcons.linkBreak(),
                       size: 16,
                       color: context.colors.textSecondary,
                     ),
@@ -315,8 +316,8 @@ class _QuoteContent extends StatelessWidget {
                     placeholder: (_, __) => CircleAvatar(
                       radius: 14,
                       backgroundColor: context.colors.surfaceTransparent,
-                      child: Icon(
-                        Icons.person,
+                      child: PhosphorIcon(
+                        PhosphorIcons.user(),
                         size: 14,
                         color: context.colors.textSecondary,
                       ),
@@ -324,8 +325,8 @@ class _QuoteContent extends StatelessWidget {
                     errorWidget: (_, __, ___) => CircleAvatar(
                       radius: 14,
                       backgroundColor: context.colors.surfaceTransparent,
-                      child: Icon(
-                        Icons.person,
+                      child: PhosphorIcon(
+                        PhosphorIcons.user(),
                         size: 14,
                         color: context.colors.textSecondary,
                       ),
@@ -336,8 +337,8 @@ class _QuoteContent extends StatelessWidget {
                 CircleAvatar(
                   radius: 14,
                   backgroundColor: context.colors.surfaceTransparent,
-                  child: Icon(
-                    Icons.person,
+                  child: PhosphorIcon(
+                    PhosphorIcons.user(),
                     size: 14,
                     color: context.colors.textSecondary,
                   ),

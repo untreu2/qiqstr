@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/theme_manager.dart';
@@ -126,8 +126,8 @@ class _DmConversationsPageState extends State<DmConversationsPage>
             color: context.colors.textPrimary,
             shape: BoxShape.circle,
           ),
-          child: Icon(
-            CarbonIcons.add,
+          child: PhosphorIcon(
+            PhosphorIcons.plus(),
             size: 24,
             color: context.colors.background,
           ),
@@ -365,8 +365,8 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Icon(
-                  CarbonIcons.chevron_right,
+                PhosphorIcon(
+                  PhosphorIcons.caretRight(),
                   size: 16,
                   color: context.colors.textSecondary,
                 ),
@@ -404,8 +404,8 @@ class _DmConversationsPageState extends State<DmConversationsPage>
   Widget _avatarPlaceholder(BuildContext context) {
     return Container(
       color: context.colors.overlayLight,
-      child: Icon(
-        CarbonIcons.user,
+      child: PhosphorIcon(
+        PhosphorIcons.user(),
         color: context.colors.textSecondary,
         size: 22,
       ),
@@ -427,8 +427,8 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                 color: context.colors.overlayLight,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                CarbonIcons.chat,
+              child: PhosphorIcon(
+                PhosphorIcons.chat(),
                 size: 32,
                 color: context.colors.textSecondary,
               ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -248,8 +249,8 @@ class _ReceivePageState extends State<ReceivePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.qr_code_2,
+            PhosphorIcon(
+              PhosphorIcons.qrCode(),
               size: 80,
               color: colors.textSecondary.withValues(alpha: 0.2),
             ),
@@ -323,7 +324,7 @@ class _ReceivePageState extends State<ReceivePage> {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.copy, size: 20, color: colors.textSecondary),
+              PhosphorIcon(PhosphorIcons.copy(), size: 20, color: colors.textSecondary),
             ],
           ),
         ),

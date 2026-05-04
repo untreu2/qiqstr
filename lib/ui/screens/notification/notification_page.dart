@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -320,8 +321,8 @@ class _NotificationPageState extends State<NotificationPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
+            PhosphorIcon(
+              PhosphorIcons.warning(),
               size: 64,
               color: context.colors.error.withValues(alpha: 0.7),
             ),
@@ -368,8 +369,8 @@ class _NotificationPageState extends State<NotificationPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.notifications_none,
+            PhosphorIcon(
+              PhosphorIcons.bell(),
               size: 80,
               color: context.colors.textSecondary.withValues(alpha: 0.5),
             ),
@@ -734,7 +735,7 @@ class _NotificationTileState extends State<_NotificationTile> {
                         ? CachedNetworkImageProvider(image)
                         : null,
                     child: image.isEmpty
-                        ? Icon(Icons.person,
+                        ? PhosphorIcon(PhosphorIcons.user(),
                             size: 22, color: context.colors.textSecondary)
                         : null,
                   ),
@@ -1001,7 +1002,7 @@ class _GroupedNotificationTileState extends State<_GroupedNotificationTile> {
                       ? CachedNetworkImageProvider(image)
                       : null,
                   child: image.isEmpty
-                      ? Icon(Icons.person,
+                      ? PhosphorIcon(PhosphorIcons.user(),
                           size: 16, color: context.colors.textSecondary)
                       : null,
                 ),

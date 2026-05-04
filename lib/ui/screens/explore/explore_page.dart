@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/article/article_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
@@ -207,8 +207,8 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(
-                    CarbonIcons.warning,
+                  PhosphorIcon(
+                    PhosphorIcons.warning(),
                     size: 48,
                     color: colors.error,
                   ),
@@ -253,8 +253,8 @@ class _ExplorePageState extends State<ExplorePage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    CarbonIcons.document,
+                  PhosphorIcon(
+                    PhosphorIcons.file(),
                     size: 48,
                     color: colors.textSecondary,
                   ),

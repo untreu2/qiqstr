@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../theme/theme_manager.dart';
@@ -133,17 +134,17 @@ class _SignupPageState extends State<SignupPage> {
       child: Column(
         children: [
           _buildFeatureItem(
-            Icons.vpn_key,
+            PhosphorIcons.key(),
             l10n.signupFeatureKeys,
           ),
           const SizedBox(height: 24),
           _buildFeatureItem(
-            Icons.shield,
+            PhosphorIcons.shieldCheck(),
             l10n.signupFeatureBackup,
           ),
           const SizedBox(height: 24),
           _buildFeatureItem(
-            Icons.person,
+            PhosphorIcons.user(),
             l10n.signupFeatureProfile,
           ),
         ],
@@ -151,7 +152,7 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  Widget _buildFeatureItem(IconData icon, String description) {
+  Widget _buildFeatureItem(PhosphorIconData icon, String description) {
     return Row(
       children: [
         Container(
@@ -161,10 +162,12 @@ class _SignupPageState extends State<SignupPage> {
             color: context.colors.overlayLight,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            icon,
-            color: context.colors.textPrimary,
-            size: 20,
+          child: Center(
+            child: PhosphorIcon(
+              icon,
+              color: context.colors.textPrimary,
+              size: 20,
+            ),
           ),
         ),
         const SizedBox(width: 12),

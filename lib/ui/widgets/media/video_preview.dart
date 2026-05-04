@@ -1,9 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:gallery_saver_plus/gallery_saver.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
@@ -204,8 +204,8 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                               ),
                               child: Icon(
                                 _isMuted
-                                    ? Icons.volume_off_rounded
-                                    : Icons.volume_up_rounded,
+                                    ? PhosphorIcons.speakerSlash()
+                                    : PhosphorIcons.speakerHigh(),
                                 color: Colors.white,
                                 size: 16,
                               ),
@@ -248,8 +248,8 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(
-                              Icons.play_circle_outline_rounded,
+                          : PhosphorIcon(
+                              PhosphorIcons.playCircle(),
                               color: Colors.white54,
                               size: 48,
                             ),
@@ -520,7 +520,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                 children: [
                                   // Close
                                   IconActionButton(
-                                    icon: CarbonIcons.close,
+                                    icon: PhosphorIcons.x(),
                                     onPressed: _dismiss,
                                     size: ButtonSize.small,
                                     isCircular: true,
@@ -532,8 +532,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                     padding: EdgeInsets.zero,
                                     icon: Icon(
                                       isPlaying
-                                          ? CarbonIcons.pause
-                                          : CarbonIcons.play,
+                                          ? PhosphorIcons.pause()
+                                          : PhosphorIcons.play(),
                                       color: colors.textPrimary,
                                       size: 22,
                                     ),
@@ -610,7 +610,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                           ),
                                         )
                                       : IconActionButton(
-                                          icon: CarbonIcons.download,
+                                          icon: PhosphorIcons.downloadSimple(),
                                           onPressed: _downloadVideo,
                                           size: ButtonSize.small,
                                         ),

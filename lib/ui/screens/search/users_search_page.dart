@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/custom_input_field.dart';
@@ -90,8 +90,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.error_outline,
+              PhosphorIcon(
+                PhosphorIcons.warning(),
                 size: 48,
                 color: context.colors.error,
               ),
@@ -146,8 +146,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.search_off,
+                        PhosphorIcon(
+                          PhosphorIcons.magnifyingGlassMinus(),
                           size: 48,
                           color: context.colors.textSecondary,
                         ),
@@ -211,8 +211,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
             color: context.colors.overlayLight,
             shape: BoxShape.circle,
           ),
-          child: Icon(
-            Icons.close,
+          child: PhosphorIcon(
+            PhosphorIcons.x(),
             size: 20,
             color: context.colors.textPrimary,
           ),
@@ -274,8 +274,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
                                   color: context.colors.background,
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(
-                                  Icons.content_paste,
+                                child: PhosphorIcon(
+                                  PhosphorIcons.clipboardText(),
                                   color: context.colors.textPrimary,
                                   size: 20,
                                 ),
@@ -454,8 +454,8 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                 children: [
                   Icon(
                     isFollowing
-                        ? CarbonIcons.user_admin
-                        : CarbonIcons.user_follow,
+                        ? PhosphorIcons.userGear()
+                        : PhosphorIcons.userPlus(),
                     size: 16,
                     color: isFollowing
                         ? context.colors.textPrimary
@@ -601,8 +601,8 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
       return CircleAvatar(
         radius: 24,
         backgroundColor: Colors.grey.shade800,
-        child: Icon(
-          Icons.person,
+        child: PhosphorIcon(
+          PhosphorIcons.user(),
           size: 26,
           color: context.colors.textSecondary,
         ),
@@ -624,16 +624,16 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
           memCacheWidth: 192,
           placeholder: (context, url) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),
           ),
           errorWidget: (context, url, error) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),

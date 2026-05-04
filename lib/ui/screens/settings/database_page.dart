@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../src/rust/api/database.dart' as rust_db;
 import '../../../src/rust/api/relay.dart' as rust_relay;
 import '../../../l10n/app_localizations.dart';
@@ -139,7 +139,7 @@ class _DatabasePageState extends State<DatabasePage> {
                     label: _isCleaningUp
                         ? l10n.cleanupCompleted
                         : l10n.cleanupOldEvents,
-                    icon: Icons.cleaning_services,
+                    icon: PhosphorIcons.broom(),
                     onPressed:
                         (_isLoading || _isCleaningUp) ? null : _performCleanup,
                     isLoading: _isCleaningUp,
@@ -157,8 +157,8 @@ class _DatabasePageState extends State<DatabasePage> {
                           padding: const EdgeInsets.only(bottom: 16),
                           child: Row(
                             children: [
-                              Icon(
-                                CarbonIcons.data_base,
+                              PhosphorIcon(
+                                PhosphorIcons.database(),
                                 color: context.colors.textSecondary,
                                 size: 20,
                               ),
@@ -182,37 +182,37 @@ class _DatabasePageState extends State<DatabasePage> {
                         {
                           'label': l10n.textNotes,
                           'count': textNotes,
-                          'icon': CarbonIcons.document
+                          'icon': PhosphorIcons.file()
                         },
                         {
                           'label': l10n.profiles,
                           'count': metadata,
-                          'icon': CarbonIcons.user
+                          'icon': PhosphorIcons.user()
                         },
                         {
                           'label': l10n.contactLists,
                           'count': contacts,
-                          'icon': CarbonIcons.user_multiple
+                          'icon': PhosphorIcons.users()
                         },
                         {
                           'label': l10n.reactions,
                           'count': reactions,
-                          'icon': CarbonIcons.favorite
+                          'icon': PhosphorIcons.heart()
                         },
                         {
                           'label': l10n.reposts,
                           'count': reposts,
-                          'icon': CarbonIcons.repeat
+                          'icon': PhosphorIcons.repeat()
                         },
                         {
                           'label': l10n.zaps,
                           'count': zaps,
-                          'icon': CarbonIcons.flash
+                          'icon': PhosphorIcons.lightning()
                         },
                         {
                           'label': l10n.articles,
                           'count': articles,
-                          'icon': CarbonIcons.document_blank
+                          'icon': PhosphorIcons.file()
                         },
                       ];
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../theme/theme_manager.dart';
@@ -179,7 +180,7 @@ class _ShareProfileScreenState extends State<ShareProfileScreen> {
                           width: double.infinity,
                           child: PrimaryButton(
                             label: l10n.scanQRCode,
-                            icon: Icons.qr_code_scanner,
+                            icon: PhosphorIcons.qrCode(),
                             size: ButtonSize.large,
                             onPressed: () {
                               Navigator.of(context, rootNavigator: true).push(

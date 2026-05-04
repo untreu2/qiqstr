@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
@@ -397,30 +397,30 @@ class _EventManagerPageState extends State<EventManagerPage> {
     }
   }
 
-  IconData _getKindIcon(int kind) {
+  PhosphorIconData _getKindIcon(int kind) {
     switch (kind) {
       case 0:
-        return CarbonIcons.user;
+        return PhosphorIcons.user();
       case 1:
-        return CarbonIcons.document;
+        return PhosphorIcons.file();
       case 3:
-        return CarbonIcons.user_multiple;
+        return PhosphorIcons.users();
       case 4:
-        return CarbonIcons.locked;
+        return PhosphorIcons.lock();
       case 5:
-        return CarbonIcons.trash_can;
+        return PhosphorIcons.trash();
       case 6:
-        return CarbonIcons.repeat;
+        return PhosphorIcons.repeat();
       case 7:
-        return CarbonIcons.favorite;
+        return PhosphorIcons.heart();
       case 9735:
-        return CarbonIcons.flash;
+        return PhosphorIcons.lightning();
       case 10000:
-        return CarbonIcons.notification_off;
+        return PhosphorIcons.bellSlash();
       case 10002:
-        return CarbonIcons.network_3;
+        return PhosphorIcons.network();
       default:
-        return CarbonIcons.document_blank;
+        return PhosphorIcons.file();
     }
   }
 
@@ -467,7 +467,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
                         ? l10n.broadcastProgress(
                             _broadcastSent, _broadcastTotal)
                         : l10n.rebroadcast,
-                    icon: _isRebroadcasting ? null : Icons.send,
+                    icon: _isRebroadcasting ? null : PhosphorIcons.paperPlaneTilt(),
                     onPressed: (_isLoading || _isRebroadcasting || _isExporting)
                         ? null
                         : _rebroadcastAllEvents,
@@ -483,7 +483,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
                   ),
                   child: SecondaryButton(
                     label: _isExporting ? l10n.exporting : l10n.exportData,
-                    icon: CarbonIcons.export,
+                    icon: PhosphorIcons.export(),
                     onPressed: (_isLoading || _isRebroadcasting || _isExporting)
                         ? null
                         : _exportAllEvents,
@@ -513,8 +513,8 @@ class _EventManagerPageState extends State<EventManagerPage> {
                                 ),
                               )
                             else
-                              Icon(
-                                CarbonIcons.data_connected,
+                              PhosphorIcon(
+                                PhosphorIcons.plugsConnected(),
                                 color: context.colors.textSecondary,
                                 size: 20,
                               ),
@@ -555,7 +555,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
                         ),
                         child: Row(
                           children: [
-                            Icon(
+                            PhosphorIcon(
                               _getKindIcon(kind),
                               color: context.colors.textPrimary,
                               size: 20,
@@ -590,7 +590,7 @@ class _EventManagerPageState extends State<EventManagerPage> {
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                   child: SecondaryButton(
                     label: l10n.deleteAccount,
-                    icon: Icons.delete_forever,
+                    icon: PhosphorIcons.trash(),
                     onPressed: (_isLoading || _isRebroadcasting || _isExporting)
                         ? null
                         : _showDeleteAccountDialog,

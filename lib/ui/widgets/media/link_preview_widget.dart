@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
@@ -201,8 +202,8 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
     return Container(
       color: context.colors.overlayLight,
       child: Center(
-        child: Icon(
-          Icons.link,
+        child: PhosphorIcon(
+          PhosphorIcons.link(),
           color: context.colors.textSecondary,
           size: 28,
         ),

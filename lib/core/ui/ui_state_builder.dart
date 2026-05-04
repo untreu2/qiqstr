@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../base/ui_state.dart';
 import '../../ui/widgets/common/common_buttons.dart';
 
@@ -80,8 +81,8 @@ class UIStateBuilder<T> extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
+            PhosphorIcon(
+              PhosphorIcons.warning(),
               size: 64,
               color: theme.colorScheme.error,
             ),
@@ -105,7 +106,7 @@ class UIStateBuilder<T> extends StatelessWidget {
               const SizedBox(height: 24),
               PrimaryButton(
                 label: 'Try Again',
-                icon: Icons.refresh,
+                icon: PhosphorIcons.arrowClockwise(),
                 onPressed: onRetry,
               ),
             ],
@@ -124,8 +125,8 @@ class UIStateBuilder<T> extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.inbox_outlined,
+            PhosphorIcon(
+              PhosphorIcons.tray(),
               size: 64,
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -201,8 +202,8 @@ class SliverUIStateBuilder<T> extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
+            PhosphorIcon(
+              PhosphorIcons.warning(),
               size: 64,
               color: theme.colorScheme.error,
             ),
@@ -237,8 +238,8 @@ class SliverUIStateBuilder<T> extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.inbox_outlined,
+            PhosphorIcon(
+              PhosphorIcons.tray(),
               size: 64,
               color: theme.colorScheme.onSurfaceVariant,
             ),

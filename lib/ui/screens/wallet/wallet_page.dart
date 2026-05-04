@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -197,7 +198,7 @@ class _WalletPageState extends State<WalletPage>
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
+                  PhosphorIcon(PhosphorIcons.warning(),
                       size: 14, color: context.colors.error),
                   const SizedBox(width: 4),
                   Text(
@@ -292,8 +293,8 @@ class _WalletPageState extends State<WalletPage>
                     const SizedBox(width: 4),
                     Icon(
                       _showAllTransactions
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
+                          ? PhosphorIcons.caretUp()
+                          : PhosphorIcons.caretDown(),
                       size: 18,
                       color: context.colors.textSecondary,
                     ),
@@ -336,7 +337,7 @@ class _WalletPageState extends State<WalletPage>
               shape: BoxShape.circle,
             ),
             child: Icon(
-              isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
+              isIncoming ? PhosphorIcons.arrowDown() : PhosphorIcons.arrowUp(),
               color: isIncoming
                   ? context.colors.success
                   : context.colors.textPrimary,
@@ -403,13 +404,13 @@ class _WalletPageState extends State<WalletPage>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          _buildFeatureItem(context, Icons.bolt, l10n.onboardingCoinosFeatureSend),
+          _buildFeatureItem(context, PhosphorIcons.lightning(), l10n.onboardingCoinosFeatureSend),
           const SizedBox(height: 24),
           _buildFeatureItem(
-              context, Icons.call_received, l10n.onboardingCoinosFeatureReceive),
+              context, PhosphorIcons.arrowDownLeft(), l10n.onboardingCoinosFeatureReceive),
           const SizedBox(height: 24),
           _buildFeatureItem(
-              context, Icons.favorite, l10n.onboardingCoinosFeatureZap),
+              context, PhosphorIcons.heart(), l10n.onboardingCoinosFeatureZap),
           const SizedBox(height: 24),
           Text(
             l10n.onboardingCoinosDisclaimer,
@@ -536,7 +537,7 @@ class _WalletPageState extends State<WalletPage>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.arrow_downward,
+                  PhosphorIcon(PhosphorIcons.arrowDown(),
                       size: 18, color: context.colors.background),
                   const SizedBox(width: 8),
                   Text(
@@ -567,7 +568,7 @@ class _WalletPageState extends State<WalletPage>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.arrow_upward,
+                  PhosphorIcon(PhosphorIcons.arrowUp(),
                       size: 18, color: context.colors.background),
                   const SizedBox(width: 8),
                   Text(
@@ -618,7 +619,7 @@ class _WalletPageState extends State<WalletPage>
         ),
         child: Row(
           children: [
-            Icon(Icons.bolt, size: 18, color: context.colors.textSecondary),
+            PhosphorIcon(PhosphorIcons.lightning(), size: 18, color: context.colors.textSecondary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -632,7 +633,7 @@ class _WalletPageState extends State<WalletPage>
               ),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.copy, size: 16, color: context.colors.textSecondary),
+            PhosphorIcon(PhosphorIcons.copy(), size: 16, color: context.colors.textSecondary),
           ],
         ),
       ),
@@ -652,7 +653,7 @@ class _WalletPageState extends State<WalletPage>
         children: [
           Row(
             children: [
-              Icon(Icons.bolt, size: 18, color: context.colors.textSecondary),
+              PhosphorIcon(PhosphorIcons.lightning(), size: 18, color: context.colors.textSecondary),
               const SizedBox(width: 8),
               Text(
                 l10n.lightningAddressSetup,
@@ -734,8 +735,8 @@ class _WalletPageState extends State<WalletPage>
               children: [
                 Icon(
                   _isUsernameAvailable!
-                      ? Icons.check_circle_outline
-                      : Icons.cancel_outlined,
+                      ? PhosphorIcons.checkCircle()
+                      : PhosphorIcons.xCircle(),
                   size: 14,
                   color: _isUsernameAvailable!
                       ? context.colors.success
@@ -813,8 +814,8 @@ class _WalletPageState extends State<WalletPage>
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 1),
-              child: Icon(
-                Icons.warning_amber_rounded,
+              child: PhosphorIcon(
+                PhosphorIcons.warning(),
                 size: 18,
                 color: context.colors.textSecondary,
               ),
@@ -863,8 +864,8 @@ class _WalletPageState extends State<WalletPage>
               onTap: _dismissBackupBanner,
               child: Padding(
                 padding: const EdgeInsets.only(left: 4),
-                child: Icon(
-                  Icons.close,
+                child: PhosphorIcon(
+                  PhosphorIcons.x(),
                   size: 16,
                   color: context.colors.textSecondary,
                 ),
@@ -958,8 +959,8 @@ class _WalletPageState extends State<WalletPage>
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.wifi_off_rounded,
+                                  PhosphorIcon(
+                                    PhosphorIcons.wifiSlash(),
                                     size: 48,
                                     color: context.colors.textSecondary
                                         .withValues(alpha: 0.4),

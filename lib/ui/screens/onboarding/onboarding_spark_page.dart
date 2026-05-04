@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -97,19 +98,19 @@ class _OnboardingSparkPageState extends State<OnboardingSparkPage> {
         children: [
           _buildFeatureItem(
             context,
-            Icons.bolt,
+            PhosphorIcons.lightning(),
             l10n.onboardingCoinosFeatureSend,
           ),
           const SizedBox(height: 24),
           _buildFeatureItem(
             context,
-            Icons.call_received,
+            PhosphorIcons.arrowDownLeft(),
             l10n.onboardingCoinosFeatureReceive,
           ),
           const SizedBox(height: 24),
           _buildFeatureItem(
             context,
-            Icons.favorite,
+            PhosphorIcons.heart(),
             l10n.onboardingCoinosFeatureZap,
           ),
         ],

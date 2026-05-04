@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/di/app_di.dart';
@@ -203,8 +204,8 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                   errorWidget: (context, url, error) => Container(
                     height: 180,
                     color: colors.overlayLight,
-                    child: Icon(
-                      Icons.image_not_supported,
+                    child: PhosphorIcon(
+                      PhosphorIcons.imageBroken(),
                       color: colors.textSecondary,
                       size: 48,
                     ),
@@ -256,8 +257,8 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                                     width: 28,
                                     height: 28,
                                     color: colors.overlayLight,
-                                    child: Icon(
-                                      Icons.person,
+                                    child: PhosphorIcon(
+                                      PhosphorIcons.user(),
                                       size: 16,
                                       color: colors.textSecondary,
                                     ),
@@ -267,8 +268,8 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                                     width: 28,
                                     height: 28,
                                     color: colors.overlayLight,
-                                    child: Icon(
-                                      Icons.person,
+                                    child: PhosphorIcon(
+                                      PhosphorIcons.user(),
                                       size: 16,
                                       color: colors.textSecondary,
                                     ),
@@ -278,8 +279,8 @@ class _ArticleWidgetState extends State<ArticleWidget> {
                                   width: 28,
                                   height: 28,
                                   color: colors.overlayLight,
-                                  child: Icon(
-                                    Icons.person,
+                                  child: PhosphorIcon(
+                                    PhosphorIcons.user(),
                                     size: 16,
                                     color: colors.textSecondary,
                                   ),
@@ -351,8 +352,8 @@ class ArticleListWidget extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.article_outlined,
+                PhosphorIcon(
+                  PhosphorIcons.article(),
                   size: 64,
                   color: colors.textSecondary,
                 ),

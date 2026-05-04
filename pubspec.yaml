@@ -63,6 +63,7 @@ dependencies:
     flutter_svg: ^2.0.10+1
     html: ^0.15.4
     carbon_icons: ^0.0.1+2
+    phosphor_flutter: ^2.1.0
     rxdart: ^0.28.0
     screenshot: ^3.0.0
     share_plus: ^12.0.0

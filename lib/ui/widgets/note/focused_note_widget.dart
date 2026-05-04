@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../utils/string_optimizer.dart';
@@ -351,7 +352,7 @@ class _Avatar extends StatelessWidget {
             shape: BoxShape.circle,
             color: colors.surfaceTransparent,
           ),
-          child: Icon(Icons.person, size: radius, color: colors.textSecondary),
+          child: PhosphorIcon(PhosphorIcons.user(), size: radius, color: colors.textSecondary),
         ),
       );
     }
@@ -371,13 +372,13 @@ class _Avatar extends StatelessWidget {
           memCacheWidth: cacheDim,
           maxWidthDiskCache: cacheDim,
           maxHeightDiskCache: cacheDim,
-          placeholder: (_, __) => Icon(
-            Icons.person,
+          placeholder: (_, __) => PhosphorIcon(
+            PhosphorIcons.user(),
             size: radius,
             color: colors.textSecondary,
           ),
-          errorWidget: (_, __, ___) => Icon(
-            Icons.person,
+          errorWidget: (_, __, ___) => PhosphorIcon(
+            PhosphorIcons.user(),
             size: radius,
             color: colors.textSecondary,
           ),

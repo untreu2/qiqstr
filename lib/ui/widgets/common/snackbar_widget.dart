@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../presentation/blocs/theme/theme_bloc.dart';
 import '../../theme/theme_manager.dart';
@@ -240,8 +241,8 @@ class _TopSnackbarState extends State<_TopSnackbar>
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: _close,
-                      child: Icon(
-                        Icons.close,
+                      child: PhosphorIcon(
+                        PhosphorIcons.x(),
                         size: 16,
                         color: widget.colors.textSecondary,
                       ),

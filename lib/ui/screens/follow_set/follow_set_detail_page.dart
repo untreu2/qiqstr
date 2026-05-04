@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/blocs/follow_set/follow_set_bloc.dart';
@@ -186,8 +186,8 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                                             height: 24,
                                             color: context
                                                 .colors.avatarPlaceholder,
-                                            child: Icon(
-                                              CarbonIcons.user,
+                                            child: PhosphorIcon(
+                                              PhosphorIcons.user(),
                                               size: 12,
                                               color:
                                                   context.colors.textSecondary,
@@ -199,8 +199,8 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                                             height: 24,
                                             color: context
                                                 .colors.avatarPlaceholder,
-                                            child: Icon(
-                                              CarbonIcons.user,
+                                            child: PhosphorIcon(
+                                              PhosphorIcons.user(),
                                               size: 12,
                                               color:
                                                   context.colors.textSecondary,
@@ -212,8 +212,8 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                                           height: 24,
                                           color:
                                               context.colors.avatarPlaceholder,
-                                          child: Icon(
-                                            CarbonIcons.user,
+                                          child: PhosphorIcon(
+                                            PhosphorIcons.user(),
                                             size: 12,
                                             color: context.colors.textSecondary,
                                           ),
@@ -248,7 +248,7 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                               horizontal: 16, vertical: 24),
                           child: SecondaryButton(
                             label: AppLocalizations.of(context)!.deleteList,
-                            icon: Icons.delete_forever,
+                            icon: PhosphorIcons.trash(),
                             onPressed: () =>
                                 _showDeleteDialog(context, currentSet),
                             size: ButtonSize.large,
@@ -302,8 +302,8 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
           child: Center(
             child: Column(
               children: [
-                Icon(
-                  CarbonIcons.user_multiple,
+                PhosphorIcon(
+                  PhosphorIcons.users(),
                   size: 48,
                   color: context.colors.textSecondary,
                 ),
@@ -366,8 +366,8 @@ class _FollowSetDetailPageState extends State<FollowSetDetailPage> {
                         color: context.colors.overlayLight,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        CarbonIcons.close,
+                      child: PhosphorIcon(
+                        PhosphorIcons.x(),
                         size: 16,
                         color: context.colors.textSecondary,
                       ),

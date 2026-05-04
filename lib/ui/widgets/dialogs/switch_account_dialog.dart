@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../l10n/app_localizations.dart';
@@ -55,8 +55,8 @@ Future<void> showSwitchAccountDialog({
                     color: colors.overlayLight,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.close,
+                  child: PhosphorIcon(
+                    PhosphorIcons.x(),
                     size: 20,
                     color: colors.textPrimary,
                   ),
@@ -104,8 +104,8 @@ Future<void> showSwitchAccountDialog({
                         ),
                         child: profileImage == null || profileImage.isEmpty
                             ? Center(
-                                child: Icon(
-                                  Icons.person,
+                                child: PhosphorIcon(
+                                  PhosphorIcons.user(),
                                   size: 16,
                                   color: colors.textSecondary,
                                 ),
@@ -144,7 +144,7 @@ Future<void> showSwitchAccountDialog({
               ),
               child: Row(
                 children: [
-                  Icon(CarbonIcons.add, size: 20, color: colors.textPrimary),
+                  PhosphorIcon(PhosphorIcons.plus(), size: 20, color: colors.textPrimary),
                   const SizedBox(width: 12),
                   Text(
                     l10n.addAccount,

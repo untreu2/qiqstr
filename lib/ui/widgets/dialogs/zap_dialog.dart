@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
@@ -462,8 +463,8 @@ Future<Map<String, dynamic>> showZapDialog({
                         color: colors.overlayLight,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        Icons.close,
+                      child: PhosphorIcon(
+                        PhosphorIcons.x(),
                         size: 20,
                         color: colors.textPrimary,
                       ),

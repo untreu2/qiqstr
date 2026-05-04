@@ -12,7 +12,7 @@ import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/common/list_separator_widget.dart';
 import '../../widgets/note/note_widget.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../l10n/app_localizations.dart';
 
 class BookmarkPage extends StatefulWidget {
@@ -153,8 +153,8 @@ class _BookmarkPageState extends State<BookmarkPage> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(
-                    CarbonIcons.warning,
+                  PhosphorIcon(
+                    PhosphorIcons.warning(),
                     size: 48,
                     color: context.colors.error,
                   ),
@@ -211,8 +211,8 @@ class _BookmarkPageState extends State<BookmarkPage> {
                       child: Center(
                         child: Column(
                           children: [
-                            Icon(
-                              CarbonIcons.bookmark,
+                            PhosphorIcon(
+                              PhosphorIcons.bookmarkSimple(),
                               size: 48,
                               color: context.colors.textSecondary,
                             ),

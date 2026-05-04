@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
 import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
@@ -374,8 +373,8 @@ class FeedPageState extends State<FeedPage> {
                           color: colors.overlayLight,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.arrow_back,
+                        child: PhosphorIcon(
+                          PhosphorIcons.arrowLeft(),
                           size: 22,
                           color: colors.textPrimary,
                         ),
@@ -412,8 +411,8 @@ class FeedPageState extends State<FeedPage> {
                           color: colors.overlayLight,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.content_paste,
+                        child: PhosphorIcon(
+                          PhosphorIcons.clipboardText(),
                           size: 20,
                           color: colors.textPrimary,
                         ),
@@ -440,8 +439,8 @@ class FeedPageState extends State<FeedPage> {
                           color: colors.overlayLight,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.qr_code_scanner,
+                        child: PhosphorIcon(
+                          PhosphorIcons.qrCode(),
                           size: 20,
                           color: colors.textPrimary,
                         ),
@@ -493,8 +492,8 @@ class FeedPageState extends State<FeedPage> {
                                             : null,
                                       ),
                                       child: userProfileImage.isEmpty
-                                          ? Icon(
-                                              Icons.person,
+                                          ? PhosphorIcon(
+                                              PhosphorIcons.user(),
                                               size: 20,
                                               color: colors.textSecondary,
                                             )
@@ -530,8 +529,8 @@ class FeedPageState extends State<FeedPage> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.center,
                                     children: [
-                                      Icon(
-                                        CarbonIcons.search,
+                                      PhosphorIcon(
+                                        PhosphorIcons.magnifyingGlass(),
                                         size: 18,
                                         color: colors.textPrimary,
                                       ),
@@ -556,8 +555,8 @@ class FeedPageState extends State<FeedPage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    CarbonIcons.network_3,
+                                  PhosphorIcon(
+                                    PhosphorIcons.network(),
                                     size: 15,
                                     color: colors.textSecondary,
                                   ),
@@ -601,12 +600,10 @@ class FeedPageState extends State<FeedPage> {
                                     curve: Curves.easeOut,
                                   );
                                 },
-                                child: SvgPicture.asset(
-                                  'assets/main_icon_white.svg',
-                                  width: 30,
-                                  height: 30,
-                                  colorFilter: ColorFilter.mode(
-                                      colors.textPrimary, BlendMode.srcIn),
+                                child: PhosphorIcon(
+                                  PhosphorIcons.house(),
+                                  size: 30,
+                                  color: colors.textPrimary,
                                 ),
                               ),
                             ),
@@ -1068,8 +1065,8 @@ class FeedPageState extends State<FeedPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.arrow_upward_rounded,
+                      PhosphorIcon(
+                        PhosphorIcons.arrowUp(),
                         size: 16,
                         color: colors.textPrimary,
                       ),
@@ -1123,8 +1120,8 @@ class FeedPageState extends State<FeedPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.error_outline,
+                      PhosphorIcon(
+                        PhosphorIcons.warning(),
                         size: 48,
                         color: context.colors.error,
                       ),
@@ -1198,11 +1195,11 @@ class FeedPageState extends State<FeedPage> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  Icons.search_off,
-                                  size: 48,
-                                  color: context.colors.textSecondary,
-                                ),
+                                 PhosphorIcon(
+                                   PhosphorIcons.magnifyingGlassMinus(),
+                                   size: 48,
+                                   color: context.colors.textSecondary,
+                                 ),
                                 const SizedBox(height: 16),
                                 Builder(builder: (ctx) {
                                   final l = AppLocalizations.of(ctx)!;
@@ -1410,8 +1407,8 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
                 children: [
                   Icon(
                     isFollowing
-                        ? CarbonIcons.user_admin
-                        : CarbonIcons.user_follow,
+                        ? PhosphorIcons.userGear()
+                        : PhosphorIcons.userPlus(),
                     size: 16,
                     color: isFollowing
                         ? context.colors.textPrimary
@@ -1529,8 +1526,8 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
       return CircleAvatar(
         radius: 24,
         backgroundColor: Colors.grey.shade800,
-        child: Icon(
-          Icons.person,
+        child: PhosphorIcon(
+          PhosphorIcons.user(),
           size: 26,
           color: context.colors.textSecondary,
         ),
@@ -1552,16 +1549,16 @@ class _FeedUserItemWidgetState extends State<_FeedUserItemWidget> {
           memCacheWidth: 192,
           placeholder: (context, url) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),
           ),
           errorWidget: (context, url, error) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),

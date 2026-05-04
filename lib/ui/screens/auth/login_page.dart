@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
@@ -172,8 +173,8 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   GestureDetector(
                     onTap: () => setState(() => _obscureText = !_obscureText),
-                    child: Icon(
-                      _obscureText ? Icons.visibility_off : Icons.visibility,
+                    child: PhosphorIcon(
+                      _obscureText ? PhosphorIcons.eyeSlash() : PhosphorIcons.eye(),
                       color: context.colors.textSecondary,
                       size: 22,
                     ),
@@ -188,8 +189,8 @@ class _LoginPageState extends State<LoginPage> {
                         color: context.colors.textPrimary,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        Icons.content_paste,
+                      child: PhosphorIcon(
+                        PhosphorIcons.clipboardText(),
                         color: context.colors.background,
                         size: 20,
                       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 
@@ -76,7 +77,7 @@ Future<bool> showBroadcastEventsDialog({
                   Expanded(
                     child: SecondaryButton(
                       label: 'Yes',
-                      icon: Icons.send,
+                      icon: PhosphorIcons.paperPlaneTilt(),
                       onPressed: () => Navigator.pop(modalContext, true),
                       size: ButtonSize.large,
                     ),

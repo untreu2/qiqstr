@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/sync/sync_service.dart';
@@ -176,8 +176,8 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                           height: bannerHeight,
                           width: screenWidth,
                           color: context.colors.background,
-                          child: Icon(
-                            Icons.image,
+                          child: PhosphorIcon(
+                            PhosphorIcons.image(),
                             color: context.colors.textSecondary,
                             size: 40,
                           ),
@@ -187,8 +187,8 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                         height: bannerHeight,
                         width: screenWidth,
                         color: context.colors.background,
-                        child: Icon(
-                          Icons.add_photo_alternate,
+                        child: PhosphorIcon(
+                          PhosphorIcons.image(),
                           color: context.colors.textSecondary,
                           size: 40,
                         ),
@@ -205,11 +205,11 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                       color: context.colors.background.withValues(alpha: 0.9),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      CarbonIcons.camera,
-                      color: context.colors.textPrimary,
-                      size: 24,
-                    ),
+                          child: PhosphorIcon(
+                            PhosphorIcons.camera(),
+                            color: context.colors.textPrimary,
+                            size: 24,
+                          ),
                   ),
                 ),
               ),
@@ -256,11 +256,11 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                           strokeWidth: 2,
                         )
                       : pictureUrl.isEmpty
-                          ? Icon(
-                              Icons.person,
-                              size: avatarRadius,
-                              color: context.colors.textSecondary,
-                            )
+                              ? PhosphorIcon(
+                                  PhosphorIcons.user(),
+                                  size: avatarRadius,
+                                  color: context.colors.textSecondary,
+                                )
                           : null,
                 ),
                 if (!isUploading)
@@ -277,8 +277,8 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                             color: context.colors.background.withValues(alpha: 0.9),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(
-                            CarbonIcons.camera,
+                          child: PhosphorIcon(
+                            PhosphorIcons.camera(),
                             color: context.colors.textPrimary,
                             size: 20,
                           ),
@@ -468,8 +468,8 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                                   ),
                                 ),
                               )
-                            : Icon(
-                                Icons.check,
+                            : PhosphorIcon(
+                                PhosphorIcons.check(),
                                 color: context.colors.background,
                                 size: 24,
                               ),

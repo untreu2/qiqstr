@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../../l10n/app_localizations.dart';
@@ -50,8 +51,8 @@ Future<void> showLanguageDialog({
                     color: colors.overlayLight,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.close,
+                  child: PhosphorIcon(
+                    PhosphorIcons.x(),
                     size: 20,
                     color: colors.textPrimary,
                   ),
@@ -132,8 +133,8 @@ Widget _buildLanguageOption({
             ),
           ),
           if (isSelected)
-            Icon(
-              Icons.check_circle,
+            PhosphorIcon(
+              PhosphorIcons.checkCircle(),
               color: colors.primary,
               size: 22,
             ),

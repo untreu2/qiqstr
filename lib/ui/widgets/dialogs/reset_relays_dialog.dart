@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../../../l10n/app_localizations.dart';
@@ -35,7 +36,7 @@ Future<void> showResetRelaysDialog({
             width: double.infinity,
             child: SecondaryButton(
               label: l10n.resetToDefaults,
-              icon: Icons.refresh,
+              icon: PhosphorIcons.arrowClockwise(),
               onPressed: () {
                 Navigator.pop(modalContext);
                 onConfirm();

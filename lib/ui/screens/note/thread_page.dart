@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../data/services/auth_service.dart';
@@ -340,8 +341,8 @@ class _ThreadPageState extends State<ThreadPage> {
                     valueListenable: _currentUserImageNotifier,
                     builder: (context, profileImage, _) {
                       if (profileImage.isEmpty) {
-                        return Icon(
-                          Icons.person,
+                        return PhosphorIcon(
+                          PhosphorIcons.user(),
                           size: 24,
                           color: context.colors.primary,
                         );
@@ -356,8 +357,8 @@ class _ThreadPageState extends State<ThreadPage> {
                         maxWidthDiskCache: 80,
                         memCacheWidth: 80,
                         memCacheHeight: 80,
-                        errorWidget: (context, url, error) => Icon(
-                          Icons.person,
+                        errorWidget: (context, url, error) => PhosphorIcon(
+                          PhosphorIcons.user(),
                           size: 24,
                           color: context.colors.primary,
                         ),
@@ -704,8 +705,8 @@ class _ThreadPageState extends State<ThreadPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.error_outline,
+                PhosphorIcon(
+                  PhosphorIcons.warning(),
                   size: 64,
                   color: context.colors.error,
                 ),

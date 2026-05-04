@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../widgets/common/snackbar_widget.dart';
@@ -154,8 +154,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
             ),
             child: Row(
               children: [
-                Icon(
-                  CarbonIcons.flash,
+                PhosphorIcon(
+                  PhosphorIcons.lightning(),
                   size: 22,
                   color: context.colors.textPrimary,
                 ),
@@ -217,8 +217,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
         children: [
           Row(
             children: [
-              Icon(
-                CarbonIcons.hashtag,
+              PhosphorIcon(
+                PhosphorIcons.hash(),
                 size: 22,
                 color: context.colors.textPrimary,
               ),
@@ -261,8 +261,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
               if (_isEditing) ...[
                 const SizedBox(width: 12),
                 IconButton(
-                  icon: Icon(
-                    CarbonIcons.checkmark,
+                  icon: PhosphorIcon(
+                    PhosphorIcons.check(),
                     size: 24,
                     color: hasChanges
                         ? context.colors.accent
@@ -291,8 +291,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
                 ),
                 const SizedBox(width: 4),
                 IconButton(
-                  icon: Icon(
-                    CarbonIcons.close,
+                  icon: PhosphorIcon(
+                    PhosphorIcons.x(),
                     size: 24,
                     color: context.colors.textSecondary,
                   ),
@@ -321,11 +321,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
       ),
       child: Row(
         children: [
-          Icon(
-            CarbonIcons.checkmark_filled,
-            size: 22,
-            color: context.colors.switchActive,
-          ),
+                  PhosphorIcon(
+                    PhosphorIcons.check(),
+                    size: 24,
+                    color: context.colors.accent,
+                  ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -359,10 +359,10 @@ class _PaymentsPageState extends State<PaymentsPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    CarbonIcons.close,
-                    size: 16,
-                    color: context.colors.textPrimary,
+                  PhosphorIcon(
+                    PhosphorIcons.x(),
+                    size: 24,
+                    color: context.colors.textSecondary,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -397,11 +397,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
         children: [
           Row(
             children: [
-              Icon(
-                CarbonIcons.connection_signal,
-                size: 22,
-                color: context.colors.textPrimary,
-              ),
+          PhosphorIcon(
+            PhosphorIcons.waveform(),
+            size: 22,
+            color: context.colors.textPrimary,
+          ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -491,11 +491,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
         children: [
           Row(
             children: [
-              Icon(
-                CarbonIcons.wallet,
-                size: 22,
-                color: context.colors.textPrimary,
-              ),
+          PhosphorIcon(
+            PhosphorIcons.checkCircle(),
+            size: 22,
+            color: context.colors.switchActive,
+          ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -543,10 +543,10 @@ class _PaymentsPageState extends State<PaymentsPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    CarbonIcons.warning,
+                  PhosphorIcon(
+                    PhosphorIcons.x(),
                     size: 16,
-                    color: context.colors.error,
+                    color: context.colors.textPrimary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
@@ -256,8 +257,8 @@ class _FollowingPageState extends State<FollowingPage> {
       return CircleAvatar(
         radius: 24,
         backgroundColor: Colors.grey.shade800,
-        child: Icon(
-          Icons.person,
+        child: PhosphorIcon(
+          PhosphorIcons.user(),
           size: 26,
           color: context.colors.textSecondary,
         ),
@@ -279,16 +280,16 @@ class _FollowingPageState extends State<FollowingPage> {
           memCacheWidth: 192,
           placeholder: (context, url) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),
           ),
           errorWidget: (context, url, error) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),

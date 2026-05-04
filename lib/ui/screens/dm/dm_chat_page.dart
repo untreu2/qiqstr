@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/services/auth_service.dart';
@@ -365,8 +365,8 @@ class _DmChatPageState extends State<DmChatPage> {
                     ),
                     child: otherUser == null ||
                             (otherUser['picture'] as String? ?? '').isEmpty
-                        ? Icon(
-                            CarbonIcons.user,
+                        ? PhosphorIcon(
+                            PhosphorIcons.user(),
                             size: 14,
                             color: context.colors.textSecondary,
                           )
@@ -490,8 +490,8 @@ class _DmChatPageState extends State<DmChatPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    CarbonIcons.locked,
+                  PhosphorIcon(
+                    PhosphorIcons.lock(),
                     size: 10,
                     color: colors.textSecondary.withValues(alpha: 0.6),
                   ),
@@ -595,7 +595,7 @@ class _DmChatPageState extends State<DmChatPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(CarbonIcons.locked,
+                            PhosphorIcon(PhosphorIcons.lock(),
                                 color: colors.textSecondary, size: 24),
                             const SizedBox(height: 8),
                             Text(
@@ -624,7 +624,7 @@ class _DmChatPageState extends State<DmChatPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(CarbonIcons.locked,
+                  PhosphorIcon(PhosphorIcons.lock(),
                       size: 10, color: colors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
@@ -698,7 +698,7 @@ class _DmChatPageState extends State<DmChatPage> {
                             errorWidget: (_, __, ___) => Container(
                               height: 100,
                               color: colors.overlayLight,
-                              child: Icon(CarbonIcons.image,
+                              child: PhosphorIcon(PhosphorIcons.image(),
                                   color: colors.textSecondary),
                             ),
                           )
@@ -709,7 +709,7 @@ class _DmChatPageState extends State<DmChatPage> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(CarbonIcons.warning,
+                                PhosphorIcon(PhosphorIcons.warning(),
                                     color: colors.textSecondary, size: 24),
                                 const SizedBox(height: 8),
                                 Text(
@@ -735,7 +735,7 @@ class _DmChatPageState extends State<DmChatPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(CarbonIcons.warning,
+                  PhosphorIcon(PhosphorIcons.warning(),
                       size: 10, color: colors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
@@ -802,7 +802,7 @@ class _DmChatPageState extends State<DmChatPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(CarbonIcons.locked, color: colors.textSecondary, size: 24),
+              PhosphorIcon(PhosphorIcons.lock(), color: colors.textSecondary, size: 24),
               const SizedBox(height: 8),
               Text(
                 l10n.decryptionError,
@@ -838,7 +838,7 @@ class _DmChatPageState extends State<DmChatPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(CarbonIcons.locked, color: colors.textSecondary, size: 24),
+            PhosphorIcon(PhosphorIcons.lock(), color: colors.textSecondary, size: 24),
             const SizedBox(height: 8),
             Text(
               l10n.decryptionFailed,
@@ -881,7 +881,7 @@ class _DmChatPageState extends State<DmChatPage> {
           errorBuilder: (_, __, ___) => Container(
             height: 100,
             color: colors.overlayLight,
-            child: Icon(CarbonIcons.image, color: colors.textSecondary),
+            child: PhosphorIcon(PhosphorIcons.image(), color: colors.textSecondary),
           ),
         ),
       );
@@ -892,7 +892,7 @@ class _DmChatPageState extends State<DmChatPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(CarbonIcons.play_filled_alt,
+            PhosphorIcon(PhosphorIcons.play(),
                 color: colors.textSecondary, size: 48),
             const SizedBox(height: 8),
             Text(
@@ -911,7 +911,7 @@ class _DmChatPageState extends State<DmChatPage> {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            Icon(CarbonIcons.document, size: 20, color: colors.textSecondary),
+            PhosphorIcon(PhosphorIcons.file(), size: 20, color: colors.textSecondary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -981,8 +981,8 @@ class _DmChatPageState extends State<DmChatPage> {
                             color: colors.textPrimary,
                           ),
                         )
-                      : Icon(
-                          CarbonIcons.image,
+                      : PhosphorIcon(
+                          PhosphorIcons.image(),
                           color: colors.textPrimary,
                           size: 22,
                         ),
@@ -1011,8 +1011,8 @@ class _DmChatPageState extends State<DmChatPage> {
                     color: colors.textPrimary,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    CarbonIcons.arrow_up,
+                  child: PhosphorIcon(
+                    PhosphorIcons.arrowUp(),
                     color: colors.background,
                     size: 22,
                   ),
@@ -1072,8 +1072,8 @@ class _DmChatPageState extends State<DmChatPage> {
                   child: Container(
                     color: colors.overlayLight,
                     child: Center(
-                      child: Icon(
-                        isImage ? CarbonIcons.image : CarbonIcons.play_filled,
+                      child: PhosphorIcon(
+                        isImage ? PhosphorIcons.image() : PhosphorIcons.play(),
                         color: colors.textSecondary,
                         size: 28,
                       ),
@@ -1092,8 +1092,8 @@ class _DmChatPageState extends State<DmChatPage> {
                       color: colors.background,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      Icons.close,
+                    child: PhosphorIcon(
+                      PhosphorIcons.x(),
                       color: colors.textPrimary,
                       size: 16,
                     ),

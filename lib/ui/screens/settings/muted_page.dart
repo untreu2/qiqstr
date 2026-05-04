@@ -9,7 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/common_buttons.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../l10n/app_localizations.dart';
 
 class MutedPage extends StatelessWidget {
@@ -121,8 +121,8 @@ class MutedPage extends StatelessWidget {
             onTap: () {
               context.read<MutedBloc>().add(MutedWordRemoved(word));
             },
-            child: Icon(
-              CarbonIcons.close,
+            child: PhosphorIcon(
+              PhosphorIcons.x(),
               size: 16,
               color: context.colors.textSecondary,
             ),
@@ -148,11 +148,11 @@ class MutedPage extends StatelessWidget {
           child: Center(
             child: Column(
               children: [
-                Icon(
-                  CarbonIcons.warning,
-                  size: 48,
-                  color: context.colors.error,
-                ),
+                  PhosphorIcon(
+                    PhosphorIcons.warning(),
+                    size: 48,
+                    color: context.colors.error,
+                  ),
                 const SizedBox(height: 16),
                 Text(
                   l10n.errorLoadingMutedUsers,
@@ -190,8 +190,8 @@ class MutedPage extends StatelessWidget {
               child: Center(
                 child: Column(
                   children: [
-                    Icon(
-                      CarbonIcons.user_multiple,
+                    PhosphorIcon(
+                      PhosphorIcons.users(),
                       size: 48,
                       color: context.colors.textSecondary,
                     ),
@@ -265,22 +265,22 @@ class MutedPage extends StatelessWidget {
                     fit: BoxFit.cover,
                     memCacheWidth: 120,
                     memCacheHeight: 120,
-                    placeholder: (context, url) => Container(
+                     placeholder: (context, url) => Container(
                       width: 40,
                       height: 40,
                       color: context.colors.avatarPlaceholder,
-                      child: Icon(
-                        CarbonIcons.user,
+                      child: PhosphorIcon(
+                        PhosphorIcons.user(),
                         size: 20,
                         color: context.colors.textSecondary,
                       ),
                     ),
-                    errorWidget: (context, url, error) => Container(
+                     errorWidget: (context, url, error) => Container(
                       width: 40,
                       height: 40,
                       color: context.colors.avatarPlaceholder,
-                      child: Icon(
-                        CarbonIcons.user,
+                      child: PhosphorIcon(
+                        PhosphorIcons.user(),
                         size: 20,
                         color: context.colors.textSecondary,
                       ),
@@ -290,8 +290,8 @@ class MutedPage extends StatelessWidget {
                     width: 40,
                     height: 40,
                     color: context.colors.avatarPlaceholder,
-                    child: Icon(
-                      CarbonIcons.user,
+                    child: PhosphorIcon(
+                      PhosphorIcons.user(),
                       size: 20,
                       color: context.colors.textSecondary,
                     ),
@@ -334,8 +334,8 @@ class MutedPage extends StatelessWidget {
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          CarbonIcons.notification_off,
+                        PhosphorIcon(
+                          PhosphorIcons.bellSlash(),
                           size: 16,
                           color: context.colors.textPrimary,
                         ),
@@ -420,8 +420,8 @@ class _MuteWordInputState extends State<_MuteWordInput> {
               color: context.colors.textPrimary,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(
-              Icons.add,
+            child: PhosphorIcon(
+              PhosphorIcons.plus(),
               color: context.colors.background,
               size: 25,
             ),

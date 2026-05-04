@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -59,7 +60,7 @@ class SuggestedFollowsPage extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline,
+                        PhosphorIcon(PhosphorIcons.warning(),
                             size: 64, color: context.colors.error),
                         const SizedBox(height: 16),
                         Text(
@@ -189,8 +190,8 @@ class SuggestedFollowsPage extends StatelessWidget {
                   ),
                   if (nip05.isNotEmpty && nip05Verified) ...[
                     const SizedBox(width: 4),
-                    Icon(
-                      Icons.verified,
+                    PhosphorIcon(
+                      PhosphorIcons.sealCheck(),
                       size: 16,
                       color: context.colors.accent,
                     ),
@@ -213,8 +214,8 @@ class SuggestedFollowsPage extends StatelessWidget {
                 ),
               ),
               child: isSelected
-                  ? Icon(
-                      Icons.check,
+                  ? PhosphorIcon(
+                      PhosphorIcons.check(),
                       color: context.colors.background,
                       size: 16,
                     )
@@ -231,8 +232,8 @@ class SuggestedFollowsPage extends StatelessWidget {
       return CircleAvatar(
         radius: 24,
         backgroundColor: Colors.grey.shade800,
-        child: Icon(
-          Icons.person,
+        child: PhosphorIcon(
+          PhosphorIcons.user(),
           size: 26,
           color: context.colors.textSecondary,
         ),
@@ -254,16 +255,16 @@ class SuggestedFollowsPage extends StatelessWidget {
           memCacheWidth: 192,
           placeholder: (context, url) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),
           ),
           errorWidget: (context, url, error) => Container(
             color: Colors.grey.shade800,
-            child: Icon(
-              Icons.person,
+            child: PhosphorIcon(
+              PhosphorIcons.user(),
               size: 26,
               color: context.colors.textSecondary,
             ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/di/app_di.dart';
@@ -186,8 +187,8 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                       color: colors.overlayLight,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      Icons.close,
+                    child: PhosphorIcon(
+                      PhosphorIcons.x(),
                       size: 20,
                       color: colors.textPrimary,
                     ),
@@ -287,7 +288,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Icon(Icons.copy,
+                            PhosphorIcon(PhosphorIcons.copy(),
                                 size: 14, color: colors.textSecondary),
                           ],
                         ),

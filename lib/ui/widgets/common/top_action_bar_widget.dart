@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -61,8 +61,8 @@ class TopActionBarWidget extends StatelessWidget {
                   child: Semantics(
                     label: l10n.goBackToPreviousScreen,
                     button: true,
-                    child: Icon(
-                      Icons.arrow_back,
+                    child: PhosphorIcon(
+                      PhosphorIcons.arrowLeft(),
                       color: colors.background,
                       size: 20,
                     ),
@@ -99,8 +99,8 @@ class TopActionBarWidget extends StatelessWidget {
                   child: Semantics(
                     label: l10n.share,
                     button: true,
-                    child: Icon(
-                      CarbonIcons.share,
+                    child: PhosphorIcon(
+                      PhosphorIcons.share(),
                       color: colors.background,
                       size: 20,
                     ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -201,8 +202,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           final profileImage =
                               currentUser['picture'] as String? ?? '';
                           return profileImage.isEmpty
-                              ? Icon(
-                                  Icons.person,
+                              ? PhosphorIcon(
+                                  PhosphorIcons.user(),
                                   size: 14,
                                   color: colors.textSecondary,
                                 )
@@ -555,8 +556,8 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.error_outline,
+                PhosphorIcon(
+                  PhosphorIcons.warning(),
                   size: 48,
                   color: context.colors.error,
                 ),
@@ -837,7 +838,7 @@ class _PhotoGridTile extends StatelessWidget {
         ),
         errorWidget: (context, url, error) => Container(
           color: context.colors.surfaceTransparent,
-          child: Icon(Icons.broken_image,
+          child: PhosphorIcon(PhosphorIcons.imageBroken(),
               color: context.colors.textSecondary, size: 24),
         ),
       ),

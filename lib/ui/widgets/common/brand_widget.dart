@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/theme_manager.dart';
 
@@ -27,14 +27,10 @@ class BrandWidget extends StatelessWidget {
       children: [
         Padding(
           padding: EdgeInsets.only(top: iconTopPadding),
-          child: SvgPicture.asset(
-            'assets/main_icon_white.svg',
-            width: iconSize,
-            height: iconSize,
-            colorFilter: ColorFilter.mode(
-              context.colors.textPrimary,
-              BlendMode.srcIn,
-            ),
+          child: PhosphorIcon(
+            PhosphorIcons.house(),
+            size: iconSize,
+            color: context.colors.textPrimary,
           ),
         ),
         const SizedBox(width: 12),

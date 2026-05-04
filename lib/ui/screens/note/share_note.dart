@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:giphy_get/giphy_get.dart';
@@ -718,7 +719,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                           ),
                         )
                       else
-                        Icon(Icons.attach_file,
+                        PhosphorIcon(PhosphorIcons.paperclip(),
                             size: 16, color: context.colors.textPrimary),
                       const SizedBox(width: 6),
                       Text(
@@ -900,7 +901,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
               : null,
           backgroundColor: context.colors.surfaceTransparent,
           child: profileImage.isEmpty
-              ? Icon(Icons.person, color: context.colors.textPrimary, size: 20)
+              ? PhosphorIcon(PhosphorIcons.user(), color: context.colors.textPrimary, size: 20)
               : null,
         );
       },
@@ -1008,7 +1009,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         width: _mediaItemSize,
         height: _mediaItemSize,
         color: context.colors.surface,
-        child: const Icon(Icons.broken_image),
+        child: PhosphorIcon(PhosphorIcons.imageBroken()),
       ),
     );
   }
@@ -1026,8 +1027,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
             color: context.colors.background,
             shape: BoxShape.circle,
           ),
-          child: Icon(
-            Icons.close,
+          child: PhosphorIcon(
+            PhosphorIcons.x(),
             color: context.colors.textPrimary,
             size: 18,
           ),
@@ -1126,7 +1127,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                     : null,
                 backgroundColor: context.colors.surfaceTransparent,
                 child: userProfileImage.isEmpty
-                    ? Icon(Icons.person,
+                    ? PhosphorIcon(PhosphorIcons.user(),
                         color: context.colors.background, size: 16)
                     : null,
               ),

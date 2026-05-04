@@ -1,10 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:gallery_saver_plus/gallery_saver.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 import '../common/snackbar_widget.dart';
@@ -172,7 +172,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                           child: Row(
                             children: [
                               IconActionButton(
-                                icon: CarbonIcons.close,
+                                icon: PhosphorIcons.x(),
                                 onPressed: () =>
                                     Navigator.of(context, rootNavigator: true)
                                         .pop(),
@@ -193,8 +193,8 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                               ),
                               IconActionButton(
                                 icon: _isDownloading
-                                    ? CarbonIcons.download
-                                    : CarbonIcons.download,
+                                    ? PhosphorIcons.downloadSimple()
+                                    : PhosphorIcons.downloadSimple(),
                                 onPressed: _isDownloading
                                     ? null
                                     : () => _downloadImage(

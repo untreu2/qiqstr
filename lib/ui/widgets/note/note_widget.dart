@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../../utils/string_optimizer.dart';
 import '../../../utils/thread_chain.dart';
 import '../../theme/theme_manager.dart';
@@ -521,19 +522,19 @@ class _NoteWidgetState extends State<NoteWidget> {
                               final reposterId = _reposterId;
                               _navigateToProfile(reposterId);
                             },
-                            child: Row(
-                              children: [
-                                Icon(
-                                  CarbonIcons.renew,
-                                  size: 16,
-                                  color: colors.textSecondary,
-                                ),
-                                const SizedBox(width: 6),
-                                _ProfileAvatar(
-                                  imageUrl: state.reposterUser?['picture']
-                                          as String? ??
-                                      '',
-                                  radius: 12,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      CarbonIcons.renew,
+                                      size: 16,
+                                      color: colors.textSecondary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    _ProfileAvatar(
+                                      imageUrl: state.reposterUser?['picture']
+                                              as String? ??
+                                          '',
+                                      radius: 12,
                                   colors: colors,
                                 ),
                                 const SizedBox(width: 6),
@@ -753,8 +754,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    Icons.reply,
+                                  PhosphorIcon(
+                                    PhosphorIcons.arrowBendUpLeft(),
                                     size: 14,
                                     color: colors.textSecondary,
                                   ),
@@ -1029,8 +1030,8 @@ class _ProfileAvatar extends StatelessWidget {
         child: CircleAvatar(
           radius: radius,
           backgroundColor: colors.surfaceTransparent,
-          child: Icon(
-            Icons.person,
+          child: PhosphorIcon(
+            PhosphorIcons.user(),
             size: radius,
             color: colors.textSecondary,
           ),
@@ -1062,16 +1063,16 @@ class _ProfileAvatar extends StatelessWidget {
                 maxHeightDiskCache: cacheDim,
                 placeholder: (context, url) => Container(
                   color: colors.surfaceTransparent,
-                  child: Icon(
-                    Icons.person,
+                  child: PhosphorIcon(
+                    PhosphorIcons.user(),
                     size: radius,
                     color: colors.textSecondary,
                   ),
                 ),
                 errorWidget: (context, url, error) => Container(
                   color: colors.surfaceTransparent,
-                  child: Icon(
-                    Icons.person,
+                  child: PhosphorIcon(
+                    PhosphorIcons.user(),
                     size: radius,
                     color: colors.textSecondary,
                   ),

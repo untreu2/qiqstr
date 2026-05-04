@@ -3,8 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/theme_manager.dart';
 import '../../../utils/logout.dart';
-import 'package:carbon_icons/carbon_icons.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/dialogs/logout_dialog.dart';
 import '../../widgets/dialogs/language_dialog.dart';
@@ -137,8 +136,8 @@ class _SettingsPageState extends State<SettingsPage> {
             currentLocale: localeState.locale,
           ),
           behavior: HitTestBehavior.opaque,
-          child: Icon(
-            CarbonIcons.language,
+          child: PhosphorIcon(
+            PhosphorIcons.translate(),
             color: context.colors.background,
             size: 20,
           ),
@@ -156,7 +155,7 @@ class _SettingsPageState extends State<SettingsPage> {
             context: context,
             title: l10n.relays,
             subtitle: '',
-            icon: CarbonIcons.network_3,
+            icon: PhosphorIcons.network(),
             onTap: () => context.push('/relays'),
           ),
           const SizedBox(height: 8),
@@ -164,7 +163,7 @@ class _SettingsPageState extends State<SettingsPage> {
             context: context,
             title: l10n.yourDataOnRelays,
             subtitle: '',
-            icon: CarbonIcons.data_connected,
+            icon: PhosphorIcons.plugsConnected(),
             onTap: () => context.push('/event-manager'),
           ),
           const SizedBox(height: 8),
@@ -172,7 +171,7 @@ class _SettingsPageState extends State<SettingsPage> {
             context: context,
             title: l10n.databaseCache,
             subtitle: '',
-            icon: CarbonIcons.data_base,
+            icon: PhosphorIcons.database(),
             onTap: () => context.push('/database'),
           ),
           const SizedBox(height: 8),
@@ -180,7 +179,7 @@ class _SettingsPageState extends State<SettingsPage> {
             context: context,
             title: l10n.keys,
             subtitle: '',
-            icon: CarbonIcons.password,
+            icon: PhosphorIcons.password(),
             onTap: () => context.push('/keys'),
           ),
           const SizedBox(height: 8),
@@ -188,7 +187,7 @@ class _SettingsPageState extends State<SettingsPage> {
             context: context,
             title: l10n.display,
             subtitle: '',
-            icon: CarbonIcons.view,
+            icon: PhosphorIcons.eye(),
             onTap: () => context.push('/display'),
           ),
           const SizedBox(height: 8),
@@ -196,7 +195,7 @@ class _SettingsPageState extends State<SettingsPage> {
             context: context,
             title: l10n.payments,
             subtitle: '',
-            icon: CarbonIcons.flash,
+            icon: PhosphorIcons.lightning(),
             onTap: () => context.push('/payments'),
           ),
           const SizedBox(height: 8),
@@ -204,7 +203,7 @@ class _SettingsPageState extends State<SettingsPage> {
             context: context,
             title: l10n.muted,
             subtitle: '',
-            icon: CarbonIcons.notification_off,
+            icon: PhosphorIcons.bellSlash(),
             onTap: () => context.push('/muted'),
           ),
           const SizedBox(height: 8),
@@ -219,8 +218,7 @@ class _SettingsPageState extends State<SettingsPage> {
     required BuildContext context,
     required String title,
     required String subtitle,
-    String? svgAsset,
-    IconData? icon,
+    PhosphorIconData? icon,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -235,20 +233,10 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Row(
           children: [
             if (icon != null)
-              Icon(
+              PhosphorIcon(
                 icon,
                 size: 22,
                 color: context.colors.textPrimary,
-              )
-            else if (svgAsset != null)
-              SvgPicture.asset(
-                svgAsset,
-                width: 22,
-                height: 22,
-                colorFilter: ColorFilter.mode(
-                  context.colors.textPrimary,
-                  BlendMode.srcIn,
-                ),
               ),
             const SizedBox(width: 8),
             Text(
@@ -282,14 +270,10 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         child: Row(
           children: [
-            SvgPicture.asset(
-              'assets/signout_button.svg',
-              width: 22,
-              height: 22,
-              colorFilter: ColorFilter.mode(
-                context.colors.error,
-                BlendMode.srcIn,
-              ),
+            PhosphorIcon(
+              PhosphorIcons.signOut(),
+              size: 22,
+              color: context.colors.error,
             ),
             const SizedBox(width: 8),
             Text(

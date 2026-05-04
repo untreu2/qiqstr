@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/following_repository.dart';
@@ -146,8 +146,8 @@ class _UserTileState extends State<UserTile> {
                                       if (userNip05.isNotEmpty &&
                                           userNip05Verified) ...[
                                         const SizedBox(width: 3),
-                                        Icon(
-                                          Icons.verified,
+                                        PhosphorIcon(
+                                          PhosphorIcons.sealCheck(),
                                           size: 14,
                                           color: context.colors.accent,
                                         ),
@@ -181,8 +181,8 @@ class _UserTileState extends State<UserTile> {
                                 ),
                               ),
                               child: widget.isSelected
-                                  ? Icon(
-                                      Icons.check,
+                                  ? PhosphorIcon(
+                                      PhosphorIcons.check(),
                                       color: context.colors.background,
                                       size: 14,
                                     )
@@ -235,8 +235,8 @@ class _UserTileState extends State<UserTile> {
                                           )
                                         : Icon(
                                             loadedState.isFollowing == true
-                                                ? CarbonIcons.user_admin
-                                                : CarbonIcons.user_follow,
+                                                ? PhosphorIcons.userGear()
+                                                : PhosphorIcons.userPlus(),
                                             size: 18,
                                             color:
                                                 loadedState.isFollowing == true
@@ -278,8 +278,8 @@ class _UserAvatar extends StatelessWidget {
         child: CircleAvatar(
           radius: 20,
           backgroundColor: Colors.grey.shade800,
-          child: Icon(
-            Icons.person,
+          child: PhosphorIcon(
+            PhosphorIcons.user(),
             size: 22,
             color: colors.textSecondary,
           ),
@@ -305,16 +305,16 @@ class _UserAvatar extends StatelessWidget {
             memCacheWidth: 160,
             placeholder: (context, url) => Container(
               color: Colors.grey.shade800,
-              child: Icon(
-                Icons.person,
+              child: PhosphorIcon(
+                PhosphorIcons.user(),
                 size: 22,
                 color: colors.textSecondary,
               ),
             ),
             errorWidget: (context, url, error) => Container(
               color: Colors.grey.shade800,
-              child: Icon(
-                Icons.person,
+              child: PhosphorIcon(
+                PhosphorIcons.user(),
                 size: 22,
                 color: colors.textSecondary,
               ),

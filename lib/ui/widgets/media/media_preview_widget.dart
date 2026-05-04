@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../theme/theme_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'photo_viewer_widget.dart';
@@ -288,7 +289,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
       ),
       errorWidget: (context, url, error) => Container(
         color: context.colors.surfaceTransparent,
-        child: Icon(Icons.broken_image, color: context.colors.textSecondary),
+        child: PhosphorIcon(PhosphorIcons.imageBroken(), color: context.colors.textSecondary),
       ),
     );
 
