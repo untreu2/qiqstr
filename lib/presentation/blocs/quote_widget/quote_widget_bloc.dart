@@ -193,26 +193,42 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
 
       Map<String, dynamic>? user;
       if (noteAuthor.isNotEmpty) {
-        var profile = await _profileRepository.getProfile(noteAuthor);
+        final hydratedName = feedNote?.authorName ?? '';
+        final hydratedImage = feedNote?.authorImage ?? '';
+        final hydratedNip05 = feedNote?.authorNip05 ?? '';
 
-        if (profile == null ||
-            (profile.name ?? '').isEmpty && (profile.picture ?? '').isEmpty) {
-          await _syncService.syncProfile(noteAuthor);
-          if (isClosed) return;
-          profile = await _profileRepository.getProfile(noteAuthor);
-        }
-
-        if (profile != null) {
+        if (hydratedName.isNotEmpty || hydratedImage.isNotEmpty) {
           user = {
             'pubkey': noteAuthor,
             'npub': noteAuthor,
-            'name': profile.name ?? profile.displayName ?? '',
-            'picture': profile.picture ?? '',
-            'nip05': profile.nip05 ?? '',
+            'name': hydratedName,
+            'picture': hydratedImage,
+            'nip05': hydratedNip05,
           };
-        }
+          _watchProfile(noteAuthor);
+        } else {
+          var profile = await _profileRepository.getProfile(noteAuthor);
 
-        _watchProfile(noteAuthor);
+          if (profile == null ||
+              (profile.name ?? '').isEmpty &&
+                  (profile.picture ?? '').isEmpty) {
+            await _syncService.syncProfile(noteAuthor);
+            if (isClosed) return;
+            profile = await _profileRepository.getProfile(noteAuthor);
+          }
+
+          if (profile != null) {
+            user = {
+              'pubkey': noteAuthor,
+              'npub': noteAuthor,
+              'name': profile.name ?? profile.displayName ?? '',
+              'picture': profile.picture ?? '',
+              'nip05': profile.nip05 ?? '',
+            };
+          }
+
+          _watchProfile(noteAuthor);
+        }
       }
 
       emit(QuoteWidgetLoaded(

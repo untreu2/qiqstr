@@ -137,6 +137,47 @@ class _NoteWidgetState extends State<NoteWidget> {
     _isInitialized = true;
   }
 
+  Map<String, dynamic> _profileFromNoteMap(String pubkey) {
+    final authorName = widget.note['authorName'] as String? ?? '';
+    final authorImage = widget.note['authorImage'] as String? ?? '';
+    final authorNip05 = widget.note['authorNip05'] as String? ?? '';
+    return {
+      'pubkey': pubkey,
+      'name': authorName.isNotEmpty
+          ? authorName
+          : (pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey),
+      'picture': authorImage,
+      'nip05': authorNip05,
+      'about': '',
+      'banner': '',
+      'website': '',
+      'lud16': '',
+      'updatedAt': DateTime.now(),
+      'nip05Verified': false,
+    };
+  }
+
+  Map<String, dynamic> _reposterFromNoteMap(String reposterId) {
+    final name = widget.note['repostedByName'] as String? ?? '';
+    final picture = widget.note['repostedByImage'] as String? ?? '';
+    return {
+      'pubkey': reposterId,
+      'name': name.isNotEmpty
+          ? name
+          : (reposterId.length > 8
+              ? reposterId.substring(0, 8)
+              : reposterId),
+      'picture': picture,
+      'nip05': '',
+      'about': '',
+      'banner': '',
+      'website': '',
+      'lud16': '',
+      'updatedAt': DateTime.now(),
+      'nip05Verified': false,
+    };
+  }
+
   void _loadInitialUserDataSync() {
     try {
       final currentState = _stateNotifier.value;
@@ -145,34 +186,15 @@ class _NoteWidgetState extends State<NoteWidget> {
       Map<String, dynamic>? reposterUser =
           _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      authorUser ??= {
-        'pubkey': _authorId,
-        'name': _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
-        'about': '',
-        'picture': '',
-        'banner': '',
-        'website': '',
-        'nip05': '',
-        'lud16': '',
-        'updatedAt': DateTime.now(),
-        'nip05Verified': false,
-      };
+      if (authorUser == null ||
+          ((authorUser['name'] as String?) ?? '').isEmpty &&
+              ((authorUser['picture'] as String?) ?? '').isEmpty) {
+        authorUser = _profileFromNoteMap(_authorId);
+      }
 
-      if (_reposterId != null && reposterUser == null) {
-        final reposterId = _reposterId;
-        reposterUser = {
-          'pubkey': reposterId,
-          'name':
-              reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
-          'about': '',
-          'picture': '',
-          'banner': '',
-          'website': '',
-          'nip05': '',
-          'lud16': '',
-          'updatedAt': DateTime.now(),
-          'nip05Verified': false,
-        };
+      final reposterId = _reposterId;
+      if (reposterId != null && reposterUser == null) {
+        reposterUser = _reposterFromNoteMap(reposterId);
       }
 
       final isReplyNote = _isReply && !_isQuote && _parentId != null;
@@ -217,34 +239,15 @@ class _NoteWidgetState extends State<NoteWidget> {
       Map<String, dynamic>? reposterUser =
           _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      authorUser ??= {
-        'pubkey': _authorId,
-        'name': _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
-        'about': '',
-        'picture': '',
-        'banner': '',
-        'website': '',
-        'nip05': '',
-        'lud16': '',
-        'updatedAt': DateTime.now(),
-        'nip05Verified': false,
-      };
+      if (authorUser == null ||
+          ((authorUser['name'] as String?) ?? '').isEmpty &&
+              ((authorUser['picture'] as String?) ?? '').isEmpty) {
+        authorUser = _profileFromNoteMap(_authorId);
+      }
 
-      if (_reposterId != null && reposterUser == null) {
-        final reposterId = _reposterId;
-        reposterUser = {
-          'pubkey': reposterId,
-          'name':
-              reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
-          'about': '',
-          'picture': '',
-          'banner': '',
-          'website': '',
-          'nip05': '',
-          'lud16': '',
-          'updatedAt': DateTime.now(),
-          'nip05Verified': false,
-        };
+      final reposterId = _reposterId;
+      if (reposterId != null && reposterUser == null) {
+        reposterUser = _reposterFromNoteMap(reposterId);
       }
 
       final isReplyNote = _isReply && !_isQuote && _parentId != null;

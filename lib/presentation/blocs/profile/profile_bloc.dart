@@ -616,6 +616,42 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     }
   }
 
+  Map<String, Map<String, dynamic>> _buildProfilesFromNoteMaps(
+    List<Map<String, dynamic>> notes,
+    Map<String, Map<String, dynamic>> existing,
+  ) {
+    final merged = Map<String, Map<String, dynamic>>.from(existing);
+    for (final n in notes) {
+      final pubkey = n['pubkey'] as String? ?? '';
+      if (pubkey.isNotEmpty && !merged.containsKey(pubkey)) {
+        final name = n['authorName'] as String? ?? '';
+        final picture = n['authorImage'] as String? ?? '';
+        if (name.isNotEmpty || picture.isNotEmpty) {
+          merged[pubkey] = {
+            'pubkey': pubkey,
+            'name': name,
+            'picture': picture,
+            'nip05': n['authorNip05'] as String? ?? '',
+          };
+        }
+      }
+      final repostedBy = n['repostedBy'] as String? ?? '';
+      if (repostedBy.isNotEmpty && !merged.containsKey(repostedBy)) {
+        final name = n['repostedByName'] as String? ?? '';
+        final picture = n['repostedByImage'] as String? ?? '';
+        if (name.isNotEmpty || picture.isNotEmpty) {
+          merged[repostedBy] = {
+            'pubkey': repostedBy,
+            'name': name,
+            'picture': picture,
+            'nip05': '',
+          };
+        }
+      }
+    }
+    return merged;
+  }
+
   void _loadProfilesForNotes(
     List<Map<String, dynamic>> notes,
     Emitter<ProfileState> emit,
@@ -623,15 +659,23 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (isClosed || state is! ProfileLoaded) return;
 
     final currentState = state as ProfileLoaded;
+
+    final seeded = _buildProfilesFromNoteMaps(notes, currentState.profiles);
+    if (seeded.length > currentState.profiles.length && !isClosed) {
+      emit(currentState.copyWith(profiles: seeded));
+    }
+
+    final refreshedState =
+        state is ProfileLoaded ? state as ProfileLoaded : currentState;
     final authorIds = <String>{};
     for (final n in notes) {
       final pubkey = n['pubkey'] as String? ?? '';
-      if (pubkey.isNotEmpty && !currentState.profiles.containsKey(pubkey)) {
+      if (pubkey.isNotEmpty && !refreshedState.profiles.containsKey(pubkey)) {
         authorIds.add(pubkey);
       }
       final repostedBy = n['repostedBy'] as String? ?? '';
       if (repostedBy.isNotEmpty &&
-          !currentState.profiles.containsKey(repostedBy)) {
+          !refreshedState.profiles.containsKey(repostedBy)) {
         authorIds.add(repostedBy);
       }
     }
@@ -709,9 +753,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     InteractionService.instance.populateFromNotes(event.notes);
 
     final incomingMaps = _feedNotesToMaps(event.notes);
+    final seededProfiles =
+        _buildProfilesFromNoteMaps(incomingMaps, currentState.profiles);
 
     if (currentState.notes.isEmpty) {
-      emit(currentState.copyWith(notes: incomingMaps, canLoadMore: true));
+      emit(currentState.copyWith(
+          notes: incomingMaps,
+          profiles: seededProfiles,
+          canLoadMore: true));
     } else {
       final existingIds = currentState.notes
           .map((n) => n['id'] as String? ?? '')
@@ -725,10 +774,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           })
           .toList();
 
-      if (appendOnly.isEmpty) return;
+      if (appendOnly.isEmpty) {
+        if (seededProfiles.length > currentState.profiles.length) {
+          emit(currentState.copyWith(profiles: seededProfiles));
+        }
+        return;
+      }
 
       final updated = _sortByTimestamp([...currentState.notes, ...appendOnly]);
-      emit(currentState.copyWith(notes: updated, canLoadMore: true));
+      emit(currentState.copyWith(
+          notes: updated, profiles: seededProfiles, canLoadMore: true));
     }
 
     if (incomingMaps.isNotEmpty) {

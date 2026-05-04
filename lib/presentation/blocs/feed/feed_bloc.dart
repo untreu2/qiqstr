@@ -160,6 +160,44 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         });
   }
 
+  Map<String, Map<String, dynamic>> _buildProfilesFromNotes(
+    List<FeedNote> notes,
+    Map<String, Map<String, dynamic>> existing,
+  ) {
+    final merged = Map<String, Map<String, dynamic>>.from(existing);
+    for (final n in notes) {
+      if (n.pubkey.isNotEmpty && !merged.containsKey(n.pubkey)) {
+        if ((n.authorName?.isNotEmpty ?? false) ||
+            (n.authorImage?.isNotEmpty ?? false)) {
+          merged[n.pubkey] = {
+            'pubkey': n.pubkey,
+            'name': n.authorName ?? '',
+            'picture': n.authorImage ?? '',
+            'nip05': n.authorNip05 ?? '',
+          };
+        }
+      }
+      final repostedBy = n.repostedBy;
+      if (repostedBy != null &&
+          repostedBy.isNotEmpty &&
+          !merged.containsKey(repostedBy)) {
+        final noteMap = n.toMap();
+        final repostedByName = noteMap['repostedByName'] as String?;
+        final repostedByImage = noteMap['repostedByImage'] as String?;
+        if ((repostedByName?.isNotEmpty ?? false) ||
+            (repostedByImage?.isNotEmpty ?? false)) {
+          merged[repostedBy] = {
+            'pubkey': repostedBy,
+            'name': repostedByName ?? '',
+            'picture': repostedByImage ?? '',
+            'nip05': '',
+          };
+        }
+      }
+    }
+    return merged;
+  }
+
   void _onFeedNotesUpdated(
     feed_event.FeedNotesUpdated event,
     Emitter<FeedState> emit,
@@ -182,16 +220,17 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     InteractionService.instance.populateFromNotes(event.notes);
 
     final sortedNotes = List<FeedNote>.from(event.notes);
-
     final canLoadMore = sortedNotes.length >= _currentLimit;
+    final seededProfiles =
+        _buildProfilesFromNotes(sortedNotes, currentState.profiles);
 
-    if (currentState.notes.isEmpty ||
-        _acceptNextUpdate) {
+    if (currentState.notes.isEmpty || _acceptNextUpdate) {
       _acceptNextUpdate = false;
       _bufferedNotes = [];
       _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
       emit(currentState.copyWith(
         notes: sortedNotes,
+        profiles: seededProfiles,
         canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
@@ -224,6 +263,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       }).toList();
       emit(currentState.copyWith(
         notes: visibleNotes,
+        profiles: seededProfiles,
         canLoadMore: canLoadMore,
         pendingNotesCount: othersCount,
       ));
@@ -232,6 +272,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
       emit(currentState.copyWith(
         notes: sortedNotes,
+        profiles: seededProfiles,
         canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
@@ -239,6 +280,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       _bufferedNotes = [];
       emit(currentState.copyWith(
         notes: sortedNotes,
+        profiles: seededProfiles,
         canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));

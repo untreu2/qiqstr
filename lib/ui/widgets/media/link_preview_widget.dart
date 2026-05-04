@@ -58,15 +58,9 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   void _loadPreview() {
     final cached = _cache[widget.url];
     if (cached != null) {
-      Future.microtask(() {
-        if (mounted) {
-          setState(() {
-            _title = cached['title'] as String?;
-            _imageUrl = cached['imageUrl'] as String?;
-            _isLoading = false;
-          });
-        }
-      });
+      _title = cached['title'] as String?;
+      _imageUrl = cached['imageUrl'] as String?;
+      _isLoading = false;
     } else {
       _fetchPreviewData();
     }
