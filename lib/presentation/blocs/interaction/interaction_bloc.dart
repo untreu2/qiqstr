@@ -220,7 +220,16 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         targetAuthor: noteAuthor,
         content: '+',
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[InteractionBloc] Reaction failed: $e');
+      _interactionService.markUnreacted(noteId);
+      if (!isClosed && state is InteractionLoaded) {
+        final s = state as InteractionLoaded;
+        emit(s.copyWith(
+          hasReacted: false,
+          reactionCount: (s.reactionCount - 1).clamp(0, double.maxFinite.toInt()),
+        ));
+      }
       await _interactionService.refreshInteractions(noteId);
     }
   }
@@ -270,7 +279,11 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       if (repostEventId != null) {
         await _syncService.publishDeletion(eventIds: [repostEventId]);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[InteractionBloc] Undo repost failed: $e');
+      _interactionService.markReposted(noteId);
+      await _interactionService.refreshInteractions(noteId);
+    }
   }
 
   void _onZapStarted(
@@ -323,6 +336,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       InteractionNoteDeleted event, Emitter<InteractionState> emit) async {
     try {
       await _syncService.publishDeletion(eventIds: [noteId]);
+      if (isClosed) return;
       final currentState =
           state is InteractionLoaded ? (state as InteractionLoaded) : null;
       if (currentState != null) {
@@ -330,7 +344,9 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       } else {
         emit(const InteractionLoaded(noteDeleted: true));
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[InteractionBloc] Note deletion failed: $e');
+    }
   }
 
   Map<String, dynamic>? getNoteForActions() => note;
