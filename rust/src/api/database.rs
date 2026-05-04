@@ -53,11 +53,11 @@ fn active_muted_words() -> Vec<String> {
 // Realtime deduplication cache
 // ---------------------------------------------------------------------------
 
-static SEEN_EVENT_IDS: OnceLock<RwLock<HashSet<String>>> = OnceLock::new();
+static SEEN_EVENT_IDS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
 static SEEN_EVENT_IDS_MAX: usize = 2000;
 
-fn seen_ids() -> &'static RwLock<HashSet<String>> {
-    SEEN_EVENT_IDS.get_or_init(|| RwLock::new(HashSet::new()))
+fn seen_ids() -> &'static RwLock<Vec<String>> {
+    SEEN_EVENT_IDS.get_or_init(|| RwLock::new(Vec::new()))
 }
 
 #[flutter_rust_bridge::frb(sync)]
@@ -65,16 +65,17 @@ pub fn is_event_new_and_track(event_id: String) -> bool {
     if event_id.is_empty() {
         return false;
     }
-    let Ok(mut set) = seen_ids().write() else {
+    let Ok(mut ring) = seen_ids().write() else {
         return true;
     };
-    if set.contains(&event_id) {
+    if ring.contains(&event_id) {
         return false;
     }
-    if set.len() >= SEEN_EVENT_IDS_MAX {
-        set.clear();
+    if ring.len() >= SEEN_EVENT_IDS_MAX {
+        let drain_count = SEEN_EVENT_IDS_MAX / 2;
+        ring.drain(..drain_count);
     }
-    set.insert(event_id);
+    ring.push(event_id);
     true
 }
 
