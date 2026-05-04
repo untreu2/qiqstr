@@ -392,6 +392,8 @@ class _DmConversationsPageState extends State<DmConversationsPage>
             ? CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
+                memCacheWidth: 144,
+                memCacheHeight: 144,
                 errorWidget: (_, __, ___) => _avatarPlaceholder(context),
               )
             : _avatarPlaceholder(context),

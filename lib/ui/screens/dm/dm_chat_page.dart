@@ -425,6 +425,7 @@ class _DmChatPageState extends State<DmChatPage> {
   Widget _buildMessageBubble(
       BuildContext context, Map<String, dynamic> message) {
     final colors = context.colors;
+    final l10n = AppLocalizations.of(context)!;
     final isFromMe = message['isFromCurrentUser'] as bool? ?? false;
     final content = message['content'] as String? ?? '';
     final createdAt = message['createdAt'] as DateTime? ?? DateTime.now();
@@ -496,7 +497,7 @@ class _DmChatPageState extends State<DmChatPage> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    _formatTime(createdAt),
+                    _formatTime(createdAt, l10n),
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 11,
@@ -627,7 +628,7 @@ class _DmChatPageState extends State<DmChatPage> {
                       size: 10, color: colors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
-                    _formatTime(createdAt),
+                    _formatTime(createdAt, l10n),
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 11,
@@ -685,6 +686,7 @@ class _DmChatPageState extends State<DmChatPage> {
                             imageUrl: mediaUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
+                            memCacheWidth: 600,
                             placeholder: (_, __) => Container(
                               height: 200,
                               color: colors.overlayLight,
@@ -737,7 +739,7 @@ class _DmChatPageState extends State<DmChatPage> {
                       size: 10, color: colors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
-                    '${l10n.notEncrypted} · ${_formatTime(createdAt)}',
+                    '${l10n.notEncrypted} · ${_formatTime(createdAt, l10n)}',
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 11,
@@ -935,7 +937,11 @@ class _DmChatPageState extends State<DmChatPage> {
       _textControllers[recipientPubkeyHex] = TextEditingController();
     }
     final textController = _textControllers[recipientPubkeyHex]!;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final bottomPadding = mediaQuery.padding.bottom;
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final effectiveBottom =
+        keyboardInset > 0 ? keyboardInset : bottomPadding;
     final colors = context.colors;
 
     return Container(
@@ -943,7 +949,7 @@ class _DmChatPageState extends State<DmChatPage> {
         left: 16,
         right: 16,
         top: 8,
-        bottom: 16 + bottomPadding,
+        bottom: 16 + effectiveBottom,
       ),
       decoration: BoxDecoration(
         color: colors.background,
@@ -1101,7 +1107,7 @@ class _DmChatPageState extends State<DmChatPage> {
     );
   }
 
-  String _formatTime(DateTime dateTime) {
+  String _formatTime(DateTime dateTime, AppLocalizations l10n) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
 
@@ -1110,9 +1116,9 @@ class _DmChatPageState extends State<DmChatPage> {
       final minute = dateTime.minute.toString().padLeft(2, '0');
       return '$hour:$minute';
     } else if (difference.inDays == 1) {
-      return 'Yesterday';
+      return l10n.yesterday;
     } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
+      return l10n.daysAgo(difference.inDays);
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }

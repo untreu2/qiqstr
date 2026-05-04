@@ -263,6 +263,8 @@ class MutedPage extends StatelessWidget {
                     width: 40,
                     height: 40,
                     fit: BoxFit.cover,
+                    memCacheWidth: 120,
+                    memCacheHeight: 120,
                     placeholder: (context, url) => Container(
                       width: 40,
                       height: 40,

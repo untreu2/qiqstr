@@ -123,18 +123,28 @@ class _NoteWidgetState extends State<NoteWidget> {
     _formattedTimestamp = _calculateTimestamp(_timestamp);
 
     final noteContent = widget.note['content'] as String? ?? '';
-    _parsedContent = stringOptimizer.parseContentOptimized(noteContent);
-
-    final tags = widget.note['tags'] as List<dynamic>? ?? [];
-    final mediaDimensions = _extractImetaDimensions(tags);
-    if (mediaDimensions.isNotEmpty) {
-      _parsedContent['mediaDimensions'] = mediaDimensions;
-    }
-
-    _shouldTruncate = _calculateTruncation(_parsedContent);
-    _truncatedContent = _shouldTruncate ? _createTruncatedContent() : null;
-
+    _parsedContent = {};
+    _shouldTruncate = false;
+    _truncatedContent = null;
     _isInitialized = true;
+
+    Future.microtask(() {
+      if (!mounted) return;
+      final parsed = stringOptimizer.parseContentOptimized(noteContent);
+      final tags = widget.note['tags'] as List<dynamic>? ?? [];
+      final mediaDimensions = _extractImetaDimensions(tags);
+      if (mediaDimensions.isNotEmpty) {
+        parsed['mediaDimensions'] = mediaDimensions;
+      }
+      final shouldTruncate = _calculateTruncation(parsed);
+      if (mounted) {
+        setState(() {
+          _parsedContent = parsed;
+          _shouldTruncate = shouldTruncate;
+          _truncatedContent = shouldTruncate ? _createTruncatedContent() : null;
+        });
+      }
+    });
   }
 
   void _loadInitialUserDataSync() {
@@ -195,19 +205,15 @@ class _NoteWidgetState extends State<NoteWidget> {
   void didUpdateWidget(NoteWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.profiles != widget.profiles) {
-      _updateUserData();
-    } else {
-      final oldAuthor = oldWidget.profiles[_authorId];
-      final newAuthor = widget.profiles[_authorId];
-      final oldReposter =
-          _reposterId != null ? oldWidget.profiles[_reposterId] : null;
-      final newReposter =
-          _reposterId != null ? widget.profiles[_reposterId] : null;
+    final oldAuthor = oldWidget.profiles[_authorId];
+    final newAuthor = widget.profiles[_authorId];
+    final oldReposter =
+        _reposterId != null ? oldWidget.profiles[_reposterId] : null;
+    final newReposter =
+        _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      if (oldAuthor != newAuthor || oldReposter != newReposter) {
-        _updateUserData();
-      }
+    if (oldAuthor != newAuthor || oldReposter != newReposter) {
+      _updateUserData();
     }
   }
 
