@@ -91,7 +91,9 @@ class _ShareProfileScreenState extends State<ShareProfileScreen> {
         '$basePath/profile?npub=${Uri.encodeComponent(npub)}&pubkey=${Uri.encodeComponent(pubkeyHex)}';
 
     Navigator.of(context).pop();
-    router.push(profileRoute);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      router.push(profileRoute);
+    });
   }
 
   @override

@@ -425,8 +425,11 @@ class FeedPageState extends State<FeedPage> {
                           MaterialPageRoute(
                             builder: (_) => QrScannerWidget(
                               onScanComplete: (value) {
-                                _searchController.text = value;
-                                _onSearchChanged(value);
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (!mounted) return;
+                                  _searchController.text = value;
+                                  _onSearchChanged(value);
+                                });
                               },
                             ),
                           ),
