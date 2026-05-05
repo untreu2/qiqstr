@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:breez_sdk_spark_flutter/breez_sdk_spark.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -19,6 +20,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   final SyncService _syncService;
 
   Timer? _balanceTimer;
+  StreamSubscription<SdkEvent>? _sdkEventSubscription;
 
   WalletBloc({
     required SparkService sparkService,
@@ -38,6 +40,10 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     on<WalletTransactionsLoaded>(_onWalletTransactionsLoaded);
     on<WalletLightningAddressRequested>(_onWalletLightningAddressRequested);
     on<WalletLightningAddressRegistered>(_onWalletLightningAddressRegistered);
+    on<WalletInvoiceWatched>(_onWalletInvoiceWatched);
+    on<WalletInvoiceCleared>(_onWalletInvoiceCleared);
+    on<WalletPaymentReceivedEvent>(_onWalletPaymentReceivedEvent);
+    on<WalletSdkSyncedEvent>(_onWalletSdkSyncedEvent);
 
     add(const WalletInitialized());
   }
@@ -73,6 +79,106 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       add(const WalletTransactionsLoaded());
       add(const WalletLightningAddressRequested());
       _startBalanceTimer();
+      _subscribeSdkEvents();
+    }
+  }
+
+  void _subscribeSdkEvents() {
+    _sdkEventSubscription?.cancel();
+    _sdkEventSubscription = _sparkService.eventStream.listen(
+      (event) {
+        if (isClosed) return;
+        switch (event) {
+          case SdkEvent_PaymentSucceeded(:final payment):
+            final paymentMap = _paymentToMap(payment);
+            add(WalletPaymentReceivedEvent(paymentMap));
+          case SdkEvent_PaymentPending(:final payment):
+            final paymentMap = _paymentToMap(payment);
+            add(WalletPaymentReceivedEvent(paymentMap));
+          case SdkEvent_PaymentFailed():
+            add(const WalletTransactionsLoaded());
+          case SdkEvent_Synced():
+            add(const WalletSdkSyncedEvent());
+          default:
+            break;
+        }
+      },
+      onError: (e) => debugPrint('[WalletBloc] SDK event error: $e'),
+    );
+  }
+
+  Map<String, dynamic> _paymentToMap(Payment payment) {
+    return {
+      'id': payment.id,
+      'isIncoming': payment.paymentType == PaymentType.receive,
+      'amount': payment.amount.toInt(),
+      'timestamp': payment.timestamp.toInt(),
+      'status': payment.status.name,
+    };
+  }
+
+  Future<void> _onWalletPaymentReceivedEvent(
+    WalletPaymentReceivedEvent event,
+    Emitter<WalletState> emit,
+  ) async {
+    if (state is! WalletLoaded) return;
+    final current = state as WalletLoaded;
+
+    final isIncoming = event.payment['isIncoming'] == true;
+    final paymentId = event.payment['id'] as String?;
+    final paymentStatus = event.payment['status'] as String?;
+
+    final isInvoiceMatch = current.watchedInvoice != null &&
+        isIncoming &&
+        paymentStatus == 'completed';
+
+    final existingTxs = current.transactions ?? [];
+    final idx = existingTxs.indexWhere((t) => t['id'] == paymentId);
+    List<Map<String, dynamic>> updatedTxs;
+    if (idx >= 0) {
+      updatedTxs = List.from(existingTxs);
+      updatedTxs[idx] = event.payment;
+    } else {
+      updatedTxs = [event.payment, ...existingTxs];
+    }
+
+    emit(current.copyWith(
+      transactions: updatedTxs,
+      invoiceReceived: isInvoiceMatch ? true : current.invoiceReceived,
+    ));
+
+    add(const WalletBalanceRequested());
+  }
+
+  Future<void> _onWalletSdkSyncedEvent(
+    WalletSdkSyncedEvent event,
+    Emitter<WalletState> emit,
+  ) async {
+    add(const WalletBalanceRequested());
+    add(const WalletTransactionsLoaded());
+  }
+
+  Future<void> _onWalletInvoiceWatched(
+    WalletInvoiceWatched event,
+    Emitter<WalletState> emit,
+  ) async {
+    if (state is WalletLoaded) {
+      emit((state as WalletLoaded).copyWith(
+        watchedInvoice: event.invoice,
+        invoiceReceived: false,
+      ));
+    }
+  }
+
+  Future<void> _onWalletInvoiceCleared(
+    WalletInvoiceCleared event,
+    Emitter<WalletState> emit,
+  ) async {
+    if (state is WalletLoaded) {
+      emit((state as WalletLoaded).copyWith(
+        clearWatchedInvoice: true,
+        invoiceReceived: false,
+      ));
     }
   }
 
@@ -133,7 +239,10 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       final result = await _nwcService.payInvoice(event.invoice);
       if (isClosed) return;
       result.fold(
-        (_) => add(const WalletBalanceRequested()),
+        (_) {
+          add(const WalletBalanceRequested());
+          add(const WalletTransactionsLoaded());
+        },
         (error) => emit(WalletError('Payment failed: $error')),
       );
       return;
@@ -142,7 +251,10 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     final result = await _sparkService.payLightningInvoice(event.invoice);
     if (isClosed) return;
     result.fold(
-      (_) => add(const WalletBalanceRequested()),
+      (_) {
+        add(const WalletBalanceRequested());
+        add(const WalletTransactionsLoaded());
+      },
       (error) => emit(WalletError('Payment failed: $error')),
     );
   }
@@ -275,13 +387,14 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   void _startBalanceTimer() {
     _balanceTimer?.cancel();
     _balanceTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      add(const WalletBalanceRequested());
+      if (!isClosed) add(const WalletBalanceRequested());
     });
   }
 
   @override
   Future<void> close() {
     _balanceTimer?.cancel();
+    _sdkEventSubscription?.cancel();
     return super.close();
   }
 }

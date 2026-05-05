@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:breez_sdk_spark_flutter/breez_sdk_spark.dart';
@@ -20,6 +21,12 @@ class SparkService {
   BreezSdk? _sdk;
   bool _isConnecting = false;
 
+  StreamSubscription<SdkEvent>? _eventSubscription;
+  final StreamController<SdkEvent> _eventController =
+      StreamController<SdkEvent>.broadcast();
+
+  Stream<SdkEvent> get eventStream => _eventController.stream;
+
   String _prefixedKey(String base) {
     if (_activeAccountId != null && _activeAccountId!.isNotEmpty) {
       return '${_activeAccountId}_$base';
@@ -34,17 +41,40 @@ class SparkService {
     if (_activeAccountId == npub) return;
     _activeAccountId = npub;
     _sdk = null;
+    _cancelEventSubscription();
   }
 
   void clearActiveAccount() {
     _activeAccountId = null;
     _sdk = null;
+    _cancelEventSubscription();
+  }
+
+  void _cancelEventSubscription() {
+    _eventSubscription?.cancel();
+    _eventSubscription = null;
+  }
+
+  void _subscribeToSdkEvents(BreezSdk sdk) {
+    _cancelEventSubscription();
+    _eventSubscription = sdk.addEventListener().listen(
+      (event) {
+        if (!_eventController.isClosed) {
+          _eventController.add(event);
+        }
+      },
+      onError: (e) {
+        debugPrint('[SparkService] SDK event stream error: $e');
+      },
+    );
   }
 
   Uint8List _generateEntropy() {
     final rng = Random.secure();
     return Uint8List.fromList(List.generate(32, (_) => rng.nextInt(256)));
   }
+
+  Future<Result<BreezSdk>> getOrConnectSdk() => _getOrConnect();
 
   Future<Result<BreezSdk>> _getOrConnect() async {
     if (_sdk != null) return Result.success(_sdk!);
@@ -88,6 +118,7 @@ class SparkService {
           ConnectRequest(config: config, seed: seed, storageDir: storageDir);
 
       _sdk = await connect(request: connectRequest);
+      _subscribeToSdkEvents(_sdk!);
       return Result.success(_sdk!);
     } catch (e) {
       debugPrint('[SparkService] Connect error: $e');
@@ -315,23 +346,10 @@ class SparkService {
 
       final sdk = sdkResult.data!;
       final response = await sdk.listPayments(
-        request: ListPaymentsRequest(
-          limit: limit,
-        ),
+        request: ListPaymentsRequest(limit: limit),
       );
 
-      final payments = response.payments.map((p) {
-        final isIncoming = p.paymentType == PaymentType.receive;
-        final amountSats = p.amount.toInt();
-        return <String, dynamic>{
-          'id': p.id,
-          'isIncoming': isIncoming,
-          'amount': amountSats,
-          'timestamp': p.timestamp.toInt(),
-          'status': p.status.name,
-        };
-      }).toList();
-
+      final payments = response.payments.map(_paymentToMap).toList();
       return Result.success(payments);
     } catch (e) {
       debugPrint('[SparkService] listPayments error: $e');
@@ -339,8 +357,75 @@ class SparkService {
     }
   }
 
+  Future<Result<Map<String, dynamic>>> getPaymentById(String paymentId) async {
+    try {
+      final sdkResult = await _getOrConnect();
+      if (sdkResult.isError) return Result.error(sdkResult.error!);
+
+      final sdk = sdkResult.data!;
+      final response = await sdk.getPayment(
+        request: GetPaymentRequest(paymentId: paymentId),
+      );
+      return Result.success(_paymentToMap(response.payment));
+    } catch (e) {
+      debugPrint('[SparkService] getPaymentById error: $e');
+      return Result.error('Failed to get payment: $e');
+    }
+  }
+
+  Map<String, dynamic> _paymentToMap(Payment p) {
+    final isIncoming = p.paymentType == PaymentType.receive;
+
+    String? description;
+    String? invoice;
+    String? preimage;
+    String? paymentHash;
+
+    final details = p.details;
+    if (details is PaymentDetails_Lightning) {
+      description = details.description;
+      invoice = details.invoice;
+      preimage = details.htlcDetails.preimage;
+      paymentHash = details.htlcDetails.paymentHash;
+    } else if (details is PaymentDetails_Spark) {
+      description = details.invoiceDetails?.description;
+      invoice = details.invoiceDetails?.invoice;
+      preimage = details.htlcDetails?.preimage;
+      paymentHash = details.htlcDetails?.paymentHash;
+    }
+
+    return <String, dynamic>{
+      'id': p.id,
+      'isIncoming': isIncoming,
+      'amount': p.amount.toInt(),
+      'fees': p.fees.toInt(),
+      'timestamp': p.timestamp.toInt(),
+      'status': p.status.name,
+      'method': p.method.name,
+      if (description != null) 'description': description,
+      if (invoice != null) 'invoice': invoice,
+      if (preimage != null) 'preimage': preimage,
+      if (paymentHash != null) 'paymentHash': paymentHash,
+    };
+  }
+
+  Future<Result<InputType>> parseInput(String input) async {
+    try {
+      final sdkResult = await _getOrConnect();
+      if (sdkResult.isError) return Result.error(sdkResult.error!);
+
+      final sdk = sdkResult.data!;
+      final result = await sdk.parse(input: input);
+      return Result.success(result);
+    } catch (e) {
+      debugPrint('[SparkService] parseInput error: $e');
+      return Result.error('Failed to parse input: $e');
+    }
+  }
+
 
   Future<void> disconnectSdk() async {
+    _cancelEventSubscription();
     if (_sdk != null) {
       try {
         await _sdk!.disconnect();

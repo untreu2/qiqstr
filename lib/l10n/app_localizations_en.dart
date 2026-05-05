@@ -1556,6 +1556,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sent => 'Sent';
 
   @override
+  String get paymentReceived => 'Payment received!';
+
+  @override
   String get pasteInvoiceHere => 'Paste invoice here...';
 
   @override
@@ -2188,4 +2191,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restoreWalletSuccess => 'Wallet restored successfully';
+
+  @override
+  String get unrecognizedPaymentFormat => 'Unrecognized payment format';
+
+  @override
+  String get date => 'Date';
+
+  @override
+  String get fee => 'Fee';
+
+  @override
+  String get method => 'Method';
+
+  @override
+  String get details => 'Details';
+
+  @override
+  String get paymentHash => 'Payment hash';
+
+  @override
+  String get preimage => 'Preimage';
 }

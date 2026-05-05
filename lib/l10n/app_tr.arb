@@ -602,6 +602,7 @@
   "showLess": "Daha az göster",
   "received": "Alındı",
   "sent": "Gönderildi",
+  "paymentReceived": "Ödeme alındı!",
   "pasteInvoiceHere": "Faturayı buraya yapıştırın...",
   "paymentSent": "Ödeme gönderildi!",
   "failedToCreateInvoice": "Fatura oluşturulamadı: {message}",
@@ -828,5 +829,12 @@
   "restoreWalletHint": "Kurtarma ifadenizi girin...",
   "restoreWalletButton": "Cüzdanı Geri Yükle",
   "restoreWalletInvalidPhrase": "Geçersiz kurtarma ifadesi. Lütfen kontrol edip tekrar deneyin.",
-  "restoreWalletSuccess": "Cüzdan başarıyla geri yüklendi"
+  "restoreWalletSuccess": "Cüzdan başarıyla geri yüklendi",
+  "unrecognizedPaymentFormat": "Tanınmayan ödeme formatı",
+  "date": "Tarih",
+  "fee": "Ücret",
+  "method": "Yöntem",
+  "details": "Detaylar",
+  "paymentHash": "Ödeme hash",
+  "preimage": "Preimage"
 }

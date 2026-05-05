@@ -665,6 +665,7 @@
   "showLess": "Show less",
   "received": "Received",
   "sent": "Sent",
+  "paymentReceived": "Payment received!",
   "pasteInvoiceHere": "Paste invoice here...",
   "paymentSent": "Payment sent!",
   "failedToCreateInvoice": "Failed to create invoice: {message}",
@@ -1021,5 +1022,12 @@
   "restoreWalletHint": "Enter your recovery phrase...",
   "restoreWalletButton": "Restore Wallet",
   "restoreWalletInvalidPhrase": "Invalid recovery phrase. Please check and try again.",
-  "restoreWalletSuccess": "Wallet restored successfully"
+  "restoreWalletSuccess": "Wallet restored successfully",
+  "unrecognizedPaymentFormat": "Unrecognized payment format",
+  "date": "Date",
+  "fee": "Fee",
+  "method": "Method",
+  "details": "Details",
+  "paymentHash": "Payment hash",
+  "preimage": "Preimage"
 }

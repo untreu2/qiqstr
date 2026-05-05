@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:breez_sdk_spark_flutter/breez_sdk_spark.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/di/app_di.dart';
 import '../../../data/services/nwc_service.dart';
@@ -27,16 +29,14 @@ class SendDialog extends StatefulWidget {
 
 class _SendDialogState extends State<SendDialog> {
   final TextEditingController _inputController = TextEditingController();
-  final TextEditingController _lnAmountController = TextEditingController();
+  final TextEditingController _amountController = TextEditingController();
 
   bool _isLoading = false;
-  bool _isResolvingAddress = false;
-  int? _parsedSats;
-  _InputType _inputType = _InputType.unknown;
-  String? _lnAddressCallback;
-  int? _lnMinSendable;
-  int? _lnMaxSendable;
-  String? _resolveError;
+  bool _isParsing = false;
+  String? _parseError;
+
+  InputType? _parsedInput;
+  Timer? _parseDebounce;
 
   @override
   void initState() {
@@ -46,122 +46,113 @@ class _SendDialogState extends State<SendDialog> {
 
   @override
   void dispose() {
+    _parseDebounce?.cancel();
     _inputController.removeListener(_onInputChanged);
     _inputController.dispose();
-    _lnAmountController.dispose();
+    _amountController.dispose();
     super.dispose();
   }
 
   void _onInputChanged() {
     final text = _inputController.text.trim();
-    final newType = _detectInputType(text);
 
-    if (newType != _inputType) {
+    if (text.isEmpty) {
+      _parseDebounce?.cancel();
       setState(() {
-        _inputType = newType;
-        _parsedSats = null;
-        _lnAddressCallback = null;
-        _lnMinSendable = null;
-        _lnMaxSendable = null;
-        _resolveError = null;
+        _parsedInput = null;
+        _parseError = null;
+        _isParsing = false;
       });
+      return;
     }
-
-    if (newType == _InputType.bolt11) {
-      final sats = _parseBolt11Sats(text);
-      if (sats != _parsedSats) {
-        setState(() => _parsedSats = sats);
-      }
-    } else if (newType == _InputType.lightningAddress) {
-      _resolveLightningAddress(text);
-    }
-  }
-
-  _InputType _detectInputType(String text) {
-    if (text.isEmpty) return _InputType.unknown;
-    final lower = text.toLowerCase();
-    if (lower.startsWith('lnbc') ||
-        lower.startsWith('lntb') ||
-        lower.startsWith('lnbcrt')) {
-      return _InputType.bolt11;
-    }
-    if (_isLightningAddress(text)) return _InputType.lightningAddress;
-    return _InputType.unknown;
-  }
-
-  bool _isLightningAddress(String text) {
-    final parts = text.split('@');
-    if (parts.length != 2) return false;
-    final user = parts[0];
-    final domain = parts[1];
-    return user.isNotEmpty &&
-        domain.contains('.') &&
-        !domain.startsWith('.') &&
-        !domain.endsWith('.');
-  }
-
-  Future<void> _resolveLightningAddress(String address) async {
-    final parts = address.split('@');
-    if (parts.length != 2) return;
-    final username = parts[0];
-    final domain = parts[1];
 
     setState(() {
-      _isResolvingAddress = true;
-      _resolveError = null;
-      _lnAddressCallback = null;
+      _parsedInput = null;
+      _parseError = null;
+      _isParsing = true;
     });
 
-    try {
-      final url = Uri.parse('https://$domain/.well-known/lnurlp/$username');
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
+    _parseDebounce?.cancel();
+    _parseDebounce =
+        Timer(const Duration(milliseconds: 400), () => _parse(text));
+  }
 
+  Future<void> _parse(String text) async {
+    if (!_isNwcMode) {
+      final result = await AppDI.get<SparkService>().parseInput(text);
       if (!mounted) return;
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final callback = data['callback'] as String?;
-        final minSendable = (data['minSendable'] as num?)?.toInt();
-        final maxSendable = (data['maxSendable'] as num?)?.toInt();
-
+      result.fold(
+        (parsed) => setState(() {
+          _parsedInput = parsed;
+          _isParsing = false;
+          _parseError = null;
+        }),
+        (_) => setState(() {
+          _parsedInput = null;
+          _isParsing = false;
+          _parseError =
+              AppLocalizations.of(context)!.unrecognizedPaymentFormat;
+        }),
+      );
+    } else {
+      // NWC mode: local detection for bolt11 / lightning address only
+      final lower = text.toLowerCase();
+      final isBolt11 = lower.startsWith('lnbc') ||
+          lower.startsWith('lntb') ||
+          lower.startsWith('lnbcrt');
+      final isLnAddress = _looksLikeLightningAddress(text);
+      if (!mounted) return;
+      if (isBolt11) {
         setState(() {
-          _isResolvingAddress = false;
-          _lnAddressCallback = callback;
-          _lnMinSendable = minSendable != null ? minSendable ~/ 1000 : null;
-          _lnMaxSendable = maxSendable != null ? maxSendable ~/ 1000 : null;
+          _isParsing = false;
+          _parseError = null;
+          _parsedInput = InputType.bolt11Invoice(Bolt11InvoiceDetails(
+            amountMsat: _parseBolt11Msats(text),
+            description: null,
+            descriptionHash: null,
+            expiry: BigInt.zero,
+            invoice: Bolt11Invoice(
+              bolt11: text,
+              source: const PaymentRequestSource(),
+            ),
+            minFinalCltvExpiryDelta: BigInt.zero,
+            network: BitcoinNetwork.bitcoin,
+            payeePubkey: '',
+            paymentHash: '',
+            paymentSecret: '',
+            routingHints: [],
+            timestamp: BigInt.zero,
+          ));
+        });
+      } else if (isLnAddress) {
+        setState(() {
+          _isParsing = false;
+          _parseError = null;
+          _parsedInput = InputType.lightningAddress(LightningAddressDetails(
+            address: text,
+            payRequest: LnurlPayRequestDetails(
+              callback: '',
+              minSendable: BigInt.zero,
+              maxSendable: BigInt.zero,
+              metadataStr: '',
+              commentAllowed: 0,
+              domain: text.split('@').last,
+              url: '',
+            ),
+          ));
         });
       } else {
         setState(() {
-          _isResolvingAddress = false;
-          _resolveError = AppLocalizations.of(context)!.resolveAddressFailed;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _isResolvingAddress = false;
-          _resolveError = AppLocalizations.of(context)!.resolveAddressFailed;
+          _isParsing = false;
+          _parseError =
+              AppLocalizations.of(context)!.unrecognizedPaymentFormat;
+          _parsedInput = null;
         });
       }
     }
   }
 
-  Future<String?> _fetchInvoiceFromCallback(int amountSats) async {
-    if (_lnAddressCallback == null) return null;
-    try {
-      final uri = Uri.parse(_lnAddressCallback!)
-          .replace(queryParameters: {'amount': '${amountSats * 1000}'});
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['pr'] as String?;
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  int? _parseBolt11Sats(String bolt11) {
-    if (bolt11.isEmpty) return null;
+  BigInt? _parseBolt11Msats(String bolt11) {
     final lower = bolt11.toLowerCase();
     final sepPos = lower.lastIndexOf('1');
     if (sepPos < 0) return null;
@@ -181,7 +172,6 @@ class _SendDialogState extends State<SendDialog> {
     }
 
     if (afterPrefix.isEmpty) return null;
-
     var i = 0;
     while (i < afterPrefix.length &&
         afterPrefix.codeUnitAt(i) >= 48 &&
@@ -189,7 +179,6 @@ class _SendDialogState extends State<SendDialog> {
       i++;
     }
     if (i == 0) return null;
-
     final amount = int.tryParse(afterPrefix.substring(0, i));
     if (amount == null) return null;
 
@@ -210,8 +199,65 @@ class _SendDialogState extends State<SendDialog> {
     } else {
       msats = amount * 100000000000;
     }
+    return BigInt.from(msats);
+  }
 
-    return msats ~/ 1000;
+  bool _looksLikeLightningAddress(String text) {
+    final parts = text.split('@');
+    if (parts.length != 2) return false;
+    final domain = parts[1];
+    return parts[0].isNotEmpty &&
+        domain.contains('.') &&
+        !domain.startsWith('.') &&
+        !domain.endsWith('.');
+  }
+
+  bool get _isNwcMode => AppDI.get<NwcService>().isActive;
+
+  bool get _needsAmountField {
+    final p = _parsedInput;
+    if (p == null) return false;
+    if (p is InputType_LightningAddress) return true;
+    if (p is InputType_SparkAddress) return true;
+    if (p is InputType_LnurlPay) return true;
+    if (p is InputType_Bolt11Invoice) {
+      final msats = p.field0.amountMsat;
+      return msats == null || msats == BigInt.zero;
+    }
+    return false;
+  }
+
+  int? get _fixedAmountSats {
+    final p = _parsedInput;
+    if (p is InputType_Bolt11Invoice) {
+      final msats = p.field0.amountMsat;
+      if (msats != null && msats > BigInt.zero) {
+        return (msats ~/ BigInt.from(1000)).toInt();
+      }
+    }
+    if (p is InputType_SparkInvoice) {
+      final sats = p.field0.amount;
+      if (sats != null && sats > BigInt.zero) return sats.toInt();
+    }
+    return null;
+  }
+
+  String? get _description {
+    final p = _parsedInput;
+    if (p is InputType_Bolt11Invoice) return p.field0.description;
+    if (p is InputType_SparkInvoice) return p.field0.description;
+    if (p is InputType_LightningAddress) return p.field0.address;
+    return null;
+  }
+
+  String? get _inputTypeLabel {
+    final p = _parsedInput;
+    if (p is InputType_Bolt11Invoice) return 'Lightning';
+    if (p is InputType_LightningAddress) return 'Lightning Address';
+    if (p is InputType_SparkAddress) return 'Spark';
+    if (p is InputType_SparkInvoice) return 'Spark Invoice';
+    if (p is InputType_LnurlPay) return 'LNURL-Pay';
+    return null;
   }
 
   String _formatSats(int sats) {
@@ -252,98 +298,18 @@ class _SendDialogState extends State<SendDialog> {
     );
   }
 
-  bool get _isNwcMode => AppDI.get<NwcService>().isActive;
-
   Future<void> _pay() async {
     final l10n = AppLocalizations.of(context)!;
-
-    if (_inputType == _InputType.lightningAddress) {
-      await _payLightningAddress(l10n);
-    } else {
-      await _payBolt11(l10n);
-    }
-  }
-
-  Future<void> _payLightningAddress(AppLocalizations l10n) async {
-    if (_lnAddressCallback == null) {
-      AppSnackbar.error(context, l10n.resolveAddressFailed);
-      return;
-    }
-
-    final amountText = _lnAmountController.text.trim();
-    final amountSats = int.tryParse(amountText);
-    if (amountSats == null || amountSats <= 0) {
-      AppSnackbar.error(context, l10n.enterValidAmount);
-      return;
-    }
-
-    if (_lnMinSendable != null && amountSats < _lnMinSendable!) {
-      AppSnackbar.error(
-          context, '${l10n.amount}: min ${_formatSats(_lnMinSendable!)} sats');
-      return;
-    }
-    if (_lnMaxSendable != null && amountSats > _lnMaxSendable!) {
-      AppSnackbar.error(
-          context, '${l10n.amount}: max ${_formatSats(_lnMaxSendable!)} sats');
-      return;
-    }
+    final parsed = _parsedInput;
+    if (parsed == null) return;
 
     setState(() => _isLoading = true);
 
-    final invoice = await _fetchInvoiceFromCallback(amountSats);
-    if (!mounted) return;
-
-    if (invoice == null) {
-      setState(() => _isLoading = false);
-      AppSnackbar.error(context, l10n.resolveAddressFailed);
-      return;
-    }
-
-    await _sendInvoice(invoice, l10n);
-  }
-
-  Future<void> _payBolt11(AppLocalizations l10n) async {
-    final invoice = _inputController.text.trim();
-    if (invoice.isEmpty) {
-      AppSnackbar.error(context, l10n.pleaseEnterInvoice);
-      return;
-    }
-    setState(() => _isLoading = true);
-    await _sendInvoice(invoice, l10n);
-  }
-
-  Future<void> _sendInvoice(String invoice, AppLocalizations l10n) async {
     try {
       if (_isNwcMode) {
-        final nwcService = AppDI.get<NwcService>();
-        final result = await nwcService.payInvoice(invoice);
-        if (mounted) {
-          setState(() => _isLoading = false);
-          result.fold(
-            (_) {
-              AppSnackbar.success(context, l10n.paymentSent);
-              widget.onPaymentSuccess();
-              Navigator.pop(context);
-            },
-            (error) =>
-                AppSnackbar.error(context, '${l10n.paymentFailed}: $error'),
-          );
-        }
+        await _payViaNwc(parsed, l10n);
       } else {
-        final sparkService = AppDI.get<SparkService>();
-        final result = await sparkService.payLightningInvoice(invoice);
-        if (mounted) {
-          setState(() => _isLoading = false);
-          result.fold(
-            (_) {
-              AppSnackbar.success(context, l10n.paymentSent);
-              widget.onPaymentSuccess();
-              Navigator.pop(context);
-            },
-            (error) =>
-                AppSnackbar.error(context, '${l10n.paymentFailed}: $error'),
-          );
-        }
+        await _payViaSpark(parsed, l10n);
       }
     } catch (e) {
       if (mounted) {
@@ -353,14 +319,151 @@ class _SendDialogState extends State<SendDialog> {
     }
   }
 
-  bool get _canPay {
-    if (_isLoading || _isResolvingAddress) return false;
-    if (_inputType == _InputType.bolt11) return true;
-    if (_inputType == _InputType.lightningAddress) {
-      return _lnAddressCallback != null &&
-          _lnAmountController.text.trim().isNotEmpty;
+  Future<void> _payViaNwc(InputType parsed, AppLocalizations l10n) async {
+    final nwcService = AppDI.get<NwcService>();
+    String? bolt11;
+
+    if (parsed is InputType_Bolt11Invoice) {
+      bolt11 = parsed.field0.invoice.bolt11;
+    } else if (parsed is InputType_LightningAddress) {
+      bolt11 = await _lnAddressToBolt11(parsed.field0.address, l10n);
     }
-    return false;
+
+    if (bolt11 == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    final result = await nwcService.payInvoice(bolt11);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    result.fold(
+      (_) {
+        AppSnackbar.success(context, l10n.paymentSent);
+        widget.onPaymentSuccess();
+        Navigator.pop(context);
+      },
+      (error) => AppSnackbar.error(context, '${l10n.paymentFailed}: $error'),
+    );
+  }
+
+  Future<String?> _lnAddressToBolt11(
+      String address, AppLocalizations l10n) async {
+    final amountSats = int.tryParse(_amountController.text.trim());
+    if (amountSats == null || amountSats <= 0) {
+      if (mounted) AppSnackbar.error(context, l10n.enterValidAmount);
+      return null;
+    }
+
+    final parts = address.split('@');
+    if (parts.length != 2) return null;
+    try {
+      final wellKnownUrl =
+          Uri.parse('https://${parts[1]}/.well-known/lnurlp/${parts[0]}');
+      final metaResp =
+          await http.get(wellKnownUrl).timeout(const Duration(seconds: 10));
+      if (metaResp.statusCode != 200) return null;
+
+      final meta = jsonDecode(metaResp.body) as Map<String, dynamic>;
+      final callback = meta['callback'] as String?;
+      if (callback == null) return null;
+
+      final invoiceUri = Uri.parse(callback).replace(
+          queryParameters: {'amount': '${amountSats * 1000}'});
+      final invoiceResp =
+          await http.get(invoiceUri).timeout(const Duration(seconds: 10));
+      if (invoiceResp.statusCode != 200) return null;
+
+      final invoiceData =
+          jsonDecode(invoiceResp.body) as Map<String, dynamic>;
+      return invoiceData['pr'] as String?;
+    } catch (_) {
+      if (mounted) AppSnackbar.error(context, l10n.resolveAddressFailed);
+      return null;
+    }
+  }
+
+  Future<void> _payViaSpark(InputType parsed, AppLocalizations l10n) async {
+    final sparkService = AppDI.get<SparkService>();
+    String paymentRequest;
+
+    if (parsed is InputType_Bolt11Invoice) {
+      paymentRequest = parsed.field0.invoice.bolt11;
+    } else if (parsed is InputType_LightningAddress) {
+      paymentRequest = _inputController.text.trim();
+    } else if (parsed is InputType_SparkAddress) {
+      paymentRequest = parsed.field0.address;
+    } else if (parsed is InputType_SparkInvoice) {
+      paymentRequest = parsed.field0.invoice;
+    } else if (parsed is InputType_LnurlPay) {
+      paymentRequest = _inputController.text.trim();
+    } else {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        AppSnackbar.error(context, l10n.unrecognizedPaymentFormat);
+      }
+      return;
+    }
+
+    BigInt? amountOverride;
+    if (_needsAmountField) {
+      final sats = int.tryParse(_amountController.text.trim());
+      if (sats == null || sats <= 0) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          AppSnackbar.error(context, l10n.enterValidAmount);
+        }
+        return;
+      }
+      amountOverride = BigInt.from(sats);
+    }
+
+    final sdkResult = await sparkService.getOrConnectSdk();
+    if (sdkResult.isError) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        AppSnackbar.error(context, '${l10n.error}: ${sdkResult.error}');
+      }
+      return;
+    }
+    final sdk = sdkResult.data!;
+
+    try {
+      final prepareResp = await sdk.prepareSendPayment(
+        request: PrepareSendPaymentRequest(
+          paymentRequest: paymentRequest,
+          amount: amountOverride,
+          tokenIdentifier: null,
+          conversionOptions: null,
+          feePolicy: null,
+        ),
+      );
+
+      await sdk.sendPayment(
+        request: SendPaymentRequest(prepareResponse: prepareResp),
+      );
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        AppSnackbar.success(context, l10n.paymentSent);
+        widget.onPaymentSuccess();
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        AppSnackbar.error(context, '${l10n.paymentFailed}: $e');
+      }
+    }
+  }
+
+  bool get _canPay {
+    if (_isLoading || _isParsing || _parsedInput == null) return false;
+    if (_needsAmountField) {
+      final sats = int.tryParse(_amountController.text.trim());
+      return sats != null && sats > 0;
+    }
+    return true;
   }
 
   @override
@@ -382,10 +485,8 @@ class _SendDialogState extends State<SendDialog> {
           _buildHeader(context, colors, l10n),
           const SizedBox(height: 16),
           _buildInputField(context, colors, l10n),
-          _buildInputStatus(context, colors, l10n),
-          if (_inputType == _InputType.lightningAddress &&
-              _lnAddressCallback != null)
-            _buildLnAmountField(context, colors, l10n),
+          _buildParseStatus(context, colors, l10n),
+          if (_needsAmountField) _buildAmountField(context, colors, l10n),
           const SizedBox(height: 20),
           _buildPayButton(context, colors, l10n),
         ],
@@ -415,7 +516,8 @@ class _SendDialogState extends State<SendDialog> {
               color: colors.overlayLight,
               shape: BoxShape.circle,
             ),
-            child: PhosphorIcon(PhosphorIcons.x(), size: 20, color: colors.textPrimary),
+            child: PhosphorIcon(PhosphorIcons.x(),
+                size: 20, color: colors.textPrimary),
           ),
         ),
       ],
@@ -491,9 +593,9 @@ class _SendDialogState extends State<SendDialog> {
     );
   }
 
-  Widget _buildInputStatus(
+  Widget _buildParseStatus(
       BuildContext context, dynamic colors, AppLocalizations l10n) {
-    if (_isResolvingAddress) {
+    if (_isParsing) {
       return Padding(
         padding: const EdgeInsets.only(top: 12),
         child: Row(
@@ -516,63 +618,69 @@ class _SendDialogState extends State<SendDialog> {
       );
     }
 
-    if (_resolveError != null) {
+    if (_parseError != null) {
       return Padding(
         padding: const EdgeInsets.only(top: 10),
         child: Text(
-          _resolveError!,
+          _parseError!,
           style: TextStyle(color: colors.error, fontSize: 13),
         ),
       );
     }
 
-    if (_inputType == _InputType.bolt11 && _parsedSats != null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Center(
-          child: Text(
-            '${_formatSats(_parsedSats!)} sats',
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
-    }
+    if (_parsedInput == null) return const SizedBox.shrink();
 
-    if (_inputType == _InputType.lightningAddress &&
-        _lnAddressCallback != null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Row(
-          children: [
-            PhosphorIcon(PhosphorIcons.checkCircle(), size: 14, color: colors.success),
-            const SizedBox(width: 6),
-            Text(
-              _inputController.text.trim(),
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 13,
+    final fixedSats = _fixedAmountSats;
+    final typeLabel = _inputTypeLabel;
+    final desc = _description;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (typeLabel != null)
+            Row(
+              children: [
+                PhosphorIcon(PhosphorIcons.checkCircle(),
+                    size: 14, color: colors.success),
+                const SizedBox(width: 6),
+                Text(
+                  typeLabel,
+                  style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                ),
+              ],
+            ),
+          if (fixedSats != null) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                '${_formatSats(fixedSats)} sats',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            if (_lnMinSendable != null) ...[
-              const SizedBox(width: 6),
-              Text(
-                '(min ${_formatSats(_lnMinSendable!)} sats)',
-                style: TextStyle(color: colors.textSecondary, fontSize: 12),
-              ),
-            ],
           ],
-        ),
-      );
-    }
-
-    return const SizedBox.shrink();
+          if (desc != null &&
+              desc.isNotEmpty &&
+              fixedSats == null &&
+              _parsedInput is! InputType_LightningAddress) ...[
+            const SizedBox(height: 4),
+            Text(
+              desc,
+              style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
-  Widget _buildLnAmountField(
+  Widget _buildAmountField(
       BuildContext context, dynamic colors, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -585,7 +693,7 @@ class _SendDialogState extends State<SendDialog> {
           children: [
             Expanded(
               child: TextField(
-                controller: _lnAmountController,
+                controller: _amountController,
                 keyboardType: TextInputType.number,
                 enabled: !_isLoading,
                 style: TextStyle(
@@ -600,8 +708,8 @@ class _SendDialogState extends State<SendDialog> {
                     fontSize: 16,
                   ),
                   border: InputBorder.none,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
@@ -661,5 +769,3 @@ class _SendDialogState extends State<SendDialog> {
     );
   }
 }
-
-enum _InputType { unknown, bolt11, lightningAddress }

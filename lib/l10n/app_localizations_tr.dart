@@ -1520,6 +1520,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get sent => 'Gönderildi';
 
   @override
+  String get paymentReceived => 'Ödeme alındı!';
+
+  @override
   String get pasteInvoiceHere => 'Faturayı buraya yapıştırın...';
 
   @override
@@ -2142,4 +2145,25 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get restoreWalletSuccess => 'Cüzdan başarıyla geri yüklendi';
+
+  @override
+  String get unrecognizedPaymentFormat => 'Tanınmayan ödeme formatı';
+
+  @override
+  String get date => 'Tarih';
+
+  @override
+  String get fee => 'Ücret';
+
+  @override
+  String get method => 'Yöntem';
+
+  @override
+  String get details => 'Detaylar';
+
+  @override
+  String get paymentHash => 'Ödeme hash';
+
+  @override
+  String get preimage => 'Preimage';
 }

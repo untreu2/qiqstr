@@ -25,8 +25,6 @@ class WalletTransactionsLoaded extends WalletEvent {
   const WalletTransactionsLoaded();
 }
 
-
-
 class WalletLightningAddressRequested extends WalletEvent {
   const WalletLightningAddressRequested();
 }
@@ -38,4 +36,30 @@ class WalletLightningAddressRegistered extends WalletEvent {
 
   @override
   List<Object?> get props => [username];
+}
+
+class WalletInvoiceWatched extends WalletEvent {
+  final String invoice;
+
+  const WalletInvoiceWatched(this.invoice);
+
+  @override
+  List<Object?> get props => [invoice];
+}
+
+class WalletInvoiceCleared extends WalletEvent {
+  const WalletInvoiceCleared();
+}
+
+class WalletPaymentReceivedEvent extends WalletEvent {
+  final Map<String, dynamic> payment;
+
+  const WalletPaymentReceivedEvent(this.payment);
+
+  @override
+  List<Object?> get props => [payment];
+}
+
+class WalletSdkSyncedEvent extends WalletEvent {
+  const WalletSdkSyncedEvent();
 }

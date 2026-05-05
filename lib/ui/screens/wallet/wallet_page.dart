@@ -16,6 +16,7 @@ import '../../../presentation/blocs/wallet/wallet_state.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/snackbar_widget.dart';
+import '../../widgets/dialogs/payment_detail_sheet.dart';
 import '../../widgets/dialogs/send_dialog.dart';
 
 class WalletPage extends StatefulWidget {
@@ -318,71 +319,105 @@ class _WalletPageState extends State<WalletPage>
     final timestamp = tx['timestamp'] as int?;
     final status = tx['status'] as String?;
     final isPending = status == 'pending';
+    final isFailed = status == 'failed';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: context.colors.overlayLight,
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: isIncoming
-                  ? context.colors.success.withValues(alpha: 0.12)
-                  : context.colors.textSecondary.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
+    Color amountColor;
+    if (isFailed) {
+      amountColor = context.colors.error;
+    } else if (isIncoming) {
+      amountColor = context.colors.success;
+    } else {
+      amountColor = context.colors.textPrimary;
+    }
+
+    return GestureDetector(
+      onTap: () => PaymentDetailSheet.show(context, tx),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isFailed
+                    ? context.colors.error.withValues(alpha: 0.1)
+                    : isIncoming
+                        ? context.colors.success.withValues(alpha: 0.12)
+                        : context.colors.textSecondary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isFailed
+                    ? PhosphorIcons.xCircle(PhosphorIconsStyle.fill)
+                    : isPending
+                        ? PhosphorIcons.clock(PhosphorIconsStyle.fill)
+                        : isIncoming
+                            ? PhosphorIcons.arrowDownLeft(
+                                PhosphorIconsStyle.fill)
+                            : PhosphorIcons.arrowUpRight(
+                                PhosphorIconsStyle.fill),
+                color: isFailed
+                    ? context.colors.error
+                    : isPending
+                        ? context.colors.accent
+                        : isIncoming
+                            ? context.colors.success
+                            : context.colors.textPrimary,
+                size: 17,
+              ),
             ),
-            child: Icon(
-              isIncoming ? PhosphorIcons.arrowDown() : PhosphorIcons.arrowUp(),
-              color: isIncoming
-                  ? context.colors.success
-                  : context.colors.textPrimary,
-              size: 17,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isIncoming ? l10n.received : l10n.sent,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.textPrimary,
-                  ),
-                ),
-                if (timestamp != null || isPending) ...[
-                  const SizedBox(height: 2),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Text(
-                    isPending ? l10n.pendingTransaction : _formatTimestamp(timestamp, l10n),
+                    isIncoming ? l10n.received : l10n.sent,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: isPending
-                          ? context.colors.accent
-                          : context.colors.textSecondary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                      height: 1.6,
                     ),
                   ),
+                  if (timestamp != null || isPending || isFailed) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      isFailed
+                          ? l10n.failed
+                          : isPending
+                              ? l10n.pendingTransaction
+                              : _formatTimestamp(timestamp, l10n),
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.6,
+                        color: isFailed
+                            ? context.colors.error
+                            : isPending
+                                ? context.colors.accent
+                                : context.colors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-          Text(
-            '${isIncoming ? '+' : '-'}${_formatSats(amount)} sats',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: isIncoming
-                  ? context.colors.success
-                  : context.colors.textPrimary,
+            Text(
+              '${isIncoming ? '+' : '-'}${_formatSats(amount)} sats',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: amountColor,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -886,6 +921,7 @@ class _WalletPageState extends State<WalletPage>
   }
 
   void _showSendDialog(BuildContext context, WalletLoaded state) {
+    final walletBloc = context.read<WalletBloc>();
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -896,7 +932,7 @@ class _WalletPageState extends State<WalletPage>
       ),
       builder: (context) => SendDialog(
         onPaymentSuccess: () {
-          context.read<WalletBloc>().add(const WalletBalanceRequested());
+          walletBloc.add(const WalletBalanceRequested());
         },
       ),
     );

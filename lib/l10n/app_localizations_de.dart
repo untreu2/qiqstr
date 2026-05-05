@@ -1585,6 +1585,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get sent => 'Gesendet';
 
   @override
+  String get paymentReceived => 'Zahlung eingegangen!';
+
+  @override
   String get pasteInvoiceHere => 'Rechnung hier einfügen...';
 
   @override
@@ -2224,4 +2227,25 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get restoreWalletSuccess => 'Wallet erfolgreich wiederhergestellt';
+
+  @override
+  String get unrecognizedPaymentFormat => 'Unbekanntes Zahlungsformat';
+
+  @override
+  String get date => 'Datum';
+
+  @override
+  String get fee => 'Gebühr';
+
+  @override
+  String get method => 'Methode';
+
+  @override
+  String get details => 'Details';
+
+  @override
+  String get paymentHash => 'Zahlungs-Hash';
+
+  @override
+  String get preimage => 'Preimage';
 }

@@ -1,14 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/di/app_di.dart';
 import '../../../data/services/nwc_service.dart';
 import '../../../data/services/spark_service.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../presentation/blocs/wallet/wallet_bloc.dart';
+import '../../../presentation/blocs/wallet/wallet_event.dart';
+import '../../../presentation/blocs/wallet/wallet_state.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
@@ -22,7 +26,8 @@ class ReceivePage extends StatefulWidget {
   State<ReceivePage> createState() => _ReceivePageState();
 }
 
-class _ReceivePageState extends State<ReceivePage> {
+class _ReceivePageState extends State<ReceivePage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _amountController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<bool> _showTitleBubble = ValueNotifier(true);
@@ -32,17 +37,34 @@ class _ReceivePageState extends State<ReceivePage> {
   String? _error;
   bool _hasAmount = false;
 
+  late AnimationController _receivedAnimController;
+  late Animation<double> _receivedScaleAnim;
+
   @override
   void initState() {
     super.initState();
     _amountController.addListener(_onInputChanged);
+
+    _receivedAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _receivedScaleAnim = CurvedAnimation(
+      parent: _receivedAnimController,
+      curve: Curves.elasticOut,
+    );
   }
 
   @override
   void dispose() {
+    final invoice = _invoice;
+    if (invoice != null) {
+      AppDI.get<WalletBloc>().add(const WalletInvoiceCleared());
+    }
     _amountController.dispose();
     _scrollController.dispose();
     _showTitleBubble.dispose();
+    _receivedAnimController.dispose();
     super.dispose();
   }
 
@@ -53,10 +75,14 @@ class _ReceivePageState extends State<ReceivePage> {
       setState(() => _hasAmount = newHasAmount);
     }
     if (text.isEmpty && (_invoice != null || _error != null)) {
+      final hadInvoice = _invoice != null;
       setState(() {
         _invoice = null;
         _error = null;
       });
+      if (hadInvoice) {
+        AppDI.get<WalletBloc>().add(const WalletInvoiceCleared());
+      }
     }
   }
 
@@ -88,40 +114,50 @@ class _ReceivePageState extends State<ReceivePage> {
     });
 
     try {
+      String? newInvoice;
+
       if (_isNwcMode) {
         final nwcService = AppDI.get<NwcService>();
         final result = await nwcService.makeInvoice(amountSats: amountValue);
         if (mounted) {
-          setState(() {
-            _isUpdating = false;
-            result.fold(
-              (invoice) => _invoice = invoice,
-              (err) {
+          result.fold(
+            (invoice) => newInvoice = invoice,
+            (err) {
+              setState(() {
+                _isUpdating = false;
                 _error = AppLocalizations.of(context)!
                     .failedToCreateInvoice(err.toString());
                 _invoice = null;
-              },
-            );
-          });
+              });
+            },
+          );
         }
       } else {
-        final sparkService = AppDI.get<SparkService>();
-        final result = await sparkService.createLightningInvoice(
-          amountSats: amountValue,
-        );
+        final sparkResult = await AppDI.get<SparkService>()
+            .createLightningInvoice(amountSats: amountValue);
         if (mounted) {
-          setState(() {
-            _isUpdating = false;
-            result.fold(
-              (invoice) => _invoice = invoice,
-              (err) {
+          sparkResult.fold(
+            (invoice) => newInvoice = invoice,
+            (err) {
+              setState(() {
+                _isUpdating = false;
                 _error = AppLocalizations.of(context)!
                     .failedToCreateInvoice(err.toString());
                 _invoice = null;
-              },
-            );
-          });
+              });
+            },
+          );
         }
+      }
+
+      if (newInvoice != null && mounted) {
+        setState(() {
+          _isUpdating = false;
+          _invoice = newInvoice;
+        });
+        AppDI.get<WalletBloc>().add(WalletInvoiceWatched(newInvoice!));
+      } else if (mounted) {
+        setState(() => _isUpdating = false);
       }
     } catch (e) {
       if (mounted) {
@@ -156,62 +192,142 @@ class _ReceivePageState extends State<ReceivePage> {
     final l10n = AppLocalizations.of(context)!;
     final colors = context.colors;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: Stack(
-        children: [
-          CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: MediaQuery.of(context).padding.top + 100,
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: _buildQrSection(context, colors, l10n),
-              ),
-              SliverToBoxAdapter(
-                child: _buildAddressOrInvoiceChip(context, colors, l10n),
-              ),
-              SliverToBoxAdapter(
-                child: _buildAmountSection(context, colors, l10n),
-              ),
-              if (_error != null)
+    return BlocProvider<WalletBloc>.value(
+      value: AppDI.get<WalletBloc>(),
+      child: _buildContent(context, l10n, colors),
+    );
+  }
+
+  Widget _buildContent(
+      BuildContext context, AppLocalizations l10n, dynamic colors) {
+    return BlocListener<WalletBloc, WalletState>(
+      listenWhen: (prev, curr) {
+        if (curr is WalletLoaded && prev is WalletLoaded) {
+          return curr.invoiceReceived && !prev.invoiceReceived;
+        }
+        return false;
+      },
+      listener: (context, state) {
+        if (state is WalletLoaded && state.invoiceReceived) {
+          _receivedAnimController.forward(from: 0);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        body: Stack(
+          children: [
+            CustomScrollView(
+              controller: _scrollController,
+              slivers: [
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: colors.error, fontSize: 13),
-                      textAlign: TextAlign.center,
-                    ),
+                  child: SizedBox(
+                    height: MediaQuery.of(context).padding.top + 100,
                   ),
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 60)),
-            ],
-          ),
-          TopActionBarWidget(
-            showShareButton: false,
-            centerBubble: Text(
-              l10n.receive,
-              style: TextStyle(
-                color: colors.background,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                SliverToBoxAdapter(
+                  child: _buildQrSection(context, colors, l10n),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildReceivedIndicator(context, colors, l10n),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildAddressOrInvoiceChip(context, colors, l10n),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildAmountSection(context, colors, l10n),
+                ),
+                if (_error != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: colors.error, fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 60)),
+              ],
+            ),
+            TopActionBarWidget(
+              showShareButton: false,
+              centerBubble: Text(
+                l10n.receive,
+                style: TextStyle(
+                  color: colors.background,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              centerBubbleVisibility: _showTitleBubble,
+              onCenterBubbleTap: () {
+                _scrollController.animateTo(
+                  0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOut,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReceivedIndicator(
+      BuildContext context, dynamic colors, AppLocalizations l10n) {
+    return BlocBuilder<WalletBloc, WalletState>(
+      buildWhen: (prev, curr) {
+        if (prev is WalletLoaded && curr is WalletLoaded) {
+          return prev.invoiceReceived != curr.invoiceReceived;
+        }
+        return false;
+      },
+      builder: (context, state) {
+        final received =
+            state is WalletLoaded && state.invoiceReceived && _invoice != null;
+
+        if (!received) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: ScaleTransition(
+            scale: _receivedScaleAnim,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF22C55E).withValues(alpha: 0.4),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  PhosphorIcon(
+                    PhosphorIcons.checkCircle(PhosphorIconsStyle.fill),
+                    size: 22,
+                    color: const Color(0xFF22C55E),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    l10n.paymentReceived,
+                    style: const TextStyle(
+                      color: Color(0xFF22C55E),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-            centerBubbleVisibility: _showTitleBubble,
-            onCenterBubbleTap: () {
-              _scrollController.animateTo(
-                0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            },
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -221,15 +337,65 @@ class _ReceivePageState extends State<ReceivePage> {
     final qrSize = screenWidth - 80;
     final qrData = _qrData;
 
-    return Center(
-      child: GestureDetector(
-        onTap: qrData.isNotEmpty ? () => _copyToClipboard(qrData) : null,
-        child: SizedBox(
-          width: qrSize,
-          height: qrSize,
+    return BlocBuilder<WalletBloc, WalletState>(
+      buildWhen: (prev, curr) {
+        if (prev is WalletLoaded && curr is WalletLoaded) {
+          return prev.invoiceReceived != curr.invoiceReceived;
+        }
+        return false;
+      },
+      builder: (context, state) {
+        final received =
+            state is WalletLoaded && state.invoiceReceived && _invoice != null;
+
+        return Center(
+          child: GestureDetector(
+            onTap: qrData.isNotEmpty ? () => _copyToClipboard(qrData) : null,
+            child: SizedBox(
+              width: qrSize,
+              height: qrSize,
+              child: received
+                  ? _buildReceivedQrOverlay(qrData, qrSize, colors, l10n)
+                  : _buildQrContent(qrData, qrSize, colors, l10n),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReceivedQrOverlay(
+      String qrData, double qrSize, dynamic colors, AppLocalizations l10n) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Opacity(
+          opacity: 0.3,
           child: _buildQrContent(qrData, qrSize, colors, l10n),
         ),
-      ),
+        Container(
+          width: qrSize * 0.5,
+          height: qrSize * 0.5,
+          decoration: BoxDecoration(
+            color: colors.background,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF22C55E).withValues(alpha: 0.3),
+                blurRadius: 20,
+                spreadRadius: 4,
+              ),
+            ],
+          ),
+          child: const Center(
+            child: PhosphorIcon(
+              PhosphorIconsFill.checkCircle,
+              size: 64,
+              color: Color(0xFF22C55E),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -324,7 +490,8 @@ class _ReceivePageState extends State<ReceivePage> {
                 ),
               ),
               const SizedBox(width: 8),
-              PhosphorIcon(PhosphorIcons.copy(), size: 20, color: colors.textSecondary),
+              PhosphorIcon(PhosphorIcons.copy(),
+                  size: 20, color: colors.textSecondary),
             ],
           ),
         ),
@@ -425,3 +592,5 @@ class _ReceivePageState extends State<ReceivePage> {
     );
   }
 }
+
+

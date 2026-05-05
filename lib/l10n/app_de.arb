@@ -602,6 +602,7 @@
   "showLess": "Weniger anzeigen",
   "received": "Empfangen",
   "sent": "Gesendet",
+  "paymentReceived": "Zahlung eingegangen!",
   "pasteInvoiceHere": "Rechnung hier einfügen...",
   "paymentSent": "Zahlung gesendet!",
   "failedToCreateInvoice": "Rechnung konnte nicht erstellt werden: {message}",
@@ -828,5 +829,12 @@
   "restoreWalletHint": "Wiederherstellungscode eingeben...",
   "restoreWalletButton": "Wallet wiederherstellen",
   "restoreWalletInvalidPhrase": "Ungültiger Wiederherstellungscode. Bitte überprüfen und erneut versuchen.",
-  "restoreWalletSuccess": "Wallet erfolgreich wiederhergestellt"
+  "restoreWalletSuccess": "Wallet erfolgreich wiederhergestellt",
+  "unrecognizedPaymentFormat": "Unbekanntes Zahlungsformat",
+  "date": "Datum",
+  "fee": "Gebühr",
+  "method": "Methode",
+  "details": "Details",
+  "paymentHash": "Zahlungs-Hash",
+  "preimage": "Preimage"
 }

@@ -2914,6 +2914,12 @@ abstract class AppLocalizations {
   /// **'Sent'**
   String get sent;
 
+  /// No description provided for @paymentReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment received!'**
+  String get paymentReceived;
+
   /// No description provided for @pasteInvoiceHere.
   ///
   /// In en, this message translates to:
@@ -3963,6 +3969,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Wallet restored successfully'**
   String get restoreWalletSuccess;
+
+  /// No description provided for @unrecognizedPaymentFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Unrecognized payment format'**
+  String get unrecognizedPaymentFormat;
+
+  /// No description provided for @date.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get date;
+
+  /// No description provided for @fee.
+  ///
+  /// In en, this message translates to:
+  /// **'Fee'**
+  String get fee;
+
+  /// No description provided for @method.
+  ///
+  /// In en, this message translates to:
+  /// **'Method'**
+  String get method;
+
+  /// No description provided for @details.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get details;
+
+  /// No description provided for @paymentHash.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment hash'**
+  String get paymentHash;
+
+  /// No description provided for @preimage.
+  ///
+  /// In en, this message translates to:
+  /// **'Preimage'**
+  String get preimage;
 }
 
 class _AppLocalizationsDelegate
