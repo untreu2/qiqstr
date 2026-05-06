@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -26,8 +24,7 @@ class ReceivePage extends StatefulWidget {
   State<ReceivePage> createState() => _ReceivePageState();
 }
 
-class _ReceivePageState extends State<ReceivePage>
-    with SingleTickerProviderStateMixin {
+class _ReceivePageState extends State<ReceivePage> {
   final TextEditingController _amountController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<bool> _showTitleBubble = ValueNotifier(true);
@@ -37,34 +34,20 @@ class _ReceivePageState extends State<ReceivePage>
   String? _error;
   bool _hasAmount = false;
 
-  late AnimationController _receivedAnimController;
-  late Animation<double> _receivedScaleAnim;
-
   @override
   void initState() {
     super.initState();
     _amountController.addListener(_onInputChanged);
-
-    _receivedAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _receivedScaleAnim = CurvedAnimation(
-      parent: _receivedAnimController,
-      curve: Curves.elasticOut,
-    );
   }
 
   @override
   void dispose() {
-    final invoice = _invoice;
-    if (invoice != null) {
+    if (_invoice != null) {
       AppDI.get<WalletBloc>().add(const WalletInvoiceCleared());
     }
     _amountController.dispose();
     _scrollController.dispose();
     _showTitleBubble.dispose();
-    _receivedAnimController.dispose();
     super.dispose();
   }
 
@@ -209,7 +192,11 @@ class _ReceivePageState extends State<ReceivePage>
       },
       listener: (context, state) {
         if (state is WalletLoaded && state.invoiceReceived) {
-          _receivedAnimController.forward(from: 0);
+          AppSnackbar.success(context, l10n.paymentReceived);
+          final nav = Navigator.of(context);
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted) nav.pop();
+          });
         }
       },
       child: Scaffold(
@@ -226,9 +213,6 @@ class _ReceivePageState extends State<ReceivePage>
                 ),
                 SliverToBoxAdapter(
                   child: _buildQrSection(context, colors, l10n),
-                ),
-                SliverToBoxAdapter(
-                  child: _buildReceivedIndicator(context, colors, l10n),
                 ),
                 SliverToBoxAdapter(
                   child: _buildAddressOrInvoiceChip(context, colors, l10n),
@@ -275,127 +259,21 @@ class _ReceivePageState extends State<ReceivePage>
     );
   }
 
-  Widget _buildReceivedIndicator(
-      BuildContext context, dynamic colors, AppLocalizations l10n) {
-    return BlocBuilder<WalletBloc, WalletState>(
-      buildWhen: (prev, curr) {
-        if (prev is WalletLoaded && curr is WalletLoaded) {
-          return prev.invoiceReceived != curr.invoiceReceived;
-        }
-        return false;
-      },
-      builder: (context, state) {
-        final received =
-            state is WalletLoaded && state.invoiceReceived && _invoice != null;
-
-        if (!received) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-          child: ScaleTransition(
-            scale: _receivedScaleAnim,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: const Color(0xFF22C55E).withValues(alpha: 0.4),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  PhosphorIcon(
-                    PhosphorIcons.checkCircle(PhosphorIconsStyle.fill),
-                    size: 22,
-                    color: const Color(0xFF22C55E),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    l10n.paymentReceived,
-                    style: const TextStyle(
-                      color: Color(0xFF22C55E),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildQrSection(
       BuildContext context, dynamic colors, AppLocalizations l10n) {
     final screenWidth = MediaQuery.of(context).size.width;
     final qrSize = screenWidth - 80;
     final qrData = _qrData;
 
-    return BlocBuilder<WalletBloc, WalletState>(
-      buildWhen: (prev, curr) {
-        if (prev is WalletLoaded && curr is WalletLoaded) {
-          return prev.invoiceReceived != curr.invoiceReceived;
-        }
-        return false;
-      },
-      builder: (context, state) {
-        final received =
-            state is WalletLoaded && state.invoiceReceived && _invoice != null;
-
-        return Center(
-          child: GestureDetector(
-            onTap: qrData.isNotEmpty ? () => _copyToClipboard(qrData) : null,
-            child: SizedBox(
-              width: qrSize,
-              height: qrSize,
-              child: received
-                  ? _buildReceivedQrOverlay(qrData, qrSize, colors, l10n)
-                  : _buildQrContent(qrData, qrSize, colors, l10n),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildReceivedQrOverlay(
-      String qrData, double qrSize, dynamic colors, AppLocalizations l10n) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Opacity(
-          opacity: 0.3,
+    return Center(
+      child: GestureDetector(
+        onTap: qrData.isNotEmpty ? () => _copyToClipboard(qrData) : null,
+        child: SizedBox(
+          width: qrSize,
+          height: qrSize,
           child: _buildQrContent(qrData, qrSize, colors, l10n),
         ),
-        Container(
-          width: qrSize * 0.5,
-          height: qrSize * 0.5,
-          decoration: BoxDecoration(
-            color: colors.background,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF22C55E).withValues(alpha: 0.3),
-                blurRadius: 20,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: const Center(
-            child: PhosphorIcon(
-              PhosphorIconsFill.checkCircle,
-              size: 64,
-              color: Color(0xFF22C55E),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
