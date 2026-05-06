@@ -54,6 +54,7 @@ Future<void> setGossipMode(GossipMode mode) async {
 }
 
 const String primalCacheUrl = 'wss://cache2.primal.net/v1';
+const String vertexRelayUrl = 'wss://relay.vertexlab.io';
 
 Future<List<String>> getRelaySetMainSockets() async {
   try {

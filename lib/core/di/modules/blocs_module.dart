@@ -36,6 +36,7 @@ import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../data/services/vertex_search_service.dart';
 
 class BlocsModule extends DIModule {
   @override
@@ -153,6 +154,7 @@ class BlocsModule extends DIModule {
           profileRepository: AppDI.get<ProfileRepository>(),
           authService: AppDI.get<AuthService>(),
           syncService: AppDI.get<SyncService>(),
+          vertexSearchService: AppDI.get<VertexSearchService>(),
         ));
 
     AppDI.registerFactory<NoteContentBloc>(() => NoteContentBloc(

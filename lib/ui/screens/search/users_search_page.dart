@@ -171,7 +171,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                   )
                 : filteredUsers.isNotEmpty
                     ? ListView.builder(
-                        padding: EdgeInsets.zero,
+                        padding: const EdgeInsets.only(bottom: 80),
                         itemCount: filteredUsers.length,
                         itemBuilder: (context, index) {
                           final user = filteredUsers[index];

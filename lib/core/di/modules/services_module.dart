@@ -13,6 +13,7 @@ import '../../../data/services/relay_service.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/sync/publishers/event_publisher.dart';
 import '../../../data/services/follow_set_service.dart';
+import '../../../data/services/vertex_search_service.dart';
 
 class ServicesModule extends DIModule {
   @override
@@ -34,6 +35,8 @@ class ServicesModule extends DIModule {
           db: AppDI.get<RustDatabaseService>(),
           publisher: AppDI.get<EventPublisher>(),
         ));
+    AppDI.registerLazySingleton<VertexSearchService>(
+        () => VertexSearchService.instance);
     await AuthService.instance.refreshCache();
 
     final currentNpub = AuthService.instance.currentUserNpub;
