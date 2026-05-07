@@ -1,3 +1,4 @@
+pub mod cashu;
 pub mod crypto;
 pub mod database;
 pub mod events;

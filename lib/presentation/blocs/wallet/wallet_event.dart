@@ -63,3 +63,29 @@ class WalletPaymentReceivedEvent extends WalletEvent {
 class WalletSdkSyncedEvent extends WalletEvent {
   const WalletSdkSyncedEvent();
 }
+
+class WalletCashuTokenRedeemRequested extends WalletEvent {
+  final String token;
+  final String lightningTarget;
+
+  const WalletCashuTokenRedeemRequested({
+    required this.token,
+    required this.lightningTarget,
+  });
+
+  @override
+  List<Object?> get props => [token, lightningTarget];
+}
+
+class WalletCashuBalanceRequested extends WalletEvent {
+  const WalletCashuBalanceRequested();
+}
+
+class WalletCashuMeltAllRequested extends WalletEvent {
+  final String lightningTarget;
+
+  const WalletCashuMeltAllRequested(this.lightningTarget);
+
+  @override
+  List<Object?> get props => [lightningTarget];
+}

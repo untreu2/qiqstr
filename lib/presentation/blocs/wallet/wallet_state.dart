@@ -22,6 +22,10 @@ class WalletLoaded extends WalletState {
   final String? balanceError;
   final String? watchedInvoice;
   final bool invoiceReceived;
+  final bool isRedeemingCashu;
+  final String? cashuRedeemError;
+  final int? cashuRedeemedAmountSats;
+  final int? cashuBalanceSats;
 
   const WalletLoaded({
     this.isConnected = false,
@@ -33,6 +37,10 @@ class WalletLoaded extends WalletState {
     this.balanceError,
     this.watchedInvoice,
     this.invoiceReceived = false,
+    this.isRedeemingCashu = false,
+    this.cashuRedeemError,
+    this.cashuRedeemedAmountSats,
+    this.cashuBalanceSats,
   });
 
   @override
@@ -46,6 +54,10 @@ class WalletLoaded extends WalletState {
         balanceError,
         watchedInvoice,
         invoiceReceived,
+        isRedeemingCashu,
+        cashuRedeemError,
+        cashuRedeemedAmountSats,
+        cashuBalanceSats,
       ];
 
   WalletLoaded copyWith({
@@ -61,6 +73,13 @@ class WalletLoaded extends WalletState {
     String? watchedInvoice,
     bool clearWatchedInvoice = false,
     bool? invoiceReceived,
+    bool? isRedeemingCashu,
+    String? cashuRedeemError,
+    bool clearCashuRedeemError = false,
+    int? cashuRedeemedAmountSats,
+    bool clearCashuRedeemedAmount = false,
+    int? cashuBalanceSats,
+    bool clearCashuBalance = false,
   }) {
     return WalletLoaded(
       isConnected: isConnected ?? this.isConnected,
@@ -77,6 +96,16 @@ class WalletLoaded extends WalletState {
       watchedInvoice:
           clearWatchedInvoice ? null : watchedInvoice ?? this.watchedInvoice,
       invoiceReceived: invoiceReceived ?? this.invoiceReceived,
+      isRedeemingCashu: isRedeemingCashu ?? this.isRedeemingCashu,
+      cashuRedeemError: clearCashuRedeemError
+          ? null
+          : cashuRedeemError ?? this.cashuRedeemError,
+      cashuRedeemedAmountSats: clearCashuRedeemedAmount
+          ? null
+          : cashuRedeemedAmountSats ?? this.cashuRedeemedAmountSats,
+      cashuBalanceSats: clearCashuBalance
+          ? null
+          : cashuBalanceSats ?? this.cashuBalanceSats,
     );
   }
 }

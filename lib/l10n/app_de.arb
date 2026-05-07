@@ -836,5 +836,34 @@
   "method": "Methode",
   "details": "Details",
   "paymentHash": "Zahlungs-Hash",
-  "preimage": "Preimage"
+  "preimage": "Preimage",
+  "cashu": "Cashu",
+  "cashuToken": "Cashu-Token",
+  "cashuTokenHint": "Cashu-Token...",
+  "cashuMintUrl": "Mint-URL",
+  "cashuRedeem": "Einlösen",
+  "cashuRedeeming": "Wird eingelöst...",
+  "cashuRedeemSuccess": "{amount} Sats eingelöst!",
+  "@cashuRedeemSuccess": {
+    "placeholders": {
+      "amount": { "type": "int" }
+    }
+  },
+  "cashuInvalidToken": "Ungültiger Cashu-Token",
+  "cashuNoWallet": "Wallet nicht verbunden",
+  "cashuNoLightningAddress": "Keine Lightning-Adresse konfiguriert. Richten Sie zuerst eine Lightning-Adresse ein.",
+  "cashuRedeemDescription": "Fügen Sie einen Cashu-Token ein, um ihn sofort in Ihr Lightning-Wallet einzulösen.",
+  "cashuMeltAll": "Alles an Lightning senden",
+  "cashuMeltAllConfirm": "{amount} Sats an Ihre Lightning-Adresse senden?",
+  "@cashuMeltAllConfirm": {
+    "placeholders": {
+      "amount": { "type": "int" }
+    }
+  },
+  "cashuMeltAllSuccess": "{amount} Sats an Lightning gesendet!",
+  "@cashuMeltAllSuccess": {
+    "placeholders": {
+      "amount": { "type": "int" }
+    }
+  }
 }

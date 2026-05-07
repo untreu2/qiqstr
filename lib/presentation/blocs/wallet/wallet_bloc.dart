@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/cashu_service.dart';
 import '../../../data/services/nwc_service.dart';
 import '../../../data/services/spark_service.dart';
 import '../../../data/sync/sync_service.dart';
@@ -18,6 +19,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   final AuthService _authService;
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
+  final CashuService _cashuService;
 
   Timer? _balanceTimer;
   StreamSubscription<SdkEvent>? _sdkEventSubscription;
@@ -28,11 +30,13 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     required AuthService authService,
     required ProfileRepository profileRepository,
     required SyncService syncService,
+    CashuService? cashuService,
   })  : _sparkService = sparkService,
         _nwcService = nwcService,
         _authService = authService,
         _profileRepository = profileRepository,
         _syncService = syncService,
+        _cashuService = cashuService ?? const CashuService(),
         super(const WalletInitial()) {
     on<WalletInitialized>(_onWalletInitialized);
     on<WalletBalanceRequested>(_onWalletBalanceRequested);
@@ -44,6 +48,9 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     on<WalletInvoiceCleared>(_onWalletInvoiceCleared);
     on<WalletPaymentReceivedEvent>(_onWalletPaymentReceivedEvent);
     on<WalletSdkSyncedEvent>(_onWalletSdkSyncedEvent);
+    on<WalletCashuTokenRedeemRequested>(_onCashuTokenRedeemRequested);
+    on<WalletCashuBalanceRequested>(_onCashuBalanceRequested);
+    on<WalletCashuMeltAllRequested>(_onCashuMeltAllRequested);
 
     add(const WalletInitialized());
   }
@@ -78,6 +85,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       add(const WalletBalanceRequested());
       add(const WalletTransactionsLoaded());
       add(const WalletLightningAddressRequested());
+      add(const WalletCashuBalanceRequested());
       _startBalanceTimer();
       _subscribeSdkEvents();
     }
@@ -347,6 +355,109 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       },
       (error) async =>
           emit(WalletError('Failed to register address: $error')),
+    );
+  }
+
+  Future<void> _onCashuTokenRedeemRequested(
+    WalletCashuTokenRedeemRequested event,
+    Emitter<WalletState> emit,
+  ) async {
+    if (state is! WalletLoaded) return;
+    final current = state as WalletLoaded;
+
+    emit(current.copyWith(
+      isRedeemingCashu: true,
+      clearCashuRedeemError: true,
+      clearCashuRedeemedAmount: true,
+    ));
+
+    final result = await _cashuService.receiveAndMelt(
+      token: event.token,
+      lightningTarget: event.lightningTarget,
+    );
+
+    if (isClosed) return;
+
+    result.fold(
+      (amountSats) {
+        if (state is WalletLoaded) {
+          emit((state as WalletLoaded).copyWith(
+            isRedeemingCashu: false,
+            cashuRedeemedAmountSats: amountSats,
+          ));
+          add(const WalletBalanceRequested());
+          add(const WalletTransactionsLoaded());
+          add(const WalletCashuBalanceRequested());
+        }
+      },
+      (error) {
+        if (state is WalletLoaded) {
+          emit((state as WalletLoaded).copyWith(
+            isRedeemingCashu: false,
+            cashuRedeemError: error,
+          ));
+        }
+      },
+    );
+  }
+
+  Future<void> _onCashuMeltAllRequested(
+    WalletCashuMeltAllRequested event,
+    Emitter<WalletState> emit,
+  ) async {
+    if (state is! WalletLoaded) return;
+    final current = state as WalletLoaded;
+
+    emit(current.copyWith(
+      isRedeemingCashu: true,
+      clearCashuRedeemError: true,
+      clearCashuRedeemedAmount: true,
+    ));
+
+    final result = await _cashuService.meltAll(
+      lightningTarget: event.lightningTarget,
+    );
+
+    if (isClosed) return;
+
+    result.fold(
+      (totalSats) {
+        if (state is WalletLoaded) {
+          emit((state as WalletLoaded).copyWith(
+            isRedeemingCashu: false,
+            cashuRedeemedAmountSats: totalSats,
+            cashuBalanceSats: 0,
+          ));
+          add(const WalletBalanceRequested());
+          add(const WalletTransactionsLoaded());
+        }
+      },
+      (error) {
+        if (state is WalletLoaded) {
+          emit((state as WalletLoaded).copyWith(
+            isRedeemingCashu: false,
+            cashuRedeemError: error,
+          ));
+        }
+      },
+    );
+  }
+
+  Future<void> _onCashuBalanceRequested(
+    WalletCashuBalanceRequested event,
+    Emitter<WalletState> emit,
+  ) async {
+    final result = await _cashuService.getBalance();
+    if (isClosed) return;
+    result.fold(
+      (balance) {
+        if (state is WalletLoaded) {
+          emit((state as WalletLoaded).copyWith(
+            cashuBalanceSats: balance.totalSats,
+          ));
+        }
+      },
+      (_) {},
     );
   }
 

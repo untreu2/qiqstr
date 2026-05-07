@@ -4011,6 +4011,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Preimage'**
   String get preimage;
+
+  /// No description provided for @cashu.
+  ///
+  /// In en, this message translates to:
+  /// **'Cashu'**
+  String get cashu;
+
+  /// No description provided for @cashuToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Cashu Token'**
+  String get cashuToken;
+
+  /// No description provided for @cashuTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Cashu token...'**
+  String get cashuTokenHint;
+
+  /// No description provided for @cashuMintUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Mint URL'**
+  String get cashuMintUrl;
+
+  /// No description provided for @cashuRedeem.
+  ///
+  /// In en, this message translates to:
+  /// **'Redeem'**
+  String get cashuRedeem;
+
+  /// No description provided for @cashuRedeeming.
+  ///
+  /// In en, this message translates to:
+  /// **'Redeeming...'**
+  String get cashuRedeeming;
+
+  /// No description provided for @cashuRedeemSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Redeemed {amount} sats!'**
+  String cashuRedeemSuccess(int amount);
+
+  /// No description provided for @cashuInvalidToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid Cashu token'**
+  String get cashuInvalidToken;
+
+  /// No description provided for @cashuNoWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet not connected'**
+  String get cashuNoWallet;
+
+  /// No description provided for @cashuNoLightningAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'No Lightning address configured. Set up a Lightning address first.'**
+  String get cashuNoLightningAddress;
+
+  /// No description provided for @cashuRedeemDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste a Cashu token to redeem it instantly to your Lightning wallet.'**
+  String get cashuRedeemDescription;
+
+  /// No description provided for @cashuMeltAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Melt All to Lightning'**
+  String get cashuMeltAll;
+
+  /// No description provided for @cashuMeltAllConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Send all {amount} sats to your Lightning address?'**
+  String cashuMeltAllConfirm(int amount);
+
+  /// No description provided for @cashuMeltAllSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent {amount} sats to Lightning!'**
+  String cashuMeltAllSuccess(int amount);
 }
 
 class _AppLocalizationsDelegate

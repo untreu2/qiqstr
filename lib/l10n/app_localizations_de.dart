@@ -2248,4 +2248,54 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get preimage => 'Preimage';
+
+  @override
+  String get cashu => 'Cashu';
+
+  @override
+  String get cashuToken => 'Cashu-Token';
+
+  @override
+  String get cashuTokenHint => 'Cashu-Token...';
+
+  @override
+  String get cashuMintUrl => 'Mint-URL';
+
+  @override
+  String get cashuRedeem => 'Einlösen';
+
+  @override
+  String get cashuRedeeming => 'Wird eingelöst...';
+
+  @override
+  String cashuRedeemSuccess(int amount) {
+    return '$amount Sats eingelöst!';
+  }
+
+  @override
+  String get cashuInvalidToken => 'Ungültiger Cashu-Token';
+
+  @override
+  String get cashuNoWallet => 'Wallet nicht verbunden';
+
+  @override
+  String get cashuNoLightningAddress =>
+      'Keine Lightning-Adresse konfiguriert. Richten Sie zuerst eine Lightning-Adresse ein.';
+
+  @override
+  String get cashuRedeemDescription =>
+      'Fügen Sie einen Cashu-Token ein, um ihn sofort in Ihr Lightning-Wallet einzulösen.';
+
+  @override
+  String get cashuMeltAll => 'Alles an Lightning senden';
+
+  @override
+  String cashuMeltAllConfirm(int amount) {
+    return '$amount Sats an Ihre Lightning-Adresse senden?';
+  }
+
+  @override
+  String cashuMeltAllSuccess(int amount) {
+    return '$amount Sats an Lightning gesendet!';
+  }
 }

@@ -2212,4 +2212,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get preimage => 'Preimage';
+
+  @override
+  String get cashu => 'Cashu';
+
+  @override
+  String get cashuToken => 'Cashu Token';
+
+  @override
+  String get cashuTokenHint => 'Cashu token...';
+
+  @override
+  String get cashuMintUrl => 'Mint URL';
+
+  @override
+  String get cashuRedeem => 'Redeem';
+
+  @override
+  String get cashuRedeeming => 'Redeeming...';
+
+  @override
+  String cashuRedeemSuccess(int amount) {
+    return 'Redeemed $amount sats!';
+  }
+
+  @override
+  String get cashuInvalidToken => 'Invalid Cashu token';
+
+  @override
+  String get cashuNoWallet => 'Wallet not connected';
+
+  @override
+  String get cashuNoLightningAddress =>
+      'No Lightning address configured. Set up a Lightning address first.';
+
+  @override
+  String get cashuRedeemDescription =>
+      'Paste a Cashu token to redeem it instantly to your Lightning wallet.';
+
+  @override
+  String get cashuMeltAll => 'Melt All to Lightning';
+
+  @override
+  String cashuMeltAllConfirm(int amount) {
+    return 'Send all $amount sats to your Lightning address?';
+  }
+
+  @override
+  String cashuMeltAllSuccess(int amount) {
+    return 'Sent $amount sats to Lightning!';
+  }
 }

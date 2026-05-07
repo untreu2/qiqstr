@@ -2166,4 +2166,54 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get preimage => 'Preimage';
+
+  @override
+  String get cashu => 'Cashu';
+
+  @override
+  String get cashuToken => 'Cashu Token';
+
+  @override
+  String get cashuTokenHint => 'Cashu token...';
+
+  @override
+  String get cashuMintUrl => 'Mint URL';
+
+  @override
+  String get cashuRedeem => 'Kullan';
+
+  @override
+  String get cashuRedeeming => 'İşleniyor...';
+
+  @override
+  String cashuRedeemSuccess(int amount) {
+    return '$amount sat kullanıldı!';
+  }
+
+  @override
+  String get cashuInvalidToken => 'Geçersiz Cashu token';
+
+  @override
+  String get cashuNoWallet => 'Cüzdan bağlı değil';
+
+  @override
+  String get cashuNoLightningAddress =>
+      'Lightning adresi yapılandırılmamış. Önce bir Lightning adresi ayarlayın.';
+
+  @override
+  String get cashuRedeemDescription =>
+      'Cashu tokenınızı anında Lightning cüzdanınıza aktarmak için yapıştırın.';
+
+  @override
+  String get cashuMeltAll => 'Tümünü Lightning\'e Gönder';
+
+  @override
+  String cashuMeltAllConfirm(int amount) {
+    return '$amount satı Lightning adresinize göndermek istiyor musunuz?';
+  }
+
+  @override
+  String cashuMeltAllSuccess(int amount) {
+    return '$amount sat Lightning\'e gönderildi!';
+  }
 }

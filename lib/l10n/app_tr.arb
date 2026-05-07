@@ -836,5 +836,34 @@
   "method": "Yöntem",
   "details": "Detaylar",
   "paymentHash": "Ödeme hash",
-  "preimage": "Preimage"
+  "preimage": "Preimage",
+  "cashu": "Cashu",
+  "cashuToken": "Cashu Token",
+  "cashuTokenHint": "Cashu token...",
+  "cashuMintUrl": "Mint URL",
+  "cashuRedeem": "Kullan",
+  "cashuRedeeming": "İşleniyor...",
+  "cashuRedeemSuccess": "{amount} sat kullanıldı!",
+  "@cashuRedeemSuccess": {
+    "placeholders": {
+      "amount": { "type": "int" }
+    }
+  },
+  "cashuInvalidToken": "Geçersiz Cashu token",
+  "cashuNoWallet": "Cüzdan bağlı değil",
+  "cashuNoLightningAddress": "Lightning adresi yapılandırılmamış. Önce bir Lightning adresi ayarlayın.",
+  "cashuRedeemDescription": "Cashu tokenınızı anında Lightning cüzdanınıza aktarmak için yapıştırın.",
+  "cashuMeltAll": "Tümünü Lightning'e Gönder",
+  "cashuMeltAllConfirm": "{amount} satı Lightning adresinize göndermek istiyor musunuz?",
+  "@cashuMeltAllConfirm": {
+    "placeholders": {
+      "amount": { "type": "int" }
+    }
+  },
+  "cashuMeltAllSuccess": "{amount} sat Lightning'e gönderildi!",
+  "@cashuMeltAllSuccess": {
+    "placeholders": {
+      "amount": { "type": "int" }
+    }
+  }
 }
