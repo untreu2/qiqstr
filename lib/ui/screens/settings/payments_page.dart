@@ -522,7 +522,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
           if (_backupRevealed && _backupPhrase != null) ...[
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: context.colors.background,
                 borderRadius: BorderRadius.circular(14),
@@ -531,47 +531,48 @@ class _PaymentsPageState extends State<PaymentsPage> {
                   width: 1,
                 ),
               ),
-              child: _buildPhraseGrid(context, _backupPhrase!),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.colors.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  PhosphorIcon(
-                    PhosphorIcons.x(),
-                    size: 16,
-                    color: context.colors.textPrimary,
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      l10n.sparkBackupWarning,
+                    child: SelectableText(
+                      _backupPhrase!,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: context.colors.error,
-                        height: 1.4,
+                        fontSize: 13,
+                        color: context.colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'monospace',
+                        letterSpacing: 0.5,
+                        height: 1.5,
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => _copyBackupPhrase(l10n),
+                    child: PhosphorIcon(
+                      PhosphorIcons.copy(),
+                      size: 20,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: SecondaryButton(
-                label: l10n.sparkBackupCopy,
-                onPressed: () => _copyBackupPhrase(l10n),
-                size: ButtonSize.medium,
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                l10n.sparkBackupWarning,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.colors.error,
+                  fontWeight: FontWeight.w700,
+                  height: 1.4,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
           ],
           SizedBox(
             width: double.infinity,
@@ -586,57 +587,6 @@ class _PaymentsPageState extends State<PaymentsPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPhraseGrid(BuildContext context, String phrase) {
-    // Split into 8-character chunks for readable display
-    final chunks = <String>[];
-    for (var i = 0; i < phrase.length; i += 8) {
-      chunks.add(phrase.substring(
-          i, i + 8 > phrase.length ? phrase.length : i + 8));
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var row = 0; row < chunks.length; row += 4)
-          Padding(
-            padding: EdgeInsets.only(
-                bottom: row + 4 < chunks.length ? 8 : 0),
-            child: Row(
-              children: [
-                for (var col = 0;
-                    col < 4 && row + col < chunks.length;
-                    col++) ...[
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: context.colors.background,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        chunks[row + col],
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.colors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'monospace',
-                          letterSpacing: 1,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                  if (col < 3 && row + col + 1 < chunks.length)
-                    const SizedBox(width: 6),
-                ],
-              ],
-            ),
-          ),
-      ],
     );
   }
 
