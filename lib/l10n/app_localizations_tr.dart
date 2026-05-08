@@ -2168,6 +2168,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get preimage => 'Preimage';
 
   @override
+  String get token => 'Token';
+
+  @override
   String get cashu => 'Cashu';
 
   @override

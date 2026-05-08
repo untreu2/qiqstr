@@ -837,6 +837,7 @@
   "details": "Details",
   "paymentHash": "Zahlungs-Hash",
   "preimage": "Preimage",
+  "token": "Token",
   "cashu": "Cashu",
   "cashuToken": "Cashu-Token",
   "cashuTokenHint": "Cashu-Token...",

@@ -1030,6 +1030,7 @@
   "details": "Details",
   "paymentHash": "Payment hash",
   "preimage": "Preimage",
+  "token": "Token",
   "cashu": "Cashu",
   "cashuToken": "Cashu Token",
   "cashuTokenHint": "Cashu token...",

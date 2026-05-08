@@ -837,6 +837,7 @@
   "details": "Detaylar",
   "paymentHash": "Ödeme hash",
   "preimage": "Preimage",
+  "token": "Token",
   "cashu": "Cashu",
   "cashuToken": "Cashu Token",
   "cashuTokenHint": "Cashu token...",

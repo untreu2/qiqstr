@@ -58,7 +58,7 @@ class _ReceivePageState extends State<ReceivePage>
                 _TabBar(
                   controller: _tabController,
                   lightningLabel: l10n.invoice,
-                  cashuLabel: l10n.cashu,
+                  cashuLabel: l10n.token,
                   colors: colors,
                 ),
                 Expanded(
@@ -72,17 +72,8 @@ class _ReceivePageState extends State<ReceivePage>
                 ),
               ],
             ),
-            TopActionBarWidget(
+            const TopActionBarWidget(
               showShareButton: false,
-              centerBubble: Text(
-                l10n.receive,
-                style: TextStyle(
-                  color: colors.background,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              centerBubbleVisibility: ValueNotifier(true),
             ),
           ],
         ),

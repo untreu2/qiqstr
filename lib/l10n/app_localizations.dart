@@ -4012,6 +4012,12 @@ abstract class AppLocalizations {
   /// **'Preimage'**
   String get preimage;
 
+  /// No description provided for @token.
+  ///
+  /// In en, this message translates to:
+  /// **'Token'**
+  String get token;
+
   /// No description provided for @cashu.
   ///
   /// In en, this message translates to:
