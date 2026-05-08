@@ -50,6 +50,9 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   bool _isInitialized = false;
   bool _isLoading = false;
   bool _isMuted = true;
+  bool _disposed = false;
+
+  ScrollPosition? _scrollPosition;
 
   @override
   void initState() {
@@ -59,9 +62,26 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newPosition = Scrollable.maybeOf(context)?.position;
+    if (newPosition != _scrollPosition) {
+      _scrollPosition?.removeListener(_onScroll);
+      _scrollPosition = newPosition;
+      _scrollPosition?.addListener(_onScroll);
+    }
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
+    _scrollPosition?.removeListener(_onScroll);
+    _scrollPosition = null;
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
+    final ctrl = _controller;
+    _controller = null;
+    ctrl?.pause();
+    ctrl?.dispose();
     super.dispose();
   }
 
@@ -81,6 +101,34 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     }
   }
 
+  // ── visibility ──────────────────────────────────────────────────────────────
+
+  void _onScroll() {
+    if (_disposed || !mounted || !_isInitialized) return;
+    final ctrl = _controller;
+    if (ctrl == null) return;
+
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.attached) return;
+
+    final viewportSize = renderBox.size;
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final screenHeight = MediaQuery.sizeOf(context).height;
+
+    final topEdge = offset.dy;
+    final bottomEdge = offset.dy + viewportSize.height;
+    final isVisible = bottomEdge > 0 && topEdge < screenHeight;
+
+    if (isVisible) {
+      if (_isMuted) ctrl.setVolume(0);
+    } else {
+      ctrl.setVolume(0);
+      if (!_isMuted) {
+        setState(() => _isMuted = true);
+      }
+    }
+  }
+
   // ── controller ─────────────────────────────────────────────────────────────
 
   void _initController() {
@@ -91,7 +139,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     _controller = ctrl;
 
     ctrl.initialize().then((_) {
-      if (!mounted || _controller != ctrl) return;
+      if (_disposed || !mounted || _controller != ctrl) return;
 
       ctrl.setVolume(0);
       ctrl.setLooping(true);
@@ -106,7 +154,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
         _isLoading = false;
       });
     }).catchError((_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (!_disposed && mounted) setState(() => _isLoading = false);
     });
   }
 
@@ -137,7 +185,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
           child: FullScreenVideoPlayer(url: widget.url),
         ))
         .then((_) {
-      if (!mounted) return;
+      if (_disposed || !mounted) return;
       final position = VideoPositionCache.instance.get(widget.url);
       if (_isInitialized && ctrl != null) {
         if (position > Duration.zero) ctrl.seekTo(position);
@@ -310,6 +358,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   bool _isInitialized = false;
   bool _showControls = true;
   bool _isDownloading = false;
+  bool _disposed = false;
   double _dragOffset = 0;
   late final AnimationController _controlsAnim;
 
@@ -336,9 +385,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   void _initVideo() {
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     _controller.initialize().then((_) {
-      if (!mounted) return;
+      if (_disposed || !mounted) return;
 
-      // Always resume from saved position
       final saved = VideoPositionCache.instance.get(widget.url);
       if (saved > Duration.zero) _controller.seekTo(saved);
 
@@ -365,10 +413,9 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
 
   void _scheduleHide() {
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _showControls && _controller.value.isPlaying) {
-        setState(() => _showControls = false);
-        _controlsAnim.reverse();
-      }
+      if (_disposed || !mounted || !_showControls || !_controller.value.isPlaying) return;
+      setState(() => _showControls = false);
+      _controlsAnim.reverse();
     });
   }
 
@@ -412,15 +459,15 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     setState(() => _isDownloading = true);
     try {
       final saved = await GallerySaver.saveVideo(widget.url);
-      if (mounted) {
+      if (!_disposed && mounted) {
         saved == true
             ? AppSnackbar.success(context, 'Video saved to gallery')
             : AppSnackbar.error(context, 'Failed to save video');
       }
     } catch (e) {
-      if (mounted) AppSnackbar.error(context, 'Download error: $e');
+      if (!_disposed && mounted) AppSnackbar.error(context, 'Download error: $e');
     } finally {
-      if (mounted) setState(() => _isDownloading = false);
+      if (!_disposed && mounted) setState(() => _isDownloading = false);
     }
   }
 
@@ -428,8 +475,10 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
 
   @override
   void dispose() {
+    _disposed = true;
     _controlsAnim.dispose();
     _controller.removeListener(_onPositionSave);
+    _controller.pause();
     _controller.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
