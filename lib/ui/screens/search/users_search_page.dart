@@ -191,7 +191,9 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildUserItem(BuildContext context, Map<String, dynamic> user) {
+    final pubkey = user['pubkey'] as String? ?? user['npub'] as String? ?? '';
     return _UserItemWidget(
+      key: ValueKey(pubkey),
       user: user,
       onUserSelected: widget.onUserSelected,
       parentContext: widget.parentContext,
@@ -306,6 +308,7 @@ class _UserItemWidget extends StatefulWidget {
   final BuildContext? parentContext;
 
   const _UserItemWidget({
+    super.key,
     required this.user,
     this.onUserSelected,
     this.parentContext,
