@@ -1,3 +1,5 @@
+I'M A GREAT PERSONNNNN!
+
 # qiqstr ─ Cross-platform Nostr client
 Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
 
