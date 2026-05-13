@@ -95,3 +95,5 @@ flutter pub get
 flutter_rust_bridge_codegen generate
 flutter run
 ```
+
+testing
