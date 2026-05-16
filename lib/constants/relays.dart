@@ -60,7 +60,7 @@ Future<List<String>> getRelaySetMainSockets() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final customRelays = prefs.getStringList('custom_main_relays');
-    if (customRelays != null && customRelays.isNotEmpty) {
+    if (customRelays != null) {
       return customRelays;
     }
   } catch (e) {
