@@ -1,5 +1,6 @@
-# qiqstr ─ Cross-platform Nostr client
-Fast, easy-to-use, and complete Nostr client with built-in Bitcoin wallet.
+# qiqstr — Cross-platform Nostr client
+
+A fast, privacy-focused Nostr client with a built-in Bitcoin wallet, built with Flutter and Rust.
 
 ## Supported NIPs
 
@@ -95,3 +96,11 @@ flutter pub get
 flutter_rust_bridge_codegen generate
 flutter run
 ```
+
+## Contributing
+
+Contributions are welcome. Please open an issue or pull request on GitHub.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
