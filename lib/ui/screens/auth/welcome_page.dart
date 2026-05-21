@@ -127,8 +127,11 @@ class _WelcomePageState extends State<WelcomePage> {
       }
     }
 
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 72, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, isLandscape ? 16 : 72, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
