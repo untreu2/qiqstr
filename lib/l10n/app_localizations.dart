@@ -385,7 +385,7 @@ abstract class AppLocalizations {
   /// No description provided for @createNewAccount.
   ///
   /// In en, this message translates to:
-  /// **'Create a New Account'**
+  /// **'Create a New Nostr Account'**
   String get createNewAccount;
 
   /// No description provided for @noFollowingUsers.
@@ -3361,7 +3361,7 @@ abstract class AppLocalizations {
   /// No description provided for @welcomeAlreadyHaveAccount.
   ///
   /// In en, this message translates to:
-  /// **'I already have an account'**
+  /// **'I already have a Nostr account'**
   String get welcomeAlreadyHaveAccount;
 
   /// No description provided for @loginSubtitle.

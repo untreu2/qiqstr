@@ -150,7 +150,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get login => 'Login';
 
   @override
-  String get createNewAccount => 'Create a New Account';
+  String get createNewAccount => 'Create a New Nostr Account';
 
   @override
   String get noFollowingUsers => 'No following users';
@@ -1819,7 +1819,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Message securely with end-to-end encryption.';
 
   @override
-  String get welcomeAlreadyHaveAccount => 'I already have an account';
+  String get welcomeAlreadyHaveAccount => 'I already have a Nostr account';
 
   @override
   String get loginSubtitle =>

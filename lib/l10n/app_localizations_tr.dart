@@ -150,7 +150,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get login => 'Giriş Yap';
 
   @override
-  String get createNewAccount => 'Yeni Hesap Oluştur';
+  String get createNewAccount => 'Yeni Nostr Hesabı Oluştur';
 
   @override
   String get noFollowingUsers => 'Takip edilen kullanıcı yok';
@@ -1785,7 +1785,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Uçtan uca şifreli ve güvenli şekilde mesajlaşın.';
 
   @override
-  String get welcomeAlreadyHaveAccount => 'Zaten bir hesabım var';
+  String get welcomeAlreadyHaveAccount => 'Zaten bir Nostr hesabım var';
 
   @override
   String get loginSubtitle =>

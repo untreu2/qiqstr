@@ -154,7 +154,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get login => 'Anmelden';
 
   @override
-  String get createNewAccount => 'Neues Konto erstellen';
+  String get createNewAccount => 'Neues Nostr-Konto erstellen';
 
   @override
   String get noFollowingUsers => 'Keine folgenden Benutzer';
@@ -1852,7 +1852,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Kommunizieren Sie sicher mit Ende-zu-Ende-Verschlüsselung.';
 
   @override
-  String get welcomeAlreadyHaveAccount => 'Ich habe bereits ein Konto';
+  String get welcomeAlreadyHaveAccount => 'Ich habe bereits ein Nostr-Konto';
 
   @override
   String get loginSubtitle =>
