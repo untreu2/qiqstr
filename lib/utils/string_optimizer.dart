@@ -2,6 +2,29 @@ import 'dart:convert';
 
 import '../src/rust/api/database.dart' as rust_db;
 
+class _LruCache<K, V> {
+  final int maxSize;
+  final Map<K, V> _map = <K, V>{};
+
+  _LruCache(this.maxSize);
+
+  V? get(K key) {
+    final value = _map.remove(key);
+    if (value != null) {
+      _map[key] = value;
+    }
+    return value;
+  }
+
+  void put(K key, V value) {
+    _map.remove(key);
+    _map[key] = value;
+    if (_map.length > maxSize) {
+      _map.remove(_map.keys.first);
+    }
+  }
+}
+
 class StringOptimizer {
   static StringOptimizer? _instance;
   static StringOptimizer get instance => _instance ??= StringOptimizer._();
@@ -10,6 +33,9 @@ class StringOptimizer {
 
   static final Map<String, dynamic> _jsonCache = {};
   static const int _maxJsonCacheSize = 500;
+
+  static final _LruCache<String, Map<String, dynamic>> _parseCache =
+      _LruCache<String, Map<String, dynamic>>(300);
 
   static final RegExp _hexRegExp = RegExp(r'^[0-9a-fA-F]+$');
 
@@ -47,9 +73,15 @@ class StringOptimizer {
   }
 
   Map<String, dynamic> parseContentOptimized(String content) {
+    final cached = _parseCache.get(content);
+    if (cached != null) {
+      return Map<String, dynamic>.from(cached);
+    }
     try {
       final json = rust_db.parseNoteContent(content: content);
-      return jsonDecode(json) as Map<String, dynamic>;
+      final parsed = jsonDecode(json) as Map<String, dynamic>;
+      _parseCache.put(content, parsed);
+      return Map<String, dynamic>.from(parsed);
     } catch (_) {
       return {
         'textParts': [

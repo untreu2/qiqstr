@@ -233,23 +233,10 @@ class _ThreadPageState extends State<ThreadPage> {
           SliverToBoxAdapter(
             child: _buildMainNote(context, state, focusedNote),
           ),
-          if (state.replies.isNotEmpty || state.repliesSynced)
-            SliverToBoxAdapter(
-              child: _buildReplyInputSection(context, state),
-            ),
-          if (!state.repliesSynced && state.replies.isEmpty)
-            SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: context.colors.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          if (state.replies.isNotEmpty || state.repliesSynced)
+          SliverToBoxAdapter(
+            child: _buildReplyInputSection(context, state),
+          ),
+          if (state.replies.isNotEmpty)
             _buildThreadRepliesSliver(context, state, focusedNote),
           SliverToBoxAdapter(
             child:
@@ -275,11 +262,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildMainNote(
       BuildContext context, ThreadLoaded state, Map<String, dynamic> note) {
-    final isRepost = note['isRepost'] as bool? ?? false;
-    if (isRepost) {
-      return const SizedBox.shrink();
-    }
-
     final noteId = note['id'] as String? ?? '';
     final noteKey = _getNoteKey(noteId);
 

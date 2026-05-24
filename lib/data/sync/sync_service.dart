@@ -957,10 +957,15 @@ class SyncService {
             final kind = (eventData['kind'] as num?)?.toInt();
             if (kind == 5) {
               await rust_db.dbProcessDeletionEvents();
+              _notifyFeedChanged();
               return;
             }
             if (muteService.shouldFilterEvent(eventData)) return;
-            _notifyFeedChanged();
+            if (eventId != null && eventId.isNotEmpty) {
+              _db.notifyFeedChange(ids: [eventId]);
+            } else {
+              _notifyFeedChanged();
+            }
             _syncMissingProfilesInBackground([eventData]);
             if (kind == 6) {
               _fetchReferencedNoteForRepost(eventData);

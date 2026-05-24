@@ -79,3 +79,29 @@ class InteractionCountsUpdated extends InteractionEvent {
   @override
   List<Object?> get props => [counts];
 }
+
+class InteractionBookmarkChanged extends InteractionEvent {
+  final bool isBookmarked;
+
+  const InteractionBookmarkChanged(this.isBookmarked);
+
+  @override
+  List<Object?> get props => [isBookmarked];
+}
+
+class InteractionBookmarkToggled extends InteractionEvent {
+  const InteractionBookmarkToggled();
+}
+
+class InteractionPinChanged extends InteractionEvent {
+  final bool isPinned;
+
+  const InteractionPinChanged(this.isPinned);
+
+  @override
+  List<Object?> get props => [isPinned];
+}
+
+class InteractionPinToggled extends InteractionEvent {
+  const InteractionPinToggled();
+}

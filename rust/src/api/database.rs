@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{OnceLock, RwLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use nostr_sdk::prelude::*;
@@ -1458,29 +1458,6 @@ async fn hydrate_notes(
                     "created_at": ev.created_at.as_secs(),
                     "tags": ev_tags,
                 }));
-            }
-        }
-
-        let missing: Vec<EventId> = repost_lookup_ids.into_iter()
-            .filter(|eid| !repost_cache.contains_key(&eid.to_hex()))
-            .collect();
-        if !missing.is_empty() {
-            let relay_filter = Filter::new().ids(missing).kind(Kind::TextNote);
-            let timeout = Duration::from_secs(3);
-            if let Ok(fetched) = client.fetch_events(relay_filter, timeout).await {
-                for ev in fetched {
-                    let ev_tags: Vec<serde_json::Value> = ev.tags.iter()
-                        .map(|t| serde_json::Value::Array(
-                            t.clone().to_vec().iter().map(|s| serde_json::json!(s)).collect()
-                        ))
-                        .collect();
-                    repost_cache.insert(ev.id.to_hex(), serde_json::json!({
-                        "content": ev.content,
-                        "pubkey": ev.pubkey.to_hex(),
-                        "created_at": ev.created_at.as_secs(),
-                        "tags": ev_tags,
-                    }));
-                }
             }
         }
     }

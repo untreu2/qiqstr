@@ -206,6 +206,9 @@ class FeedNote extends Equatable {
         hasReacted,
         hasReposted,
         hasZapped,
+        quotedNote?['id'],
+        embeddedNotes?.length ?? 0,
+        embeddedArticles?.length ?? 0,
       ];
 
   Map<String, dynamic> toMap() {

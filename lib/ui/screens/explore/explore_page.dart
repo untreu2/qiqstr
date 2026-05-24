@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -92,7 +93,7 @@ class _ExplorePageState extends State<ExplorePage> {
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics()),
-                  cacheExtent: 600,
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(600),
                   slivers: [
                     SliverToBoxAdapter(
                       child: SizedBox(

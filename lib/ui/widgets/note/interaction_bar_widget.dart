@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -22,8 +21,6 @@ import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
 import '../common/popup_menu_widget.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../data/services/encrypted_bookmark_service.dart';
-import '../../../data/services/pinned_notes_service.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -45,23 +42,10 @@ class InteractionBar extends StatefulWidget {
 
 class _InteractionBarState extends State<InteractionBar> {
   late final InteractionBloc _interactionBloc;
-  bool _isBookmarked = false;
-  StreamSubscription<void>? _bookmarkChangesSubscription;
 
   @override
   void initState() {
     super.initState();
-    _isBookmarked =
-        EncryptedBookmarkService.instance.isBookmarked(widget.noteId);
-    _bookmarkChangesSubscription =
-        EncryptedBookmarkService.instance.changes.listen((_) {
-      if (mounted) {
-        setState(() {
-          _isBookmarked =
-              EncryptedBookmarkService.instance.isBookmarked(widget.noteId);
-        });
-      }
-    });
     _interactionBloc = InteractionBloc(
       syncService: AppDI.get<SyncService>(),
       feedRepository: AppDI.get<FeedRepository>(),
@@ -87,7 +71,6 @@ class _InteractionBarState extends State<InteractionBar> {
 
   @override
   void dispose() {
-    _bookmarkChangesSubscription?.cancel();
     _interactionBloc.close();
     super.dispose();
   }
@@ -317,28 +300,7 @@ class _InteractionBarState extends State<InteractionBar> {
   void _handleBookmarkTap() {
     HapticFeedback.lightImpact();
     if (!mounted) return;
-
-    final bookmarkService = EncryptedBookmarkService.instance;
-
-    if (_isBookmarked) {
-      bookmarkService.removeBookmark(widget.noteId);
-      setState(() => _isBookmarked = false);
-      _publishBookmarkUpdate();
-    } else {
-      bookmarkService.addBookmark(widget.noteId);
-      setState(() => _isBookmarked = true);
-      _publishBookmarkUpdate();
-    }
-  }
-
-  Future<void> _publishBookmarkUpdate() async {
-    try {
-      final syncService = AppDI.get<SyncService>();
-      final bookmarkService = EncryptedBookmarkService.instance;
-      await syncService.publishBookmark(
-        bookmarkedEventIds: bookmarkService.bookmarkedEventIds,
-      );
-    } catch (_) {}
+    _interactionBloc.add(const InteractionBookmarkToggled());
   }
 
   void _handleDeleteTap() {
@@ -356,38 +318,16 @@ class _InteractionBarState extends State<InteractionBar> {
     _interactionBloc.add(const InteractionNoteDeleted());
   }
 
-  Future<void> _handlePinTap() async {
+  void _handlePinTap(InteractionLoaded state) {
     final l10n = AppLocalizations.of(context)!;
     HapticFeedback.lightImpact();
     if (!mounted) return;
-
-    final pinnedService = PinnedNotesService.instance;
-    final isPinned = pinnedService.isPinned(widget.noteId);
-
-    if (isPinned) {
-      pinnedService.unpinNote(widget.noteId);
-    } else {
-      pinnedService.pinNote(widget.noteId);
-    }
-
-    try {
-      final syncService = AppDI.get<SyncService>();
-      await syncService.publishPinnedNotes(
-        pinnedNoteIds: pinnedService.pinnedNoteIds,
-      );
-      if (mounted) {
-        AppSnackbar.success(
-          context,
-          isPinned ? l10n.noteUnpinned : l10n.notePinned,
-        );
-      }
-    } catch (_) {
-      if (isPinned) {
-        pinnedService.pinNote(widget.noteId);
-      } else {
-        pinnedService.unpinNote(widget.noteId);
-      }
-    }
+    final wasPinned = state.isPinned;
+    _interactionBloc.add(const InteractionPinToggled());
+    AppSnackbar.success(
+      context,
+      wasPinned ? l10n.noteUnpinned : l10n.notePinned,
+    );
   }
 
   @override
@@ -462,7 +402,7 @@ class _InteractionBarState extends State<InteractionBar> {
                     carbonIcon: CarbonIcons.bookmark,
                     activeCarbonIcon: CarbonIcons.bookmark_filled,
                     count: 0,
-                    isActive: _isBookmarked,
+                    isActive: interactionState.isBookmarked,
                     activeColor: colors.textPrimary,
                     inactiveColor: colors.secondary,
                     onTap: _handleBookmarkTap,
@@ -479,7 +419,7 @@ class _InteractionBarState extends State<InteractionBar> {
     );
   }
 
-  List<AppPopupMenuItem> _buildMoreMenuItems() {
+  List<AppPopupMenuItem> _buildMoreMenuItems(InteractionLoaded state) {
     final l10n = AppLocalizations.of(context)!;
     final items = <AppPopupMenuItem>[
       AppPopupMenuItem(
@@ -495,10 +435,9 @@ class _InteractionBarState extends State<InteractionBar> {
     ];
 
     final noteForActions = _interactionBloc.getNoteForActions();
-    final noteAuthor = noteForActions?['pubkey'] as String? ??
-        noteForActions?['pubkey'] as String?;
+    final noteAuthor = noteForActions?['pubkey'] as String?;
     if (noteAuthor == widget.currentUserHex) {
-      final isPinned = PinnedNotesService.instance.isPinned(widget.noteId);
+      final isPinned = state.isPinned;
       items.add(AppPopupMenuItem(
         value: 'pin',
         icon: isPinned ? CarbonIcons.pin_filled : CarbonIcons.pin,
@@ -514,14 +453,14 @@ class _InteractionBarState extends State<InteractionBar> {
     return items;
   }
 
-  void _handleMoreMenuSelection(String value) {
+  void _handleMoreMenuSelection(String value, InteractionLoaded state) {
     switch (value) {
       case 'verify':
         _handleVerifyTap();
       case 'interactions':
         _handleStatsTap();
       case 'pin':
-        _handlePinTap();
+        _handlePinTap(state);
       case 'delete':
         _handleDeleteTap();
     }
@@ -583,8 +522,8 @@ class _InteractionBarState extends State<InteractionBar> {
 
   Widget _buildPopupMenu(dynamic colors, InteractionLoaded state) {
     return AppPopupMenuButton(
-      items: _buildMoreMenuItems(),
-      onSelected: _handleMoreMenuSelection,
+      items: _buildMoreMenuItems(state),
+      onSelected: (v) => _handleMoreMenuSelection(v, state),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Transform.translate(

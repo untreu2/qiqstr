@@ -94,6 +94,12 @@ dependencies:
         path: rust_builder
     mobile_scanner: ^7.1.4
 
+dependency_overrides:
+    carbon_icons:
+        path: third_party/carbon_icons
+    phosphor_flutter:
+        path: third_party/phosphor_flutter
+
 dev_dependencies:
     flutter_test:
         sdk: flutter

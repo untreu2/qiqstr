@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -328,7 +329,7 @@ class _ProfilePageState extends State<ProfilePage> {
           physics: const AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics(),
           ),
-          cacheExtent: 1200,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
           slivers: [
             SliverToBoxAdapter(
               child: _buildProfileInfo(context, state),

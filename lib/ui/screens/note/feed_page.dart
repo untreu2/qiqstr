@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -18,7 +19,6 @@ import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/feed/feed_event.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../presentation/blocs/feed/feed_state.dart';
-import '../../../data/services/interaction_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_bloc.dart';
 import '../../../presentation/blocs/user_search/user_search_event.dart';
@@ -751,13 +751,11 @@ class FeedPageState extends State<FeedPage> {
               buildWhen: (previous, current) {
                 if (previous.runtimeType != current.runtimeType) return true;
                 if (previous is FeedLoaded && current is FeedLoaded) {
-                  return previous.notes.length != current.notes.length ||
-                      previous.notes != current.notes ||
+                  return previous.version != current.version ||
                       previous.isSyncing != current.isSyncing ||
                       previous.isLoadingMore != current.isLoadingMore ||
                       previous.canLoadMore != current.canLoadMore ||
-                      previous.currentUserHex != current.currentUserHex ||
-                      previous.profiles != current.profiles;
+                      previous.currentUserHex != current.currentUserHex;
                 }
                 return true;
               },
@@ -846,6 +844,7 @@ class FeedPageState extends State<FeedPage> {
         ),
       FeedLoaded(
         :final notes,
+        :final notesMaps,
         :final profiles,
         :final currentUserHex,
         :final isLoadingMore,
@@ -891,7 +890,7 @@ class FeedPageState extends State<FeedPage> {
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics()),
-                  cacheExtent: 600,
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(600),
                   slivers: [
                     if (!isHashtagMode)
                       SliverPersistentHeader(
@@ -940,7 +939,7 @@ class FeedPageState extends State<FeedPage> {
                       )
                     else
                       widgets.NoteListWidget(
-                        notes: notes.map((n) => n.toMap()).toList(),
+                        notes: notesMaps,
                         currentUserHex: currentUserHex,
                         notesNotifier: _notesNotifier,
                         profiles: profiles,
@@ -955,8 +954,6 @@ class FeedPageState extends State<FeedPage> {
                           context.read<FeedBloc>().add(const FeedRefreshed());
                         },
                         scrollController: _scrollController,
-                        onNotesVisible: (ids) => InteractionService.instance
-                            .fetchCountsFromRelays(ids),
                       ),
                   ],
                 ),

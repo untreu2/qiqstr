@@ -18,6 +18,8 @@ class InteractionLoaded extends InteractionState {
   final bool hasZapped;
   final bool zapProcessing;
   final bool noteDeleted;
+  final bool isBookmarked;
+  final bool isPinned;
 
   const InteractionLoaded({
     this.reactionCount = 0,
@@ -29,6 +31,8 @@ class InteractionLoaded extends InteractionState {
     this.hasZapped = false,
     this.zapProcessing = false,
     this.noteDeleted = false,
+    this.isBookmarked = false,
+    this.isPinned = false,
   });
 
   InteractionLoaded copyWith({
@@ -41,6 +45,8 @@ class InteractionLoaded extends InteractionState {
     bool? hasZapped,
     bool? zapProcessing,
     bool? noteDeleted,
+    bool? isBookmarked,
+    bool? isPinned,
   }) {
     return InteractionLoaded(
       reactionCount: reactionCount ?? this.reactionCount,
@@ -52,6 +58,8 @@ class InteractionLoaded extends InteractionState {
       hasZapped: hasZapped ?? this.hasZapped,
       zapProcessing: zapProcessing ?? this.zapProcessing,
       noteDeleted: noteDeleted ?? this.noteDeleted,
+      isBookmarked: isBookmarked ?? this.isBookmarked,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 
@@ -66,5 +74,7 @@ class InteractionLoaded extends InteractionState {
         hasZapped,
         zapProcessing,
         noteDeleted,
+        isBookmarked,
+        isPinned,
       ];
 }

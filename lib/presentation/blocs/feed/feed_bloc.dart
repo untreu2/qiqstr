@@ -19,14 +19,18 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   final FollowSetService _followSetService;
 
   static const int _pageSize = 50;
+  static const int _watchLimit = 50;
   String? _currentUserHex;
-  StreamSubscription<List<FeedNote>>? _feedSubscription;
-  int _currentLimit = 50;
+  StreamSubscription<FeedUpdate>? _feedSubscription;
   FeedSortMode _currentSortMode = FeedSortMode.latest;
-  List<FeedNote> _bufferedNotes = [];
+
+  List<FeedNote> _topPageNotes = const [];
+  List<FeedNote> _olderNotes = const [];
+
   bool _acceptNextUpdate = false;
   int _latestDisplayedTimestamp = 0;
   bool _profileLoadInProgress = false;
+  bool _canLoadMoreOlder = true;
 
   FeedBloc({
     required FeedRepository feedRepository,
@@ -76,6 +80,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
 
     _currentUserHex = event.userHex;
+    _resetAccumulators();
 
     final initialProfiles = <String, Map<String, dynamic>>{};
     final cachedCurrentUser =
@@ -95,20 +100,28 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     ));
 
     if (event.hashtag != null) {
-      _syncHashtagInBackground(event.hashtag!, emit);
+      _syncHashtagInBackground(event.hashtag!);
     } else {
-      _syncInBackground(event.userHex, emit);
+      _syncInBackground(event.userHex);
     }
   }
 
-  void _watch(
-    Stream<List<FeedNote>> Function() source,
+  void _resetAccumulators() {
+    _topPageNotes = const [];
+    _olderNotes = const [];
+    _canLoadMoreOlder = true;
+    _latestDisplayedTimestamp = 0;
+    _acceptNextUpdate = false;
+  }
+
+  void _watchStream(
+    Stream<FeedUpdate> Function() source,
     void Function() retry,
   ) {
     _feedSubscription?.cancel();
     _feedSubscription = source().listen(
-      (notes) {
-        if (!isClosed) add(feed_event.FeedNotesUpdated(notes));
+      (update) {
+        if (!isClosed) add(feed_event.FeedNotesUpdated(update));
       },
       onError: (_) {
         if (!isClosed) {
@@ -127,25 +140,33 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     );
   }
 
-  void _watchFeed(String userHex, {int? limit, String? sortMode}) => _watch(
+  void _watchFeed(String userHex, {String? sortMode}) => _watchStream(
         () => _feedRepository.watchFeed(
           userHex,
-          limit: limit ?? _currentLimit,
+          limit: _watchLimit,
           sortMode: sortMode ?? _sortModeKey(_currentSortMode),
         ),
-        () => _watchFeed(userHex, limit: limit, sortMode: sortMode),
+        () => _watchFeed(userHex, sortMode: sortMode),
       );
 
   static String _sortModeKey(FeedSortMode mode) =>
       mode == FeedSortMode.mostInteracted ? 'most_interacted' : 'latest';
 
-  void _watchHashtagFeed(String hashtag, {int? limit}) => _watch(
-        () => _feedRepository.watchHashtag(hashtag,
-            limit: limit ?? _currentLimit),
-        () => _watchHashtagFeed(hashtag, limit: limit),
+  void _watchHashtagFeed(String hashtag) => _watchStream(
+        () => _feedRepository.watchHashtag(hashtag, limit: _watchLimit),
+        () => _watchHashtagFeed(hashtag),
       );
 
-  void _syncHashtagInBackground(String hashtag, Emitter<FeedState>? emit) {
+  void _watchListFeed(List<String> pubkeys) => _watchStream(
+        () => _feedRepository.watchFeed(
+          _currentUserHex ?? '',
+          authors: pubkeys,
+          limit: _watchLimit,
+        ),
+        () => _watchListFeed(pubkeys),
+      );
+
+  void _syncHashtagInBackground(String hashtag) {
     _syncService
         .syncHashtag(hashtag)
         .then((_) {
@@ -205,9 +226,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     FeedLoaded currentState;
     if (state is FeedLoaded) {
       currentState = state as FeedLoaded;
-    } else if (state is FeedEmpty &&
-        event.notes.isNotEmpty &&
-        _currentUserHex != null) {
+    } else if (state is FeedEmpty && _currentUserHex != null) {
       currentState = FeedLoaded(
         notes: const [],
         profiles: const {},
@@ -217,31 +236,41 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       return;
     }
 
-    InteractionService.instance.populateFromNotes(event.notes);
+    final update = event.update;
+    switch (update) {
+      case FeedSnapshot(notes: final snap):
+        _topPageNotes = snap;
+        break;
+      case FeedDelta(changed: final changed, removed: final removed):
+        _applyDelta(changed, removed);
+        break;
+    }
 
-    final sortedNotes = List<FeedNote>.from(event.notes);
-    final canLoadMore = sortedNotes.length >= _currentLimit;
+    final combined = _combinedNotes();
+    InteractionService.instance.populateFromNotes(combined);
+
     final seededProfiles =
-        _buildProfilesFromNotes(sortedNotes, currentState.profiles);
+        _buildProfilesFromNotes(combined, currentState.profiles);
+    final canLoadMore =
+        _canLoadMoreOlder && (combined.length >= _watchLimit);
 
     if (currentState.notes.isEmpty || _acceptNextUpdate) {
       _acceptNextUpdate = false;
-      _bufferedNotes = [];
-      _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
+      _latestDisplayedTimestamp = _getLatestTimestamp(combined);
       emit(currentState.copyWith(
-        notes: sortedNotes,
+        notes: combined,
         profiles: seededProfiles,
         canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
-      _loadProfilesForNotes(sortedNotes);
-      _prefetchEmbeddedContent(sortedNotes);
+      _loadProfilesForNotes(combined);
+      _prefetchEmbeddedContent(combined);
       return;
     }
 
     int othersCount = 0;
     bool hasOwnNew = false;
-    for (final n in sortedNotes) {
+    for (final n in combined) {
       final noteTime = n.repostCreatedAt ?? n.createdAt;
       if (noteTime > _latestDisplayedTimestamp) {
         if (n.pubkey == _currentUserHex) {
@@ -253,9 +282,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
 
     if (othersCount > 0) {
-      _bufferedNotes = sortedNotes;
       final displayedIds = currentState.notes.map((n) => n.id).toSet();
-      final visibleNotes = sortedNotes.where((n) {
+      final visibleNotes = combined.where((n) {
         final noteTime = n.repostCreatedAt ?? n.createdAt;
         return noteTime <= _latestDisplayedTimestamp ||
             displayedIds.contains(n.id) ||
@@ -268,25 +296,77 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         pendingNotesCount: othersCount,
       ));
     } else if (hasOwnNew) {
-      _bufferedNotes = [];
-      _latestDisplayedTimestamp = _getLatestTimestamp(sortedNotes);
+      _latestDisplayedTimestamp = _getLatestTimestamp(combined);
       emit(currentState.copyWith(
-        notes: sortedNotes,
+        notes: combined,
         profiles: seededProfiles,
         canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
     } else {
-      _bufferedNotes = [];
       emit(currentState.copyWith(
-        notes: sortedNotes,
+        notes: combined,
         profiles: seededProfiles,
         canLoadMore: canLoadMore,
         pendingNotesCount: 0,
       ));
     }
-    _loadProfilesForNotes(sortedNotes);
-    _prefetchEmbeddedContent(sortedNotes);
+    _loadProfilesForNotes(combined);
+    _prefetchEmbeddedContent(combined);
+  }
+
+  List<FeedNote> _combinedNotes() {
+    if (_olderNotes.isEmpty) return _topPageNotes;
+    if (_topPageNotes.isEmpty) return _olderNotes;
+    final topIds = <String>{for (final n in _topPageNotes) n.id};
+    final older = _olderNotes.where((n) => !topIds.contains(n.id));
+    return [..._topPageNotes, ...older];
+  }
+
+  void _applyDelta(List<FeedNote> changed, List<String> removed) {
+    if (removed.isNotEmpty) {
+      final removeSet = removed.toSet();
+      _topPageNotes =
+          _topPageNotes.where((n) => !removeSet.contains(n.id)).toList();
+      _olderNotes =
+          _olderNotes.where((n) => !removeSet.contains(n.id)).toList();
+    }
+    if (changed.isEmpty) return;
+
+    final byId = <String, FeedNote>{for (final n in changed) n.id: n};
+
+    var topUpdated = false;
+    final newTop = [
+      for (final n in _topPageNotes)
+        if (byId.containsKey(n.id))
+          (topUpdated = true, byId.remove(n.id)!).$2
+        else
+          n,
+    ];
+
+    var olderUpdated = false;
+    final newOlder = [
+      for (final n in _olderNotes)
+        if (byId.containsKey(n.id))
+          (olderUpdated = true, byId.remove(n.id)!).$2
+        else
+          n,
+    ];
+
+    final brandNew = byId.values.toList();
+    if (brandNew.isNotEmpty) {
+      newTop.addAll(brandNew);
+      topUpdated = true;
+    }
+
+    if (topUpdated) {
+      newTop.sort((a, b) => (b.repostCreatedAt ?? b.createdAt)
+          .compareTo(a.repostCreatedAt ?? a.createdAt));
+      _topPageNotes = newTop;
+    }
+    if (olderUpdated) {
+      _olderNotes = newOlder;
+    }
   }
 
   void _onFeedNewNotesAccepted(
@@ -296,13 +376,13 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     if (state is! FeedLoaded) return;
     final currentState = state as FeedLoaded;
 
-    if (_bufferedNotes.isNotEmpty) {
-      _latestDisplayedTimestamp = _getLatestTimestamp(_bufferedNotes);
+    final combined = _combinedNotes();
+    if (combined.isNotEmpty) {
+      _latestDisplayedTimestamp = _getLatestTimestamp(combined);
       emit(currentState.copyWith(
-        notes: _bufferedNotes,
+        notes: combined,
         pendingNotesCount: 0,
       ));
-      _bufferedNotes = [];
     } else {
       emit(currentState.copyWith(pendingNotesCount: 0));
     }
@@ -318,7 +398,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     return latest;
   }
 
-  void _syncInBackground(String userHex, Emitter<FeedState>? emit) {
+  void _syncInBackground(String userHex) {
     _watchFeed(userHex);
 
     Future.wait([
@@ -333,8 +413,6 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     )
         .then((_) async {
       if (isClosed) return;
-
-      _watchFeed(userHex);
 
       final ownProfile = await _profileRepository.getProfile(userHex);
       if (!isClosed && ownProfile != null) {
@@ -367,22 +445,18 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     Emitter<FeedState> emit,
   ) async {
     if (_currentUserHex == null) return;
-    _currentLimit = _pageSize;
+    _resetAccumulators();
     _acceptNextUpdate = true;
 
     final currentState = state;
     if (currentState is FeedLoaded) {
-      final notesToShow =
-          _bufferedNotes.isNotEmpty ? _bufferedNotes : currentState.notes;
-      _bufferedNotes = [];
       emit(currentState.copyWith(
-        notes: notesToShow,
         isSyncing: true,
         pendingNotesCount: 0,
       ));
 
       if (currentState.hashtag != null) {
-        _syncHashtagInBackground(currentState.hashtag!, null);
+        _syncHashtagInBackground(currentState.hashtag!);
       } else if (currentState.activeListId != null) {
         final listPubkeys =
             _followSetService.pubkeysForList(currentState.activeListId!);
@@ -418,30 +492,77 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     if (state is! FeedLoaded) return;
     final currentState = state as FeedLoaded;
 
-    if (!currentState.canLoadMore) return;
+    if (!currentState.canLoadMore || !_canLoadMoreOlder) return;
+    if (_currentUserHex == null && currentState.hashtag == null) return;
 
-    _acceptNextUpdate = true;
-    _bufferedNotes = [];
     emit(currentState.copyWith(isLoadingMore: true, pendingNotesCount: 0));
 
     try {
-      _currentLimit += _pageSize;
+      final currentCombined = _combinedNotes();
+      final newLimit = currentCombined.length + _pageSize;
 
+      List<FeedNote> page;
       if (currentState.hashtag != null) {
-        _watchHashtagFeed(currentState.hashtag!, limit: _currentLimit);
+        page = const [];
       } else if (currentState.activeListId != null) {
         final listPubkeys =
             _followSetService.pubkeysForList(currentState.activeListId!);
-        if (listPubkeys != null && listPubkeys.isNotEmpty) {
-          _watchListFeed(listPubkeys, limit: _currentLimit);
+        if (listPubkeys == null || listPubkeys.isEmpty) {
+          emit(currentState.copyWith(isLoadingMore: false));
+          return;
         }
-      } else if (_currentUserHex != null) {
-        _watchFeed(_currentUserHex!, limit: _currentLimit);
+        page = await _feedRepository.getFeed(
+          _currentUserHex ?? '',
+          authors: listPubkeys,
+          limit: newLimit,
+        );
+      } else {
+        page = await _feedRepository.getFeed(
+          _currentUserHex!,
+          limit: newLimit,
+        );
       }
 
-      emit(currentState.copyWith(isLoadingMore: false));
-    } catch (e) {
-      emit(currentState.copyWith(isLoadingMore: false));
+      if (isClosed) return;
+
+      final knownIds = <String>{
+        for (final n in _topPageNotes) n.id,
+        for (final n in _olderNotes) n.id,
+      };
+      final additions =
+          page.where((n) => !knownIds.contains(n.id)).toList();
+
+      if (additions.isEmpty) {
+        _canLoadMoreOlder = false;
+        emit(currentState.copyWith(
+          isLoadingMore: false,
+          canLoadMore: false,
+        ));
+        return;
+      }
+
+      _olderNotes = [..._olderNotes, ...additions];
+      _olderNotes.sort((a, b) => (b.repostCreatedAt ?? b.createdAt)
+          .compareTo(a.repostCreatedAt ?? a.createdAt));
+
+      InteractionService.instance.populateFromNotes(additions);
+      _loadProfilesForNotes(additions);
+      _prefetchEmbeddedContent(additions);
+
+      final combined = _combinedNotes();
+      final seededProfiles =
+          _buildProfilesFromNotes(combined, currentState.profiles);
+
+      emit(currentState.copyWith(
+        notes: combined,
+        profiles: seededProfiles,
+        isLoadingMore: false,
+        canLoadMore: additions.length >= _pageSize,
+      ));
+    } catch (_) {
+      if (state is FeedLoaded) {
+        emit((state as FeedLoaded).copyWith(isLoadingMore: false));
+      }
     }
   }
 
@@ -461,7 +582,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     if (state is! FeedLoaded) return;
     final currentState = state as FeedLoaded;
     _currentSortMode = event.mode;
-    _bufferedNotes = [];
+    _resetAccumulators();
     _acceptNextUpdate = true;
     emit(currentState.copyWith(sortMode: event.mode));
     if (_currentUserHex != null) {
@@ -477,8 +598,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final currentState = state as FeedLoaded;
 
     _feedSubscription?.cancel();
-    _currentLimit = _pageSize;
-    _bufferedNotes = [];
+    _resetAccumulators();
 
     if (event.hashtag != null) {
       emit(currentState.copyWith(
@@ -487,7 +607,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           isSyncing: true,
           pendingNotesCount: 0));
       _watchHashtagFeed(event.hashtag!);
-      _syncHashtagInBackground(event.hashtag!, null);
+      _syncHashtagInBackground(event.hashtag!);
     } else {
       emit(currentState.copyWith(
           hashtag: null,
@@ -496,7 +616,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           pendingNotesCount: 0));
       if (_currentUserHex != null) {
         _watchFeed(_currentUserHex!);
-        _syncInBackground(_currentUserHex!, null);
+        _syncInBackground(_currentUserHex!);
       }
     }
   }
@@ -520,9 +640,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   ) {
     if (state is FeedLoaded) {
       final currentState = state as FeedLoaded;
-      final updatedNotes =
-          currentState.notes.where((n) => n.id != event.noteId).toList();
-      emit(currentState.copyWith(notes: updatedNotes));
+      _topPageNotes =
+          _topPageNotes.where((n) => n.id != event.noteId).toList();
+      _olderNotes = _olderNotes.where((n) => n.id != event.noteId).toList();
+      emit(currentState.copyWith(notes: _combinedNotes()));
     }
   }
 
@@ -617,15 +738,6 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
   }
 
-  void _watchListFeed(List<String> pubkeys, {int? limit}) => _watch(
-        () => _feedRepository.watchFeed(
-          _currentUserHex ?? '',
-          authors: pubkeys,
-          limit: limit ?? _currentLimit,
-        ),
-        () => _watchListFeed(pubkeys, limit: limit),
-      );
-
   Future<void> _onFeedListChanged(
     feed_event.FeedListChanged event,
     Emitter<FeedState> emit,
@@ -634,8 +746,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final currentState = state as FeedLoaded;
 
     _feedSubscription?.cancel();
-    _currentLimit = _pageSize;
-    _bufferedNotes = [];
+    _resetAccumulators();
     _acceptNextUpdate = true;
 
     if (event.pubkeys == null || event.pubkeys!.isEmpty) {
@@ -646,7 +757,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         clearActiveList: true,
       ));
       if (_currentUserHex != null) {
-        _syncInBackground(_currentUserHex!, null);
+        _syncInBackground(_currentUserHex!);
       }
     } else {
       emit(currentState.copyWith(

@@ -1,5 +1,5 @@
 import '../../../core/bloc/base/base_event.dart';
-import '../../../domain/entities/feed_note.dart';
+import '../../../data/repositories/feed_repository.dart';
 import 'feed_state.dart';
 
 abstract class FeedEvent extends BaseEvent {
@@ -80,12 +80,12 @@ class FeedProfilesLoaded extends FeedEvent {
 }
 
 class FeedNotesUpdated extends FeedEvent {
-  final List<FeedNote> notes;
+  final FeedUpdate update;
 
-  const FeedNotesUpdated(this.notes);
+  const FeedNotesUpdated(this.update);
 
   @override
-  List<Object?> get props => [notes];
+  List<Object?> get props => [update];
 }
 
 class FeedNewNotesAccepted extends FeedEvent {

@@ -20,8 +20,26 @@ class EmbeddedIdsResult {
   });
 }
 
+sealed class FeedUpdate {
+  const FeedUpdate();
+}
+
+class FeedSnapshot extends FeedUpdate {
+  final List<FeedNote> notes;
+  const FeedSnapshot(this.notes);
+}
+
+class FeedDelta extends FeedUpdate {
+  final List<FeedNote> changed;
+  final List<String> removed;
+  const FeedDelta({
+    this.changed = const [],
+    this.removed = const [],
+  });
+}
+
 abstract interface class FeedRepository {
-  Stream<List<FeedNote>> watchFeed(
+  Stream<FeedUpdate> watchFeed(
     String userPubkey, {
     List<String>? authors,
     int limit,
@@ -56,7 +74,7 @@ abstract interface class FeedRepository {
 
   Future<List<FeedNote>> getLikes(String pubkey, {int limit});
 
-  Stream<List<FeedNote>> watchHashtag(String hashtag, {int limit});
+  Stream<FeedUpdate> watchHashtag(String hashtag, {int limit});
 
   Future<FeedNote?> getNote(String noteId);
 
@@ -92,28 +110,56 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   @override
-  Stream<List<FeedNote>> watchFeed(
+  Stream<FeedUpdate> watchFeed(
     String userPubkey, {
     List<String>? authors,
-    int limit = 100,
+    int limit = 50,
     String sortMode = 'latest',
   }) async* {
     if (userPubkey.isEmpty || userPubkey.length != 64) {
-      yield [];
+      yield const FeedSnapshot(<FeedNote>[]);
       return;
     }
     if (authors != null && authors.isEmpty) {
-      yield [];
+      yield const FeedSnapshot(<FeedNote>[]);
       return;
     }
 
     final initial = await _fetchFeed(userPubkey, authors, limit, sortMode);
-    if (initial.isNotEmpty) yield initial;
+    yield FeedSnapshot(initial);
 
-    yield* _events.onFeedChange
-        .debounceTime(const Duration(milliseconds: 300))
-        .startWith(null)
-        .asyncMap((_) => _fetchFeed(userPubkey, authors, limit, sortMode));
+    final feedEvents = _events.onDbChange
+        .where((e) =>
+            e.type == DbChangeType.feed || e.type == DbChangeType.generic)
+        .bufferTime(const Duration(milliseconds: 300))
+        .where((batch) => batch.isNotEmpty);
+
+    await for (final batch in feedEvents) {
+      final allIds = <String>{};
+      bool hasUntargeted = false;
+      for (final e in batch) {
+        if (e.ids.isEmpty) {
+          hasUntargeted = true;
+          break;
+        }
+        allIds.addAll(e.ids);
+      }
+
+      if (hasUntargeted || allIds.isEmpty) {
+        final snapshot =
+            await _fetchFeed(userPubkey, authors, limit, sortMode);
+        yield FeedSnapshot(snapshot);
+      } else {
+        try {
+          final changed = await getNotesByIds(allIds.toList());
+          if (changed.isNotEmpty) {
+            yield FeedDelta(changed: changed);
+          }
+        } catch (e) {
+          if (kDebugMode) print('[FeedRepository] delta fetch error: $e');
+        }
+      }
+    }
   }
 
   Future<List<FeedNote>> _fetchFeed(
@@ -249,7 +295,7 @@ class FeedRepositoryImpl implements FeedRepository {
     final initial = await fetchBoth();
     yield initial;
 
-    yield* _events.onChange
+    yield* _events.onFeedChange
         .debounceTime(Duration(milliseconds: debounceMs))
         .asyncMap((_) => fetchBoth());
   }
@@ -289,8 +335,8 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   @override
-  Stream<List<FeedNote>> watchHashtag(String hashtag, {int limit = 100}) {
-    return _onChange(() async {
+  Stream<FeedUpdate> watchHashtag(String hashtag, {int limit = 50}) async* {
+    Future<List<FeedNote>> fetch() async {
       try {
         final json = await rust_db.dbGetHydratedHashtagNotes(
           hashtag: hashtag,
@@ -300,12 +346,48 @@ class FeedRepositoryImpl implements FeedRepository {
           currentUserPubkeyHex: _currentUserHex,
         );
         final decoded = jsonDecode(json) as List<dynamic>;
-        return decoded.cast<Map<String, dynamic>>();
+        return decoded
+            .cast<Map<String, dynamic>>()
+            .map((m) => FeedNote.fromMap(m))
+            .toList();
       } catch (e) {
         if (kDebugMode) print('[FeedRepository] watchHashtag error: $e');
-        return <Map<String, dynamic>>[];
+        return <FeedNote>[];
       }
-    }).map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
+    }
+
+    yield FeedSnapshot(await fetch());
+
+    final feedEvents = _events.onDbChange
+        .where((e) =>
+            e.type == DbChangeType.feed || e.type == DbChangeType.generic)
+        .bufferTime(const Duration(milliseconds: 300))
+        .where((batch) => batch.isNotEmpty);
+
+    await for (final batch in feedEvents) {
+      final allIds = <String>{};
+      bool hasUntargeted = false;
+      for (final e in batch) {
+        if (e.ids.isEmpty) {
+          hasUntargeted = true;
+          break;
+        }
+        allIds.addAll(e.ids);
+      }
+
+      if (hasUntargeted || allIds.isEmpty) {
+        yield FeedSnapshot(await fetch());
+      } else {
+        try {
+          final changed = await getNotesByIds(allIds.toList());
+          if (changed.isNotEmpty) {
+            yield FeedDelta(changed: changed);
+          }
+        } catch (e) {
+          if (kDebugMode) print('[FeedRepository] hashtag delta error: $e');
+        }
+      }
+    }
   }
 
   @override
@@ -353,7 +435,7 @@ class FeedRepositoryImpl implements FeedRepository {
 
   @override
   Stream<List<FeedNote>> watchThreadReplies(String noteId, {int limit = 100}) {
-    return _events.onChange
+    return _events.onFeedChange
         .debounceTime(const Duration(milliseconds: 200))
         .startWith(null)
         .asyncMap((_) => getThreadReplies(noteId, limit: limit));

@@ -15,6 +15,8 @@ fn is_persistent_kind(kind: Kind) -> bool {
             | Kind::EventDeletion
             | Kind::MuteList
             | Kind::RelayList
+            | Kind::TextNote
+            | Kind::Repost
     )
 }
 

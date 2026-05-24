@@ -1208,13 +1208,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   Future<List<Map<String, dynamic>>> _fetchNotesByIds(
       List<String> noteIds) async {
-    final results = await Future.wait(
-      noteIds.map((id) => _feedRepository.getNote(id)),
-    );
-    return results
-        .where((n) => n != null)
-        .map((n) => n!.toMap())
-        .toList();
+    if (noteIds.isEmpty) return const [];
+    final notes = await _feedRepository.getNotesByIds(noteIds);
+    return notes.map((n) => n.toMap()).toList();
   }
 
   void _syncPinnedNotesInBackground(String pubkeyHex) async {

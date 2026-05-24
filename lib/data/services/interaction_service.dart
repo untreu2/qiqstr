@@ -89,7 +89,7 @@ class InteractionService {
       if (_cache.containsKey(noteId)) {
         final cached = _cache[noteId]!;
         if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
-          final merged = _mergeCounts(cached, initialCounts);
+          final merged = _adoptFresh(noteId, initialCounts);
           _cache[noteId] = merged;
           Future.microtask(() => _emit(noteId, merged));
         } else {
@@ -99,8 +99,8 @@ class InteractionService {
           _scheduleBatchLoad(noteId);
         }
       } else if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
-        _cache[noteId] = initialCounts;
-        Future.microtask(() => _emit(noteId, initialCounts));
+        _cache[noteId] = _adoptFresh(noteId, initialCounts);
+        Future.microtask(() => _emit(noteId, _cache[noteId]!));
         _scheduleBatchLoad(noteId);
       } else {
         _scheduleBatchLoad(noteId);
@@ -109,7 +109,7 @@ class InteractionService {
       _streamRefCounts[noteId] = (_streamRefCounts[noteId] ?? 0) + 1;
       final cached = _cache[noteId]!;
       if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
-        final merged = _mergeCounts(cached, initialCounts);
+        final merged = _adoptFresh(noteId, initialCounts);
         _cache[noteId] = merged;
         Future.microtask(() => _emit(noteId, merged));
       } else {
@@ -117,8 +117,8 @@ class InteractionService {
       }
     } else if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
       _streamRefCounts[noteId] = (_streamRefCounts[noteId] ?? 0) + 1;
-      _cache[noteId] = initialCounts;
-      Future.microtask(() => _emit(noteId, initialCounts));
+      _cache[noteId] = _adoptFresh(noteId, initialCounts);
+      Future.microtask(() => _emit(noteId, _cache[noteId]!));
       _scheduleBatchLoad(noteId);
     } else {
       _streamRefCounts[noteId] = (_streamRefCounts[noteId] ?? 0) + 1;
@@ -137,15 +137,15 @@ class InteractionService {
         !counts.hasZapped;
   }
 
-  InteractionCounts _mergeCounts(InteractionCounts a, InteractionCounts b) {
+  InteractionCounts _adoptFresh(String noteId, InteractionCounts fresh) {
     return InteractionCounts(
-      reactions: a.reactions > b.reactions ? a.reactions : b.reactions,
-      reposts: a.reposts > b.reposts ? a.reposts : b.reposts,
-      replies: a.replies > b.replies ? a.replies : b.replies,
-      zapAmount: a.zapAmount > b.zapAmount ? a.zapAmount : b.zapAmount,
-      hasReacted: a.hasReacted || b.hasReacted,
-      hasReposted: a.hasReposted || b.hasReposted,
-      hasZapped: a.hasZapped || b.hasZapped,
+      reactions: fresh.reactions,
+      reposts: fresh.reposts,
+      replies: fresh.replies,
+      zapAmount: fresh.zapAmount,
+      hasReacted: _localReactions.contains(noteId) || fresh.hasReacted,
+      hasReposted: _localReposts.contains(noteId) || fresh.hasReposted,
+      hasZapped: _localZaps.contains(noteId) || fresh.hasZapped,
     );
   }
 
@@ -193,27 +193,15 @@ class InteractionService {
   }) {
     final existing = _cache[noteId];
     final counts = InteractionCounts(
-      reactions: existing != null && existing.reactions > newReactions
-          ? existing.reactions
-          : newReactions,
-      reposts: existing != null && existing.reposts > newReposts
-          ? existing.reposts
-          : newReposts,
-      replies: existing != null && existing.replies > newReplies
-          ? existing.replies
-          : newReplies,
-      zapAmount: existing != null && existing.zapAmount > newZaps
-          ? existing.zapAmount
-          : newZaps,
-      hasReacted: _localReactions.contains(noteId) ||
-          (d['hasReacted'] == true) ||
-          (existing?.hasReacted ?? false),
-      hasReposted: _localReposts.contains(noteId) ||
-          (d['hasReposted'] == true) ||
-          (existing?.hasReposted ?? false),
-      hasZapped: _localZaps.contains(noteId) ||
-          (d['hasZapped'] == true) ||
-          (existing?.hasZapped ?? false),
+      reactions: newReactions,
+      reposts: newReposts,
+      replies: newReplies,
+      zapAmount: newZaps,
+      hasReacted:
+          _localReactions.contains(noteId) || (d['hasReacted'] == true),
+      hasReposted:
+          _localReposts.contains(noteId) || (d['hasReposted'] == true),
+      hasZapped: _localZaps.contains(noteId) || (d['hasZapped'] == true),
     );
     if (existing == null || _differs(existing, counts)) {
       _cache[noteId] = counts;
@@ -268,12 +256,7 @@ class InteractionService {
   }
 
   void prePopulateCache(String noteId, InteractionCounts counts) {
-    final existing = _cache[noteId];
-    if (existing == null) {
-      _cache[noteId] = counts;
-    } else {
-      _cache[noteId] = _mergeCounts(existing, counts);
-    }
+    _cache[noteId] = _adoptFresh(noteId, counts);
   }
 
   Future<void> refreshInteractions(String noteId) async {

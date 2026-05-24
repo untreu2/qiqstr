@@ -20,6 +20,7 @@ class FeedLoading extends FeedState {
 
 class FeedLoaded extends FeedState {
   final List<FeedNote> notes;
+  final List<Map<String, dynamic>> notesMaps;
   final Map<String, Map<String, dynamic>> profiles;
   final String currentUserHex;
   final bool canLoadMore;
@@ -31,26 +32,69 @@ class FeedLoaded extends FeedState {
   final int pendingNotesCount;
   final String? activeListId;
   final String? activeListTitle;
+  final int version;
 
-  const FeedLoaded({
+  const FeedLoaded._({
     required this.notes,
+    required this.notesMaps,
     required this.profiles,
     required this.currentUserHex,
-    this.canLoadMore = true,
-    this.viewMode = NoteViewMode.list,
-    this.sortMode = FeedSortMode.latest,
-    this.hashtag,
-    this.isLoadingMore = false,
-    this.isSyncing = false,
-    this.pendingNotesCount = 0,
-    this.activeListId,
-    this.activeListTitle,
+    required this.canLoadMore,
+    required this.viewMode,
+    required this.sortMode,
+    required this.hashtag,
+    required this.isLoadingMore,
+    required this.isSyncing,
+    required this.pendingNotesCount,
+    required this.activeListId,
+    required this.activeListTitle,
+    required this.version,
   });
+
+  factory FeedLoaded({
+    required List<FeedNote> notes,
+    required Map<String, Map<String, dynamic>> profiles,
+    required String currentUserHex,
+    bool canLoadMore = true,
+    NoteViewMode viewMode = NoteViewMode.list,
+    FeedSortMode sortMode = FeedSortMode.latest,
+    String? hashtag,
+    bool isLoadingMore = false,
+    bool isSyncing = false,
+    int pendingNotesCount = 0,
+    String? activeListId,
+    String? activeListTitle,
+    int version = 0,
+    List<Map<String, dynamic>>? notesMaps,
+  }) {
+    return FeedLoaded._(
+      notes: notes,
+      notesMaps: notesMaps ?? _buildMaps(notes),
+      profiles: profiles,
+      currentUserHex: currentUserHex,
+      canLoadMore: canLoadMore,
+      viewMode: viewMode,
+      sortMode: sortMode,
+      hashtag: hashtag,
+      isLoadingMore: isLoadingMore,
+      isSyncing: isSyncing,
+      pendingNotesCount: pendingNotesCount,
+      activeListId: activeListId,
+      activeListTitle: activeListTitle,
+      version: version,
+    );
+  }
+
+  static List<Map<String, dynamic>> _buildMaps(List<FeedNote> notes) {
+    if (notes.isEmpty) return const [];
+    return List<Map<String, dynamic>>.unmodifiable(
+      notes.map((n) => n.toMap()),
+    );
+  }
 
   @override
   List<Object?> get props => [
-        notes,
-        profiles,
+        version,
         currentUserHex,
         canLoadMore,
         viewMode,
@@ -78,8 +122,12 @@ class FeedLoaded extends FeedState {
     String? activeListTitle,
     bool clearActiveList = false,
   }) {
-    return FeedLoaded(
+    final notesChanged = notes != null && !identical(notes, this.notes);
+    final profilesChanged =
+        profiles != null && !identical(profiles, this.profiles);
+    return FeedLoaded._(
       notes: notes ?? this.notes,
+      notesMaps: notesChanged ? _buildMaps(notes) : notesMaps,
       profiles: profiles ?? this.profiles,
       currentUserHex: currentUserHex ?? this.currentUserHex,
       canLoadMore: canLoadMore ?? this.canLoadMore,
@@ -89,9 +137,11 @@ class FeedLoaded extends FeedState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isSyncing: isSyncing ?? this.isSyncing,
       pendingNotesCount: pendingNotesCount ?? this.pendingNotesCount,
-      activeListId: clearActiveList ? null : (activeListId ?? this.activeListId),
+      activeListId:
+          clearActiveList ? null : (activeListId ?? this.activeListId),
       activeListTitle:
           clearActiveList ? null : (activeListTitle ?? this.activeListTitle),
+      version: (notesChanged || profilesChanged) ? version + 1 : version,
     );
   }
 }

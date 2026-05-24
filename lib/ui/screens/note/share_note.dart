@@ -955,10 +955,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
       child: ReorderableListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: state.mediaUrls.length,
-        onReorder: (oldIndex, newIndex) {
-          _noteBloc.add(NoteMediaRemoved(state.mediaUrls[oldIndex]));
-          if (newIndex > oldIndex) newIndex -= 1;
-          _noteBloc.add(NoteMediaUploaded([state.mediaUrls[oldIndex]]));
+        onReorderItem: (oldIndex, newIndex) {
+          final url = state.mediaUrls[oldIndex];
+          _noteBloc.add(NoteMediaRemoved(url));
+          _noteBloc.add(NoteMediaUploaded([url]));
         },
         itemBuilder: (context, index) {
           final url = state.mediaUrls[index];

@@ -93,7 +93,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final focusedNoteId = chain.last;
 
       if (event.initialNoteData != null) {
-        final noteData = event.initialNoteData!;
+        final noteData = _stripRepostMetadata(
+          event.initialNoteData!,
+          focusedNoteId,
+        );
         final noteId = noteData['id'] as String? ?? focusedNoteId;
         final structure = ThreadStructure(
           rootNote: noteData,
@@ -357,6 +360,21 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       repliesSynced: repliesSynced,
       quoteCount: quoteCount,
     );
+  }
+
+  static Map<String, dynamic> _stripRepostMetadata(
+    Map<String, dynamic> noteData,
+    String focusedNoteId,
+  ) {
+    final stripped = Map<String, dynamic>.from(noteData);
+    stripped['isRepost'] = false;
+    stripped.remove('repostedBy');
+    stripped.remove('repostCreatedAt');
+    if ((stripped['id'] as String? ?? '') != focusedNoteId &&
+        focusedNoteId.isNotEmpty) {
+      stripped['id'] = focusedNoteId;
+    }
+    return stripped;
   }
 
   static bool _noteIsQuoteOf(Map<String, dynamic> note, String targetNoteId) {
