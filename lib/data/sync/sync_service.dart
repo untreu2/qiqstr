@@ -324,25 +324,31 @@ class SyncService {
     });
   }
 
-  Future<void> syncNotifications(String userPubkey) async {
+  Future<void> syncNotifications(String userPubkey,
+      {bool force = false}) async {
     final key = 'notifications_$userPubkey';
-    if (!_shouldSync(key)) return;
+    if (!force && !_shouldSync(key)) return;
 
     await _sync('notifications', () async {
-      final since = _getSincestamp(key) ??
-          (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
+      final lastSync = _lastSyncTime[key];
+      final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final since = lastSync != null
+          ? (lastSync.millisecondsSinceEpoch ~/ 1000 - 60)
+          : (nowSecs - 86400 * 30);
+      final limit = lastSync == null ? 300 : 150;
+
       final filter = <String, dynamic>{
         '#p': [userPubkey],
         'kinds': [1, 6, 7, 9735],
         'since': since,
-        'limit': 100,
+        'limit': limit,
       };
       await _fetchAndStore(filter);
       _db.notifyNotificationChange();
 
       final missingPubkeys = await rust_db.dbGetNotificationsMissingProfiles(
         userPubkeyHex: userPubkey,
-        limit: 100,
+        limit: 200,
       );
       if (missingPubkeys.isNotEmpty) {
         await _syncMissingProfiles(missingPubkeys.toSet());
@@ -351,6 +357,45 @@ class SyncService {
 
       _markSynced(key);
     });
+  }
+
+  Future<int> syncOlderNotifications(
+    String userPubkey, {
+    required int beforeTimestamp,
+    int limit = 100,
+    int windowDays = 90,
+  }) async {
+    if (beforeTimestamp <= 0) return 0;
+    final since = beforeTimestamp - 86400 * windowDays;
+    final filter = <String, dynamic>{
+      '#p': [userPubkey],
+      'kinds': [1, 6, 7, 9735],
+      'until': beforeTimestamp - 1,
+      'since': since.clamp(0, beforeTimestamp - 1),
+      'limit': limit,
+    };
+    try {
+      final events = await _relayService.fetchEvents(filter, timeoutSecs: 12);
+      if (events.isNotEmpty) {
+        await rust_db.dbSaveEvents(eventsJson: jsonEncode(events));
+        _db.notifyNotificationChange();
+
+        final missingPubkeys = await rust_db.dbGetNotificationsMissingProfiles(
+          userPubkeyHex: userPubkey,
+          limit: 200,
+        );
+        if (missingPubkeys.isNotEmpty) {
+          await _syncMissingProfiles(missingPubkeys.toSet());
+          _notifyProfileChanged();
+        }
+      }
+      return events.length;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[SyncService] syncOlderNotifications error: $e');
+      }
+      return 0;
+    }
   }
 
   Future<void> syncFollowingList(String userPubkey) async {

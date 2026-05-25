@@ -812,6 +812,56 @@ pub async fn db_get_interaction_counts(note_id: String) -> Result<String> {
     Ok(serde_json::json!({"reactions":0,"reposts":0,"zaps":0,"replies":0}).to_string())
 }
 
+pub(crate) fn extract_reply_parent_id(event: &Event) -> Option<String> {
+    let mut reply_marker: Option<String> = None;
+    let mut root_marker: Option<String> = None;
+    let mut positional: Vec<String> = Vec::new();
+
+    for tag in event.tags.iter() {
+        let vec = tag.clone().to_vec();
+        if vec.len() < 2 || vec[0] != "e" {
+            continue;
+        }
+        let ref_id = vec[1].clone();
+        if ref_id.is_empty() {
+            continue;
+        }
+        let marker = vec.get(3).map(|s| s.as_str()).unwrap_or("");
+        match marker {
+            "reply" => reply_marker = Some(ref_id),
+            "root" => root_marker = Some(ref_id),
+            "mention" => {}
+            _ => positional.push(ref_id),
+        }
+    }
+
+    if let Some(id) = reply_marker {
+        return Some(id);
+    }
+    if let Some(id) = root_marker {
+        return Some(id);
+    }
+    positional.into_iter().last()
+}
+
+pub(crate) fn extract_first_e_tag(event: &Event) -> Option<String> {
+    for tag in event.tags.iter() {
+        let tag_kind = tag.kind();
+        if matches!(
+            tag_kind,
+            TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })
+        ) {
+            if let Some(content) = tag.content() {
+                let s = content.to_string();
+                if !s.is_empty() {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub async fn db_get_batch_interaction_counts(note_ids: Vec<String>) -> Result<String> {
     let client = get_client_pub().await?;
 
@@ -830,36 +880,44 @@ pub async fn db_get_batch_interaction_counts(note_ids: Vec<String>) -> Result<St
     let events = client.database().query(filter).await?;
 
     let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
+    let mut counted_events: HashMap<String, HashSet<String>> = HashMap::new();
     for nid in &note_ids {
         counts.insert(nid.clone(), [0; 4]);
+        counted_events.insert(nid.clone(), HashSet::new());
     }
 
     for event in events.iter() {
         let kind = event.kind;
+        let event_id_hex = event.id.to_hex();
+
         let zap_sats = if kind == Kind::ZapReceipt {
             extract_zap_amount_sats(event) as usize
         } else {
             0
         };
 
-        let mut counted_for: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for tag in event.tags.iter() {
-            let tag_kind = tag.kind();
-            if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
-                if let Some(ref_id) = tag.content() {
-                    let ref_hex = ref_id.to_string();
-                    if counted_for.contains(&ref_hex) {
-                        continue;
+        if kind == Kind::TextNote {
+            if let Some(parent_id) = extract_reply_parent_id(event) {
+                if let Some(c) = counts.get_mut(&parent_id) {
+                    let seen = counted_events.get_mut(&parent_id).unwrap();
+                    if seen.insert(event_id_hex.clone()) {
+                        c[3] += 1;
                     }
-                    if let Some(c) = counts.get_mut(&ref_hex) {
-                        counted_for.insert(ref_hex);
-                        match kind {
-                            k if k == Kind::Reaction => c[0] += 1,
-                            k if k == Kind::Repost => c[1] += 1,
-                            k if k == Kind::ZapReceipt => c[2] += zap_sats,
-                            k if k == Kind::TextNote => c[3] += 1,
-                            _ => {}
-                        }
+                }
+            }
+            continue;
+        }
+
+        let target = extract_first_e_tag(event);
+        if let Some(target_id) = target {
+            if let Some(c) = counts.get_mut(&target_id) {
+                let seen = counted_events.get_mut(&target_id).unwrap();
+                if seen.insert(event_id_hex) {
+                    match kind {
+                        k if k == Kind::Reaction => c[0] += 1,
+                        k if k == Kind::Repost => c[1] += 1,
+                        k if k == Kind::ZapReceipt => c[2] += zap_sats,
+                        _ => {}
                     }
                 }
             }
@@ -907,16 +965,19 @@ pub async fn db_get_batch_interaction_data(
     let mut user_reacted: HashMap<String, bool> = HashMap::new();
     let mut user_reposted: HashMap<String, bool> = HashMap::new();
     let mut user_zapped: HashMap<String, bool> = HashMap::new();
+    let mut counted_events: HashMap<String, HashSet<String>> = HashMap::new();
 
     for nid in &note_ids {
         counts.insert(nid.clone(), [0; 4]);
         user_reacted.insert(nid.clone(), false);
         user_reposted.insert(nid.clone(), false);
         user_zapped.insert(nid.clone(), false);
+        counted_events.insert(nid.clone(), HashSet::new());
     }
 
     for event in events.iter() {
         let kind = event.kind;
+        let event_id_hex = event.id.to_hex();
         let is_user = user_pk.as_ref().map_or(false, |pk| event.pubkey == *pk);
 
         let zap_sats = if kind == Kind::ZapReceipt {
@@ -934,39 +995,43 @@ pub async fn db_get_batch_interaction_data(
             false
         };
 
-        let mut counted_for: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for tag in event.tags.iter() {
-            let tag_kind = tag.kind();
-            if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
-                if let Some(ref_id) = tag.content() {
-                    let ref_hex = ref_id.to_string();
-                    if counted_for.contains(&ref_hex) {
-                        continue;
+        if kind == Kind::TextNote {
+            if let Some(parent_id) = extract_reply_parent_id(event) {
+                if let Some(c) = counts.get_mut(&parent_id) {
+                    let seen = counted_events.get_mut(&parent_id).unwrap();
+                    if seen.insert(event_id_hex.clone()) {
+                        c[3] += 1;
                     }
-                    if let Some(c) = counts.get_mut(&ref_hex) {
-                        counted_for.insert(ref_hex.clone());
-                        match kind {
-                            k if k == Kind::Reaction => {
-                                c[0] += 1;
-                                if is_user {
-                                    user_reacted.insert(ref_hex, true);
-                                }
+                }
+            }
+            continue;
+        }
+
+        let target = extract_first_e_tag(event);
+        if let Some(target_id) = target {
+            if let Some(c) = counts.get_mut(&target_id) {
+                let seen = counted_events.get_mut(&target_id).unwrap();
+                if seen.insert(event_id_hex) {
+                    match kind {
+                        k if k == Kind::Reaction => {
+                            c[0] += 1;
+                            if is_user {
+                                user_reacted.insert(target_id, true);
                             }
-                            k if k == Kind::Repost => {
-                                c[1] += 1;
-                                if is_user {
-                                    user_reposted.insert(ref_hex, true);
-                                }
-                            }
-                            k if k == Kind::ZapReceipt => {
-                                c[2] += zap_sats;
-                                if is_zap_sender {
-                                    user_zapped.insert(ref_hex, true);
-                                }
-                            }
-                            k if k == Kind::TextNote => c[3] += 1,
-                            _ => {}
                         }
+                        k if k == Kind::Repost => {
+                            c[1] += 1;
+                            if is_user {
+                                user_reposted.insert(target_id, true);
+                            }
+                        }
+                        k if k == Kind::ZapReceipt => {
+                            c[2] += zap_sats;
+                            if is_zap_sender {
+                                user_zapped.insert(target_id, true);
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -1687,6 +1752,17 @@ async fn hydrate_notes(
             zap_counts.insert(nid.clone(), 0);
         }
 
+        let mut counted_reply_events: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut counted_reaction_events: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut counted_repost_events: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut counted_zap_events: HashMap<String, HashSet<String>> = HashMap::new();
+        for nid in &note_ids {
+            counted_reply_events.insert(nid.clone(), HashSet::new());
+            counted_reaction_events.insert(nid.clone(), HashSet::new());
+            counted_repost_events.insert(nid.clone(), HashSet::new());
+            counted_zap_events.insert(nid.clone(), HashSet::new());
+        }
+
         for ev in local_events.iter() {
             let is_user = user_pk.as_ref().map_or(false, |pk| ev.pubkey == *pk);
             let is_zap_sender = if ev.kind == Kind::ZapReceipt {
@@ -1702,44 +1778,62 @@ async fn hydrate_notes(
             } else {
                 0
             };
+            let ev_hex = ev.id.to_hex();
 
-            let mut counted_for: HashSet<String> = HashSet::new();
-            for tag in ev.tags.iter() {
-                let tag_kind = tag.kind();
-                if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
-                    if let Some(ref_id) = tag.content() {
-                        let ref_hex = ref_id.to_string();
-                        if counted_for.contains(&ref_hex) { continue; }
-                        if reply_counts.contains_key(&ref_hex) {
-                            counted_for.insert(ref_hex.clone());
-                            match ev.kind {
-                                k if k == Kind::TextNote => {
-                                    if let Some(c) = reply_counts.get_mut(&ref_hex) {
-                                        *c += 1;
-                                    }
-                                }
-                                k if k == Kind::Reaction => {
-                                    if let Some(c) = reaction_counts.get_mut(&ref_hex) {
-                                        *c += 1;
-                                    }
-                                    if is_user { has_reacted.insert(ref_hex); }
-                                }
-                                k if k == Kind::Repost => {
-                                    if let Some(c) = repost_counts.get_mut(&ref_hex) {
-                                        *c += 1;
-                                    }
-                                    if is_user { has_reposted.insert(ref_hex); }
-                                }
-                                k if k == Kind::ZapReceipt => {
-                                    if let Some(c) = zap_counts.get_mut(&ref_hex) {
-                                        *c += zap_sats;
-                                    }
-                                    if is_zap_sender { has_zapped.insert(ref_hex); }
-                                }
-                                _ => {}
+            if ev.kind == Kind::TextNote {
+                if let Some(parent_id) = extract_reply_parent_id(ev) {
+                    if reply_counts.contains_key(&parent_id) {
+                        let seen = counted_reply_events.get_mut(&parent_id).unwrap();
+                        if seen.insert(ev_hex.clone()) {
+                            if let Some(c) = reply_counts.get_mut(&parent_id) {
+                                *c += 1;
                             }
                         }
                     }
+                }
+                continue;
+            }
+
+            let target = extract_first_e_tag(ev);
+            if let Some(ref_hex) = target {
+                if !reaction_counts.contains_key(&ref_hex) {
+                    continue;
+                }
+                match ev.kind {
+                    k if k == Kind::Reaction => {
+                        let seen = counted_reaction_events.get_mut(&ref_hex).unwrap();
+                        if seen.insert(ev_hex.clone()) {
+                            if let Some(c) = reaction_counts.get_mut(&ref_hex) {
+                                *c += 1;
+                            }
+                            if is_user {
+                                has_reacted.insert(ref_hex);
+                            }
+                        }
+                    }
+                    k if k == Kind::Repost => {
+                        let seen = counted_repost_events.get_mut(&ref_hex).unwrap();
+                        if seen.insert(ev_hex.clone()) {
+                            if let Some(c) = repost_counts.get_mut(&ref_hex) {
+                                *c += 1;
+                            }
+                            if is_user {
+                                has_reposted.insert(ref_hex);
+                            }
+                        }
+                    }
+                    k if k == Kind::ZapReceipt => {
+                        let seen = counted_zap_events.get_mut(&ref_hex).unwrap();
+                        if seen.insert(ev_hex.clone()) {
+                            if let Some(c) = zap_counts.get_mut(&ref_hex) {
+                                *c += zap_sats;
+                            }
+                            if is_zap_sender {
+                                has_zapped.insert(ref_hex);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -2251,12 +2345,11 @@ async fn hydrate_notification_events(
         content: String,
         created_at: u64,
         zap_amount: Option<u64>,
-        needs_author_check: bool,
     }
 
     let mut pending: Vec<PendingItem> = Vec::new();
     let mut pubkeys_needed: HashSet<String> = HashSet::new();
-    let mut target_ids_to_check: HashSet<String> = HashSet::new();
+    let mut target_ids_for_author_filter: HashSet<String> = HashSet::new();
 
     for event in events {
         if event.pubkey.to_hex() == user_pubkey_hex {
@@ -2273,48 +2366,63 @@ async fn hydrate_notification_events(
             .map(|tag| tag.clone().to_vec())
             .collect();
 
+        let mut user_is_p_tagged = false;
+        for tag in &tags {
+            if tag.len() >= 2 && tag[0] == "p" && tag[1] == user_pubkey_hex {
+                user_is_p_tagged = true;
+                break;
+            }
+        }
+
         let notification_type;
         let mut target_note_id: Option<String> = None;
         let mut zap_amount: Option<u64> = None;
         let mut from_pubkey = pubkey.clone();
-        let mut needs_author_check = false;
 
         match kind_num {
             1 => {
-                let mut has_q_tag = false;
+                if !user_is_p_tagged {
+                    continue;
+                }
+
                 let mut q_target_id: Option<String> = None;
-                let mut has_reply_marker = false;
-                let mut first_e_id: Option<String> = None;
+                let mut reply_target_id: Option<String> = None;
+                let mut root_target_id: Option<String> = None;
+                let mut positional_e_tags: Vec<String> = Vec::new();
+                let mut has_q_tag = false;
 
                 for tag in &tags {
                     if tag.len() >= 2 && tag[0] == "q" {
                         has_q_tag = true;
-                        q_target_id = Some(tag[1].clone());
-                    } else if tag.len() >= 2 && tag[0] == "e" {
-                        if first_e_id.is_none() {
-                            first_e_id = Some(tag[1].clone());
+                        if q_target_id.is_none() {
+                            q_target_id = Some(tag[1].clone());
                         }
-                        if tag.len() >= 4 && (tag[3] == "reply" || tag[3] == "root") {
-                            has_reply_marker = true;
-                            target_note_id = Some(tag[1].clone());
+                    } else if tag.len() >= 2 && tag[0] == "e" {
+                        let marker = tag.get(3).map(|s| s.as_str()).unwrap_or("");
+                        match marker {
+                            "reply" => reply_target_id = Some(tag[1].clone()),
+                            "root" => root_target_id = Some(tag[1].clone()),
+                            "mention" => {}
+                            _ => positional_e_tags.push(tag[1].clone()),
                         }
                     }
                 }
 
-                if has_q_tag && !has_reply_marker {
+                if let Some(tid) = reply_target_id.or(root_target_id.clone()) {
+                    notification_type = "reply".to_string();
+                    target_note_id = Some(tid);
+                } else if !positional_e_tags.is_empty() {
+                    notification_type = "reply".to_string();
+                    target_note_id = Some(positional_e_tags.last().unwrap().clone());
+                } else if has_q_tag {
                     notification_type = "quote".to_string();
                     target_note_id = q_target_id;
-                } else if has_reply_marker {
-                    notification_type = "reply".to_string();
-                    needs_author_check = true;
-                    if let Some(ref tid) = target_note_id {
-                        target_ids_to_check.insert(tid.clone());
-                    }
-                } else if first_e_id.is_some() {
-                    notification_type = "mention".to_string();
-                    target_note_id = first_e_id;
                 } else {
                     notification_type = "mention".to_string();
+                }
+
+                if let Some(ref tid) = target_note_id {
+                    target_ids_for_author_filter.insert(tid.clone());
                 }
             }
             6 => {
@@ -2325,22 +2433,13 @@ async fn hydrate_notification_events(
                         break;
                     }
                 }
-                needs_author_check = true;
-                if let Some(ref tid) = target_note_id {
-                    target_ids_to_check.insert(tid.clone());
-                }
             }
             7 => {
                 notification_type = "reaction".to_string();
                 for tag in &tags {
                     if tag.len() >= 2 && tag[0] == "e" {
                         target_note_id = Some(tag[1].clone());
-                        break;
                     }
-                }
-                needs_author_check = true;
-                if let Some(ref tid) = target_note_id {
-                    target_ids_to_check.insert(tid.clone());
                 }
             }
             9735 => {
@@ -2359,9 +2458,7 @@ async fn hydrate_notification_events(
                     }
                 }
             }
-            _ => {
-                notification_type = "mention".to_string();
-            }
+            _ => continue,
         }
 
         pubkeys_needed.insert(from_pubkey.clone());
@@ -2374,18 +2471,17 @@ async fn hydrate_notification_events(
             content,
             created_at,
             zap_amount,
-            needs_author_check,
         });
     }
 
     let mut target_note_authors: HashMap<String, String> = HashMap::new();
-    if !target_ids_to_check.is_empty() {
-        let ids: Vec<EventId> = target_ids_to_check
+    if !target_ids_for_author_filter.is_empty() {
+        let ids: Vec<EventId> = target_ids_for_author_filter
             .iter()
             .filter_map(|id| EventId::from_hex(id).ok())
             .collect();
         if !ids.is_empty() {
-            let filter = Filter::new().ids(ids).kind(Kind::TextNote);
+            let filter = Filter::new().ids(ids);
             let target_events = client.database().query(filter).await?;
             for te in target_events {
                 target_note_authors.insert(te.id.to_hex(), te.pubkey.to_hex());
@@ -2395,12 +2491,13 @@ async fn hydrate_notification_events(
 
     let mut items: Vec<serde_json::Value> = Vec::new();
 
-    for mut item in pending {
-        if item.needs_author_check {
+    for item in pending {
+        if item.notification_type == "reply" {
             if let Some(ref tid) = item.target_note_id {
-                let author = target_note_authors.get(tid).map(|s| s.as_str()).unwrap_or("");
-                if author != user_pubkey_hex {
-                    item.notification_type = "mention".to_string();
+                if let Some(author) = target_note_authors.get(tid) {
+                    if author != user_pubkey_hex {
+                        continue;
+                    }
                 }
             }
         }
@@ -2469,11 +2566,60 @@ pub async fn db_get_hydrated_notifications(
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
 
-    let filtered: Vec<Event> = events.into_iter()
+    let filtered: Vec<Event> = events
+        .into_iter()
+        .filter(|e| e.pubkey.to_hex() != user_pubkey_hex)
         .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
     hydrate_notification_events(&client, &filtered, &user_pubkey_hex).await
+}
+
+pub async fn db_get_hydrated_notifications_before(
+    user_pubkey_hex: String,
+    before_timestamp: u64,
+    limit: u32,
+    muted_pubkeys: Vec<String>,
+    muted_words: Vec<String>,
+) -> Result<String> {
+    let client = get_client_pub().await?;
+    let pk = PublicKey::from_hex(&user_pubkey_hex)?;
+
+    let filter = Filter::new()
+        .pubkey(pk)
+        .kinds([Kind::TextNote, Kind::Repost, Kind::Reaction, Kind::ZapReceipt])
+        .until(Timestamp::from(before_timestamp.saturating_sub(1)))
+        .limit(limit as usize);
+    let events = client.database().query(filter).await?;
+
+    let filtered: Vec<Event> = events
+        .into_iter()
+        .filter(|e| e.pubkey.to_hex() != user_pubkey_hex)
+        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .collect();
+
+    hydrate_notification_events(&client, &filtered, &user_pubkey_hex).await
+}
+
+pub async fn db_get_oldest_notification_timestamp(
+    user_pubkey_hex: String,
+) -> Result<Option<u64>> {
+    let client = get_client_pub().await?;
+    let pk = PublicKey::from_hex(&user_pubkey_hex)?;
+
+    let filter = Filter::new()
+        .pubkey(pk)
+        .kinds([Kind::TextNote, Kind::Repost, Kind::Reaction, Kind::ZapReceipt])
+        .limit(500);
+    let events = client.database().query(filter).await?;
+
+    let oldest = events
+        .into_iter()
+        .filter(|e| e.pubkey.to_hex() != user_pubkey_hex)
+        .map(|e| e.created_at.as_secs())
+        .min();
+
+    Ok(oldest)
 }
 
 async fn hydrate_article_events(
@@ -3136,20 +3282,65 @@ pub async fn db_get_hydrated_thread_structure(
         None => return Ok(serde_json::json!({"error": "not_found"}).to_string()),
     };
 
-    let reply_filter = Filter::new()
-        .kind(Kind::TextNote)
-        .event(root_id)
-        .limit(limit as usize);
-    let reply_events = client.database().query(reply_filter).await?;
+    let mut collected: HashMap<String, Event> = HashMap::new();
+    collected.insert(root_event.id.to_hex(), root_event.clone());
 
-    let mut all_events: Vec<Event> = vec![root_event.clone()];
-    for ev in reply_events.into_iter() {
-        if ev.id != root_event.id
-            && !is_event_muted(&ev, &muted_pubkeys, &muted_words)
-        {
-            all_events.push(ev);
+    let max_depth: u32 = 6;
+    let max_total: usize = (limit as usize).max(50);
+
+    let mut frontier: Vec<EventId> = vec![root_event.id];
+
+    for _ in 0..max_depth {
+        if frontier.is_empty() || collected.len() >= max_total {
+            break;
         }
+
+        let filter = Filter::new()
+            .kind(Kind::TextNote)
+            .events(frontier.clone())
+            .limit(limit as usize);
+        let replies = client.database().query(filter).await?;
+
+        let mut next_frontier: Vec<EventId> = Vec::new();
+        for ev in replies.into_iter() {
+            let id_hex = ev.id.to_hex();
+            if collected.contains_key(&id_hex) {
+                continue;
+            }
+            if is_event_muted(&ev, &muted_pubkeys, &muted_words) {
+                continue;
+            }
+            collected.insert(id_hex.clone(), ev.clone());
+            next_frontier.push(ev.id);
+
+            if collected.len() >= max_total {
+                break;
+            }
+        }
+
+        frontier = next_frontier;
     }
+
+    let quote_filter = Filter::new()
+        .kind(Kind::TextNote)
+        .custom_tag(SingleLetterTag::lowercase(Alphabet::Q), root_note_id.clone())
+        .limit(limit as usize);
+    let quote_events = client
+        .database()
+        .query(quote_filter)
+        .await
+        .unwrap_or_default();
+    let mut quote_event_ids: HashSet<String> = HashSet::new();
+    for ev in quote_events.into_iter() {
+        let id_hex = ev.id.to_hex();
+        if is_event_muted(&ev, &muted_pubkeys, &muted_words) {
+            continue;
+        }
+        quote_event_ids.insert(id_hex.clone());
+        collected.entry(id_hex).or_insert(ev);
+    }
+
+    let all_events: Vec<Event> = collected.into_values().collect();
 
     let hydrated_str =
         hydrate_notes(&client, &all_events, false, current_user_pubkey_hex).await?;
@@ -3171,33 +3362,29 @@ pub async fn db_get_hydrated_thread_structure(
         .cloned()
         .unwrap_or_else(|| hydrated[0].clone());
 
-    let reply_ids: HashSet<String> = hydrated
-        .iter()
-        .filter_map(|n| n["id"].as_str().map(|s| s.to_string()))
-        .collect();
+    let known_ids: HashSet<String> = notes_map.keys().cloned().collect();
 
     let mut children_map: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
     let mut all_replies: Vec<serde_json::Value> = Vec::new();
     let mut quote_count: usize = 0;
 
     for note in &hydrated {
-        let note_id = note["id"].as_str().unwrap_or("");
-        if note_id == root_note_id {
+        let note_id = note["id"].as_str().unwrap_or("").to_string();
+        if note_id == root_note_id || note_id.is_empty() {
             continue;
         }
 
-        let is_quote = _is_note_quote_of(note, &root_note_id);
-        if is_quote {
+        if _is_quote_of_root(note, &root_note_id, &quote_event_ids) {
             quote_count += 1;
-        } else {
-            all_replies.push(note.clone());
+            continue;
         }
 
-        let parent_id = _resolve_parent_id(note, &root_note_id, &reply_ids);
+        let parent_id = _resolve_thread_parent(note, &root_note_id, &known_ids);
         children_map
             .entry(parent_id)
             .or_default()
             .push(note.clone());
+        all_replies.push(note.clone());
     }
 
     for children in children_map.values_mut() {
@@ -3229,26 +3416,68 @@ pub async fn db_get_hydrated_thread_structure(
     .to_string())
 }
 
-fn _is_note_quote_of(note: &serde_json::Value, target_id: &str) -> bool {
-    let Some(tags) = note["tags"].as_array() else {
-        return false;
-    };
-    for tag in tags {
-        let Some(arr) = tag.as_array() else { continue };
-        if arr.len() >= 2 && arr[0].as_str() == Some("e") {
-            let ref_id = arr[1].as_str().unwrap_or("");
-            if ref_id == target_id {
+fn _is_quote_of_root(
+    note: &serde_json::Value,
+    root_note_id: &str,
+    quote_event_ids: &HashSet<String>,
+) -> bool {
+    let id = note["id"].as_str().unwrap_or("");
+    if !id.is_empty() && quote_event_ids.contains(id) {
+        let Some(tags) = note["tags"].as_array() else {
+            return true;
+        };
+        for tag in tags {
+            let Some(arr) = tag.as_array() else { continue };
+            if arr.len() < 2 || arr[0].as_str() != Some("e") {
+                continue;
+            }
+            if arr[1].as_str() == Some(root_note_id) {
                 let marker = arr.get(3).and_then(|v| v.as_str()).unwrap_or("");
-                if marker == "mention" {
-                    return true;
+                if marker == "reply" || marker == "root" {
+                    return false;
                 }
             }
         }
+        return true;
     }
-    false
+
+    let Some(tags) = note["tags"].as_array() else {
+        return false;
+    };
+
+    let mut has_reply_marker_to_root = false;
+    let mut has_mention_marker_to_root = false;
+    let mut has_q_to_root = false;
+
+    for tag in tags {
+        let Some(arr) = tag.as_array() else { continue };
+        if arr.len() < 2 {
+            continue;
+        }
+        match arr[0].as_str() {
+            Some("e") => {
+                if arr[1].as_str() == Some(root_note_id) {
+                    let marker = arr.get(3).and_then(|v| v.as_str()).unwrap_or("");
+                    match marker {
+                        "reply" | "root" => has_reply_marker_to_root = true,
+                        "mention" => has_mention_marker_to_root = true,
+                        _ => {}
+                    }
+                }
+            }
+            Some("q") => {
+                if arr[1].as_str() == Some(root_note_id) {
+                    has_q_to_root = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    !has_reply_marker_to_root && (has_q_to_root || has_mention_marker_to_root)
 }
 
-fn _resolve_parent_id(
+fn _resolve_thread_parent(
     note: &serde_json::Value,
     root_note_id: &str,
     known_ids: &HashSet<String>,
@@ -3263,6 +3492,41 @@ fn _resolve_parent_id(
             return rid.to_string();
         }
     }
+
+    if let Some(tags) = note["tags"].as_array() {
+        let mut reply_marker: Option<String> = None;
+        let mut root_marker: Option<String> = None;
+        let mut positional: Vec<String> = Vec::new();
+
+        for tag in tags {
+            let Some(arr) = tag.as_array() else { continue };
+            if arr.len() < 2 || arr[0].as_str() != Some("e") {
+                continue;
+            }
+            let ref_id = match arr[1].as_str() {
+                Some(s) if !s.is_empty() => s.to_string(),
+                _ => continue,
+            };
+            match arr.get(3).and_then(|v| v.as_str()).unwrap_or("") {
+                "reply" => reply_marker = Some(ref_id),
+                "root" => root_marker = Some(ref_id),
+                "mention" => {}
+                _ => positional.push(ref_id),
+            }
+        }
+
+        if let Some(pid) = reply_marker.or(root_marker) {
+            if pid == root_note_id || known_ids.contains(&pid) {
+                return pid;
+            }
+        }
+        if let Some(pid) = positional.last() {
+            if pid == root_note_id || known_ids.contains(pid) {
+                return pid.clone();
+            }
+        }
+    }
+
     root_note_id.to_string()
 }
 

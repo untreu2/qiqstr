@@ -681,15 +681,18 @@ pub async fn fetch_counts_from_relays(
     let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
     let mut user_reacted: HashMap<String, bool> = HashMap::new();
     let mut user_reposted: HashMap<String, bool> = HashMap::new();
+    let mut counted_events: HashMap<String, HashSet<String>> = HashMap::new();
 
     for nid in &note_ids {
         counts.insert(nid.clone(), [0; 4]);
         user_reacted.insert(nid.clone(), false);
         user_reposted.insert(nid.clone(), false);
+        counted_events.insert(nid.clone(), HashSet::new());
     }
 
     for event in events.iter() {
         let kind = event.kind;
+        let event_id_hex = event.id.to_hex();
         let is_user = user_pk.as_ref().map_or(false, |pk| event.pubkey == *pk);
         let zap_sats = if kind == Kind::ZapReceipt {
             super::database::extract_zap_amount_sats(event) as usize
@@ -697,32 +700,38 @@ pub async fn fetch_counts_from_relays(
             0
         };
 
-        let mut counted_for: HashSet<String> = HashSet::new();
-        for tag in event.tags.iter() {
-            let tag_kind = tag.kind();
-            if matches!(tag_kind, TagKind::SingleLetter(SingleLetterTag { character: Alphabet::E, .. })) {
-                if let Some(ref_id) = tag.content() {
-                    let ref_hex = ref_id.to_string();
-                    if counted_for.contains(&ref_hex) { continue; }
-                    if let Some(c) = counts.get_mut(&ref_hex) {
-                        counted_for.insert(ref_hex.clone());
-                        match kind {
-                            k if k == Kind::Reaction => {
-                                c[0] += 1;
-                                if is_user {
-                                    user_reacted.insert(ref_hex, true);
-                                }
+        if kind == Kind::TextNote {
+            if let Some(parent_id) = super::database::extract_reply_parent_id(event) {
+                if let Some(c) = counts.get_mut(&parent_id) {
+                    let seen = counted_events.get_mut(&parent_id).unwrap();
+                    if seen.insert(event_id_hex.clone()) {
+                        c[3] += 1;
+                    }
+                }
+            }
+            continue;
+        }
+
+        let target = super::database::extract_first_e_tag(event);
+        if let Some(target_id) = target {
+            if let Some(c) = counts.get_mut(&target_id) {
+                let seen = counted_events.get_mut(&target_id).unwrap();
+                if seen.insert(event_id_hex) {
+                    match kind {
+                        k if k == Kind::Reaction => {
+                            c[0] += 1;
+                            if is_user {
+                                user_reacted.insert(target_id, true);
                             }
-                            k if k == Kind::Repost => {
-                                c[1] += 1;
-                                if is_user {
-                                    user_reposted.insert(ref_hex, true);
-                                }
-                            }
-                            k if k == Kind::ZapReceipt => c[2] += zap_sats,
-                            k if k == Kind::TextNote => c[3] += 1,
-                            _ => {}
                         }
+                        k if k == Kind::Repost => {
+                            c[1] += 1;
+                            if is_user {
+                                user_reposted.insert(target_id, true);
+                            }
+                        }
+                        k if k == Kind::ZapReceipt => c[2] += zap_sats,
+                        _ => {}
                     }
                 }
             }

@@ -28,11 +28,37 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
+  final ScrollController _scrollController = ScrollController();
+  NotificationBloc? _bloc;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.maxScrollExtent <= 0) return;
+    if (position.pixels >= position.maxScrollExtent - 320) {
+      _bloc?.add(const notification_events.NotificationsLoadMoreRequested());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider<NotificationBloc>(
       create: (context) {
         final bloc = AppDI.get<NotificationBloc>();
+        _bloc = bloc;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           bloc.add(const notification_events.NotificationsLoadRequested());
         });
@@ -68,6 +94,8 @@ class _NotificationPageState extends State<NotificationPage> {
       }
 
       final grouped = _groupNotifications(notifications);
+      final showLoadMore = !state.hasReachedEnd;
+      final showLoadingMore = state.isLoadingMore;
 
       return RefreshIndicator(
         onRefresh: () async {
@@ -77,19 +105,28 @@ class _NotificationPageState extends State<NotificationPage> {
         },
         color: context.colors.textPrimary,
         child: CustomScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(child: _buildHeader(context, notifications)),
             SliverPadding(
               padding: const EdgeInsets.only(bottom: 100),
               sliver: SliverList.separated(
-                itemCount: grouped.length,
+                itemCount: grouped.length +
+                    (showLoadingMore ? 1 : 0) +
+                    (!showLoadingMore && !showLoadMore ? 1 : 0),
                 itemBuilder: (context, index) {
-                  final item = grouped[index];
-                  if (item['isGrouped'] == true) {
-                    return _GroupedNotificationTile(notification: item);
+                  if (index < grouped.length) {
+                    final item = grouped[index];
+                    if (item['isGrouped'] == true) {
+                      return _GroupedNotificationTile(notification: item);
+                    }
+                    return _NotificationTile(notification: item);
                   }
-                  return _NotificationTile(notification: item);
+                  if (showLoadingMore) {
+                    return _buildLoadingMoreIndicator(context);
+                  }
+                  return _buildEndOfListIndicator(context);
                 },
                 separatorBuilder: (_, __) => const ListSeparatorWidget(),
               ),
@@ -100,6 +137,37 @@ class _NotificationPageState extends State<NotificationPage> {
     }
 
     return _buildLoadingContent(context);
+  }
+
+  Widget _buildLoadingMoreIndicator(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: context.colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEndOfListIndicator(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Text(
+          '·',
+          style: TextStyle(
+            color: context.colors.textSecondary.withValues(alpha: 0.5),
+            fontSize: 18,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildHeader(
@@ -633,32 +701,74 @@ class _NotificationTileState extends State<_NotificationTile> {
       if (author.isNotEmpty) {
         _navigateToProfile(author);
       }
-    } else if (targetEventId.isNotEmpty) {
-      String chainStr;
-
-      if (type == 'reply' && notificationEventId.isNotEmpty) {
-        try {
-          final feedRepo = AppDI.get<FeedRepository>();
-          final replyNote = await feedRepo.getNote(notificationEventId);
-          if (replyNote != null) {
-            chainStr = ThreadChain.buildFromNote(replyNote.toMap());
-          } else {
-            final fallbackChain = notificationEventId != targetEventId
-                ? [targetEventId, notificationEventId]
-                : [targetEventId];
-            chainStr = ThreadChain.build(fallbackChain);
-          }
-        } catch (e) {
-          debugPrint('[NotificationTile] Error resolving thread: $e');
-          chainStr = ThreadChain.build([targetEventId]);
-        }
-      } else {
-        chainStr = ThreadChain.build([targetEventId]);
-      }
-
-      if (!mounted) return;
-      context.push('/home/notifications/thread/$chainStr');
+      return;
     }
+
+    final focusedNoteId = _resolveFocusedNoteId(
+      type: type,
+      notificationEventId: notificationEventId,
+      targetEventId: targetEventId,
+    );
+    if (focusedNoteId.isEmpty) return;
+
+    final chainStr = await _resolveThreadChain(
+      type: type,
+      focusedNoteId: focusedNoteId,
+      targetEventId: targetEventId,
+    );
+
+    if (!mounted) return;
+    context.push('/home/notifications/thread/$chainStr');
+  }
+
+  String _resolveFocusedNoteId({
+    required String type,
+    required String notificationEventId,
+    required String targetEventId,
+  }) {
+    switch (type) {
+      case 'reply':
+      case 'mention':
+      case 'quote':
+        return notificationEventId.isNotEmpty
+            ? notificationEventId
+            : targetEventId;
+      case 'reaction':
+      case 'repost':
+      case 'zap':
+        return targetEventId.isNotEmpty
+            ? targetEventId
+            : notificationEventId;
+      default:
+        return targetEventId.isNotEmpty
+            ? targetEventId
+            : notificationEventId;
+    }
+  }
+
+  Future<String> _resolveThreadChain({
+    required String type,
+    required String focusedNoteId,
+    required String targetEventId,
+  }) async {
+    if (type == 'reaction' || type == 'repost' || type == 'zap') {
+      return ThreadChain.build([focusedNoteId]);
+    }
+
+    try {
+      final feedRepo = AppDI.get<FeedRepository>();
+      final focusedNote = await feedRepo.getNote(focusedNoteId);
+      if (focusedNote != null) {
+        return ThreadChain.buildFromNote(focusedNote.toMap());
+      }
+    } catch (e) {
+      debugPrint('[NotificationTile] Error resolving thread chain: $e');
+    }
+
+    if (targetEventId.isNotEmpty && targetEventId != focusedNoteId) {
+      return ThreadChain.build([targetEventId, focusedNoteId]);
+    }
+    return ThreadChain.build([focusedNoteId]);
   }
 
   void _navigateToProfile(String pubkeyHex) async {

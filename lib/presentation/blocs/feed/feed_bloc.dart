@@ -32,6 +32,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   bool _profileLoadInProgress = false;
   bool _canLoadMoreOlder = true;
 
+  Timer? _interactionSyncDebounce;
+  final Set<String> _syncedInteractionNoteIds = <String>{};
+  static const Duration _interactionSyncDebounceDelay =
+      Duration(milliseconds: 800);
+  static const int _interactionSyncMaxBatch = 60;
+
   FeedBloc({
     required FeedRepository feedRepository,
     required FollowingRepository followingRepository,
@@ -248,6 +254,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     final combined = _combinedNotes();
     InteractionService.instance.populateFromNotes(combined);
+    _scheduleInteractionSync(combined);
 
     final seededProfiles =
         _buildProfilesFromNotes(combined, currentState.profiles);
@@ -795,6 +802,31 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   @override
   Future<void> close() {
     _feedSubscription?.cancel();
+    _interactionSyncDebounce?.cancel();
     return super.close();
+  }
+
+  void _scheduleInteractionSync(List<FeedNote> notes) {
+    if (notes.isEmpty) return;
+    final candidates = <String>[];
+    for (final n in notes) {
+      final id = n.isRepost && (n.repostEventId?.isNotEmpty ?? false)
+          ? n.repostEventId!
+          : n.id;
+      if (id.isEmpty) continue;
+      if (_syncedInteractionNoteIds.contains(id)) continue;
+      candidates.add(id);
+      if (candidates.length >= _interactionSyncMaxBatch) break;
+    }
+    if (candidates.isEmpty) return;
+
+    _interactionSyncDebounce?.cancel();
+    _interactionSyncDebounce = Timer(_interactionSyncDebounceDelay, () {
+      if (isClosed) return;
+      _syncedInteractionNoteIds.addAll(candidates);
+      _syncService
+          .syncInteractionsForNotes(candidates)
+          .catchError((_) {});
+    });
   }
 }

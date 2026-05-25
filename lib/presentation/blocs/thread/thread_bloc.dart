@@ -314,15 +314,24 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
     final totalReplies = threadData['totalReplies'] as int? ?? 0;
 
+    final preComputedReplies = (threadData['allReplies'] as List<dynamic>?)
+        ?.cast<Map<String, dynamic>>();
+    final preComputedQuoteCount = threadData['quoteCount'] as int?;
+
     final allReplies = <Map<String, dynamic>>[];
     int quoteCount = 0;
-    for (final entry in notesMap.entries) {
-      if (entry.key != rootNoteId) {
-        final note = entry.value;
-        if (_noteIsQuoteOf(note, rootNoteId)) {
-          quoteCount++;
-        } else {
-          allReplies.add(note);
+    if (preComputedReplies != null) {
+      allReplies.addAll(preComputedReplies);
+      quoteCount = preComputedQuoteCount ?? 0;
+    } else {
+      for (final entry in notesMap.entries) {
+        if (entry.key != rootNoteId) {
+          final note = entry.value;
+          if (_noteIsQuoteOf(note, rootNoteId)) {
+            quoteCount++;
+          } else {
+            allReplies.add(note);
+          }
         }
       }
     }
@@ -379,14 +388,29 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   static bool _noteIsQuoteOf(Map<String, dynamic> note, String targetNoteId) {
     final tags = note['tags'] as List<dynamic>? ?? [];
+    bool hasReplyMarkerToTarget = false;
+    bool hasMentionMarkerToTarget = false;
+    bool hasQToTarget = false;
+
     for (final tag in tags) {
-      if (tag is! List || tag.length < 2 || tag[0] != 'e') continue;
+      if (tag is! List || tag.length < 2) continue;
+      final tagName = tag[0] as String? ?? '';
       final refId = tag[1] as String? ?? '';
       if (refId != targetNoteId) continue;
-      final marker = tag.length >= 4 ? tag[3] as String? : null;
-      if (marker == 'mention') return true;
+      if (tagName == 'q') {
+        hasQToTarget = true;
+      } else if (tagName == 'e') {
+        final marker = tag.length >= 4 ? tag[3] as String? : null;
+        if (marker == 'reply' || marker == 'root') {
+          hasReplyMarkerToTarget = true;
+        } else if (marker == 'mention') {
+          hasMentionMarkerToTarget = true;
+        }
+      }
     }
-    return false;
+
+    if (hasReplyMarkerToTarget) return false;
+    return hasQToTarget || hasMentionMarkerToTarget;
   }
 
   void _loadCurrentUserProfile(String currentUserHex) {
@@ -414,32 +438,40 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   ) async {
     if (state is! ThreadLoaded) return;
     final currentState = state as ThreadLoaded;
+    final rootNoteId = currentState.rootNoteId;
 
-    final incomingIds = event.replies.map((r) => r.id).toSet();
+    final incomingMap = <String, FeedNote>{
+      for (final r in event.replies) r.id: r,
+    };
+    final incomingIds = incomingMap.keys.toSet();
     final existingIds =
         currentState.replies.map((r) => r['id'] as String? ?? '').toSet();
 
-    final hasNewReplies = incomingIds.length != existingIds.length ||
-        incomingIds.any((id) => !existingIds.contains(id));
-    if (!hasNewReplies) return;
+    final newIds =
+        incomingIds.where((id) => !existingIds.contains(id)).toList();
+    if (newIds.isEmpty) return;
 
-    // Re-query thread structure from Rust — avoids Dart-side tree rebuild
+    final shouldFullRefresh = newIds.length > 3 ||
+        currentState.threadStructure.childrenMap.length < 2;
+
     Map<String, dynamic>? freshStructure;
-    try {
-      final json = await rust_db.dbGetHydratedThreadStructure(
-        rootNoteId: currentState.rootNoteId,
-        currentUserPubkeyHex: currentState.currentUserHex.isNotEmpty
-            ? currentState.currentUserHex
-            : null,
-        limit: 500,
-      );
-      final data = jsonDecode(json) as Map<String, dynamic>;
-      if (!data.containsKey('error')) {
-        freshStructure = data;
-      }
-    } catch (_) {}
+    if (shouldFullRefresh) {
+      try {
+        final json = await rust_db.dbGetHydratedThreadStructure(
+          rootNoteId: rootNoteId,
+          currentUserPubkeyHex: currentState.currentUserHex.isNotEmpty
+              ? currentState.currentUserHex
+              : null,
+          limit: 500,
+        );
+        final data = jsonDecode(json) as Map<String, dynamic>;
+        if (!data.containsKey('error')) {
+          freshStructure = data;
+        }
+      } catch (_) {}
 
-    if (isClosed) return;
+      if (isClosed) return;
+    }
 
     Map<String, List<Map<String, dynamic>>> childrenMap;
     Map<String, Map<String, dynamic>> notesMap;
@@ -447,40 +479,58 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     int quoteCount;
 
     if (freshStructure != null) {
-      repliesMap =
-          (freshStructure['allReplies'] as List<dynamic>?)
+      repliesMap = (freshStructure['allReplies'] as List<dynamic>?)
               ?.cast<Map<String, dynamic>>() ??
-              [];
+          [];
       quoteCount = (freshStructure['quoteCount'] as int?) ?? 0;
       notesMap = (freshStructure['notesMap'] as Map<String, dynamic>?)?.map(
             (k, v) => MapEntry(k, v as Map<String, dynamic>),
           ) ??
           {};
-      childrenMap =
-          (freshStructure['childrenMap'] as Map<String, dynamic>?)?.map(
+      childrenMap = (freshStructure['childrenMap'] as Map<String, dynamic>?)
+              ?.map(
                 (k, v) => MapEntry(
-                    k,
-                    (v as List<dynamic>).cast<Map<String, dynamic>>()),
+                    k, (v as List<dynamic>).cast<Map<String, dynamic>>()),
               ) ??
-              {};
+          {};
     } else {
-      // Fallback: merge existing + new replies in Dart
-      repliesMap = event.replies.map((r) => r.toMap()).toList();
-      final replyIds = incomingIds;
-      for (final existing in currentState.replies) {
-        final eid = existing['id'] as String? ?? '';
-        if (eid.isNotEmpty && !replyIds.contains(eid)) {
-          repliesMap.add(existing);
-          replyIds.add(eid);
-        }
-      }
-      quoteCount = 0;
-      notesMap = {
-        currentState.rootNoteId: currentState.rootNote,
-        for (final r in repliesMap)
-          if (r['id'] != null) r['id'] as String: r,
+      notesMap = Map<String, Map<String, dynamic>>.from(
+          currentState.threadStructure.notesMap);
+      childrenMap = {
+        for (final entry in currentState.threadStructure.childrenMap.entries)
+          entry.key: List<Map<String, dynamic>>.from(entry.value),
       };
-      childrenMap = {};
+      repliesMap = List<Map<String, dynamic>>.from(currentState.replies);
+      quoteCount = currentState.quoteCount;
+
+      for (final id in newIds) {
+        final feedNote = incomingMap[id];
+        if (feedNote == null) continue;
+        final noteMap = feedNote.toMap();
+        if (feedNote.isQuote && feedNote.quotedNoteId == rootNoteId) {
+          quoteCount++;
+          notesMap[id] = noteMap;
+          continue;
+        }
+        if (_noteIsQuoteOf(noteMap, rootNoteId)) {
+          quoteCount++;
+          notesMap[id] = noteMap;
+          continue;
+        }
+        notesMap[id] = noteMap;
+        repliesMap.add(noteMap);
+        final parentId =
+            _resolveLocalParent(noteMap, rootNoteId, notesMap.keys.toSet());
+        childrenMap.putIfAbsent(parentId, () => []).add(noteMap);
+      }
+
+      for (final list in childrenMap.values) {
+        list.sort((a, b) {
+          final ta = a['created_at'] as int? ?? 0;
+          final tb = b['created_at'] as int? ?? 0;
+          return ta.compareTo(tb);
+        });
+      }
     }
 
     final threadStructure = ThreadStructure(
@@ -503,14 +553,63 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         .toList();
     if (newNotes.isNotEmpty) {
       _loadAndSyncProfilesForNotes(newNotes);
+      final newFeedNotes = event.replies
+          .where((n) => newIds.contains(n.id))
+          .toList();
+      if (newFeedNotes.isNotEmpty) {
+        _interactionService.populateFromNotes(newFeedNotes);
+      }
+    }
+  }
+
+  static String _resolveLocalParent(
+    Map<String, dynamic> note,
+    String rootNoteId,
+    Set<String> knownIds,
+  ) {
+    final parentId = note['parentId'] as String? ?? '';
+    if (parentId.isNotEmpty &&
+        (parentId == rootNoteId || knownIds.contains(parentId))) {
+      return parentId;
+    }
+    final rootId = note['rootId'] as String? ?? '';
+    if (rootId.isNotEmpty &&
+        (rootId == rootNoteId || knownIds.contains(rootId))) {
+      return rootId;
     }
 
-    if (newNotes.isNotEmpty) {
-      final newFeedNotes = event.replies
-          .where((n) => newNotes.any((m) => m['id'] == n.id))
-          .toList();
-      _interactionService.populateFromNotes(newFeedNotes);
+    final tags = note['tags'] as List<dynamic>? ?? [];
+    String? replyMarker;
+    String? rootMarker;
+    final positional = <String>[];
+    for (final tag in tags) {
+      if (tag is! List || tag.length < 2 || tag[0] != 'e') continue;
+      final refId = tag[1] as String? ?? '';
+      if (refId.isEmpty) continue;
+      final marker = tag.length >= 4 ? tag[3] as String? : null;
+      switch (marker) {
+        case 'reply':
+          replyMarker = refId;
+        case 'root':
+          rootMarker = refId;
+        case 'mention':
+          break;
+        default:
+          positional.add(refId);
+      }
     }
+    final candidate = replyMarker ?? rootMarker;
+    if (candidate != null &&
+        (candidate == rootNoteId || knownIds.contains(candidate))) {
+      return candidate;
+    }
+    if (positional.isNotEmpty) {
+      final last = positional.last;
+      if (last == rootNoteId || knownIds.contains(last)) {
+        return last;
+      }
+    }
+    return rootNoteId;
   }
 
   void _loadInteractionCountsInBackground(List<String> initialIds) {

@@ -19,7 +19,7 @@ class NotificationRepository {
   List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
 
   Stream<List<NotificationItem>> watchNotifications(String userPubkey,
-      {int limit = 100}) {
+      {int limit = 200}) {
     return _events.onNotificationChange
         .debounceTime(const Duration(milliseconds: 300))
         .startWith(null)
@@ -27,7 +27,7 @@ class NotificationRepository {
   }
 
   Future<List<NotificationItem>> getNotifications(String userPubkey,
-      {int limit = 100}) async {
+      {int limit = 200}) async {
     try {
       final json = await rust_db.dbGetHydratedNotifications(
         userPubkeyHex: userPubkey,
@@ -45,6 +45,48 @@ class NotificationRepository {
         print('[NotificationRepository] getNotifications error: $e');
       }
       return [];
+    }
+  }
+
+  Future<List<NotificationItem>> getNotificationsBefore(
+    String userPubkey, {
+    required int beforeTimestamp,
+    int limit = 100,
+  }) async {
+    if (beforeTimestamp <= 0) return [];
+    try {
+      final json = await rust_db.dbGetHydratedNotificationsBefore(
+        userPubkeyHex: userPubkey,
+        beforeTimestamp: BigInt.from(beforeTimestamp),
+        limit: limit,
+        mutedPubkeys: _mutedPubkeys,
+        mutedWords: _mutedWords,
+      );
+      final decoded = jsonDecode(json) as List<dynamic>;
+      return decoded
+          .cast<Map<String, dynamic>>()
+          .map((m) => NotificationItem.fromMap(m))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) {
+        print('[NotificationRepository] getNotificationsBefore error: $e');
+      }
+      return [];
+    }
+  }
+
+  Future<int?> getOldestLocalNotificationTimestamp(String userPubkey) async {
+    try {
+      final ts =
+          await rust_db.dbGetOldestNotificationTimestamp(userPubkeyHex: userPubkey);
+      if (ts == null) return null;
+      final asInt = ts.toInt();
+      return asInt == 0 ? null : asInt;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[NotificationRepository] getOldestLocalNotificationTimestamp error: $e');
+      }
+      return null;
     }
   }
 

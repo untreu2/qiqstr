@@ -36,3 +36,7 @@ class NotificationRead extends NotificationEvent {
 class AllNotificationsRead extends NotificationEvent {
   const AllNotificationsRead();
 }
+
+class NotificationsLoadMoreRequested extends NotificationEvent {
+  const NotificationsLoadMoreRequested();
+}
