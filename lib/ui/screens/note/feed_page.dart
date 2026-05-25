@@ -744,7 +744,7 @@ class FeedPageState extends State<FeedPage> {
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: colors.background,
-        drawer: const SidebarWidget(),
+        drawer: const RepaintBoundary(child: SidebarWidget()),
         body: Stack(
           children: [
             BlocBuilder<FeedBloc, FeedState>(

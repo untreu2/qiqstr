@@ -16,9 +16,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   String? _currentUserHex;
   String? _currentNpub;
   StreamSubscription? _profileSubscription;
+  StreamSubscription? _followingSubscription;
   Timer? _relayCountTimer;
   Timer? _countsTimer;
-  Timer? _followingPollTimer;
 
   SidebarBloc({
     required FollowingRepository followingRepository,
@@ -42,6 +42,8 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     SidebarInitialized event,
     Emitter<SidebarState> emit,
   ) async {
+    if (state is SidebarLoaded) return;
+
     try {
       final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
       if (pubkeyResult.isError || pubkeyResult.data == null) {
@@ -55,7 +57,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
       emit(const SidebarLoaded(currentUser: {}));
 
       _watchProfile(_currentUserHex!);
-      _loadFollowerCounts(_currentUserHex!);
+      _watchFollowingCounts(_currentUserHex!);
       _syncInBackground(_currentUserHex!);
       _startRelayCountPolling();
       _loadStoredAccounts();
@@ -111,55 +113,31 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     if (_currentUserHex == null) return;
     try {
       await _syncService.syncProfile(_currentUserHex!);
-      _fetchCounts(_currentUserHex!);
     } catch (_) {}
   }
 
-  void _loadFollowerCounts(String userPubkeyHex) {
-    _fetchCounts(userPubkeyHex);
-    _startFollowingPoll(userPubkeyHex);
-    _countsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _fetchCounts(userPubkeyHex);
-    });
-  }
-
-  void _fetchCounts(String userPubkeyHex) {
-    Future.wait([
-      _followingRepository.getFollowing(userPubkeyHex),
-      _profileRepository.getFollowerCount(userPubkeyHex),
-    ]).then((results) {
+  void _watchFollowingCounts(String userPubkeyHex) {
+    _followingSubscription?.cancel();
+    _followingSubscription =
+        _followingRepository.watchFollowing(userPubkeyHex).listen((follows) {
       if (isClosed) return;
-      final follows = results[0] as List<String>?;
-      final followerCount = results[1] as int;
-      add(_SidebarCountsUpdated(follows?.length ?? 0, followerCount));
-    }).catchError((_) {
-      if (!isClosed) add(_SidebarCountsUpdated(0, 0));
-    });
-  }
-
-  void _startFollowingPoll(String pubkeyHex) {
-    _followingPollTimer?.cancel();
-    int attempts = 0;
-    _followingPollTimer =
-        Timer.periodic(const Duration(seconds: 1), (timer) async {
-      attempts++;
-      if (isClosed || attempts > 15) {
-        timer.cancel();
-        return;
-      }
-      try {
-        final follows = await _followingRepository.getFollowing(pubkeyHex);
-        if (follows != null && follows.isNotEmpty) {
-          timer.cancel();
-          if (!isClosed && state is SidebarLoaded) {
-            final followerCount =
-                await _profileRepository.getFollowerCount(pubkeyHex);
-            if (!isClosed) {
-              add(_SidebarCountsUpdated(follows.length, followerCount));
-            }
-          }
+      _profileRepository.getFollowerCount(userPubkeyHex).then((followerCount) {
+        if (!isClosed) {
+          add(_SidebarCountsUpdated(follows.length, followerCount));
         }
-      } catch (_) {}
+      }).catchError((_) {});
+    });
+
+    _countsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _followingRepository.getFollowing(userPubkeyHex).then((follows) {
+        _profileRepository
+            .getFollowerCount(userPubkeyHex)
+            .then((followerCount) {
+          if (!isClosed) {
+            add(_SidebarCountsUpdated(follows?.length ?? 0, followerCount));
+          }
+        });
+      }).catchError((_) {});
     });
   }
 
@@ -238,9 +216,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   @override
   Future<void> close() {
     _profileSubscription?.cancel();
+    _followingSubscription?.cancel();
     _relayCountTimer?.cancel();
     _countsTimer?.cancel();
-    _followingPollTimer?.cancel();
     return super.close();
   }
 }
