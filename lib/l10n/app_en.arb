@@ -192,6 +192,8 @@
   "shareThisToReceiveMessages": "Share this with others to receive messages and zaps.",
   "keepThisSecret": "Keep this secret! Never share it with anyone.",
   "useThisToRecoverAccount": "Use this to recover your account. Store it safely.",
+  "showKey": "Show",
+  "hideKey": "Hide",
   "advanced": "Advanced",
   "keysTitle": "Keys",
   "keysSubtitle": "Manage your Nostr identity keys.",

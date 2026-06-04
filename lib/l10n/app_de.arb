@@ -192,6 +192,8 @@
   "shareThisToReceiveMessages": "Teilen Sie dies, um Nachrichten und Zaps zu erhalten.",
   "keepThisSecret": "Halten Sie dies geheim! Teilen Sie es niemals mit jemandem.",
   "useThisToRecoverAccount": "Verwenden Sie dies, um Ihr Konto wiederherzustellen. Bewahren Sie es sicher auf.",
+  "showKey": "Anzeigen",
+  "hideKey": "Verbergen",
   "advanced": "Erweitert",
   "keysTitle": "Schlüssel",
   "keysSubtitle": "Verwalten Sie Ihre Nostr-Identitätsschlüssel.",
