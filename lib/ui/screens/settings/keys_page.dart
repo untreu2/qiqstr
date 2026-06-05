@@ -28,6 +28,8 @@ class _KeysPageState extends State<KeysPage> {
   String _mnemonic = '';
   String? _copiedKeyType;
   bool _showAdvanced = false;
+  bool _revealedNsec = false;
+  bool _revealedMnemonic = false;
 
   @override
   void initState() {
@@ -128,8 +130,10 @@ class _KeysPageState extends State<KeysPage> {
   }
 
   Widget _buildKeyDisplayCard(BuildContext context, String title, String value,
-      String keyType, bool isCopied, AppLocalizations l10n) {
-    final isMasked = keyType == 'mnemonic' || keyType == 'nsec';
+      String keyType, bool isCopied, AppLocalizations l10n,
+      {bool isRevealed = false, VoidCallback? onToggleReveal}) {
+    final isMasked =
+        (keyType == 'mnemonic' || keyType == 'nsec') && !isRevealed;
     final displayValue = isMasked ? '•' * 48 : value;
 
     String? description;
@@ -159,8 +163,10 @@ class _KeysPageState extends State<KeysPage> {
                 Expanded(
                   child: Text(
                     displayValue,
-                    maxLines: isMasked ? 3 : 1,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: isMasked ? 3 : null,
+                    overflow: isMasked
+                        ? TextOverflow.ellipsis
+                        : TextOverflow.visible,
                     style: TextStyle(
                       color: context.colors.textPrimary,
                       fontSize: 16,
@@ -170,13 +176,31 @@ class _KeysPageState extends State<KeysPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                if (onToggleReveal != null) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: onToggleReveal,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      child: PhosphorIcon(
+                        isRevealed
+                            ? PhosphorIcons.eyeSlash()
+                            : PhosphorIcons.eye(),
+                        color: context.colors.iconSecondary,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 4),
                 GestureDetector(
                   onTap: () => _copyToClipboard(value, keyType),
                   child: Container(
                     padding: const EdgeInsets.all(8),
-                    child:                       PhosphorIcon(
-                      isCopied ? PhosphorIcons.check() : PhosphorIcons.copy(),
+                    child: PhosphorIcon(
+                      isCopied
+                          ? PhosphorIcons.check()
+                          : PhosphorIcons.copy(),
                       color: isCopied
                           ? context.colors.success
                           : context.colors.iconSecondary,
@@ -267,6 +291,9 @@ class _KeysPageState extends State<KeysPage> {
                   'nsec',
                   _copiedKeyType == 'nsec',
                   l10n,
+                  isRevealed: _revealedNsec,
+                  onToggleReveal: () =>
+                      setState(() => _revealedNsec = !_revealedNsec),
                 ),
                 const SizedBox(height: 24),
               ],
@@ -277,6 +304,9 @@ class _KeysPageState extends State<KeysPage> {
                 'mnemonic',
                 _copiedKeyType == 'mnemonic',
                 l10n,
+                isRevealed: _revealedMnemonic,
+                onToggleReveal: () =>
+                    setState(() => _revealedMnemonic = !_revealedMnemonic),
               ),
               const SizedBox(height: 32),
               _buildAdvancedLink(context, l10n),

@@ -192,6 +192,8 @@
   "shareThisToReceiveMessages": "Mesaj ve zap almak için bunu paylaşın.",
   "keepThisSecret": "Bunu gizli tutun! Asla kimseyle paylaşmayın.",
   "useThisToRecoverAccount": "Hesabınızı kurtarmak için bunu kullanın. Güvenli bir şekilde saklayın.",
+  "showKey": "Göster",
+  "hideKey": "Gizle",
   "advanced": "Gelişmiş",
   "keysTitle": "Anahtarlar",
   "keysSubtitle": "Nostr kimlik anahtarlarınızı yönetin.",
