@@ -154,7 +154,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get login => 'Anmelden';
 
   @override
-  String get createNewAccount => 'Neues Konto erstellen';
+  String get createNewAccount => 'Neues Nostr-Konto erstellen';
 
   @override
   String get noFollowingUsers => 'Keine folgenden Benutzer';
@@ -1852,11 +1852,11 @@ class AppLocalizationsDe extends AppLocalizations {
       'Kommunizieren Sie sicher mit Ende-zu-Ende-Verschlüsselung.';
 
   @override
-  String get welcomeAlreadyHaveAccount => 'Ich habe bereits ein Konto';
+  String get welcomeAlreadyHaveAccount => 'Ich habe bereits ein Nostr-Konto';
 
   @override
   String get loginSubtitle =>
-      'Geben Sie Ihre Seed-Phrase oder Ihren nsec-Schlüssel ein, um sich bei Ihrem bestehenden Konto anzumelden.';
+      'Geben Sie Ihre Seed-Phrase oder Ihren nsec-Schlüssel ein, um sich bei Ihrem bestehenden Nostr-Konto anzumelden.';
 
   @override
   String get loginExampleSeed =>
