@@ -17,6 +17,16 @@ fn is_persistent_kind(kind: Kind) -> bool {
             | Kind::RelayList
             | Kind::TextNote
             | Kind::Repost
+    ) || matches!(
+        kind.as_u16(),
+        7        // Reaction
+            | 1059   // Gift wrap (NIP-17 DM)
+            | 9735   // Zap receipt
+            | 10001  // Pinned notes
+            | 10003  // Bookmarks
+            | 30000  // Follow sets / categorized people
+            | 30001  // Categorized lists (legacy bookmarks)
+            | 30023 // Long-form article
     )
 }
 
@@ -52,7 +62,7 @@ impl HybridDatabase {
     pub(crate) fn new(lmdb: NostrLMDB) -> Self {
         let memory = MemoryDatabase::with_opts(MemoryDatabaseOptions {
             events: true,
-            max_events: None,
+            max_events: Some(50000),
         });
         Self { lmdb, memory }
     }

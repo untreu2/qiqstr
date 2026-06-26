@@ -571,6 +571,12 @@ class AppLocalizationsDe extends AppLocalizations {
       'Verwenden Sie dies, um Ihr Konto wiederherzustellen. Bewahren Sie es sicher auf.';
 
   @override
+  String get showKey => 'Anzeigen';
+
+  @override
+  String get hideKey => 'Verbergen';
+
+  @override
   String get advanced => 'Erweitert';
 
   @override

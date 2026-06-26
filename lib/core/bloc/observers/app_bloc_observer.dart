@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/services/crash_reporting_service.dart';
 import '../../../data/services/logging_service.dart';
 
 class AppBlocObserver extends BlocObserver {
@@ -38,13 +39,10 @@ class AppBlocObserver extends BlocObserver {
   @override
   void onError(BlocBase bloc, Object error, StackTrace stackTrace) {
     super.onError(bloc, error, stackTrace);
-    loggingService.error(
-      'Error in ${bloc.runtimeType}: $error',
-      'BlocObserver',
-    );
-    loggingService.error(
-      'StackTrace: $stackTrace',
-      'BlocObserver',
+    crashReporting.recordError(
+      error,
+      stackTrace,
+      context: 'BLoC:${bloc.runtimeType}',
     );
   }
 

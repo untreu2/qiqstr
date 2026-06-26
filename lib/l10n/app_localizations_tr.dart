@@ -557,6 +557,12 @@ class AppLocalizationsTr extends AppLocalizations {
       'Hesabınızı kurtarmak için bunu kullanın. Güvenli bir şekilde saklayın.';
 
   @override
+  String get showKey => 'Göster';
+
+  @override
+  String get hideKey => 'Gizle';
+
+  @override
   String get advanced => 'Gelişmiş';
 
   @override

@@ -552,6 +552,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Use this to recover your account. Store it safely.';
 
   @override
+  String get showKey => 'Show';
+
+  @override
+  String get hideKey => 'Hide';
+
+  @override
   String get advanced => 'Advanced';
 
   @override

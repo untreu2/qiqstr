@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:file_picker/file_picker.dart';
@@ -400,10 +401,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
         if (!hasETag) {
           additionalTags.add(['e', eventIdHex]);
-          debugPrint('[ShareNotePage] Added e tag for reply: $eventIdHex');
+          if (kDebugMode) debugPrint('[ShareNotePage] Added e tag for reply: $eventIdHex');
         }
       } catch (e) {
-        debugPrint('[ShareNotePage] Error processing replyToNoteId: $e');
+        if (kDebugMode) debugPrint('[ShareNotePage] Error processing replyToNoteId: $e');
       }
     }
 
@@ -1065,14 +1066,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
       if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(cleanId)) {
         final encoded = AuthService.instance.encodeNoteId(cleanId);
-        debugPrint('[ShareNotePage] Encoded hex to note1: $encoded');
+        if (kDebugMode) debugPrint('[ShareNotePage] Encoded hex to note1: $encoded');
         return encoded;
       }
 
-      debugPrint('[ShareNotePage] Using event ID as is: $cleanId');
+      if (kDebugMode) debugPrint('[ShareNotePage] Using event ID as is: $cleanId');
       return cleanId;
     } catch (e) {
-      debugPrint('[ShareNotePage] Error encoding event ID: $e');
+      if (kDebugMode) debugPrint('[ShareNotePage] Error encoding event ID: $e');
       return eventId;
     }
   }

@@ -23,9 +23,30 @@ struct WalletStore {
 
 impl WalletStore {
     fn new(db_path: PathBuf) -> Self {
+        let seed = Self::load_or_create_seed(&db_path);
+        Self { db_path, wallets: HashMap::new(), seed }
+    }
+
+    fn seed_path(db_path: &PathBuf) -> PathBuf {
+        db_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("cashu_seed.bin")
+    }
+
+    fn load_or_create_seed(db_path: &PathBuf) -> [u8; 64] {
+        let path = Self::seed_path(db_path);
+        if let Ok(bytes) = std::fs::read(&path) {
+            if bytes.len() == 64 {
+                let mut seed = [0u8; 64];
+                seed.copy_from_slice(&bytes);
+                return seed;
+            }
+        }
         let mut seed = [0u8; 64];
         rand::thread_rng().fill_bytes(&mut seed);
-        Self { db_path, wallets: HashMap::new(), seed }
+        let _ = std::fs::write(&path, &seed);
+        seed
     }
 
     async fn wallet_for(&mut self, mint_url: &str) -> Result<Arc<Wallet>> {

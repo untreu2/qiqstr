@@ -67,7 +67,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (oldWidget.notes.length != widget.notes.length ||
         oldWidget.isLoading != widget.isLoading) {
       if (widget.notes.isNotEmpty) {
-        _hasTriggeredEmptyRefresh = false;
         if (!_initialSyncDone) {
           _scheduleInitialInteractionSync();
         }

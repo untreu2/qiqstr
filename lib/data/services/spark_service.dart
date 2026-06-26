@@ -27,6 +27,10 @@ class SparkService {
 
   Stream<SdkEvent> get eventStream => _eventController.stream;
 
+  void _log(String message) {
+    if (kDebugMode) debugPrint(message);
+  }
+
   String _prefixedKey(String base) {
     if (_activeAccountId != null && _activeAccountId!.isNotEmpty) {
       return '${_activeAccountId}_$base';
@@ -64,7 +68,7 @@ class SparkService {
         }
       },
       onError: (e) {
-        debugPrint('[SparkService] SDK event stream error: $e');
+        _log('[SparkService] SDK event stream error: $e');
       },
     );
   }
@@ -121,7 +125,7 @@ class SparkService {
       _subscribeToSdkEvents(_sdk!);
       return Result.success(_sdk!);
     } catch (e) {
-      debugPrint('[SparkService] Connect error: $e');
+      _log('[SparkService] Connect error: $e');
       return Result.error('Failed to connect to Spark: $e');
     } finally {
       _isConnecting = false;
@@ -199,7 +203,7 @@ class SparkService {
 
       return Result.success(null);
     } catch (e) {
-      debugPrint('[SparkService] restoreWallet error: $e');
+      _log('[SparkService] restoreWallet error: $e');
       return Result.error('Failed to restore wallet: $e');
     }
   }
@@ -222,7 +226,7 @@ class SparkService {
 
       return Result.success(address);
     } catch (e) {
-      debugPrint('[SparkService] getLightningAddress error: $e');
+      _log('[SparkService] getLightningAddress error: $e');
       final cached = await _secureStorage.read(key: _lnAddressKey);
       return Result.success(cached);
     }
@@ -241,7 +245,7 @@ class SparkService {
           key: _lnAddressKey, value: info.lightningAddress);
       return Result.success(info.lightningAddress);
     } catch (e) {
-      debugPrint('[SparkService] registerLightningAddress error: $e');
+      _log('[SparkService] registerLightningAddress error: $e');
       return Result.error('Failed to register lightning address: $e');
     }
   }
@@ -257,7 +261,7 @@ class SparkService {
       );
       return Result.success(available);
     } catch (e) {
-      debugPrint('[SparkService] checkLightningAddressAvailable error: $e');
+      _log('[SparkService] checkLightningAddressAvailable error: $e');
       return Result.error('Failed to check availability: $e');
     }
   }
@@ -281,7 +285,7 @@ class SparkService {
           request: const GetInfoRequest(ensureSynced: false));
       return Result.success(info.balanceSats.toInt());
     } catch (e) {
-      debugPrint('[SparkService] getBalance error: $e');
+      _log('[SparkService] getBalance error: $e');
       return Result.error('Failed to get balance: $e');
     }
   }
@@ -306,7 +310,7 @@ class SparkService {
       );
       return Result.success(response.paymentRequest);
     } catch (e) {
-      debugPrint('[SparkService] createLightningInvoice error: $e');
+      _log('[SparkService] createLightningInvoice error: $e');
       return Result.error('Failed to create invoice: $e');
     }
   }
@@ -319,7 +323,7 @@ class SparkService {
       final sdk = sdkResult.data!;
 
       final prepareRequest = PrepareSendPaymentRequest(
-        paymentRequest: bolt11,
+        paymentRequest: PaymentRequest.input(input: bolt11),
         amount: null,
         tokenIdentifier: null,
         conversionOptions: null,
@@ -333,7 +337,7 @@ class SparkService {
       );
       return Result.success(null);
     } catch (e) {
-      debugPrint('[SparkService] payLightningInvoice error: $e');
+      _log('[SparkService] payLightningInvoice error: $e');
       return Result.error('Payment failed: $e');
     }
   }
@@ -352,7 +356,7 @@ class SparkService {
       final payments = response.payments.map(_paymentToMap).toList();
       return Result.success(payments);
     } catch (e) {
-      debugPrint('[SparkService] listPayments error: $e');
+      _log('[SparkService] listPayments error: $e');
       return Result.error('Failed to list payments: $e');
     }
   }
@@ -368,7 +372,7 @@ class SparkService {
       );
       return Result.success(_paymentToMap(response.payment));
     } catch (e) {
-      debugPrint('[SparkService] getPaymentById error: $e');
+      _log('[SparkService] getPaymentById error: $e');
       return Result.error('Failed to get payment: $e');
     }
   }
@@ -418,7 +422,7 @@ class SparkService {
       final result = await sdk.parse(input: input);
       return Result.success(result);
     } catch (e) {
-      debugPrint('[SparkService] parseInput error: $e');
+      _log('[SparkService] parseInput error: $e');
       return Result.error('Failed to parse input: $e');
     }
   }
@@ -431,6 +435,13 @@ class SparkService {
         await _sdk!.disconnect();
       } catch (_) {}
       _sdk = null;
+    }
+  }
+
+  Future<void> dispose() async {
+    await disconnectSdk();
+    if (!_eventController.isClosed) {
+      await _eventController.close();
     }
   }
 

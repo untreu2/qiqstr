@@ -478,42 +478,28 @@ class FeedPageState extends State<FeedPage> {
                               onTap: () {
                                 _scaffoldKey.currentState?.openDrawer();
                               },
-                              child: user != null
-                                  ? Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: colors.avatarPlaceholder,
-                                        image: userProfileImage.isNotEmpty
-                                            ? DecorationImage(
-                                                image:
-                                                    CachedNetworkImageProvider(
-                                                        userProfileImage),
-                                                fit: BoxFit.cover,
-                                              )
-                                            : null,
-                                      ),
-                                      child: userProfileImage.isEmpty
-                                          ? PhosphorIcon(
-                                              PhosphorIcons.user(),
-                                              size: 20,
-                                              color: colors.textSecondary,
-                                            )
-                                          : null,
-                                    )
-                                  : Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: colors.avatarPlaceholder,
-                                      ),
-                                      child: CircularProgressIndicator(
-                                        color: colors.accent,
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: colors.avatarPlaceholder,
+                                  image: userProfileImage.isNotEmpty
+                                      ? DecorationImage(
+                                          image: CachedNetworkImageProvider(
+                                              userProfileImage),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                                child: userProfileImage.isEmpty
+                                    ? PhosphorIcon(
+                                        PhosphorIcons.user(),
+                                        size: 20,
+                                        color: colors.textSecondary,
+                                      )
+                                    : null,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(

@@ -21,6 +21,7 @@ class LoggingService {
 
   final Map<String, int> _lastLogTime = {};
   static const int _rateLimitMs = 100;
+  static const int _maxLogKeys = 500;
 
   void configure({
     LogLevel level = LogLevel.error,
@@ -62,6 +63,14 @@ class LoggingService {
 
     if (lastTime != null && (now - lastTime) < _rateLimitMs) {
       return;
+    }
+    if (_lastLogTime.length >= _maxLogKeys) {
+      _lastLogTime.removeWhere(
+        (_, time) => (now - time) >= _rateLimitMs,
+      );
+      if (_lastLogTime.length >= _maxLogKeys) {
+        _lastLogTime.clear();
+      }
     }
     _lastLogTime[key] = now;
 

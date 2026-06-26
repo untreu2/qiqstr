@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
@@ -65,6 +66,7 @@ class NotificationBloc
     _currentUserHex = currentUserHex;
     _olderNotifications.clear();
     _olderIds.clear();
+    await _loadReadIds(currentUserHex);
 
     emit(NotificationsLoaded(
       notifications: const [],
@@ -107,17 +109,40 @@ class NotificationBloc
   }
 
   List<NotificationItem> _mergeWithOlder(List<NotificationItem> live) {
-    if (_olderNotifications.isEmpty) return live;
-
-    final liveIds = live.map((n) => n.id).toSet();
     final combined = <NotificationItem>[...live];
-    for (final older in _olderNotifications) {
-      if (!liveIds.contains(older.id)) {
-        combined.add(older);
+    if (_olderNotifications.isNotEmpty) {
+      final liveIds = live.map((n) => n.id).toSet();
+      for (final older in _olderNotifications) {
+        if (!liveIds.contains(older.id)) {
+          combined.add(older);
+        }
       }
     }
     combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return combined;
+  }
+
+  Future<void> _loadReadIds(String userHex) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ids = prefs.getStringList('notif_read_$userHex') ?? const [];
+      _readNotificationIds
+        ..clear()
+        ..addAll(ids);
+    } catch (_) {}
+  }
+
+  Future<void> _persistReadIds() async {
+    final userHex = _currentUserHex;
+    if (userHex == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var ids = _readNotificationIds.toList();
+      if (ids.length > 1000) {
+        ids = ids.sublist(ids.length - 1000);
+      }
+      await prefs.setStringList('notif_read_$userHex', ids);
+    } catch (_) {}
   }
 
   void _syncInBackground(String userHex) {
@@ -271,6 +296,7 @@ class NotificationBloc
     final currentState = state;
     if (currentState is NotificationsLoaded) {
       _readNotificationIds.add(event.notificationId);
+      unawaited(_persistReadIds());
 
       final updatedNotifications = currentState.notifications.map((n) {
         final notificationId = n['id'] as String? ?? '';
@@ -305,6 +331,7 @@ class NotificationBloc
           _readNotificationIds.add(id);
         }
       }
+      unawaited(_persistReadIds());
 
       final updatedNotifications = currentState.notifications.map((n) {
         return {...n, 'isRead': true};

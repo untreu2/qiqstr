@@ -1627,11 +1627,14 @@ pub async fn subscribe_to_events(
                 } = notification
                 {
                     if subscription_id == sub_id {
+                        let _ = client.database().save_event(&event).await;
                         if let Ok(json) = serde_json::to_string(
                             &serde_json::from_str::<serde_json::Value>(&event.as_json())
                                 .unwrap_or_default(),
                         ) {
-                            let _ = sink.add(json);
+                            if sink.add(json).is_err() {
+                                break;
+                            }
                         }
                     }
                 } else if let RelayPoolNotification::Shutdown = notification {
@@ -1642,6 +1645,8 @@ pub async fn subscribe_to_events(
             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
         }
     }
+
+    let _ = client.unsubscribe(&sub_id).await;
 
     Ok(())
 }

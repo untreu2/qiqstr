@@ -780,7 +780,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       child: InkWell(
         onTap: () {
           HapticFeedback.lightImpact();
-          debugPrint('Follow button tapped');
           _toggleFollow(state, bloc);
         },
         borderRadius: BorderRadius.circular(16),

@@ -1162,6 +1162,18 @@ abstract class AppLocalizations {
   /// **'Use this to recover your account. Store it safely.'**
   String get useThisToRecoverAccount;
 
+  /// No description provided for @showKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get showKey;
+
+  /// No description provided for @hideKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide'**
+  String get hideKey;
+
   /// No description provided for @advanced.
   ///
   /// In en, this message translates to:

@@ -4,7 +4,6 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -17,6 +16,14 @@ import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
 import '../common/custom_input_field.dart';
 import '../../../l10n/app_localizations.dart';
+
+Future<String?> _currentPrivateKey() async {
+  final result = await AuthService.instance.getCurrentUserPrivateKey();
+  if (result.isError) return null;
+  final key = result.data;
+  if (key == null || key.isEmpty) return null;
+  return key;
+}
 
 Future<bool> _payZapWithWallet(
   BuildContext context,
@@ -42,7 +49,6 @@ Future<bool> _payZapWithNwc(
   String comment,
 ) async {
   final nwcService = AppDI.get<NwcService>();
-  const secureStorage = FlutterSecureStorage();
 
   try {
     final l10n = AppLocalizations.of(context);
@@ -64,16 +70,14 @@ Future<bool> _payZapWithNwc(
           duration: const Duration(seconds: 5));
     }
 
-    final privateKey = await secureStorage.read(key: 'privateKey');
-    if (privateKey == null || privateKey.isEmpty) {
+    final privateKey = await _currentPrivateKey();
+    if (privateKey == null) {
       throw Exception('Private key not found.');
     }
 
     final invoice = await _buildZapInvoice(user, note, sats, comment);
     if (invoice == null) return false;
 
-    debugPrint(
-        '[ZapDialog] Paying invoice via NWC: ${invoice.substring(0, 20)}...');
     final paymentResult = await nwcService.payInvoice(invoice);
 
     if (paymentResult.isError) {
@@ -96,7 +100,7 @@ Future<bool> _payZapWithNwc(
         _toHex(user['pubkey'] as String? ?? ''),
         note,
         comment,
-        await secureStorage.read(key: 'privateKey') ?? '',
+        privateKey,
         sats,
         paymentResult));
 
@@ -119,7 +123,6 @@ Future<bool> _payZapWithSpark(
   String comment,
 ) async {
   final sparkService = AppDI.get<SparkService>();
-  const secureStorage = FlutterSecureStorage();
 
   try {
     final l10n = AppLocalizations.of(context);
@@ -141,16 +144,14 @@ Future<bool> _payZapWithSpark(
           duration: const Duration(seconds: 5));
     }
 
-    final privateKey = await secureStorage.read(key: 'privateKey');
-    if (privateKey == null || privateKey.isEmpty) {
+    final privateKey = await _currentPrivateKey();
+    if (privateKey == null) {
       throw Exception('Private key not found.');
     }
 
     final invoice = await _buildZapInvoice(user, note, sats, comment);
     if (invoice == null) return false;
 
-    debugPrint(
-        '[ZapDialog] Paying invoice via Spark: ${invoice.substring(0, 20)}...');
     final paymentResult = await sparkService.payLightningInvoice(invoice);
 
     if (paymentResult.isError) {
@@ -201,9 +202,8 @@ Future<Map<String, dynamic>?> _buildZapRequest(
   int sats,
   String comment,
 ) async {
-  const secureStorage = FlutterSecureStorage();
-  final privateKey = await secureStorage.read(key: 'privateKey');
-  if (privateKey == null || privateKey.isEmpty) return null;
+  final privateKey = await _currentPrivateKey();
+  if (privateKey == null) return null;
 
   final lud16 = user['lud16'] as String? ?? '';
   if (!lud16.contains('@')) return null;
@@ -278,9 +278,8 @@ Future<String?> _buildZapInvoice(
   final relays = AppDI.get<SyncService>().relayUrls;
   if (relays.isEmpty) return null;
 
-  const secureStorage = FlutterSecureStorage();
-  final privateKey = await secureStorage.read(key: 'privateKey');
-  if (privateKey == null || privateKey.isEmpty) return null;
+  final privateKey = await _currentPrivateKey();
+  if (privateKey == null) return null;
 
   final recipientPubkeyHex = _toHex(user['pubkey'] as String? ?? '');
 

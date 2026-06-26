@@ -111,17 +111,27 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
             break;
         }
       },
-      onError: (e) => debugPrint('[WalletBloc] SDK event error: $e'),
+      onError: (e) {
+        if (kDebugMode) debugPrint('[WalletBloc] SDK event error: $e');
+      },
     );
   }
 
   Map<String, dynamic> _paymentToMap(Payment payment) {
+    String? invoice;
+    final details = payment.details;
+    if (details is PaymentDetails_Lightning) {
+      invoice = details.invoice;
+    } else if (details is PaymentDetails_Spark) {
+      invoice = details.invoiceDetails?.invoice;
+    }
     return {
       'id': payment.id,
       'isIncoming': payment.paymentType == PaymentType.receive,
       'amount': payment.amount.toInt(),
       'timestamp': payment.timestamp.toInt(),
       'status': payment.status.name,
+      if (invoice != null) 'invoice': invoice,
     };
   }
 
@@ -135,10 +145,13 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     final isIncoming = event.payment['isIncoming'] == true;
     final paymentId = event.payment['id'] as String?;
     final paymentStatus = event.payment['status'] as String?;
+    final paymentInvoice = event.payment['invoice'] as String?;
 
     final isInvoiceMatch = current.watchedInvoice != null &&
         isIncoming &&
-        paymentStatus == 'completed';
+        paymentStatus == 'completed' &&
+        paymentInvoice != null &&
+        paymentInvoice == current.watchedInvoice;
 
     final existingTxs = current.transactions ?? [];
     final idx = existingTxs.indexWhere((t) => t['id'] == paymentId);
@@ -207,7 +220,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
           }
         },
         (error) {
-          debugPrint('[WalletBloc] NWC balance error: $error');
+          if (kDebugMode) debugPrint('[WalletBloc] NWC balance error: $error');
           if (state is WalletLoaded) {
             emit((state as WalletLoaded).copyWith(balanceError: error));
           }
@@ -231,7 +244,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         }
       },
       (error) {
-        debugPrint('[WalletBloc] Spark balance error: $error');
+        if (kDebugMode) debugPrint('[WalletBloc] Spark balance error: $error');
         if (state is WalletLoaded) {
           emit((state as WalletLoaded).copyWith(balanceError: error));
         }
@@ -248,10 +261,13 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       if (isClosed) return;
       result.fold(
         (_) {
+          if (state is WalletLoaded) {
+            emit((state as WalletLoaded).copyWith(clearPaymentError: true));
+          }
           add(const WalletBalanceRequested());
           add(const WalletTransactionsLoaded());
         },
-        (error) => emit(WalletError('Payment failed: $error')),
+        (error) => _emitPaymentError(error, emit),
       );
       return;
     }
@@ -260,11 +276,23 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     if (isClosed) return;
     result.fold(
       (_) {
+        if (state is WalletLoaded) {
+          emit((state as WalletLoaded).copyWith(clearPaymentError: true));
+        }
         add(const WalletBalanceRequested());
         add(const WalletTransactionsLoaded());
       },
-      (error) => emit(WalletError('Payment failed: $error')),
+      (error) => _emitPaymentError(error, emit),
     );
+  }
+
+  void _emitPaymentError(String error, Emitter<WalletState> emit) {
+    final message = 'Payment failed: $error';
+    if (state is WalletLoaded) {
+      emit((state as WalletLoaded).copyWith(paymentError: message));
+    } else {
+      emit(WalletError(message));
+    }
   }
 
   Future<void> _onWalletTransactionsLoaded(
@@ -288,7 +316,9 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
           }
         },
         (error) {
-          debugPrint('[WalletBloc] NWC transactions error: $error');
+          if (kDebugMode) {
+            debugPrint('[WalletBloc] NWC transactions error: $error');
+          }
           if (state is WalletLoaded) {
             emit((state as WalletLoaded)
                 .copyWith(isLoadingTransactions: false));
@@ -335,7 +365,9 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
           emit((state as WalletLoaded).copyWith(lightningAddress: address));
         }
       },
-      (error) => debugPrint('[WalletBloc] LN address error: $error'),
+      (error) {
+        if (kDebugMode) debugPrint('[WalletBloc] LN address error: $error');
+      },
     );
   }
 
@@ -489,9 +521,13 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       };
 
       await _syncService.publishProfileUpdate(profileContent: profile);
-      debugPrint('[WalletBloc] Published lud16 to Nostr profile: $lud16');
+      if (kDebugMode) {
+        debugPrint('[WalletBloc] Published lud16 to Nostr profile: $lud16');
+      }
     } catch (e) {
-      debugPrint('[WalletBloc] Failed to publish lud16 to profile: $e');
+      if (kDebugMode) {
+        debugPrint('[WalletBloc] Failed to publish lud16 to profile: $e');
+      }
     }
   }
 

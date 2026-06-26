@@ -44,7 +44,7 @@ class OnboardingSparkBloc
 
       emit(const OnboardingSparkReady(shouldNavigate: true));
     } catch (e) {
-      debugPrint('[OnboardingSparkBloc] Setup error: $e');
+      if (kDebugMode) debugPrint('[OnboardingSparkBloc] Setup error: $e');
       emit(OnboardingSparkError('Wallet setup failed: $e'));
     }
   }
@@ -77,7 +77,7 @@ class OnboardingSparkBloc
 
       emit(const OnboardingSparkReady(shouldNavigate: true));
     } catch (e) {
-      debugPrint('[OnboardingSparkBloc] Restore error: $e');
+      if (kDebugMode) debugPrint('[OnboardingSparkBloc] Restore error: $e');
       emit(OnboardingSparkError('Wallet restore failed: $e'));
     }
   }

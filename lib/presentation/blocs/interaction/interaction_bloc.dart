@@ -28,6 +28,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
   DateTime? _optimisticReactedAt;
   DateTime? _optimisticRepostedAt;
   DateTime? _optimisticZappedAt;
+  int _pendingZapAmount = 0;
 
   bool get _isOptimisticReactActive =>
       _optimisticReactedAt != null &&
@@ -318,7 +319,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         content: '+',
       );
     } catch (e) {
-      debugPrint('[InteractionBloc] Reaction failed: $e');
+      if (kDebugMode) debugPrint('[InteractionBloc] Reaction failed: $e');
       _interactionService.markUnreacted(noteId);
       if (!isClosed && state is InteractionLoaded) {
         final s = state as InteractionLoaded;
@@ -360,8 +361,17 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         originalContent: originalContent,
       );
     } catch (e) {
-      debugPrint('[InteractionBloc] Repost failed: $e');
+      if (kDebugMode) debugPrint('[InteractionBloc] Repost failed: $e');
       _interactionService.markUnreposted(noteId);
+      _optimisticRepostedAt = null;
+      if (!isClosed && state is InteractionLoaded) {
+        final s = state as InteractionLoaded;
+        emit(s.copyWith(
+          hasReposted: false,
+          repostCount:
+              (s.repostCount - 1).clamp(0, double.maxFinite.toInt()),
+        ));
+      }
       await _interactionService.refreshInteractions(noteId);
     }
   }
@@ -377,7 +387,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         await _syncService.publishDeletion(eventIds: [repostEventId]);
       }
     } catch (e) {
-      debugPrint('[InteractionBloc] Undo repost failed: $e');
+      if (kDebugMode) debugPrint('[InteractionBloc] Undo repost failed: $e');
       _interactionService.markReposted(noteId);
       await _interactionService.refreshInteractions(noteId);
     }
@@ -390,6 +400,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null) return;
 
     _optimisticZappedAt = DateTime.now();
+    _pendingZapAmount = event.amount;
 
     emit(currentState.copyWith(
       zapProcessing: true,
@@ -405,6 +416,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null) return;
 
     _optimisticZappedAt = DateTime.now();
+    _pendingZapAmount = 0;
     _interactionService.markZapped(noteId, event.amount);
 
     emit(currentState.copyWith(
@@ -420,10 +432,14 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null) return;
 
     _optimisticZappedAt = null;
+    final revertedAmount = (currentState.zapAmount - _pendingZapAmount)
+        .clamp(0, double.maxFinite.toInt());
+    _pendingZapAmount = 0;
 
     emit(currentState.copyWith(
       zapProcessing: false,
-      hasZapped: false,
+      hasZapped: revertedAmount > 0,
+      zapAmount: revertedAmount,
     ));
 
     _interactionService.refreshInteractions(noteId);
@@ -442,7 +458,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         emit(const InteractionLoaded(noteDeleted: true));
       }
     } catch (e) {
-      debugPrint('[InteractionBloc] Note deletion failed: $e');
+      if (kDebugMode) debugPrint('[InteractionBloc] Note deletion failed: $e');
     }
   }
 

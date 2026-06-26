@@ -15,6 +15,7 @@ import 'presentation/blocs/locale/locale_bloc.dart';
 import 'presentation/blocs/locale/locale_event.dart';
 import 'presentation/blocs/locale/locale_state.dart';
 
+import 'data/services/crash_reporting_service.dart';
 import 'data/services/logging_service.dart';
 import 'data/services/relay_service.dart';
 import 'data/services/auth_service.dart';
@@ -100,6 +101,12 @@ void main() {
       if (details.exception is SocketException) {
         return;
       }
+      crashReporting.recordError(
+        details.exception,
+        details.stack,
+        context: 'FlutterError',
+        fatal: true,
+      );
       FlutterError.presentError(details);
     };
 
@@ -108,7 +115,8 @@ void main() {
         if (error is SocketException) {
           return true;
         }
-        logError('Platform error', 'Main', error);
+        crashReporting.recordError(error, stack,
+            context: 'PlatformDispatcher', fatal: true);
         return true;
       };
     } catch (e) {
@@ -138,7 +146,7 @@ void main() {
     if (error is SocketException) {
       return;
     }
-    logError('Unhandled error', 'Main', error);
+    crashReporting.recordError(error, stack, context: 'Zone', fatal: true);
   });
 }
 

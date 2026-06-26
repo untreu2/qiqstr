@@ -431,7 +431,7 @@ class _SendDialogState extends State<SendDialog> {
     try {
       final prepareResp = await sdk.prepareSendPayment(
         request: PrepareSendPaymentRequest(
-          paymentRequest: paymentRequest,
+          paymentRequest: PaymentRequest.input(input: paymentRequest),
           amount: amountOverride,
           tokenIdentifier: null,
           conversionOptions: null,

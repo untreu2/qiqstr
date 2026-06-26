@@ -26,6 +26,7 @@ class WalletLoaded extends WalletState {
   final String? cashuRedeemError;
   final int? cashuRedeemedAmountSats;
   final int? cashuBalanceSats;
+  final String? paymentError;
 
   const WalletLoaded({
     this.isConnected = false,
@@ -41,6 +42,7 @@ class WalletLoaded extends WalletState {
     this.cashuRedeemError,
     this.cashuRedeemedAmountSats,
     this.cashuBalanceSats,
+    this.paymentError,
   });
 
   @override
@@ -58,6 +60,7 @@ class WalletLoaded extends WalletState {
         cashuRedeemError,
         cashuRedeemedAmountSats,
         cashuBalanceSats,
+        paymentError,
       ];
 
   WalletLoaded copyWith({
@@ -80,6 +83,8 @@ class WalletLoaded extends WalletState {
     bool clearCashuRedeemedAmount = false,
     int? cashuBalanceSats,
     bool clearCashuBalance = false,
+    String? paymentError,
+    bool clearPaymentError = false,
   }) {
     return WalletLoaded(
       isConnected: isConnected ?? this.isConnected,
@@ -106,6 +111,8 @@ class WalletLoaded extends WalletState {
       cashuBalanceSats: clearCashuBalance
           ? null
           : cashuBalanceSats ?? this.cashuBalanceSats,
+      paymentError:
+          clearPaymentError ? null : paymentError ?? this.paymentError,
     );
   }
 }

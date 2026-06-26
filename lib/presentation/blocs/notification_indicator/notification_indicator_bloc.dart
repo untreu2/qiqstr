@@ -17,6 +17,7 @@ class NotificationIndicatorBloc
   static const String _lastCheckedKey = 'notification_last_checked_timestamp';
 
   int _lastCheckedTimestamp = 0;
+  int _latestNotificationTimestamp = 0;
   StreamSubscription<List<NotificationItem>>? _notificationSubscription;
 
   NotificationIndicatorBloc({
@@ -56,6 +57,7 @@ class NotificationIndicatorBloc
         final latestTimestamp = notifications
             .map((e) => e.createdAt)
             .reduce((a, b) => a > b ? a : b);
+        _latestNotificationTimestamp = latestTimestamp;
 
         if (_lastCheckedTimestamp == 0) {
           _lastCheckedTimestamp = latestTimestamp;
@@ -98,6 +100,9 @@ class NotificationIndicatorBloc
     final latestTimestamp = event.notifications
         .map((e) => e.createdAt)
         .reduce((a, b) => a > b ? a : b);
+    if (latestTimestamp > _latestNotificationTimestamp) {
+      _latestNotificationTimestamp = latestTimestamp;
+    }
 
     if (_lastCheckedTimestamp > 0 && latestTimestamp > _lastCheckedTimestamp) {
       emit(NotificationIndicatorLoaded(
@@ -119,7 +124,8 @@ class NotificationIndicatorBloc
     Emitter<NotificationIndicatorState> emit,
   ) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    _lastCheckedTimestamp = now;
+    _lastCheckedTimestamp =
+        _latestNotificationTimestamp > 0 ? _latestNotificationTimestamp : now;
 
     try {
       final prefs = await SharedPreferences.getInstance();

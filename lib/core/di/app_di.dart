@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:get_it/get_it.dart';
 
 import 'modules/services_module.dart';
@@ -9,8 +11,11 @@ class AppDI {
 
   static T get<T extends Object>() => _getIt.get<T>();
 
-  static void registerLazySingleton<T extends Object>(T Function() factory) {
-    _getIt.registerLazySingleton<T>(factory);
+  static void registerLazySingleton<T extends Object>(
+    T Function() factory, {
+    FutureOr<void> Function(T)? dispose,
+  }) {
+    _getIt.registerLazySingleton<T>(factory, dispose: dispose);
   }
 
   static void registerFactory<T extends Object>(T Function() factory) {

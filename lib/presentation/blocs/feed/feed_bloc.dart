@@ -21,6 +21,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   static const int _pageSize = 50;
   static const int _watchLimit = 50;
   String? _currentUserHex;
+  Map<String, dynamic>? _currentUserProfile;
   StreamSubscription<FeedUpdate>? _feedSubscription;
   FeedSortMode _currentSortMode = FeedSortMode.latest;
 
@@ -92,7 +93,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final cachedCurrentUser =
         await _profileRepository.getProfile(event.userHex);
     if (cachedCurrentUser != null) {
-      initialProfiles[event.userHex] = cachedCurrentUser.toMap();
+      _currentUserProfile = cachedCurrentUser.toMap();
+      initialProfiles[event.userHex] = _currentUserProfile!;
     }
 
     emit(FeedLoaded(
@@ -187,6 +189,17 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         });
   }
 
+  Map<String, Map<String, dynamic>> _withCurrentUserProfile(
+    Map<String, Map<String, dynamic>> profiles,
+  ) {
+    final hex = _currentUserHex;
+    final profile = _currentUserProfile;
+    if (hex == null || profile == null || profiles.containsKey(hex)) {
+      return profiles;
+    }
+    return {...profiles, hex: profile};
+  }
+
   Map<String, Map<String, dynamic>> _buildProfilesFromNotes(
     List<FeedNote> notes,
     Map<String, Map<String, dynamic>> existing,
@@ -222,7 +235,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         }
       }
     }
-    return merged;
+    return _withCurrentUserProfile(merged);
   }
 
   void _onFeedNotesUpdated(
@@ -235,7 +248,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     } else if (state is FeedEmpty && _currentUserHex != null) {
       currentState = FeedLoaded(
         notes: const [],
-        profiles: const {},
+        profiles: _withCurrentUserProfile(const {}),
         currentUserHex: _currentUserHex!,
       );
     } else {
@@ -245,11 +258,17 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     final update = event.update;
     switch (update) {
       case FeedSnapshot(notes: final snap):
-        _topPageNotes = snap;
+        _topPageNotes =
+            _currentSortMode == FeedSortMode.latest ? _sortedByTime(snap) : snap;
         break;
       case FeedDelta(changed: final changed, removed: final removed):
         _applyDelta(changed, removed);
         break;
+      case FeedErrorUpdate(message: final message):
+        if (currentState.notes.isEmpty) {
+          emit(FeedError(message));
+        }
+        return;
     }
 
     final combined = _combinedNotes();
@@ -395,6 +414,13 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
   }
 
+  List<FeedNote> _sortedByTime(List<FeedNote> notes) {
+    final sorted = List<FeedNote>.from(notes);
+    sorted.sort((a, b) => (b.repostCreatedAt ?? b.createdAt)
+        .compareTo(a.repostCreatedAt ?? a.createdAt));
+    return sorted;
+  }
+
   int _getLatestTimestamp(List<FeedNote> notes) {
     if (notes.isEmpty) return 0;
     int latest = 0;
@@ -415,7 +441,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       _syncService.syncFeed(userHex),
     ])
         .timeout(
-      const Duration(seconds: 2),
+      const Duration(seconds: 15),
       onTimeout: () => [],
     )
         .then((_) async {
@@ -456,32 +482,26 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     _acceptNextUpdate = true;
 
     final currentState = state;
-    if (currentState is FeedLoaded) {
-      emit(currentState.copyWith(
-        isSyncing: true,
-        pendingNotesCount: 0,
-      ));
+    final FeedLoaded baseState = currentState is FeedLoaded
+        ? currentState.copyWith(isSyncing: true, pendingNotesCount: 0)
+        : FeedLoaded(
+            notes: const [],
+            profiles: _withCurrentUserProfile(const {}),
+            currentUserHex: _currentUserHex!,
+            sortMode: _currentSortMode,
+            isSyncing: true,
+          );
+    emit(baseState);
 
-      if (currentState.hashtag != null) {
-        _syncHashtagInBackground(currentState.hashtag!);
-      } else if (currentState.activeListId != null) {
-        final listPubkeys =
-            _followSetService.pubkeysForList(currentState.activeListId!);
-        if (listPubkeys != null && listPubkeys.isNotEmpty) {
-          _watchListFeed(listPubkeys);
-          _syncService
-              .syncListFeed(listPubkeys, force: true)
-              .catchError((_) {})
-              .whenComplete(() {
-            if (!isClosed && state is FeedLoaded) {
-              add(feed_event.FeedSyncCompleted());
-            }
-          });
-        }
-      } else {
-        _watchFeed(_currentUserHex!);
+    if (baseState.hashtag != null) {
+      _syncHashtagInBackground(baseState.hashtag!);
+    } else if (baseState.activeListId != null) {
+      final listPubkeys =
+          _followSetService.pubkeysForList(baseState.activeListId!);
+      if (listPubkeys != null && listPubkeys.isNotEmpty) {
+        _watchListFeed(listPubkeys);
         _syncService
-            .syncFeed(_currentUserHex!, force: true)
+            .syncListFeed(listPubkeys, force: true)
             .catchError((_) {})
             .whenComplete(() {
           if (!isClosed && state is FeedLoaded) {
@@ -489,6 +509,16 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           }
         });
       }
+    } else {
+      _watchFeed(_currentUserHex!);
+      _syncService
+          .syncFeed(_currentUserHex!, force: true)
+          .catchError((_) {})
+          .whenComplete(() {
+        if (!isClosed && state is FeedLoaded) {
+          add(feed_event.FeedSyncCompleted());
+        }
+      });
     }
   }
 
@@ -510,7 +540,10 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
       List<FeedNote> page;
       if (currentState.hashtag != null) {
-        page = const [];
+        page = await _feedRepository.getHashtag(
+          currentState.hashtag!,
+          limit: newLimit,
+        );
       } else if (currentState.activeListId != null) {
         final listPubkeys =
             _followSetService.pubkeysForList(currentState.activeListId!);
@@ -549,8 +582,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       }
 
       _olderNotes = [..._olderNotes, ...additions];
-      _olderNotes.sort((a, b) => (b.repostCreatedAt ?? b.createdAt)
-          .compareTo(a.repostCreatedAt ?? a.createdAt));
+      _olderNotes = _sortedByTime(_olderNotes);
+
+      if (additions.length < _pageSize) {
+        _canLoadMoreOlder = false;
+      }
 
       InteractionService.instance.populateFromNotes(additions);
       _loadProfilesForNotes(additions);
@@ -564,7 +600,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         notes: combined,
         profiles: seededProfiles,
         isLoadingMore: false,
-        canLoadMore: additions.length >= _pageSize,
+        canLoadMore: _canLoadMoreOlder,
       ));
     } catch (_) {
       if (state is FeedLoaded) {
@@ -632,6 +668,9 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     feed_event.FeedUserProfileUpdated event,
     Emitter<FeedState> emit,
   ) {
+    if (event.userId == _currentUserHex) {
+      _currentUserProfile = event.user;
+    }
     if (state is FeedLoaded) {
       final currentState = state as FeedLoaded;
       final updatedProfiles =
@@ -794,8 +833,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     Emitter<FeedState> emit,
   ) {
     if (state is FeedLoaded) {
-      final currentState = state as FeedLoaded;
-      emit(currentState.copyWith(isSyncing: false));
+      emit((state as FeedLoaded).copyWith(isSyncing: false));
     }
   }
 

@@ -38,6 +38,11 @@ class FeedDelta extends FeedUpdate {
   });
 }
 
+class FeedErrorUpdate extends FeedUpdate {
+  final String message;
+  const FeedErrorUpdate(this.message);
+}
+
 abstract interface class FeedRepository {
   Stream<FeedUpdate> watchFeed(
     String userPubkey, {
@@ -75,6 +80,8 @@ abstract interface class FeedRepository {
   Future<List<FeedNote>> getLikes(String pubkey, {int limit});
 
   Stream<FeedUpdate> watchHashtag(String hashtag, {int limit});
+
+  Future<List<FeedNote>> getHashtag(String hashtag, {int limit});
 
   Future<FeedNote?> getNote(String noteId);
 
@@ -125,8 +132,7 @@ class FeedRepositoryImpl implements FeedRepository {
       return;
     }
 
-    final initial = await _fetchFeed(userPubkey, authors, limit, sortMode);
-    yield FeedSnapshot(initial);
+    yield await _fetchFeedUpdate(userPubkey, authors, limit, sortMode);
 
     final feedEvents = _events.onDbChange
         .where((e) =>
@@ -146,9 +152,7 @@ class FeedRepositoryImpl implements FeedRepository {
       }
 
       if (hasUntargeted || allIds.isEmpty) {
-        final snapshot =
-            await _fetchFeed(userPubkey, authors, limit, sortMode);
-        yield FeedSnapshot(snapshot);
+        yield await _fetchFeedUpdate(userPubkey, authors, limit, sortMode);
       } else {
         try {
           final changed = await getNotesByIds(allIds.toList());
@@ -162,6 +166,42 @@ class FeedRepositoryImpl implements FeedRepository {
     }
   }
 
+  Future<List<FeedNote>> _fetchFeedOrThrow(
+    String userPubkey,
+    List<String>? authors,
+    int limit,
+    String sortMode,
+  ) async {
+    final json = await rust_db.dbGetHydratedFeedNotesSorted(
+      userPubkeyHex: userPubkey,
+      authorsHex: authors,
+      limit: limit,
+      filterReplies: true,
+      currentUserPubkeyHex: _currentUserHex,
+      sortMode: sortMode,
+    );
+    final decoded = jsonDecode(json) as List<dynamic>;
+    return decoded
+        .cast<Map<String, dynamic>>()
+        .map((m) => FeedNote.fromMap(m))
+        .toList();
+  }
+
+  Future<FeedUpdate> _fetchFeedUpdate(
+    String userPubkey,
+    List<String>? authors,
+    int limit,
+    String sortMode,
+  ) async {
+    try {
+      return FeedSnapshot(
+          await _fetchFeedOrThrow(userPubkey, authors, limit, sortMode));
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] fetchFeed error: $e');
+      return FeedErrorUpdate(e.toString());
+    }
+  }
+
   Future<List<FeedNote>> _fetchFeed(
     String userPubkey,
     List<String>? authors,
@@ -169,19 +209,7 @@ class FeedRepositoryImpl implements FeedRepository {
     String sortMode,
   ) async {
     try {
-      final json = await rust_db.dbGetHydratedFeedNotesSorted(
-        userPubkeyHex: userPubkey,
-        authorsHex: authors,
-        limit: limit,
-        filterReplies: true,
-        currentUserPubkeyHex: _currentUserHex,
-        sortMode: sortMode,
-      );
-      final decoded = jsonDecode(json) as List<dynamic>;
-      return decoded
-          .cast<Map<String, dynamic>>()
-          .map((m) => FeedNote.fromMap(m))
-          .toList();
+      return await _fetchFeedOrThrow(userPubkey, authors, limit, sortMode);
     } catch (e) {
       if (kDebugMode) print('[FeedRepository] fetchFeed error: $e');
       return [];
@@ -334,29 +362,43 @@ class FeedRepositoryImpl implements FeedRepository {
     return maps.map((m) => FeedNote.fromMap(m)).toList();
   }
 
+  Future<List<FeedNote>> _fetchHashtagOrThrow(String hashtag, int limit) async {
+    final json = await rust_db.dbGetHydratedHashtagNotes(
+      hashtag: hashtag,
+      limit: limit,
+      mutedPubkeys: _mutedPubkeys,
+      mutedWords: _mutedWords,
+      currentUserPubkeyHex: _currentUserHex,
+    );
+    final decoded = jsonDecode(json) as List<dynamic>;
+    return decoded
+        .cast<Map<String, dynamic>>()
+        .map((m) => FeedNote.fromMap(m))
+        .toList();
+  }
+
+  @override
+  Future<List<FeedNote>> getHashtag(String hashtag, {int limit = 50}) async {
+    try {
+      return await _fetchHashtagOrThrow(hashtag, limit);
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getHashtag error: $e');
+      return <FeedNote>[];
+    }
+  }
+
   @override
   Stream<FeedUpdate> watchHashtag(String hashtag, {int limit = 50}) async* {
-    Future<List<FeedNote>> fetch() async {
+    Future<FeedUpdate> fetch() async {
       try {
-        final json = await rust_db.dbGetHydratedHashtagNotes(
-          hashtag: hashtag,
-          limit: limit,
-          mutedPubkeys: _mutedPubkeys,
-          mutedWords: _mutedWords,
-          currentUserPubkeyHex: _currentUserHex,
-        );
-        final decoded = jsonDecode(json) as List<dynamic>;
-        return decoded
-            .cast<Map<String, dynamic>>()
-            .map((m) => FeedNote.fromMap(m))
-            .toList();
+        return FeedSnapshot(await _fetchHashtagOrThrow(hashtag, limit));
       } catch (e) {
         if (kDebugMode) print('[FeedRepository] watchHashtag error: $e');
-        return <FeedNote>[];
+        return FeedErrorUpdate(e.toString());
       }
     }
 
-    yield FeedSnapshot(await fetch());
+    yield await fetch();
 
     final feedEvents = _events.onDbChange
         .where((e) =>
@@ -376,7 +418,7 @@ class FeedRepositoryImpl implements FeedRepository {
       }
 
       if (hasUntargeted || allIds.isEmpty) {
-        yield FeedSnapshot(await fetch());
+        yield await fetch();
       } else {
         try {
           final changed = await getNotesByIds(allIds.toList());

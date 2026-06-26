@@ -947,6 +947,26 @@ class DmService {
     // SDK auto-saves events during fetch/subscribe — explicit save is not needed.
   }
 
+  void reset() {
+    _stopChatPolling();
+    _reconnectTimer?.cancel();
+    _realtimeSubscription?.cancel();
+    _realtimeSubscription = null;
+    _initialized = false;
+    _currentUserPubkeyHex = null;
+    _cachedPrivateKey = null;
+    _activeChatPubkeyHex = null;
+    _failedUnwrapIds.clear();
+    _messagesCache.clear();
+    _decryptedEventCache.clear();
+    _cachedConversations = null;
+    _lastConversationsFetch = null;
+    for (final controller in _messageStreams.values) {
+      controller.close();
+    }
+    _messageStreams.clear();
+  }
+
   void dispose() {
     _stopChatPolling();
     _reconnectTimer?.cancel();

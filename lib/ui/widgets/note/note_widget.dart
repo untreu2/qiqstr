@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:carbon_icons/carbon_icons.dart';
@@ -74,7 +75,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       _loadInitialUserDataSync();
       _scheduleTimestampUpdates();
     } catch (e) {
-      debugPrint('[NoteWidget] InitState error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] InitState error: $e');
       _isInitialized = false;
     }
   }
@@ -210,7 +211,7 @@ class _NoteWidgetState extends State<NoteWidget> {
         _stateNotifier.value = newState;
       }
     } catch (e) {
-      debugPrint('[NoteWidget] Load initial user data sync error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] Load initial user data sync error: $e');
     }
   }
 
@@ -279,7 +280,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (d.inDays < 365) return '${(d.inDays / 30).floor()}mo';
       return '${(d.inDays / 365).floor()}y';
     } catch (e) {
-      debugPrint('[NoteWidget] Calculate timestamp error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] Calculate timestamp error: $e');
       return 'unknown';
     }
   }
@@ -325,7 +326,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       }
       return false;
     } catch (e) {
-      debugPrint('[NoteWidget] Calculate truncation error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] Calculate truncation error: $e');
       return false;
     }
   }
@@ -381,7 +382,7 @@ class _NoteWidgetState extends State<NoteWidget> {
           'mediaDimensions': _parsedContent['mediaDimensions'],
       };
     } catch (e) {
-      debugPrint('[NoteWidget] Create truncated content error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] Create truncated content error: $e');
       return _parsedContent;
     }
   }
@@ -425,7 +426,7 @@ class _NoteWidgetState extends State<NoteWidget> {
             '/profile?npub=${Uri.encodeComponent(userNpub)}&pubkey=${Uri.encodeComponent(userPubkeyHex)}');
       }
     } catch (e) {
-      debugPrint('[NoteWidget] Navigate to profile error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] Navigate to profile error: $e');
     }
   }
 
@@ -464,7 +465,7 @@ class _NoteWidgetState extends State<NoteWidget> {
         context.push('/thread/$chainStr', extra: noteData);
       }
     } catch (e) {
-      debugPrint('[NoteWidget] Navigate to thread error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] Navigate to thread error: $e');
     }
   }
 
@@ -489,7 +490,7 @@ class _NoteWidgetState extends State<NoteWidget> {
         return _buildNormalLayout(colors);
       }
     } catch (e) {
-      debugPrint('[NoteWidget] Build error: $e');
+      if (kDebugMode) debugPrint('[NoteWidget] Build error: $e');
       return const SizedBox.shrink();
     }
   }
@@ -932,7 +933,7 @@ class _SafeProfileSection extends StatelessWidget {
             return _buildNormalProfile(state);
           }
         } catch (e) {
-          debugPrint('[ProfileSection] Build error: $e');
+          if (kDebugMode) debugPrint('[ProfileSection] Build error: $e');
           return const SizedBox(width: 40, height: 40);
         }
       },
@@ -1152,7 +1153,7 @@ class _SafeUserInfoSection extends StatelessWidget {
             ],
           );
         } catch (e) {
-          debugPrint('[UserInfoSection] Build error: $e');
+          if (kDebugMode) debugPrint('[UserInfoSection] Build error: $e');
           return const SizedBox(height: 20);
         }
       },
@@ -1202,7 +1203,7 @@ class _SafeContentSection extends StatelessWidget {
         embeddedArticles: embeddedArticles,
       );
     } catch (e) {
-      debugPrint('[ContentSection] Build error: $e');
+      if (kDebugMode) debugPrint('[ContentSection] Build error: $e');
       return const SizedBox.shrink();
     }
   }

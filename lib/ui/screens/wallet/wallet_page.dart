@@ -39,6 +39,7 @@ class _WalletPageState extends State<WalletPage>
   bool _isCheckingUsername = false;
   bool _isRegisteringAddress = false;
   bool _isConnecting = false;
+  String? _lastShownPaymentError;
   bool _showAllTransactions = false;
   bool _showBackupBanner = false;
 
@@ -954,6 +955,13 @@ class _WalletPageState extends State<WalletPage>
           }
           if (state is WalletLoaded) {
             if (_isConnecting) setState(() => _isConnecting = false);
+            if (state.paymentError != null &&
+                state.paymentError != _lastShownPaymentError) {
+              _lastShownPaymentError = state.paymentError;
+              AppSnackbar.error(context, state.paymentError!);
+            } else if (state.paymentError == null) {
+              _lastShownPaymentError = null;
+            }
             if (_isRegisteringAddress) {
               setState(() {
                 _isRegisteringAddress = false;

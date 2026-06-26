@@ -8,6 +8,10 @@ class DmConversationsLoadRequested extends DmEvent {
   const DmConversationsLoadRequested();
 }
 
+class DmConversationsRefreshRequested extends DmEvent {
+  const DmConversationsRefreshRequested();
+}
+
 class DmConversationOpened extends DmEvent {
   final String pubkeyHex;
 

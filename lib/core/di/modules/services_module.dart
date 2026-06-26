@@ -13,6 +13,7 @@ import '../../../data/services/relay_service.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/sync/publishers/event_publisher.dart';
 import '../../../data/services/follow_set_service.dart';
+import '../../../data/services/interaction_service.dart';
 import '../../../data/services/vertex_search_service.dart';
 
 class ServicesModule extends DIModule {
@@ -23,18 +24,27 @@ class ServicesModule extends DIModule {
     AppDI.registerLazySingleton<AuthService>(() => AuthService.instance);
     AppDI.registerLazySingleton<ValidationService>(
         () => ValidationService.instance);
-    AppDI.registerLazySingleton<SparkService>(() => SparkService());
+    AppDI.registerLazySingleton<SparkService>(
+      () => SparkService(),
+      dispose: (service) => service.dispose(),
+    );
     AppDI.registerLazySingleton<NwcService>(() => NwcService());
-    AppDI.registerLazySingleton<DmService>(() => DmService(
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerLazySingleton<DmService>(
+      () => DmService(
+        authService: AppDI.get<AuthService>(),
+      ),
+      dispose: (service) => service.dispose(),
+    );
     AppDI.registerLazySingleton<EventPublisher>(() => EventPublisher(
           authService: AppDI.get<AuthService>(),
         ));
-    AppDI.registerLazySingleton<SyncService>(() => SyncService(
-          db: AppDI.get<RustDatabaseService>(),
-          publisher: AppDI.get<EventPublisher>(),
-        ));
+    AppDI.registerLazySingleton<SyncService>(
+      () => SyncService(
+        db: AppDI.get<RustDatabaseService>(),
+        publisher: AppDI.get<EventPublisher>(),
+      ),
+      dispose: (service) => service.dispose(),
+    );
     AppDI.registerLazySingleton<VertexSearchService>(
         () => VertexSearchService.instance);
     await AuthService.instance.refreshCache();
@@ -94,7 +104,6 @@ class ServicesModule extends DIModule {
         print('[ServicesModule] ERROR initializing RustRelayService: $e');
         print('[ServicesModule] Stack trace: $stackTrace');
       }
-      rethrow;
     }
   }
 
@@ -102,6 +111,9 @@ class ServicesModule extends DIModule {
     try {
       final authService = AuthService.instance;
       await authService.refreshCache();
+
+      AppDI.get<DmService>().reset();
+      InteractionService.instance.clearCache();
 
       final currentNpub = authService.currentUserNpub;
       if (currentNpub != null && currentNpub.isNotEmpty) {
@@ -120,6 +132,8 @@ class ServicesModule extends DIModule {
       if (!pubResult.isError && pubResult.data != null) {
         userPubkeyHex = pubResult.data;
       }
+
+      InteractionService.instance.setCurrentUser(userPubkeyHex);
 
       await RustRelayService.instance.init(privateKeyHex: privateKeyHex);
 

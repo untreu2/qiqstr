@@ -241,7 +241,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
       onRefresh: () async {
         context
             .read<DmBloc>()
-            .add(const dm_events.DmConversationsLoadRequested());
+            .add(const dm_events.DmConversationsRefreshRequested());
       },
       color: context.colors.textPrimary,
       child: ListView.builder(

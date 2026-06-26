@@ -50,6 +50,8 @@ class SyncService {
   Timer? _notificationReconnectTimer;
   int _feedReconnectAttempts = 0;
   int _notificationReconnectAttempts = 0;
+  int? _feedLastEventTs;
+  int? _notificationLastEventTs;
   static const List<Duration> _reconnectBackoff = [
     Duration(seconds: 2),
     Duration(seconds: 5),
@@ -985,7 +987,9 @@ class SyncService {
       final follows = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
       if (follows.isEmpty) return;
 
-      final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
+      final since = _feedLastEventTs != null
+          ? _feedLastEventTs! - 1
+          : DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
       final filter = <String, dynamic>{
         'kinds': [1, 5, 6],
         'authors': follows,
@@ -1000,12 +1004,19 @@ class SyncService {
             final eventId = eventData['id'] as String?;
             if (_isDuplicate(eventId)) return;
             final kind = (eventData['kind'] as num?)?.toInt();
+            final createdAt = (eventData['created_at'] as num?)?.toInt();
+            if (createdAt != null &&
+                (_feedLastEventTs == null || createdAt > _feedLastEventTs!)) {
+              _feedLastEventTs = createdAt;
+            }
             if (kind == 5) {
+              await rust_db.dbSaveEvents(eventsJson: jsonEncode([eventData]));
               await rust_db.dbProcessDeletionEvents();
               _notifyFeedChanged();
               return;
             }
             if (muteService.shouldFilterEvent(eventData)) return;
+            await rust_db.dbSaveEvents(eventsJson: jsonEncode([eventData]));
             if (eventId != null && eventId.isNotEmpty) {
               _db.notifyFeedChange(ids: [eventId]);
             } else {
@@ -1032,7 +1043,9 @@ class SyncService {
   Future<void> _startNotificationSubscription(String userPubkey) async {
     _notificationSubscription?.cancel();
     try {
-      final since = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
+      final since = _notificationLastEventTs != null
+          ? _notificationLastEventTs! - 1
+          : DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
       final filter = <String, dynamic>{
         'kinds': [1, 6, 7, 9735],
         '#p': [userPubkey],
@@ -1047,6 +1060,13 @@ class SyncService {
             final eventId = eventData['id'] as String?;
             if (_isDuplicate(eventId)) return;
             if (muteService.shouldFilterEvent(eventData)) return;
+            final createdAt = (eventData['created_at'] as num?)?.toInt();
+            if (createdAt != null &&
+                (_notificationLastEventTs == null ||
+                    createdAt > _notificationLastEventTs!)) {
+              _notificationLastEventTs = createdAt;
+            }
+            await rust_db.dbSaveEvents(eventsJson: jsonEncode([eventData]));
             _notifyNotificationChange();
             _syncMissingProfilesInBackground([eventData]);
           } catch (_) {}

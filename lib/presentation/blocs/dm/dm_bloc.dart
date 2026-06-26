@@ -40,6 +40,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
         _syncService = syncService,
         super(const DmInitial()) {
     on<DmConversationsLoadRequested>(_onDmConversationsLoadRequested);
+    on<DmConversationsRefreshRequested>(_onDmConversationsRefreshRequested);
     on<DmConversationOpened>(_onDmConversationOpened);
     on<DmMessageSent>(_onDmMessageSent);
     on<DmEncryptedMediaSent>(_onDmEncryptedMediaSent);
@@ -117,6 +118,24 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     _startConversationsPolling();
     _startConversationsStreamListener();
     _dmService.startRealtimeSubscription();
+  }
+
+  Future<void> _onDmConversationsRefreshRequested(
+    DmConversationsRefreshRequested event,
+    Emitter<DmState> emit,
+  ) async {
+    try {
+      final result = await _dmService.getConversations(forceRefresh: true);
+      if (isClosed) return;
+      if (result.isSuccess && result.data != null) {
+        final enriched = await _enrichConversations(result.data!);
+        if (isClosed) return;
+        _cachedConversations = enriched;
+        if (state is DmConversationsLoaded || state is DmLoading) {
+          emit(DmConversationsLoaded(enriched));
+        }
+      }
+    } catch (_) {}
   }
 
   void _startConversationsStreamListener() {
