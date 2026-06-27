@@ -80,6 +80,7 @@
   "thread": "Konu",
   "noRepliesFound": "Yanıt bulunamadı",
   "loadMore": "Daha fazla yükle",
+  "viewMoreReplies": "Daha fazla yanıt gör",
   "failedToLoadThread": "Konu yüklenemedi",
   "closeDialog": "Diyalogu kapat",
   "pleaseSetUpProfileFirst": "Lütfen önce profilinizi oluşturun",

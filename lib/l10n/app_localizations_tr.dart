@@ -252,6 +252,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get loadMore => 'Daha fazla yükle';
 
   @override
+  String get viewMoreReplies => 'Daha fazla yanıt gör';
+
+  @override
   String get failedToLoadThread => 'Konu yüklenemedi';
 
   @override

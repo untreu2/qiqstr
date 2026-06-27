@@ -42,8 +42,8 @@ class _ThreadPageState extends State<ThreadPage> {
   int _visibleRepliesCount = 20;
   static const int _repliesPerPage = 20;
   static const int _maxInitialReplies = 100;
-  static const int _maxNestedReplies = 2;
-  static const int _maxReplyDepth = 1;
+  static const int _maxNestedReplies = 3;
+  static const int _maxReplyDepth = 4;
 
   String _stableOrderFocusedId = '';
   final List<String> _stableReplyOrder = [];
@@ -567,15 +567,17 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     final currentUserHex = state.currentUserHex;
-    if (currentUserHex.isNotEmpty) {
-      nestedReplies.sort((a, b) {
+    nestedReplies.sort((a, b) {
+      if (currentUserHex.isNotEmpty) {
         final aIsUser = (a['pubkey'] as String? ?? '') == currentUserHex;
         final bIsUser = (b['pubkey'] as String? ?? '') == currentUserHex;
         if (aIsUser && !bIsUser) return -1;
         if (!aIsUser && bIsUser) return 1;
-        return 0;
-      });
-    }
+      }
+      final aTime = (a['created_at'] as int?) ?? 0;
+      final bTime = (b['created_at'] as int?) ?? 0;
+      return aTime.compareTo(bTime);
+    });
 
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
@@ -608,25 +610,61 @@ class _ThreadPageState extends State<ThreadPage> {
                         ),
                       ),
                   if (nestedReplies.length > _maxNestedReplies)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        left: (depth + 1) * baseIndentWidth + 12,
-                        top: 4,
-                      ),
-                      child: Text(
-                        '${nestedReplies.length - _maxNestedReplies} more replies...',
-                        style: TextStyle(
-                          color: context.colors.textSecondary,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
+                    _buildContinueThreadLink(
+                      context,
+                      state,
+                      reply,
+                      depth + 1,
+                      nestedReplies.length - _maxNestedReplies,
                     ),
-                ],
+                ] else if (hasNestedReplies)
+                  _buildContinueThreadLink(
+                    context,
+                    state,
+                    reply,
+                    depth + 1,
+                    nestedReplies.length,
+                  ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildContinueThreadLink(
+    BuildContext context,
+    ThreadLoaded state,
+    Map<String, dynamic> parentReply,
+    int indentDepth,
+    int hiddenCount,
+  ) {
+    const double baseIndentWidth = 16.0;
+    final replyId = parentReply['id'] as String? ?? '';
+    final l10n = AppLocalizations.of(context)!;
+    final label = hiddenCount > 0
+        ? '${l10n.viewMoreReplies} ($hiddenCount)'
+        : l10n.viewMoreReplies;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: indentDepth * baseIndentWidth + 12,
+        top: 4,
+        bottom: 4,
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: replyId.isEmpty
+            ? null
+            : () => _handleNoteTap(replyId, state.rootNoteId, state),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: context.colors.accent,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }

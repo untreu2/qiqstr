@@ -257,6 +257,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get loadMore => 'Mehr laden';
 
   @override
+  String get viewMoreReplies => 'Weitere Antworten anzeigen';
+
+  @override
   String get failedToLoadThread => 'Thread konnte nicht geladen werden';
 
   @override

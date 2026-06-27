@@ -150,11 +150,20 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         if (localState != null) {
           emit(localState);
           _currentRootNoteId = localState.rootNoteId;
+          if (currentUserHex.isNotEmpty) {
+            _interactionService.setCurrentUser(currentUserHex);
+          }
           _watchReplies(localState.rootNoteId);
           _loadCurrentUserProfile(currentUserHex);
           _loadAndSyncProfilesForNotes(
             [...localState.chainNotes, ...localState.replies],
           );
+          final localIds = <String>[localState.rootNoteId];
+          for (final r in localState.replies) {
+            final id = r['id'] as String? ?? '';
+            if (id.isNotEmpty) localIds.add(id);
+          }
+          _loadInteractionCountsInBackground(localIds);
         }
       } else if (state is! ThreadLoaded) {
         emit(const ThreadLoading());
@@ -426,7 +435,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   void _watchReplies(String rootNoteId) {
     _repliesSubscription?.cancel();
     _repliesSubscription =
-        _feedRepository.watchThreadReplies(rootNoteId).listen((replies) {
+        _feedRepository.watchThreadAllReplies(rootNoteId).listen((replies) {
       if (isClosed) return;
       add(ThreadRepliesUpdated(replies));
     });

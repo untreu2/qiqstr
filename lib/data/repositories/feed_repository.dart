@@ -91,6 +91,10 @@ abstract interface class FeedRepository {
 
   Stream<List<FeedNote>> watchThreadReplies(String noteId, {int limit});
 
+  Future<List<FeedNote>> getThreadAllReplies(String rootNoteId, {int limit});
+
+  Stream<List<FeedNote>> watchThreadAllReplies(String rootNoteId, {int limit});
+
   Future<List<FeedNote>> getNotesByIds(List<String> noteIds);
 
   Future<List<FeedNote>> searchNotes(String query, {int limit});
@@ -481,6 +485,40 @@ class FeedRepositoryImpl implements FeedRepository {
         .debounceTime(const Duration(milliseconds: 200))
         .startWith(null)
         .asyncMap((_) => getThreadReplies(noteId, limit: limit));
+  }
+
+  @override
+  Future<List<FeedNote>> getThreadAllReplies(String rootNoteId,
+      {int limit = 500}) async {
+    try {
+      final json = await rust_db.dbGetHydratedThreadStructure(
+        rootNoteId: rootNoteId,
+        currentUserPubkeyHex: _currentUserHex,
+        limit: limit,
+      );
+      final data = jsonDecode(json);
+      if (data is! Map<String, dynamic> || data.containsKey('error')) {
+        return getThreadReplies(rootNoteId, limit: limit);
+      }
+      final allReplies =
+          (data['allReplies'] as List<dynamic>?)?.cast<Map<String, dynamic>>();
+      if (allReplies == null) {
+        return getThreadReplies(rootNoteId, limit: limit);
+      }
+      return allReplies.map((m) => FeedNote.fromMap(m)).toList();
+    } catch (e) {
+      if (kDebugMode) print('[FeedRepository] getThreadAllReplies error: $e');
+      return getThreadReplies(rootNoteId, limit: limit);
+    }
+  }
+
+  @override
+  Stream<List<FeedNote>> watchThreadAllReplies(String rootNoteId,
+      {int limit = 500}) {
+    return _events.onFeedChange
+        .debounceTime(const Duration(milliseconds: 250))
+        .startWith(null)
+        .asyncMap((_) => getThreadAllReplies(rootNoteId, limit: limit));
   }
 
   @override

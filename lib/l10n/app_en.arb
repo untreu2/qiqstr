@@ -80,6 +80,7 @@
   "thread": "Thread",
   "noRepliesFound": "No replies found",
   "loadMore": "Load more",
+  "viewMoreReplies": "View more replies",
   "failedToLoadThread": "Failed to load thread",
   "closeDialog": "Close dialog",
   "pleaseSetUpProfileFirst": "Please set up your profile first",

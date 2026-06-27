@@ -580,6 +580,12 @@ abstract class AppLocalizations {
   /// **'Load more'**
   String get loadMore;
 
+  /// No description provided for @viewMoreReplies.
+  ///
+  /// In en, this message translates to:
+  /// **'View more replies'**
+  String get viewMoreReplies;
+
   /// No description provided for @failedToLoadThread.
   ///
   /// In en, this message translates to:

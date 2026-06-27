@@ -249,6 +249,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loadMore => 'Load more';
 
   @override
+  String get viewMoreReplies => 'View more replies';
+
+  @override
   String get failedToLoadThread => 'Failed to load thread';
 
   @override

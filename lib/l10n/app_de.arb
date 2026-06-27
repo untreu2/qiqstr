@@ -80,6 +80,7 @@
   "thread": "Thread",
   "noRepliesFound": "Keine Antworten gefunden",
   "loadMore": "Mehr laden",
+  "viewMoreReplies": "Weitere Antworten anzeigen",
   "failedToLoadThread": "Thread konnte nicht geladen werden",
   "closeDialog": "Dialog schließen",
   "pleaseSetUpProfileFirst": "Bitte richten Sie zuerst Ihr Profil ein",
