@@ -22,11 +22,27 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   late final SidebarBloc _sidebarBloc;
   bool _isSwitching = false;
 
+  // ISSUE #17 (Following section lag on drawer open):
+  // `SidebarWidget` is passed as `drawer: const SidebarWidget()` in feed_page.dart.
+  // Flutter builds/disposes the drawer's element subtree every time the drawer
+  // opens, so this State (and its `initState`) is recreated on EVERY open.
+  // `_sidebarBloc` is a lazySingleton (blocs_module.dart), so dispatching
+  // `SidebarInitialized` previously re-ran ALL of the bloc's initialization on
+  // each open (re-fetch counts, re-subscribe to profile, restart timers/poll,
+  // re-emit a blank loading state), causing the lag/flicker and the spinner
+  // re-appearing each open.
+  //
+  // FIX: the bloc's `_onSidebarInitialized` is now idempotent (no-ops once
+  // initialized for the current user). We also skip re-dispatching here when
+  // the bloc is already in `SidebarLoaded`, so a re-open reuses the cached
+  // state and running timers without touching the Following section.
   @override
   void initState() {
     super.initState();
     _sidebarBloc = AppDI.get<SidebarBloc>();
-    _sidebarBloc.add(const SidebarInitialized());
+    if (_sidebarBloc.state is! SidebarLoaded) {
+      _sidebarBloc.add(const SidebarInitialized());
+    }
   }
 
   Future<void> _handleAccountSwitch(BuildContext context, String npub) async {

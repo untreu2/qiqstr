@@ -15,6 +15,7 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   final AuthService _authService;
   String? _currentUserHex;
   String? _currentNpub;
+  bool _isInitialized = false;
   StreamSubscription? _profileSubscription;
   Timer? _relayCountTimer;
   Timer? _countsTimer;
@@ -38,6 +39,14 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
     on<_SidebarAccountsLoaded>(_onAccountsLoaded);
   }
 
+  // ISSUE #17 FIX: `SidebarWidget.initState` dispatches this on EVERY drawer
+  // open (Flutter rebuilds the drawer subtree each open) and this bloc is a
+  // lazySingleton. Previously every open wiped the loaded state, re-fetched
+  // counts, re-subscribed to the profile stream, restarted polling, and leaked
+  // periodic timers. This handler is now idempotent: once initialized for the
+  // current user, subsequent opens are a no-op (the already-loaded state and
+  // running timers are reused), so the Following section no longer flashes a
+  // spinner or re-fetches when the menu opens.
   Future<void> _onSidebarInitialized(
     SidebarInitialized event,
     Emitter<SidebarState> emit,
@@ -48,7 +57,16 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
         return;
       }
 
-      _currentUserHex = pubkeyResult.data!;
+      final pubkeyHex = pubkeyResult.data!;
+
+      if (_isInitialized &&
+          _currentUserHex == pubkeyHex &&
+          state is SidebarLoaded) {
+        return;
+      }
+
+      _isInitialized = true;
+      _currentUserHex = pubkeyHex;
       _currentNpub =
           _authService.hexToNpub(_currentUserHex!) ?? _currentUserHex!;
 
@@ -118,6 +136,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   void _loadFollowerCounts(String userPubkeyHex) {
     _fetchCounts(userPubkeyHex);
     _startFollowingPoll(userPubkeyHex);
+    // ISSUE #17: cancel any existing timer before reassigning so re-init never
+    // leaks/stacks periodic timers.
+    _countsTimer?.cancel();
     _countsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _fetchCounts(userPubkeyHex);
     });
@@ -177,6 +198,9 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
 
   void _startRelayCountPolling() {
     _loadRelayCount();
+    // ISSUE #17: cancel any existing timer before reassigning so re-init never
+    // leaks/stacks periodic timers.
+    _relayCountTimer?.cancel();
     _relayCountTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _loadRelayCount();
     });
