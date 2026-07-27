@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `get_quote`, `melt_with_retry`, `new`, `store`, `wallet_for`
+// These functions are ignored because they are not marked as `pub`: `get_quote`, `load_or_create_seed`, `melt_with_retry`, `new`, `seed_path`, `store`, `wallet_for`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `WalletStore`
 
 /// Receives a Cashu token and melts it to the given Lightning target.

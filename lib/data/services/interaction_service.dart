@@ -92,9 +92,10 @@ class InteractionService {
   static const int _relayBatchSize = 40;
 
   void setCurrentUser(String? userHex) {
-    if (_currentUserHex != null &&
-        userHex != null &&
-        _currentUserHex != userHex) {
+    final normalizedUserHex =
+        userHex != null && userHex.length == 64 ? userHex : null;
+    final changed = _currentUserHex != normalizedUserHex;
+    if (changed) {
       _cache.clear();
       _localReactions.clear();
       _localReposts.clear();
@@ -102,8 +103,23 @@ class InteractionService {
       _lastUserActionAt.clear();
       _relayFetchedAt.clear();
       _relayFetchTimestamps.clear();
+      _pendingBatch.clear();
+      _pendingRelayBatch.clear();
+      _batchTimer?.cancel();
+      _relayBatchTimer?.cancel();
     }
-    _currentUserHex = userHex;
+    _currentUserHex = normalizedUserHex;
+    if (changed) {
+      for (final noteId in _streams.keys) {
+        const empty = InteractionCounts();
+        _cache[noteId] = empty;
+        _emit(noteId, empty);
+        if (normalizedUserHex != null) {
+          _scheduleBatchLoad(noteId);
+          _scheduleRelayBatchLoad(noteId);
+        }
+      }
+    }
   }
 
   Stream<InteractionCounts> streamInteractions(String noteId,
@@ -116,34 +132,25 @@ class InteractionService {
       _streamRefCounts[noteId] = (_streamRefCounts[noteId] ?? 0) + 1;
     }
 
-    if (initialCounts != null && !_isEmptyCounts(initialCounts)) {
+    if (initialCounts != null) {
       final merged = _adoptFresh(noteId, initialCounts);
       _cache[noteId] = merged;
       Future.microtask(() => _emit(noteId, merged));
     } else if (_cache.containsKey(noteId)) {
       final cached = _cache[noteId]!;
       Future.microtask(() => _emit(noteId, cached));
+    } else {
+      const empty = InteractionCounts();
+      _cache[noteId] = empty;
+      Future.microtask(() => _emit(noteId, empty));
     }
 
-    final current = _cache[noteId];
-    if (current == null || _isEmptyCounts(current)) {
-      _scheduleBatchLoad(noteId);
-      _scheduleRelayBatchLoad(noteId);
-    } else if (!_relayFetchedAt.contains(noteId)) {
+    _scheduleBatchLoad(noteId);
+    if (!_relayFetchedAt.contains(noteId)) {
       _scheduleRelayBatchLoad(noteId);
     }
 
     return _streams[noteId]!.stream;
-  }
-
-  bool _isEmptyCounts(InteractionCounts counts) {
-    return counts.reactions == 0 &&
-        counts.reposts == 0 &&
-        counts.replies == 0 &&
-        counts.zapAmount == 0 &&
-        !counts.hasReacted &&
-        !counts.hasReposted &&
-        !counts.hasZapped;
   }
 
   InteractionCounts _adoptFresh(String noteId, InteractionCounts fresh) {
@@ -176,15 +183,9 @@ class InteractionService {
       reposts: reposts,
       replies: replies,
       zapAmount: zapAmount,
-      hasReacted: _localReactions.contains(noteId) ||
-          fresh.hasReacted ||
-          (existing?.hasReacted ?? false),
-      hasReposted: _localReposts.contains(noteId) ||
-          fresh.hasReposted ||
-          (existing?.hasReposted ?? false),
-      hasZapped: _localZaps.contains(noteId) ||
-          fresh.hasZapped ||
-          (existing?.hasZapped ?? false),
+      hasReacted: _localReactions.contains(noteId) || fresh.hasReacted,
+      hasReposted: _localReposts.contains(noteId) || fresh.hasReposted,
+      hasZapped: _localZaps.contains(noteId) || fresh.hasZapped,
     );
   }
 
@@ -211,19 +212,19 @@ class InteractionService {
   Future<void> _flushBatch() async {
     if (_batchLoading || _pendingBatch.isEmpty) return;
     _batchLoading = true;
+    try {
+      final batch = _pendingBatch.toList();
+      _pendingBatch.clear();
 
-    final batch = _pendingBatch.toList();
-    _pendingBatch.clear();
-
-    for (var i = 0; i < batch.length; i += _batchSize) {
-      final chunk = batch.skip(i).take(_batchSize).toList();
-      await _loadBatchFromDb(chunk);
-    }
-
-    _batchLoading = false;
-
-    if (_pendingBatch.isNotEmpty) {
-      _flushBatch();
+      for (var i = 0; i < batch.length; i += _batchSize) {
+        final chunk = batch.skip(i).take(_batchSize).toList();
+        await _loadBatchFromDb(chunk);
+      }
+    } finally {
+      _batchLoading = false;
+      if (_pendingBatch.isNotEmpty) {
+        _flushBatch();
+      }
     }
   }
 
@@ -247,24 +248,33 @@ class InteractionService {
   }) {
     final existing = _cache[noteId];
 
-    if (!authoritative && existing != null && _hasRecentUserAction(noteId)) {
+    if (existing != null && _hasRecentUserAction(noteId)) {
       _emit(noteId, existing);
       return;
     }
 
-    final mergedReactions = existing == null
+    final mergedReactions = authoritative
         ? newReactions
-        : math.max(newReactions, existing.reactions);
-    final mergedReposts = existing == null
+        : existing == null
+            ? newReactions
+            : math.max(newReactions, existing.reactions);
+    final mergedReposts = authoritative
         ? newReposts
-        : math.max(newReposts, existing.reposts);
-    final mergedReplies = existing == null
+        : existing == null
+            ? newReposts
+            : math.max(newReposts, existing.reposts);
+    final mergedReplies = authoritative
         ? newReplies
-        : math.max(newReplies, existing.replies);
-    final mergedZaps = existing == null
+        : existing == null
+            ? newReplies
+            : math.max(newReplies, existing.replies);
+    final mergedZaps = authoritative
         ? newZaps
-        : math.max(newZaps, existing.zapAmount);
+        : existing == null
+            ? newZaps
+            : math.max(newZaps, existing.zapAmount);
 
+    final preserveExisting = !authoritative;
     final counts = InteractionCounts(
       reactions: mergedReactions,
       reposts: mergedReposts,
@@ -272,13 +282,13 @@ class InteractionService {
       zapAmount: mergedZaps,
       hasReacted: _localReactions.contains(noteId) ||
           (d['hasReacted'] == true) ||
-          (existing?.hasReacted ?? false),
+          (preserveExisting && (existing?.hasReacted ?? false)),
       hasReposted: _localReposts.contains(noteId) ||
           (d['hasReposted'] == true) ||
-          (existing?.hasReposted ?? false),
+          (preserveExisting && (existing?.hasReposted ?? false)),
       hasZapped: _localZaps.contains(noteId) ||
           (d['hasZapped'] == true) ||
-          (existing?.hasZapped ?? false),
+          (preserveExisting && (existing?.hasZapped ?? false)),
     );
     if (existing == null || _differs(existing, counts)) {
       _cache[noteId] = counts;
@@ -299,8 +309,7 @@ class InteractionService {
       );
 
       for (final noteId in noteIds) {
-        final d = data[noteId];
-        if (d == null) continue;
+        final d = data[noteId] ?? const <String, dynamic>{};
         _applyData(
           noteId,
           d,
@@ -308,6 +317,7 @@ class InteractionService {
           newReposts: (d['reposts'] as num?)?.toInt() ?? 0,
           newReplies: (d['replies'] as num?)?.toInt() ?? 0,
           newZaps: (d['zaps'] as num?)?.toInt() ?? 0,
+          authoritative: true,
         );
       }
     } catch (e) {
@@ -333,7 +343,12 @@ class InteractionService {
   }
 
   void prePopulateCache(String noteId, InteractionCounts counts) {
-    _cache[noteId] = _adoptFresh(noteId, counts);
+    final existing = _cache[noteId];
+    final adopted = _adoptFresh(noteId, counts);
+    _cache[noteId] = adopted;
+    if (existing == null || _differs(existing, adopted)) {
+      _emit(noteId, adopted);
+    }
   }
 
   Future<void> refreshInteractions(String noteId) async {
@@ -359,15 +374,16 @@ class InteractionService {
       final now = DateTime.now();
       for (final noteId in noteIds) {
         final d = decoded[noteId];
-        if (d == null) continue;
-        _applyData(
-          noteId,
-          d,
-          newReactions: (d['reactions'] as num?)?.toInt() ?? 0,
-          newReposts: (d['reposts'] as num?)?.toInt() ?? 0,
-          newReplies: (d['replies'] as num?)?.toInt() ?? 0,
-          newZaps: (d['zaps'] as num?)?.toInt() ?? 0,
-        );
+        if (d is Map<String, dynamic>) {
+          _applyData(
+            noteId,
+            d,
+            newReactions: (d['reactions'] as num?)?.toInt() ?? 0,
+            newReposts: (d['reposts'] as num?)?.toInt() ?? 0,
+            newReplies: (d['replies'] as num?)?.toInt() ?? 0,
+            newZaps: (d['zaps'] as num?)?.toInt() ?? 0,
+          );
+        }
         _relayFetchedAt.add(noteId);
         _relayFetchTimestamps[noteId] = now;
       }
@@ -378,8 +394,7 @@ class InteractionService {
 
   void _scheduleRelayBatchLoad(String noteId) {
     final last = _relayFetchTimestamps[noteId];
-    if (last != null &&
-        DateTime.now().difference(last) < _relayFetchCooldown) {
+    if (last != null && DateTime.now().difference(last) < _relayFetchCooldown) {
       return;
     }
     _pendingRelayBatch.add(noteId);
@@ -390,21 +405,19 @@ class InteractionService {
   Future<void> _flushRelayBatch() async {
     if (_relayBatchLoading || _pendingRelayBatch.isEmpty) return;
     _relayBatchLoading = true;
+    try {
+      final batch = _pendingRelayBatch.toList();
+      _pendingRelayBatch.clear();
 
-    final batch = _pendingRelayBatch.toList();
-    _pendingRelayBatch.clear();
-
-    for (var i = 0; i < batch.length; i += _relayBatchSize) {
-      final chunk = batch.skip(i).take(_relayBatchSize).toList();
-      try {
-        await fetchCountsFromRelays(chunk);
-      } catch (_) {}
-    }
-
-    _relayBatchLoading = false;
-
-    if (_pendingRelayBatch.isNotEmpty) {
-      _flushRelayBatch();
+      for (var i = 0; i < batch.length; i += _relayBatchSize) {
+        await fetchCountsFromRelays(
+            batch.skip(i).take(_relayBatchSize).toList());
+      }
+    } finally {
+      _relayBatchLoading = false;
+      if (_pendingRelayBatch.isNotEmpty) {
+        _flushRelayBatch();
+      }
     }
   }
 
@@ -512,6 +525,8 @@ class InteractionService {
 
   void clearCache() {
     _cache.clear();
+    _relayFetchedAt.clear();
+    _relayFetchTimestamps.clear();
   }
 
   void _refreshActiveStreams() {
@@ -544,6 +559,7 @@ class InteractionService {
     _lastUserActionAt.clear();
     _relayFetchedAt.clear();
     _relayFetchTimestamps.clear();
+    _pendingBatch.clear();
     _pendingRelayBatch.clear();
   }
 }

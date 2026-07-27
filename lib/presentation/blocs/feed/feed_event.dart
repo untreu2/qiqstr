@@ -71,21 +71,23 @@ class FeedNoteDeleted extends FeedEvent {
 }
 
 class FeedProfilesLoaded extends FeedEvent {
+  final int generation;
   final Map<String, Map<String, dynamic>> profiles;
 
-  const FeedProfilesLoaded(this.profiles);
+  const FeedProfilesLoaded(this.profiles, this.generation);
 
   @override
-  List<Object?> get props => [profiles];
+  List<Object?> get props => [profiles, generation];
 }
 
 class FeedNotesUpdated extends FeedEvent {
   final FeedUpdate update;
+  final int generation;
 
-  const FeedNotesUpdated(this.update);
+  const FeedNotesUpdated(this.update, this.generation);
 
   @override
-  List<Object?> get props => [update];
+  List<Object?> get props => [update, generation];
 }
 
 class FeedNewNotesAccepted extends FeedEvent {
@@ -104,5 +106,10 @@ class FeedListChanged extends FeedEvent {
 }
 
 class FeedSyncCompleted extends FeedEvent {
-  const FeedSyncCompleted();
+  final int generation;
+
+  const FeedSyncCompleted(this.generation);
+
+  @override
+  List<Object?> get props => [generation];
 }

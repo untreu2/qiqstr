@@ -27,13 +27,29 @@
   "errorSelectingUser": "Error selecting user",
   "errorSharingNote": "Error sharing note",
   "emptyNoteMessage": "Please enter a note or add media",
+  "maxMediaFilesAllowed": "Maximum {count} media files allowed",
+  "@maxMediaFilesAllowed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "onlyMoreMediaFiles": "Only {count} more media files can be added",
+  "@onlyMoreMediaFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "invalidMediaFileType": "Invalid file type. Only images and videos are allowed",
   "addMediaText": "Add media",
   "retryText": "Retry",
   "hintText": "What's on your mind?",
   "cancel": "Cancel",
   "uploadingMediaFiles": "Uploading media files",
   "addMediaFilesToPost": "Add media files to your post",
-  "addGifFromGiphy": "Add GIF from Giphy",
   "postYourNote": "Post your note",
   "composeYourNote": "Compose your note",
   "removeThisMediaFile": "Remove this media file",
@@ -1057,6 +1073,7 @@
       "amount": { "type": "int" }
     }
   },
+  "mediaUploadFailed": "Media upload failed. Please try again.",
   "cashuMeltAllSuccess": "Sent {amount} sats to Lightning!",
   "@cashuMeltAllSuccess": {
     "placeholders": {

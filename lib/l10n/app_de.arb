@@ -27,13 +27,15 @@
   "errorSelectingUser": "Fehler beim Auswählen des Benutzers",
   "errorSharingNote": "Fehler beim Teilen der Notiz",
   "emptyNoteMessage": "Bitte geben Sie eine Notiz ein oder fügen Sie Medien hinzu",
+  "maxMediaFilesAllowed": "Maximal {count} Mediendateien sind erlaubt",
+  "onlyMoreMediaFiles": "Es können nur noch {count} Mediendateien hinzugefügt werden",
+  "invalidMediaFileType": "Ungültiger Dateityp. Nur Bilder und Videos sind erlaubt",
   "addMediaText": "Medien hinzufügen",
   "retryText": "Wiederholen",
   "hintText": "Was denken Sie?",
   "cancel": "Abbrechen",
   "uploadingMediaFiles": "Mediendateien werden hochgeladen",
   "addMediaFilesToPost": "Fügen Sie Mediendateien zu Ihrem Beitrag hinzu",
-  "addGifFromGiphy": "GIF von Giphy hinzufügen",
   "postYourNote": "Notiz veröffentlichen",
   "composeYourNote": "Verfassen Sie Ihre Notiz",
   "removeThisMediaFile": "Diese Mediendatei entfernen",
@@ -864,6 +866,7 @@
       "amount": { "type": "int" }
     }
   },
+  "mediaUploadFailed": "Medien konnten nicht hochgeladen werden. Bitte versuchen Sie es erneut.",
   "cashuMeltAllSuccess": "{amount} Sats an Lightning gesendet!",
   "@cashuMeltAllSuccess": {
     "placeholders": {

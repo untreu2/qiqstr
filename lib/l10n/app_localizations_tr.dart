@@ -90,6 +90,20 @@ class AppLocalizationsTr extends AppLocalizations {
   String get emptyNoteMessage => 'Lütfen bir not girin veya medya ekleyin';
 
   @override
+  String maxMediaFilesAllowed(int count) {
+    return 'En fazla $count medya dosyasına izin verilir';
+  }
+
+  @override
+  String onlyMoreMediaFiles(int count) {
+    return 'Yalnızca $count medya dosyası daha eklenebilir';
+  }
+
+  @override
+  String get invalidMediaFileType =>
+      'Geçersiz dosya türü. Yalnızca resim ve videolara izin verilir';
+
+  @override
   String get addMediaText => 'Medya ekle';
 
   @override
@@ -106,9 +120,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get addMediaFilesToPost => 'Gönderinize medya dosyaları ekleyin';
-
-  @override
-  String get addGifFromGiphy => 'Giphy\'den GIF ekle';
 
   @override
   String get postYourNote => 'Notunuzu paylaşın';
@@ -2223,6 +2234,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String cashuMeltAllConfirm(int amount) {
     return '$amount satı Lightning adresinize göndermek istiyor musunuz?';
   }
+
+  @override
+  String get mediaUploadFailed => 'Medya yüklenemedi. Lütfen tekrar deneyin.';
 
   @override
   String cashuMeltAllSuccess(int amount) {

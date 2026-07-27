@@ -1,6 +1,9 @@
 import 'dart:async';
+
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -34,6 +37,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   StreamSubscription<List<FeedNote>>? _likesSubscription;
   StreamSubscription<List<String>>? _pinnedNotesSubscription;
   StreamSubscription<int>? _syncSubscription;
+  int _profileGeneration = 0;
+  int _notesWatchGeneration = 0;
+  int _likesWatchGeneration = 0;
 
   ProfileBloc({
     required FeedRepository feedRepository,
@@ -49,7 +55,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         _syncService = syncService,
         _authService = authService,
         super(const ProfileInitial()) {
-    on<ProfileLoadRequested>(_onProfileLoaded);
+    on<ProfileLoadRequested>(_onProfileLoaded, transformer: restartable());
     on<ProfileRefreshed>(_onProfileRefreshed);
     on<ProfileFollowToggled>(_onProfileFollowToggled);
     on<ProfileEditRequested>(_onProfileEditRequested);
@@ -60,11 +66,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<ProfileUserUpdated>(_onProfileUserUpdated);
     on<ProfileUserNotePublished>(_onProfileUserNotePublished);
     on<ProfileProfilesLoaded>(_onProfileProfilesLoaded);
-    on<_ProfileNotesUpdated>(_onProfileNotesUpdatedInternal);
     on<ProfileSyncCompleted>(_onProfileSyncCompleted);
     on<ProfileRepliesLoaded>(_onProfileRepliesLoaded);
     on<ProfileLoadMoreRepliesRequested>(_onProfileLoadMoreRepliesRequested);
-    on<_ProfileRepliesUpdated>(_onProfileRepliesUpdatedInternal);
     on<_ProfileNotesAndRepliesUpdated>(_onProfileNotesAndRepliesUpdated);
     on<ProfileArticlesRequested>(_onProfileArticlesRequested);
     on<ProfileLikesRequested>(_onProfileLikesRequested);
@@ -82,6 +86,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   ) {
     if (state is ProfileLoaded) {
       final currentState = state as ProfileLoaded;
+      if (event.pubkeyHex != currentState.currentProfileHex) return;
       final updatedProfiles =
           Map<String, Map<String, dynamic>>.from(currentState.profiles);
       updatedProfiles.addAll(event.profiles);
@@ -93,21 +98,43 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     ProfileLoadRequested event,
     Emitter<ProfileState> emit,
   ) async {
+    final generation = ++_profileGeneration;
+    _notesWatchGeneration++;
+    _likesWatchGeneration++;
+    await Future.wait([
+      if (_profileSubscription != null) _profileSubscription!.cancel(),
+      if (_notesAndRepliesSubscription != null)
+        _notesAndRepliesSubscription!.cancel(),
+      if (_likesSubscription != null) _likesSubscription!.cancel(),
+      if (_pinnedNotesSubscription != null) _pinnedNotesSubscription!.cancel(),
+      if (_syncSubscription != null) _syncSubscription!.cancel(),
+    ]);
+
     try {
       final currentUserHex = _authService.currentUserPubkeyHex ?? '';
       final targetHex =
           _authService.npubToHex(event.pubkeyHex) ?? event.pubkeyHex;
+      if (targetHex.length != 64) {
+        emit(const ProfileError('Invalid profile public key'));
+        return;
+      }
+      _currentProfileHex = targetHex;
+      _isLoadingMore = false;
+      _isLoadingMoreReplies = false;
+      _isLoadingMoreLikes = false;
+      _isLoadingMoreArticles = false;
+      emit(const ProfileLoading());
 
       final isCurrentUser =
           currentUserHex.isNotEmpty && currentUserHex == targetHex;
 
       final profileFuture = _profileRepository.getProfile(targetHex);
-      final followingFuture =
-          (!isCurrentUser && currentUserHex.isNotEmpty)
-              ? _followingRepository.isFollowing(currentUserHex, targetHex)
-              : Future.value(false);
+      final followingFuture = (!isCurrentUser && currentUserHex.isNotEmpty)
+          ? _followingRepository.isFollowing(currentUserHex, targetHex)
+          : Future.value(false);
 
       final results = await Future.wait([profileFuture, followingFuture]);
+      if (isClosed || generation != _profileGeneration) return;
       final cachedProfile = results[0] as dynamic;
       final isFollowing = results[1] as bool;
 
@@ -129,7 +156,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
         add(ProfileNotesLoaded(targetHex));
         _watchProfile(targetHex);
-        _syncProfileInBackground(targetHex, emit);
+        _syncProfileInBackground(targetHex, generation);
       } else {
         final placeholderUser = <String, dynamic>{
           'pubkey': targetHex,
@@ -156,10 +183,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
         add(ProfileNotesLoaded(targetHex));
         _watchProfile(targetHex);
-        _syncProfileInBackground(targetHex, emit);
+        _syncProfileInBackground(targetHex, generation);
       }
     } catch (e) {
-      emit(ProfileError(e.toString()));
+      if (generation == _profileGeneration) {
+        emit(ProfileError(e.toString()));
+      }
     }
   }
 
@@ -167,7 +196,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     _profileSubscription?.cancel();
     _profileSubscription =
         _profileRepository.watchProfile(pubkey).listen((profile) {
-      if (profile == null || isClosed) return;
+      if (profile == null || isClosed || pubkey != _currentProfileHex) return;
       try {
         final userMap = profile.toMap();
         userMap['pubkey'] = pubkey;
@@ -177,22 +206,30 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     });
   }
 
-  void _syncProfileInBackground(String targetHex, Emitter<ProfileState> emit) {
+  void _syncProfileInBackground(String targetHex, int generation) {
     _syncService
         .syncProfile(targetHex)
         .timeout(const Duration(seconds: 2), onTimeout: () {})
         .then((_) async {
-      if (isClosed) return;
-      final freshProfile = await _profileRepository.getProfile(targetHex);
-      if (freshProfile != null && !isClosed && state is ProfileLoaded) {
-        final userMap = freshProfile.toMap();
-        userMap['pubkey'] = targetHex;
-        userMap['npub'] = _authService.hexToNpub(targetHex) ?? targetHex;
-        add(ProfileUserUpdated(userMap));
-      }
-    }).catchError((_) {}).whenComplete(() {
-      if (!isClosed) add(const ProfileSyncCompleted());
-    });
+          if (isClosed || generation != _profileGeneration) return;
+          final freshProfile = await _profileRepository.getProfile(targetHex);
+          if (freshProfile != null &&
+              !isClosed &&
+              generation == _profileGeneration &&
+              state is ProfileLoaded &&
+              (state as ProfileLoaded).currentProfileHex == targetHex) {
+            final userMap = freshProfile.toMap();
+            userMap['pubkey'] = targetHex;
+            userMap['npub'] = _authService.hexToNpub(targetHex) ?? targetHex;
+            add(ProfileUserUpdated(userMap));
+          }
+        })
+        .catchError((_) {})
+        .whenComplete(() {
+          if (!isClosed && generation == _profileGeneration) {
+            add(ProfileSyncCompleted(targetHex));
+          }
+        });
   }
 
   Future<void> _onProfileRefreshed(
@@ -203,6 +240,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     final currentState = state as ProfileLoaded;
     final targetHex = currentState.currentProfileHex;
+    final generation = _profileGeneration;
 
     if (targetHex.isEmpty) return;
 
@@ -212,18 +250,23 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     try {
       await _syncService.syncProfile(targetHex);
     } catch (_) {}
+    if (isClosed ||
+        generation != _profileGeneration ||
+        state is! ProfileLoaded ||
+        (state as ProfileLoaded).currentProfileHex != targetHex) {
+      return;
+    }
 
-    _syncSubscription = _syncService
-        .streamProfileNotesProgress(targetHex, force: true)
-        .listen(
+    _syncSubscription =
+        _syncService.streamProfileNotesProgress(targetHex, force: true).listen(
       (_) {},
       onDone: () {
-        if (isClosed) return;
-        add(const ProfileSyncCompleted());
+        if (isClosed || generation != _profileGeneration) return;
+        add(ProfileSyncCompleted(targetHex));
       },
       onError: (_) {
-        if (isClosed) return;
-        add(const ProfileSyncCompleted());
+        if (isClosed || generation != _profileGeneration) return;
+        add(ProfileSyncCompleted(targetHex));
       },
     );
 
@@ -240,11 +283,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final currentState = state as ProfileLoaded;
     if (currentState.isCurrentUser) return;
 
+    final generation = _profileGeneration;
+    final targetHex = currentState.currentProfileHex;
     final wasFollowing = currentState.isFollowing;
     emit(currentState.copyWith(isFollowing: !wasFollowing));
 
     try {
-      final targetHex = currentState.currentProfileHex;
       final currentUserHex = currentState.currentUserHex;
 
       if (wasFollowing) {
@@ -263,7 +307,20 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         }
       }
     } catch (e) {
-      if (isClosed) return;
+      try {
+        final currentUserHex = currentState.currentUserHex;
+        if (wasFollowing) {
+          await _followingRepository.follow(currentUserHex, targetHex);
+        } else {
+          await _followingRepository.unfollow(currentUserHex, targetHex);
+        }
+      } catch (_) {}
+      if (isClosed ||
+          generation != _profileGeneration ||
+          state is! ProfileLoaded ||
+          (state as ProfileLoaded).currentProfileHex != targetHex) {
+        return;
+      }
       emit(currentState.copyWith(
         isFollowing: wasFollowing,
         followError: 'Failed to ${wasFollowing ? 'unfollow' : 'follow'} user',
@@ -327,6 +384,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Emitter<ProfileState> emit,
   ) async {
     if (state is! ProfileLoaded) return;
+    if ((state as ProfileLoaded).currentProfileHex != event.pubkeyHex) return;
 
     if (event.pubkeyHex.isEmpty) {
       emit(const ProfileError('Pubkey cannot be empty'));
@@ -345,22 +403,22 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   void _syncProfileNotesInBackground(String pubkeyHex) {
+    final generation = _profileGeneration;
     _syncSubscription?.cancel();
 
     _watchProfileNotesAndReplies(pubkeyHex);
 
-    _syncSubscription = _syncService
-        .streamProfileNotesProgress(pubkeyHex, force: true)
-        .listen(
+    _syncSubscription =
+        _syncService.streamProfileNotesProgress(pubkeyHex, force: true).listen(
       (_) {},
       onDone: () {
-        if (isClosed) return;
-        add(const ProfileSyncCompleted());
+        if (isClosed || generation != _profileGeneration) return;
+        add(ProfileSyncCompleted(pubkeyHex));
         _loadAuthorProfilesForCurrentNotes();
       },
       onError: (_) {
-        if (isClosed) return;
-        add(const ProfileSyncCompleted());
+        if (isClosed || generation != _profileGeneration) return;
+        add(ProfileSyncCompleted(pubkeyHex));
       },
     );
   }
@@ -398,10 +456,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final currentState = state as ProfileLoaded;
     final targetHex = currentState.currentProfileHex;
 
-    if (targetHex != _currentProfileHex) {
-      emit(currentState.copyWith(isSyncing: false));
-      return;
-    }
+    if (event.pubkeyHex != targetHex || targetHex != _currentProfileHex) return;
 
     try {
       final results = await Future.wait([
@@ -417,43 +472,21 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final noteMaps = _feedNotesToMaps(results[0]);
       final replyMaps = _feedNotesToMaps(results[1]);
 
-      final existingNoteIds = freshState.notes
-          .map((n) => n['id'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
-      final newNotes = noteMaps
-          .where((n) => !existingNoteIds.contains(n['id'] as String? ?? ''))
-          .toList();
-
-      final existingReplyIds = freshState.replies
-          .map((n) => n['id'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
-      final newReplies = replyMaps
-          .where((n) => !existingReplyIds.contains(n['id'] as String? ?? ''))
-          .toList();
-
-      final updatedNotes = newNotes.isEmpty
-          ? freshState.notes
-          : _sortByTimestamp([...freshState.notes, ...newNotes]);
-      final updatedReplies = newReplies.isEmpty
-          ? freshState.replies
-          : _sortByTimestamp([...freshState.replies, ...newReplies]);
-
       emit(freshState.copyWith(
-        notes: updatedNotes,
-        replies: updatedReplies,
+        notes: _reconcileWatchedPage(freshState.notes, noteMaps),
+        replies: _reconcileWatchedPage(freshState.replies, replyMaps),
         isSyncing: false,
-        canLoadMore: true,
-        canLoadMoreReplies: true,
+        canLoadMore: noteMaps.length >= _pageSize,
+        canLoadMoreReplies: replyMaps.length >= _pageSize,
       ));
 
-      final allNew = [...newNotes, ...newReplies];
-      if (allNew.isNotEmpty) {
-        _loadProfilesForNotes(allNew, emit);
+      final incoming = [...noteMaps, ...replyMaps];
+      if (incoming.isNotEmpty) {
+        _loadProfilesForNotes(incoming);
       }
     } catch (_) {
-      if (state is ProfileLoaded) {
+      if (state is ProfileLoaded &&
+          (state as ProfileLoaded).currentProfileHex == targetHex) {
         emit((state as ProfileLoaded).copyWith(isSyncing: false));
       }
     }
@@ -534,6 +567,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final currentState = state as ProfileLoaded;
     if (_isLoadingMore || !currentState.canLoadMore) return;
 
+    final generation = _profileGeneration;
     final targetHex = currentState.currentProfileHex;
     if (targetHex != _currentProfileHex) return;
 
@@ -554,8 +588,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       );
 
       if (state is! ProfileLoaded ||
-          (state as ProfileLoaded).currentProfileHex != targetHex) {
-        _isLoadingMore = false;
+          (state as ProfileLoaded).currentProfileHex != targetHex ||
+          generation != _profileGeneration) {
         return;
       }
 
@@ -575,7 +609,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         final allNotes =
             _sortByTimestamp([...freshState.notes, ...uniqueNewNotes]);
         emit(freshState.copyWith(notes: allNotes, isLoadingMore: false));
-        _loadProfilesForNotes(uniqueNewNotes, emit);
+        _loadProfilesForNotes(uniqueNewNotes);
       } else {
         emit(freshState.copyWith(
           isLoadingMore: false,
@@ -583,12 +617,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         ));
       }
     } catch (e) {
-      if (state is ProfileLoaded) {
+      if (generation == _profileGeneration &&
+          state is ProfileLoaded &&
+          (state as ProfileLoaded).currentProfileHex == targetHex) {
         emit((state as ProfileLoaded).copyWith(isLoadingMore: false));
       }
     }
 
-    _isLoadingMore = false;
+    if (generation == _profileGeneration) {
+      _isLoadingMore = false;
+    }
   }
 
   void _onProfileUserUpdated(
@@ -652,30 +690,25 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     return merged;
   }
 
-  void _loadProfilesForNotes(
-    List<Map<String, dynamic>> notes,
-    Emitter<ProfileState> emit,
-  ) async {
+  void _loadProfilesForNotes(List<Map<String, dynamic>> notes) async {
     if (isClosed || state is! ProfileLoaded) return;
 
     final currentState = state as ProfileLoaded;
+    final targetHex = currentState.currentProfileHex;
 
     final seeded = _buildProfilesFromNoteMaps(notes, currentState.profiles);
     if (seeded.length > currentState.profiles.length && !isClosed) {
-      emit(currentState.copyWith(profiles: seeded));
+      add(ProfileProfilesLoaded(targetHex, seeded));
     }
 
-    final refreshedState =
-        state is ProfileLoaded ? state as ProfileLoaded : currentState;
     final authorIds = <String>{};
     for (final n in notes) {
       final pubkey = n['pubkey'] as String? ?? '';
-      if (pubkey.isNotEmpty && !refreshedState.profiles.containsKey(pubkey)) {
+      if (pubkey.isNotEmpty && !seeded.containsKey(pubkey)) {
         authorIds.add(pubkey);
       }
       final repostedBy = n['repostedBy'] as String? ?? '';
-      if (repostedBy.isNotEmpty &&
-          !refreshedState.profiles.containsKey(repostedBy)) {
+      if (repostedBy.isNotEmpty && !seeded.containsKey(repostedBy)) {
         authorIds.add(repostedBy);
       }
     }
@@ -683,8 +716,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (authorIds.isEmpty) return;
 
     try {
-      final profiles =
-          await _profileRepository.getProfiles(authorIds.toList());
+      final profiles = await _profileRepository.getProfiles(authorIds.toList());
       if (isClosed) return;
 
       final updatedProfiles = <String, Map<String, dynamic>>{};
@@ -700,10 +732,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       }
 
       if (updatedProfiles.isNotEmpty && !isClosed) {
-        add(ProfileProfilesLoaded(updatedProfiles));
+        add(ProfileProfilesLoaded(targetHex, updatedProfiles));
       }
 
-      if (missingPubkeys.isNotEmpty) {
+      if (missingPubkeys.isNotEmpty &&
+          state is ProfileLoaded &&
+          (state as ProfileLoaded).currentProfileHex == targetHex) {
         try {
           await _syncService
               .syncProfiles(missingPubkeys)
@@ -720,7 +754,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         }
 
         if (syncedProfiles.isNotEmpty && !isClosed) {
-          add(ProfileProfilesLoaded(syncedProfiles));
+          add(ProfileProfilesLoaded(targetHex, syncedProfiles));
         }
       }
     } catch (_) {}
@@ -731,64 +765,62 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   void _watchProfileNotesAndReplies(String pubkeyHex) {
+    final generation = ++_notesWatchGeneration;
     _notesAndRepliesSubscription?.cancel();
-    _notesAndRepliesSubscription = _feedRepository
-        .watchProfileNotesAndReplies(pubkeyHex,
-            notesLimit: 200, repliesLimit: 200)
-        .listen((data) {
-      if (isClosed) return;
-      add(_ProfileNotesAndRepliesUpdated(data.notes, data.replies));
-    });
+
+    void subscribe() {
+      if (isClosed || generation != _notesWatchGeneration) return;
+      _notesAndRepliesSubscription = _feedRepository
+          .watchProfileNotesAndReplies(
+        pubkeyHex,
+        notesLimit: 200,
+        repliesLimit: 200,
+      )
+          .listen(
+        (data) {
+          if (isClosed || generation != _notesWatchGeneration) return;
+          add(_ProfileNotesAndRepliesUpdated(
+            pubkeyHex,
+            data.notes,
+            data.replies,
+          ));
+        },
+        onError: (_) {
+          Future.delayed(const Duration(seconds: 2), subscribe);
+        },
+        onDone: () {
+          Future.delayed(const Duration(seconds: 2), subscribe);
+        },
+      );
+    }
+
+    subscribe();
   }
 
-  void _onProfileNotesUpdatedInternal(
-    _ProfileNotesUpdated event,
-    Emitter<ProfileState> emit,
+  List<Map<String, dynamic>> _reconcileWatchedPage(
+    List<Map<String, dynamic>> existing,
+    List<Map<String, dynamic>> incoming,
   ) {
-    if (state is! ProfileLoaded) return;
-    final currentState = state as ProfileLoaded;
-
-    if (currentState.currentProfileHex != _currentProfileHex) return;
-
-    InteractionService.instance.populateFromNotes(event.notes);
-
-    final incomingMaps = _feedNotesToMaps(event.notes);
-    final seededProfiles =
-        _buildProfilesFromNoteMaps(incomingMaps, currentState.profiles);
-
-    if (currentState.notes.isEmpty) {
-      emit(currentState.copyWith(
-          notes: incomingMaps,
-          profiles: seededProfiles,
-          canLoadMore: true));
-    } else {
-      final existingIds = currentState.notes
-          .map((n) => n['id'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
-
-      final appendOnly = incomingMaps
-          .where((n) {
-            final id = n['id'] as String? ?? '';
-            return id.isNotEmpty && !existingIds.contains(id);
-          })
-          .toList();
-
-      if (appendOnly.isEmpty) {
-        if (seededProfiles.length > currentState.profiles.length) {
-          emit(currentState.copyWith(profiles: seededProfiles));
-        }
-        return;
-      }
-
-      final updated = _sortByTimestamp([...currentState.notes, ...appendOnly]);
-      emit(currentState.copyWith(
-          notes: updated, profiles: seededProfiles, canLoadMore: true));
+    if (incoming.isEmpty || existing.length <= incoming.length) {
+      return _sortByTimestamp(incoming);
     }
 
-    if (incomingMaps.isNotEmpty) {
-      _loadProfilesForNotes(incomingMaps, emit);
-    }
+    final incomingIds = incoming
+        .map((note) => note['id'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final oldestIncoming = _oldestNoteTimestamp(incoming);
+    if (oldestIncoming == null) return _sortByTimestamp(incoming);
+
+    final older = existing.where((note) {
+      final id = note['id'] as String? ?? '';
+      final timestamp =
+          note['repostCreatedAt'] as int? ?? note['created_at'] as int? ?? 0;
+      return id.isNotEmpty &&
+          !incomingIds.contains(id) &&
+          timestamp < oldestIncoming;
+    });
+    return _sortByTimestamp([...incoming, ...older]);
   }
 
   Future<void> _onProfileRepliesLoaded(
@@ -796,106 +828,38 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Emitter<ProfileState> emit,
   ) async {}
 
-
-  void _onProfileRepliesUpdatedInternal(
-    _ProfileRepliesUpdated event,
-    Emitter<ProfileState> emit,
-  ) {
-    if (state is! ProfileLoaded) return;
-    final currentState = state as ProfileLoaded;
-
-    if (currentState.currentProfileHex != _currentProfileHex) return;
-
-    final incomingMaps = _feedNotesToMaps(event.replies);
-
-    if (currentState.replies.isEmpty) {
-      emit(currentState.copyWith(
-          replies: incomingMaps, canLoadMoreReplies: true));
-    } else {
-      final existingIds = currentState.replies
-          .map((n) => n['id'] as String? ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
-
-      final appendOnly = incomingMaps
-          .where((n) {
-            final id = n['id'] as String? ?? '';
-            return id.isNotEmpty && !existingIds.contains(id);
-          })
-          .toList();
-
-      if (appendOnly.isEmpty) return;
-
-      final updated =
-          _sortByTimestamp([...currentState.replies, ...appendOnly]);
-      emit(currentState.copyWith(
-          replies: updated, canLoadMoreReplies: true));
-    }
-
-    if (incomingMaps.isNotEmpty) {
-      _loadProfilesForNotes(incomingMaps, emit);
-    }
-  }
-
   void _onProfileNotesAndRepliesUpdated(
     _ProfileNotesAndRepliesUpdated event,
     Emitter<ProfileState> emit,
   ) {
     if (state is! ProfileLoaded) return;
     final currentState = state as ProfileLoaded;
-    if (currentState.currentProfileHex != _currentProfileHex) return;
+    if (event.pubkeyHex != currentState.currentProfileHex ||
+        currentState.currentProfileHex != _currentProfileHex) {
+      return;
+    }
 
-    var updated = currentState;
+    InteractionService.instance.populateFromNotes([
+      ...event.notes,
+      ...event.replies,
+    ]);
 
     final incomingNotes = _feedNotesToMaps(event.notes);
-    if (incomingNotes.isNotEmpty) {
-      InteractionService.instance.populateFromNotes(event.notes);
-      if (updated.notes.isEmpty) {
-        updated = updated.copyWith(notes: incomingNotes, canLoadMore: true);
-      } else {
-        final existingIds = updated.notes
-            .map((n) => n['id'] as String? ?? '')
-            .where((id) => id.isNotEmpty)
-            .toSet();
-        final newNotes = incomingNotes
-            .where((n) => !existingIds.contains(n['id'] as String? ?? ''))
-            .toList();
-        if (newNotes.isNotEmpty) {
-          updated = updated.copyWith(
-              notes: _sortByTimestamp([...updated.notes, ...newNotes]),
-              canLoadMore: true);
-        }
-      }
-    }
-
     final incomingReplies = _feedNotesToMaps(event.replies);
-    if (incomingReplies.isNotEmpty) {
-      if (updated.replies.isEmpty) {
-        updated = updated.copyWith(
-            replies: incomingReplies, canLoadMoreReplies: true);
-      } else {
-        final existingIds = updated.replies
-            .map((n) => n['id'] as String? ?? '')
-            .where((id) => id.isNotEmpty)
-            .toSet();
-        final newReplies = incomingReplies
-            .where((n) => !existingIds.contains(n['id'] as String? ?? ''))
-            .toList();
-        if (newReplies.isNotEmpty) {
-          updated = updated.copyWith(
-              replies: _sortByTimestamp([...updated.replies, ...newReplies]),
-              canLoadMoreReplies: true);
-        }
-      }
-    }
-
-    if (updated != currentState) {
-      emit(updated);
-    }
-
     final allIncoming = [...incomingNotes, ...incomingReplies];
+    final profiles =
+        _buildProfilesFromNoteMaps(allIncoming, currentState.profiles);
+
+    emit(currentState.copyWith(
+      notes: _reconcileWatchedPage(currentState.notes, incomingNotes),
+      replies: _reconcileWatchedPage(currentState.replies, incomingReplies),
+      profiles: profiles,
+      canLoadMore: incomingNotes.length >= 200,
+      canLoadMoreReplies: incomingReplies.length >= 200,
+    ));
+
     if (allIncoming.isNotEmpty) {
-      _loadProfilesForNotes(allIncoming, emit);
+      _loadProfilesForNotes(allIncoming);
     }
   }
 
@@ -908,6 +872,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final currentState = state as ProfileLoaded;
     if (_isLoadingMoreReplies || !currentState.canLoadMoreReplies) return;
 
+    final generation = _profileGeneration;
     final targetHex = currentState.currentProfileHex;
     if (targetHex != _currentProfileHex) return;
 
@@ -928,8 +893,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       );
 
       if (state is! ProfileLoaded ||
-          (state as ProfileLoaded).currentProfileHex != targetHex) {
-        _isLoadingMoreReplies = false;
+          (state as ProfileLoaded).currentProfileHex != targetHex ||
+          generation != _profileGeneration) {
         return;
       }
 
@@ -950,7 +915,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
             _sortByTimestamp([...freshState.replies, ...uniqueNewReplies]);
         emit(freshState.copyWith(
             replies: allReplies, isLoadingMoreReplies: false));
-        _loadProfilesForNotes(uniqueNewReplies, emit);
+        _loadProfilesForNotes(uniqueNewReplies);
       } else {
         emit(freshState.copyWith(
           isLoadingMoreReplies: false,
@@ -958,12 +923,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         ));
       }
     } catch (e) {
-      if (state is ProfileLoaded) {
+      if (generation == _profileGeneration &&
+          state is ProfileLoaded &&
+          (state as ProfileLoaded).currentProfileHex == targetHex) {
         emit((state as ProfileLoaded).copyWith(isLoadingMoreReplies: false));
       }
     }
 
-    _isLoadingMoreReplies = false;
+    if (generation == _profileGeneration) {
+      _isLoadingMoreReplies = false;
+    }
   }
 
   Future<void> _onProfileArticlesRequested(
@@ -971,6 +940,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Emitter<ProfileState> emit,
   ) async {
     if (state is! ProfileLoaded) return;
+    if ((state as ProfileLoaded).currentProfileHex != event.pubkeyHex) return;
 
     _articlesOffset = _pageSize;
 
@@ -979,7 +949,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         authors: [event.pubkeyHex],
         limit: _pageSize,
       );
-      if (isClosed || state is! ProfileLoaded) return;
+      if (isClosed ||
+          state is! ProfileLoaded ||
+          (state as ProfileLoaded).currentProfileHex != event.pubkeyHex) {
+        return;
+      }
 
       final articleMaps = articles.map((a) => a.toMap()).toList();
       emit((state as ProfileLoaded).copyWith(
@@ -994,7 +968,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Emitter<ProfileState> emit,
   ) async {
     if (state is! ProfileLoaded) return;
-    if (event.pubkeyHex.isEmpty) return;
+    if (event.pubkeyHex.isEmpty ||
+        (state as ProfileLoaded).currentProfileHex != event.pubkeyHex) {
+      return;
+    }
 
     _likesReactionsLimit = _pageSize * 3;
     _watchProfileLikes(event.pubkeyHex);
@@ -1002,13 +979,28 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   void _watchProfileLikes(String pubkeyHex) {
+    final generation = ++_likesWatchGeneration;
     _likesSubscription?.cancel();
-    _likesSubscription = _feedRepository
-        .watchLikes(pubkeyHex, limit: _likesReactionsLimit)
-        .listen((likes) {
-      if (isClosed) return;
-      add(_ProfileLikesUpdated(likes));
-    });
+
+    void subscribe() {
+      if (isClosed || generation != _likesWatchGeneration) return;
+      _likesSubscription = _feedRepository
+          .watchLikes(pubkeyHex, limit: _likesReactionsLimit)
+          .listen(
+        (likes) {
+          if (isClosed || generation != _likesWatchGeneration) return;
+          add(_ProfileLikesUpdated(pubkeyHex, likes));
+        },
+        onError: (_) {
+          Future.delayed(const Duration(seconds: 2), subscribe);
+        },
+        onDone: () {
+          Future.delayed(const Duration(seconds: 2), subscribe);
+        },
+      );
+    }
+
+    subscribe();
   }
 
   void _syncProfileReactionsInBackground(String pubkeyHex) {
@@ -1021,6 +1013,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   ) {
     if (state is! ProfileLoaded) return;
     final currentState = state as ProfileLoaded;
+    if (event.pubkeyHex != currentState.currentProfileHex) return;
 
     final newLikeMaps = _feedNotesToMaps(event.likes);
 
@@ -1030,7 +1023,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     ));
 
     if (newLikeMaps.isNotEmpty) {
-      _loadProfilesForNotes(newLikeMaps, emit);
+      _loadProfilesForNotes(newLikeMaps);
     }
   }
 
@@ -1041,12 +1034,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (state is! ProfileLoaded) return;
     final currentState = state as ProfileLoaded;
     if (_isLoadingMoreLikes || !currentState.canLoadMoreLikes) return;
+    final generation = _profileGeneration;
+    final targetHex = currentState.currentProfileHex;
 
     _isLoadingMoreLikes = true;
     emit(currentState.copyWith(isLoadingMoreLikes: true));
 
     try {
-      final targetHex = currentState.currentProfileHex;
       _likesReactionsLimit += _pageSize * 3;
 
       final moreLikes = await _feedRepository.getLikes(
@@ -1065,7 +1059,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         return noteId.isNotEmpty && !currentIds.contains(noteId);
       }).toList();
 
-      if (isClosed || state is! ProfileLoaded) return;
+      if (isClosed ||
+          state is! ProfileLoaded ||
+          (state as ProfileLoaded).currentProfileHex != targetHex ||
+          generation != _profileGeneration) {
+        return;
+      }
 
       if (uniqueNew.isNotEmpty) {
         final allLikes = [
@@ -1077,7 +1076,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           isLoadingMoreLikes: false,
           canLoadMoreLikes: true,
         ));
-        _loadProfilesForNotes(uniqueNew, emit);
+        _loadProfilesForNotes(uniqueNew);
       } else {
         emit((state as ProfileLoaded).copyWith(
           isLoadingMoreLikes: false,
@@ -1085,12 +1084,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         ));
       }
     } catch (_) {
-      if (state is ProfileLoaded) {
+      if (generation == _profileGeneration &&
+          state is ProfileLoaded &&
+          (state as ProfileLoaded).currentProfileHex == targetHex) {
         emit((state as ProfileLoaded).copyWith(isLoadingMoreLikes: false));
       }
     }
 
-    _isLoadingMoreLikes = false;
+    if (generation == _profileGeneration) {
+      _isLoadingMoreLikes = false;
+    }
   }
 
   Future<void> _onProfileLoadMoreArticlesRequested(
@@ -1100,19 +1103,25 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (state is! ProfileLoaded) return;
     final currentState = state as ProfileLoaded;
     if (_isLoadingMoreArticles || !currentState.canLoadMoreArticles) return;
+    final generation = _profileGeneration;
+    final targetHex = currentState.currentProfileHex;
 
     _isLoadingMoreArticles = true;
     emit(currentState.copyWith(isLoadingMoreArticles: true));
 
     try {
-      final targetHex = currentState.currentProfileHex;
       final newLimit = _articlesOffset + _pageSize;
 
       final articles = await _articleRepository.getArticles(
         authors: [targetHex],
         limit: newLimit,
       );
-      if (isClosed || state is! ProfileLoaded) return;
+      if (isClosed ||
+          state is! ProfileLoaded ||
+          (state as ProfileLoaded).currentProfileHex != targetHex ||
+          generation != _profileGeneration) {
+        return;
+      }
 
       final articleMaps = articles.map((a) => a.toMap()).toList();
       final currentIds = currentState.articles
@@ -1145,12 +1154,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         ));
       }
     } catch (_) {
-      if (state is ProfileLoaded) {
+      if (generation == _profileGeneration &&
+          state is ProfileLoaded &&
+          (state as ProfileLoaded).currentProfileHex == targetHex) {
         emit((state as ProfileLoaded).copyWith(isLoadingMoreArticles: false));
       }
     }
 
-    _isLoadingMoreArticles = false;
+    if (generation == _profileGeneration) {
+      _isLoadingMoreArticles = false;
+    }
   }
 
   Future<void> _onProfilePinnedNotesRequested(
@@ -1158,7 +1171,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Emitter<ProfileState> emit,
   ) async {
     if (state is! ProfileLoaded) return;
-    if (event.pubkeyHex.isEmpty) return;
+    if (event.pubkeyHex.isEmpty ||
+        (state as ProfileLoaded).currentProfileHex != event.pubkeyHex) {
+      return;
+    }
 
     final currentState = state as ProfileLoaded;
     final isCurrentUser = currentState.isCurrentUser;
@@ -1168,13 +1184,15 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     if (cachedIds.isNotEmpty) {
       final cachedNotes = await _fetchNotesByIds(cachedIds);
-      if (!isClosed && state is ProfileLoaded) {
+      if (!isClosed &&
+          state is ProfileLoaded &&
+          (state as ProfileLoaded).currentProfileHex == event.pubkeyHex) {
         emit((state as ProfileLoaded).copyWith(
           pinnedNoteIds: cachedIds,
           pinnedNotes: cachedNotes,
         ));
         if (cachedNotes.isNotEmpty) {
-          _loadProfilesForNotes(cachedNotes, emit);
+          _loadProfilesForNotes(cachedNotes);
         }
       }
     }
@@ -1197,9 +1215,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   void _reloadPinnedNotesFromIds(List<String> pinnedIds) async {
     if (isClosed || state is! ProfileLoaded) return;
+    final pubkeyHex = (state as ProfileLoaded).currentProfileHex;
     final notes = await _fetchNotesByIds(pinnedIds);
-    if (!isClosed) {
+    if (!isClosed &&
+        state is ProfileLoaded &&
+        (state as ProfileLoaded).currentProfileHex == pubkeyHex) {
       add(ProfilePinnedNotesUpdated(
+        pubkeyHex: pubkeyHex,
         pinnedNoteIds: pinnedIds,
         pinnedNotes: notes,
       ));
@@ -1217,7 +1239,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (isClosed) return;
     try {
       await _syncService.syncPinnedNotes(pubkeyHex);
-      if (isClosed || state is! ProfileLoaded) return;
+      if (isClosed ||
+          state is! ProfileLoaded ||
+          (state as ProfileLoaded).currentProfileHex != pubkeyHex) {
+        return;
+      }
 
       final pinnedIds = await PinnedNotesService.instance
           .fetchPinnedNoteIdsForUser(pubkeyHex);
@@ -1245,6 +1271,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
       if (!isClosed) {
         add(ProfilePinnedNotesUpdated(
+          pubkeyHex: pubkeyHex,
           pinnedNoteIds: pinnedIds,
           pinnedNotes: pinnedNotes,
         ));
@@ -1258,6 +1285,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   ) {
     if (state is! ProfileLoaded) return;
     final currentState = state as ProfileLoaded;
+    if (event.pubkeyHex != currentState.currentProfileHex) return;
 
     emit(currentState.copyWith(
       pinnedNoteIds: event.pinnedNoteIds,
@@ -1265,7 +1293,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     ));
 
     if (event.pinnedNotes.isNotEmpty) {
-      _loadProfilesForNotes(event.pinnedNotes, emit);
+      _loadProfilesForNotes(event.pinnedNotes);
     }
   }
 
@@ -1280,6 +1308,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   @override
   Future<void> close() async {
+    _profileGeneration++;
+    _notesWatchGeneration++;
+    _likesWatchGeneration++;
     _syncSubscription?.cancel();
     _profileSubscription?.cancel();
     _notesAndRepliesSubscription?.cancel();
@@ -1290,34 +1321,24 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 }
 
 class _ProfileLikesUpdated extends ProfileEvent {
+  final String pubkeyHex;
   final List<FeedNote> likes;
-  const _ProfileLikesUpdated(this.likes);
+  const _ProfileLikesUpdated(this.pubkeyHex, this.likes);
 
   @override
-  List<Object?> get props => [likes];
-}
-
-class _ProfileNotesUpdated extends ProfileEvent {
-  final List<FeedNote> notes;
-  const _ProfileNotesUpdated(this.notes);
-
-  @override
-  List<Object?> get props => [notes];
-}
-
-class _ProfileRepliesUpdated extends ProfileEvent {
-  final List<FeedNote> replies;
-  const _ProfileRepliesUpdated(this.replies);
-
-  @override
-  List<Object?> get props => [replies];
+  List<Object?> get props => [pubkeyHex, likes];
 }
 
 class _ProfileNotesAndRepliesUpdated extends ProfileEvent {
+  final String pubkeyHex;
   final List<FeedNote> notes;
   final List<FeedNote> replies;
-  const _ProfileNotesAndRepliesUpdated(this.notes, this.replies);
+  const _ProfileNotesAndRepliesUpdated(
+    this.pubkeyHex,
+    this.notes,
+    this.replies,
+  );
 
   @override
-  List<Object?> get props => [notes, replies];
+  List<Object?> get props => [pubkeyHex, notes, replies];
 }

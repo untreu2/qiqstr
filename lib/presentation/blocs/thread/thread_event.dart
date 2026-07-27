@@ -33,11 +33,12 @@ class ThreadProfilesUpdated extends ThreadEvent {
 
 class ThreadRepliesUpdated extends ThreadEvent {
   final List<FeedNote> replies;
+  final String rootNoteId;
 
-  const ThreadRepliesUpdated(this.replies);
+  const ThreadRepliesUpdated(this.replies, this.rootNoteId);
 
   @override
-  List<Object?> get props => [replies];
+  List<Object?> get props => [replies, rootNoteId];
 }
 
 class ThreadCurrentUserLoaded extends ThreadEvent {
@@ -53,16 +54,24 @@ class ThreadNetworkDataLoaded extends ThreadEvent {
   final Map<String, dynamic> threadData;
   final List<String> chain;
   final String currentUserHex;
+  final int requestId;
 
-  const ThreadNetworkDataLoaded(this.threadData, this.chain, this.currentUserHex);
+  const ThreadNetworkDataLoaded(
+    this.threadData,
+    this.chain,
+    this.currentUserHex,
+    this.requestId,
+  );
 
   @override
-  List<Object?> get props => [threadData, chain, currentUserHex];
+  List<Object?> get props => [threadData, chain, currentUserHex, requestId];
 }
 
 class ThreadNetworkFailed extends ThreadEvent {
-  const ThreadNetworkFailed();
+  final int requestId;
+
+  const ThreadNetworkFailed(this.requestId);
 
   @override
-  List<Object?> get props => [];
+  List<Object?> get props => [requestId];
 }

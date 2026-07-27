@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:breez_sdk_spark_flutter/breez_sdk_spark.dart';
 import 'package:convert/convert.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -137,8 +136,8 @@ class SparkService {
       final fromStorage = await _secureStorage.read(key: 'breez_api_key');
       if (fromStorage != null && fromStorage.isNotEmpty) return fromStorage;
 
-      final fromEnv = dotenv.maybeGet('BREEZ_API_KEY');
-      if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
+      const fromBuild = String.fromEnvironment('BREEZ_API_KEY');
+      if (fromBuild.isNotEmpty) return fromBuild;
 
       return '';
     } catch (_) {
@@ -281,8 +280,8 @@ class SparkService {
       if (sdkResult.isError) return Result.error(sdkResult.error!);
 
       final sdk = sdkResult.data!;
-      final info = await sdk.getInfo(
-          request: const GetInfoRequest(ensureSynced: false));
+      final info =
+          await sdk.getInfo(request: const GetInfoRequest(ensureSynced: false));
       return Result.success(info.balanceSats.toInt());
     } catch (e) {
       _log('[SparkService] getBalance error: $e');
@@ -426,7 +425,6 @@ class SparkService {
       return Result.error('Failed to parse input: $e');
     }
   }
-
 
   Future<void> disconnectSdk() async {
     _cancelEventSubscription();

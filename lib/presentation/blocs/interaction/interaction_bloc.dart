@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/interaction_repository.dart';
-import '../../../data/sync/sync_service.dart';
-import '../../../data/services/interaction_service.dart';
 import '../../../data/services/encrypted_bookmark_service.dart';
+import '../../../data/services/interaction_service.dart';
 import '../../../data/services/pinned_notes_service.dart';
-import 'dart:convert';
+import '../../../data/sync/sync_service.dart';
 import 'interaction_event.dart';
 import 'interaction_state.dart';
 
@@ -28,7 +31,8 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
   DateTime? _optimisticReactedAt;
   DateTime? _optimisticRepostedAt;
   DateTime? _optimisticZappedAt;
-  int _pendingZapAmount = 0;
+  int _zapAmountBeforePending = 0;
+  bool _hadZappedBeforePending = false;
 
   bool get _isOptimisticReactActive =>
       _optimisticReactedAt != null &&
@@ -55,21 +59,24 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         _interactionRepository = interactionRepository,
         _interactionService = interactionService ?? InteractionService.instance,
         super(const InteractionInitial()) {
-    on<InteractionInitialized>(_onInitialized);
+    on<InteractionInitialized>(_onInitialized, transformer: restartable());
     on<InteractionNoteUpdated>(_onNoteUpdated);
     on<InteractionStateRefreshed>(_onRefreshed);
-    on<InteractionReactRequested>(_onReact);
-    on<InteractionRepostRequested>(_onRepost);
-    on<InteractionRepostDeleted>(_onRepostDeleted);
-    on<InteractionNoteDeleted>(_onNoteDeleted);
+    on<InteractionReactRequested>(_onReact, transformer: droppable());
+    on<InteractionRepostRequested>(_onRepost, transformer: droppable());
+    on<InteractionRepostDeleted>(_onRepostDeleted, transformer: droppable());
+    on<InteractionNoteDeleted>(_onNoteDeleted, transformer: droppable());
     on<InteractionZapStarted>(_onZapStarted);
     on<InteractionZapCompleted>(_onZapCompleted);
     on<InteractionZapFailed>(_onZapFailed);
     on<InteractionCountsUpdated>(_onCountsUpdated);
     on<InteractionBookmarkChanged>(_onBookmarkChanged);
-    on<InteractionBookmarkToggled>(_onBookmarkToggled);
+    on<InteractionBookmarkToggled>(
+      _onBookmarkToggled,
+      transformer: droppable(),
+    );
     on<InteractionPinChanged>(_onPinChanged);
-    on<InteractionPinToggled>(_onPinToggled);
+    on<InteractionPinToggled>(_onPinToggled, transformer: droppable());
   }
 
   Future<void> _onInitialized(
@@ -78,16 +85,15 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     _interactionService.setCurrentUser(currentUserHex);
 
     final cached = _interactionService.getCachedInteractions(noteId);
-    final isBookmarked =
-        EncryptedBookmarkService.instance.isBookmarked(noteId);
+    final isBookmarked = EncryptedBookmarkService.instance.isBookmarked(noteId);
     final isPinned = PinnedNotesService.instance.isPinned(noteId);
 
     InteractionCounts? initialCounts;
     if (note != null) {
-      final reactionCount = note!['reactionCount'] as int? ?? 0;
-      final repostCount = note!['repostCount'] as int? ?? 0;
-      final replyCount = note!['replyCount'] as int? ?? 0;
-      final zapCount = note!['zapCount'] as int? ?? 0;
+      final reactionCount = (note!['reactionCount'] as num?)?.toInt() ?? 0;
+      final repostCount = (note!['repostCount'] as num?)?.toInt() ?? 0;
+      final replyCount = (note!['replyCount'] as num?)?.toInt() ?? 0;
+      final zapCount = (note!['zapCount'] as num?)?.toInt() ?? 0;
       final noteHasReacted = note!['hasReacted'] == true;
       final noteHasReposted = note!['hasReposted'] == true;
       final noteHasZapped = note!['hasZapped'] == true;
@@ -143,7 +149,10 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       ));
     }
 
-    _subscription?.cancel();
+    if (_subscription != null) {
+      await _subscription!.cancel();
+      _interactionService.disposeStream(noteId);
+    }
     _subscription = _interactionService
         .streamInteractions(noteId, initialCounts: initialCounts)
         .listen(
@@ -191,15 +200,15 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
     final isBookmarked = currentState?.isBookmarked ??
         EncryptedBookmarkService.instance.isBookmarked(noteId);
-    final isPinned = currentState?.isPinned ??
-        PinnedNotesService.instance.isPinned(noteId);
+    final isPinned =
+        currentState?.isPinned ?? PinnedNotesService.instance.isPinned(noteId);
 
     if (currentState != null && currentState.zapProcessing) {
       emit(currentState.copyWith(
         reactionCount: event.counts.reactions,
         repostCount: event.counts.reposts,
         replyCount: event.counts.replies,
-        zapAmount: event.counts.zapAmount,
+        zapAmount: currentState.zapAmount,
         hasReacted: hasReacted,
         hasReposted: hasReposted,
         hasZapped: hasZapped,
@@ -245,7 +254,17 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       await _syncService.publishBookmark(
         bookmarkedEventIds: svc.bookmarkedEventIds,
       );
-    } catch (_) {}
+    } catch (_) {
+      if (current.isBookmarked) {
+        svc.addBookmark(noteId);
+      } else {
+        svc.removeBookmark(noteId);
+      }
+      if (!isClosed && state is InteractionLoaded) {
+        emit((state as InteractionLoaded)
+            .copyWith(isBookmarked: current.isBookmarked));
+      }
+    }
   }
 
   void _onPinChanged(
@@ -320,12 +339,14 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       );
     } catch (e) {
       if (kDebugMode) debugPrint('[InteractionBloc] Reaction failed: $e');
+      _optimisticReactedAt = null;
       _interactionService.markUnreacted(noteId);
       if (!isClosed && state is InteractionLoaded) {
         final s = state as InteractionLoaded;
         emit(s.copyWith(
           hasReacted: false,
-          reactionCount: (s.reactionCount - 1).clamp(0, double.maxFinite.toInt()),
+          reactionCount:
+              (s.reactionCount - 1).clamp(0, double.maxFinite.toInt()),
         ));
       }
       await _interactionService.refreshInteractions(noteId);
@@ -368,8 +389,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         final s = state as InteractionLoaded;
         emit(s.copyWith(
           hasReposted: false,
-          repostCount:
-              (s.repostCount - 1).clamp(0, double.maxFinite.toInt()),
+          repostCount: (s.repostCount - 1).clamp(0, double.maxFinite.toInt()),
         ));
       }
       await _interactionService.refreshInteractions(noteId);
@@ -378,17 +398,31 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
   Future<void> _onRepostDeleted(
       InteractionRepostDeleted event, Emitter<InteractionState> emit) async {
+    final currentState =
+        state is InteractionLoaded ? state as InteractionLoaded : null;
+    if (currentState == null || !currentState.hasReposted) return;
+
+    _optimisticRepostedAt = null;
     _interactionService.markUnreposted(noteId);
+    emit(currentState.copyWith(
+      hasReposted: false,
+      repostCount:
+          (currentState.repostCount - 1).clamp(0, double.maxFinite.toInt()),
+    ));
 
     try {
       final repostEventId =
           await _interactionRepository.findRepostId(currentUserHex, noteId);
-      if (repostEventId != null) {
-        await _syncService.publishDeletion(eventIds: [repostEventId]);
+      if (repostEventId == null) {
+        throw StateError('Repost event was not found');
       }
+      await _syncService.publishDeletion(eventIds: [repostEventId]);
     } catch (e) {
       if (kDebugMode) debugPrint('[InteractionBloc] Undo repost failed: $e');
       _interactionService.markReposted(noteId);
+      if (!isClosed) {
+        emit(currentState);
+      }
       await _interactionService.refreshInteractions(noteId);
     }
   }
@@ -400,7 +434,8 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null) return;
 
     _optimisticZappedAt = DateTime.now();
-    _pendingZapAmount = event.amount;
+    _zapAmountBeforePending = currentState.zapAmount;
+    _hadZappedBeforePending = currentState.hasZapped;
 
     emit(currentState.copyWith(
       zapProcessing: true,
@@ -416,7 +451,6 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null) return;
 
     _optimisticZappedAt = DateTime.now();
-    _pendingZapAmount = 0;
     _interactionService.markZapped(noteId, event.amount);
 
     emit(currentState.copyWith(
@@ -432,14 +466,10 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     if (currentState == null) return;
 
     _optimisticZappedAt = null;
-    final revertedAmount = (currentState.zapAmount - _pendingZapAmount)
-        .clamp(0, double.maxFinite.toInt());
-    _pendingZapAmount = 0;
-
     emit(currentState.copyWith(
       zapProcessing: false,
-      hasZapped: revertedAmount > 0,
-      zapAmount: revertedAmount,
+      hasZapped: _hadZappedBeforePending,
+      zapAmount: _zapAmountBeforePending,
     ));
 
     _interactionService.refreshInteractions(noteId);
@@ -465,10 +495,10 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
   Map<String, dynamic>? getNoteForActions() => note;
 
   @override
-  Future<void> close() {
-    _subscription?.cancel();
-    _bookmarkSubscription?.cancel();
-    _pinSubscription?.cancel();
+  Future<void> close() async {
+    await _subscription?.cancel();
+    await _bookmarkSubscription?.cancel();
+    await _pinSubscription?.cancel();
     _interactionService.disposeStream(noteId);
     return super.close();
   }

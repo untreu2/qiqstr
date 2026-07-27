@@ -65,6 +65,19 @@ class NoteMediaRemoved extends NoteEvent {
   List<Object?> get props => [url];
 }
 
+class NoteMediaReordered extends NoteEvent {
+  final int oldIndex;
+  final int newIndex;
+
+  const NoteMediaReordered({
+    required this.oldIndex,
+    required this.newIndex,
+  });
+
+  @override
+  List<Object?> get props => [oldIndex, newIndex];
+}
+
 class NoteMentionAdded extends NoteEvent {
   final MentionParams params;
 

@@ -24,6 +24,7 @@ class ThreadLoaded extends ThreadState {
   final String currentUserHex;
   final Map<String, dynamic>? currentUser;
   final bool repliesSynced;
+  final bool isRefreshing;
   final int quoteCount;
 
   const ThreadLoaded({
@@ -36,6 +37,7 @@ class ThreadLoaded extends ThreadState {
     required this.currentUserHex,
     this.currentUser,
     this.repliesSynced = false,
+    this.isRefreshing = false,
     this.quoteCount = 0,
   });
 
@@ -57,6 +59,7 @@ class ThreadLoaded extends ThreadState {
         currentUserHex,
         currentUser,
         repliesSynced,
+        isRefreshing,
         quoteCount,
       ];
 
@@ -70,6 +73,7 @@ class ThreadLoaded extends ThreadState {
     String? currentUserHex,
     Map<String, dynamic>? currentUser,
     bool? repliesSynced,
+    bool? isRefreshing,
     int? quoteCount,
   }) {
     return ThreadLoaded(
@@ -82,6 +86,7 @@ class ThreadLoaded extends ThreadState {
       currentUserHex: currentUserHex ?? this.currentUserHex,
       currentUser: currentUser ?? this.currentUser,
       repliesSynced: repliesSynced ?? this.repliesSynced,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
       quoteCount: quoteCount ?? this.quoteCount,
     );
   }

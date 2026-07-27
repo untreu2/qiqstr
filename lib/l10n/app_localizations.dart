@@ -262,6 +262,24 @@ abstract class AppLocalizations {
   /// **'Please enter a note or add media'**
   String get emptyNoteMessage;
 
+  /// No description provided for @maxMediaFilesAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum {count} media files allowed'**
+  String maxMediaFilesAllowed(int count);
+
+  /// No description provided for @onlyMoreMediaFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {count} more media files can be added'**
+  String onlyMoreMediaFiles(int count);
+
+  /// No description provided for @invalidMediaFileType.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid file type. Only images and videos are allowed'**
+  String get invalidMediaFileType;
+
   /// No description provided for @addMediaText.
   ///
   /// In en, this message translates to:
@@ -297,12 +315,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add media files to your post'**
   String get addMediaFilesToPost;
-
-  /// No description provided for @addGifFromGiphy.
-  ///
-  /// In en, this message translates to:
-  /// **'Add GIF from Giphy'**
-  String get addGifFromGiphy;
 
   /// No description provided for @postYourNote.
   ///
@@ -4113,6 +4125,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Send all {amount} sats to your Lightning address?'**
   String cashuMeltAllConfirm(int amount);
+
+  /// No description provided for @mediaUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Media upload failed. Please try again.'**
+  String get mediaUploadFailed;
 
   /// No description provided for @cashuMeltAllSuccess.
   ///

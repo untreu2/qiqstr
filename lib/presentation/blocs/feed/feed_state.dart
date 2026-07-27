@@ -120,6 +120,7 @@ class FeedLoaded extends FeedState {
     int? pendingNotesCount,
     String? activeListId,
     String? activeListTitle,
+    bool clearHashtag = false,
     bool clearActiveList = false,
   }) {
     final notesChanged = notes != null && !identical(notes, this.notes);
@@ -133,7 +134,7 @@ class FeedLoaded extends FeedState {
       canLoadMore: canLoadMore ?? this.canLoadMore,
       viewMode: viewMode ?? this.viewMode,
       sortMode: sortMode ?? this.sortMode,
-      hashtag: hashtag ?? this.hashtag,
+      hashtag: clearHashtag ? null : (hashtag ?? this.hashtag),
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isSyncing: isSyncing ?? this.isSyncing,
       pendingNotesCount: pendingNotesCount ?? this.pendingNotesCount,

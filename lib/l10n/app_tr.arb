@@ -27,13 +27,15 @@
   "errorSelectingUser": "Kullanıcı seçme hatası",
   "errorSharingNote": "Not paylaşma hatası",
   "emptyNoteMessage": "Lütfen bir not girin veya medya ekleyin",
+  "maxMediaFilesAllowed": "En fazla {count} medya dosyasına izin verilir",
+  "onlyMoreMediaFiles": "Yalnızca {count} medya dosyası daha eklenebilir",
+  "invalidMediaFileType": "Geçersiz dosya türü. Yalnızca resim ve videolara izin verilir",
   "addMediaText": "Medya ekle",
   "retryText": "Tekrar Dene",
   "hintText": "Aklından ne geçiyor?",
   "cancel": "İptal",
   "uploadingMediaFiles": "Medya dosyaları yükleniyor",
   "addMediaFilesToPost": "Gönderinize medya dosyaları ekleyin",
-  "addGifFromGiphy": "Giphy'den GIF ekle",
   "postYourNote": "Notunuzu paylaşın",
   "composeYourNote": "Notunuzu yazın",
   "removeThisMediaFile": "Bu medya dosyasını kaldır",
@@ -864,6 +866,7 @@
       "amount": { "type": "int" }
     }
   },
+  "mediaUploadFailed": "Medya yüklenemedi. Lütfen tekrar deneyin.",
   "cashuMeltAllSuccess": "{amount} sat Lightning'e gönderildi!",
   "@cashuMeltAllSuccess": {
     "placeholders": {

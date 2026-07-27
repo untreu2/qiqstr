@@ -49,7 +49,6 @@ class _ThreadPageState extends State<ThreadPage> {
   final List<String> _stableReplyOrder = [];
   final Set<String> _stableReplyOrderSet = {};
 
-  bool _isRefreshing = false;
   final ValueNotifier<List<Map<String, dynamic>>> _emptyNotesNotifier =
       ValueNotifier([]);
 
@@ -107,11 +106,14 @@ class _ThreadPageState extends State<ThreadPage> {
               }
             }
             if (previous.rootNoteId != current.rootNoteId) return true;
-            if (previous.replies.length != current.replies.length) return true;
+            if (previous.threadStructure != current.threadStructure) {
+              return true;
+            }
             if (previous.chainNotes.length != current.chainNotes.length) {
               return true;
             }
             if (previous.repliesSynced != current.repliesSynced) return true;
+            if (previous.quoteCount != current.quoteCount) return true;
             final prevCount = previous.userProfiles.length;
             final currCount = current.userProfiles.length;
             if (currCount != prevCount) {
@@ -374,11 +376,13 @@ class _ThreadPageState extends State<ThreadPage> {
   void _handleReplyInputTap(ThreadLoaded state) {
     final focusedNote = state.focusedNote;
     final focusedNoteId = focusedNote['id'] as String? ?? '';
+    final rootNoteId = focusedNote['rootId'] as String? ?? state.rootNoteId;
     final parentAuthor = focusedNote['pubkey'] as String?;
 
     ShareNotePage.show(
       context,
       replyToNoteId: focusedNoteId,
+      rootNoteId: rootNoteId,
       parentAuthor: parentAuthor,
     );
   }
@@ -750,7 +754,10 @@ class _ThreadPageState extends State<ThreadPage> {
                 PrimaryButton(
                   label: l10n.retryText,
                   onPressed: () {
-                    context.read<ThreadBloc>().add(const ThreadRefreshed());
+                    context.read<ThreadBloc>().add(ThreadLoadRequested(
+                          chain: _parsedChain,
+                          initialNoteData: widget.initialNoteData,
+                        ));
                   },
                   backgroundColor: context.colors.accent,
                   foregroundColor: Colors.white,
@@ -837,21 +844,18 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Future<void> _debouncedRefresh(BuildContext context) async {
-    if (_isRefreshing) return;
-
-    setState(() {
-      _isRefreshing = true;
-    });
-
-    try {
-      context.read<ThreadBloc>().add(const ThreadRefreshed());
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
-      }
+    final bloc = context.read<ThreadBloc>();
+    if (bloc.state is! ThreadLoaded ||
+        (bloc.state as ThreadLoaded).isRefreshing) {
+      return;
     }
+    final completed = bloc.stream
+        .where((state) => state is ThreadLoaded)
+        .cast<ThreadLoaded>()
+        .skipWhile((state) => !state.isRefreshing)
+        .firstWhere((state) => !state.isRefreshing);
+    bloc.add(const ThreadRefreshed());
+    await completed;
   }
 
   Future<void> _handleShare(BuildContext context, ThreadState state) async {
@@ -899,42 +903,76 @@ class _ThreadLoadingSkeleton extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SkeletonBox(width: 40, height: 40, borderRadius: 20, colors: colors),
+                _SkeletonBox(
+                    width: 40, height: 40, borderRadius: 20, colors: colors),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _SkeletonBox(width: 120, height: 14, borderRadius: 4, colors: colors),
+                      _SkeletonBox(
+                          width: 120,
+                          height: 14,
+                          borderRadius: 4,
+                          colors: colors),
                       const SizedBox(height: 8),
-                      _SkeletonBox(width: double.infinity, height: 14, borderRadius: 4, colors: colors),
+                      _SkeletonBox(
+                          width: double.infinity,
+                          height: 14,
+                          borderRadius: 4,
+                          colors: colors),
                       const SizedBox(height: 6),
-                      _SkeletonBox(width: double.infinity, height: 14, borderRadius: 4, colors: colors),
+                      _SkeletonBox(
+                          width: double.infinity,
+                          height: 14,
+                          borderRadius: 4,
+                          colors: colors),
                       const SizedBox(height: 6),
-                      _SkeletonBox(width: 200, height: 14, borderRadius: 4, colors: colors),
+                      _SkeletonBox(
+                          width: 200,
+                          height: 14,
+                          borderRadius: 4,
+                          colors: colors),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            _SkeletonBox(width: double.infinity, height: 1, borderRadius: 0, colors: colors),
+            _SkeletonBox(
+                width: double.infinity,
+                height: 1,
+                borderRadius: 0,
+                colors: colors),
             const SizedBox(height: 24),
             for (int i = 0; i < 3; i++) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SkeletonBox(width: 36, height: 36, borderRadius: 18, colors: colors),
+                  _SkeletonBox(
+                      width: 36, height: 36, borderRadius: 18, colors: colors),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SkeletonBox(width: 100, height: 12, borderRadius: 4, colors: colors),
+                        _SkeletonBox(
+                            width: 100,
+                            height: 12,
+                            borderRadius: 4,
+                            colors: colors),
                         const SizedBox(height: 6),
-                        _SkeletonBox(width: double.infinity, height: 12, borderRadius: 4, colors: colors),
+                        _SkeletonBox(
+                            width: double.infinity,
+                            height: 12,
+                            borderRadius: 4,
+                            colors: colors),
                         const SizedBox(height: 4),
-                        _SkeletonBox(width: 160, height: 12, borderRadius: 4, colors: colors),
+                        _SkeletonBox(
+                            width: 160,
+                            height: 12,
+                            borderRadius: 4,
+                            colors: colors),
                       ],
                     ),
                   ),

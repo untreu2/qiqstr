@@ -23,6 +23,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
 
   String? _currentRootNoteId;
   StreamSubscription<List<FeedNote>>? _repliesSubscription;
+  int _loadRequestId = 0;
+  int _repliesWatchGeneration = 0;
 
   ThreadBloc({
     required FeedRepository feedRepository,
@@ -82,6 +84,11 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     ThreadLoadRequested event,
     Emitter<ThreadState> emit,
   ) async {
+    final requestId = ++_loadRequestId;
+    _repliesWatchGeneration++;
+    await _repliesSubscription?.cancel();
+    _repliesSubscription = null;
+
     try {
       final chain = event.chain;
       if (chain.isEmpty) {
@@ -92,7 +99,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final currentUserHex = _authService.currentUserPubkeyHex ?? '';
       final focusedNoteId = chain.last;
 
-      if (event.initialNoteData != null) {
+      if (event.initialNoteData == null) {
+        emit(const ThreadLoading());
+      } else {
         final noteData = _stripRepostMetadata(
           event.initialNoteData!,
           focusedNoteId,
@@ -131,14 +140,14 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         _loadCurrentUserProfile(currentUserHex);
       }
 
-      _fetchNetworkThread(focusedNoteId, chain, currentUserHex);
+      _fetchNetworkThread(focusedNoteId, chain, currentUserHex, requestId);
 
       final localThreadData = await _loadFromLocalDb(
-        focusedNoteId,
+        chain.first,
         currentUserHex: currentUserHex.isNotEmpty ? currentUserHex : null,
       );
 
-      if (isClosed) return;
+      if (isClosed || requestId != _loadRequestId) return;
 
       if (localThreadData != null) {
         final localState = _buildLoadedState(
@@ -147,7 +156,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           currentUserHex,
           repliesSynced: false,
         );
-        if (localState != null) {
+        if (localState != null &&
+            !(state is ThreadLoaded && (state as ThreadLoaded).repliesSynced)) {
           emit(localState);
           _currentRootNoteId = localState.rootNoteId;
           if (currentUserHex.isNotEmpty) {
@@ -214,23 +224,22 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     final allReplies =
         (data['allReplies'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
             [];
-    final notesMap =
-        (data['notesMap'] as Map<String, dynamic>?)?.map(
-              (k, v) => MapEntry(k, v as Map<String, dynamic>),
-            ) ??
-            {};
-    final childrenMap =
-        (data['childrenMap'] as Map<String, dynamic>?)?.map(
-              (k, v) => MapEntry(
-                  k,
-                  (v as List<dynamic>).cast<Map<String, dynamic>>()),
-            ) ??
-            {};
+    final notesMap = (data['notesMap'] as Map<String, dynamic>?)?.map(
+          (k, v) => MapEntry(k, v as Map<String, dynamic>),
+        ) ??
+        {};
+    final childrenMap = (data['childrenMap'] as Map<String, dynamic>?)?.map(
+          (k, v) =>
+              MapEntry(k, (v as List<dynamic>).cast<Map<String, dynamic>>()),
+        ) ??
+        {};
     return {
       'rootNote': data['rootNote'],
       'chainNotes': data['chainNotes'],
       'childrenMap': childrenMap,
       'notesMap': notesMap,
+      'allReplies': allReplies,
+      'quoteCount': data['quoteCount'],
       'totalReplies': data['totalReplies'] ?? allReplies.length,
     };
   }
@@ -239,6 +248,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     String focusedNoteId,
     List<String> chain,
     String currentUserHex,
+    int requestId,
   ) {
     _syncService
         .fetchFullThread(
@@ -247,11 +257,16 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     )
         .then((threadData) {
       if (!isClosed) {
-        add(ThreadNetworkDataLoaded(threadData, chain, currentUserHex));
+        add(ThreadNetworkDataLoaded(
+          threadData,
+          chain,
+          currentUserHex,
+          requestId,
+        ));
       }
     }).catchError((e) {
       if (!isClosed) {
-        add(const ThreadNetworkFailed());
+        add(ThreadNetworkFailed(requestId));
       }
     });
   }
@@ -260,6 +275,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     ThreadNetworkDataLoaded event,
     Emitter<ThreadState> emit,
   ) {
+    if (event.requestId != _loadRequestId) return;
+
     final newState = _buildLoadedState(
       event.threadData,
       event.chain,
@@ -301,13 +318,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   }) {
     final rootNote =
         threadData['rootNote'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    if (rootNote.isEmpty) return null;
     final rootNoteId = rootNote['id'] as String? ?? chain.first;
-
-    final rawChainNotes = threadData['chainNotes'] as List<dynamic>? ?? [];
-    final chainNotes = rawChainNotes.cast<Map<String, dynamic>>();
-    if (chainNotes.isEmpty) {
-      chainNotes.add(rootNote);
-    }
 
     final rawChildrenMap =
         threadData['childrenMap'] as Map<String, dynamic>? ?? {};
@@ -320,6 +332,22 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     final notesMap = rawNotesMap.map(
       (key, value) => MapEntry(key, value as Map<String, dynamic>),
     );
+    final rawChainNotes = threadData['chainNotes'] as List<dynamic>? ?? [];
+    var chainNotes = List<Map<String, dynamic>>.from(
+      rawChainNotes.cast<Map<String, dynamic>>(),
+    );
+    final mappedChain = chain
+        .map((id) => notesMap[id])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    if (mappedChain.isNotEmpty &&
+        (chainNotes.length < chain.length ||
+            (chainNotes.last['id'] as String? ?? '') != chain.last)) {
+      chainNotes = mappedChain;
+    }
+    if (chainNotes.isEmpty) {
+      chainNotes.add(rootNote);
+    }
 
     final totalReplies = threadData['totalReplies'] as int? ?? 0;
 
@@ -433,11 +461,31 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   }
 
   void _watchReplies(String rootNoteId) {
+    final generation = ++_repliesWatchGeneration;
     _repliesSubscription?.cancel();
-    _repliesSubscription =
-        _feedRepository.watchThreadAllReplies(rootNoteId).listen((replies) {
-      if (isClosed) return;
-      add(ThreadRepliesUpdated(replies));
+
+    void subscribe() {
+      if (isClosed || generation != _repliesWatchGeneration) return;
+      _repliesSubscription =
+          _feedRepository.watchThreadAllReplies(rootNoteId).listen(
+        (replies) {
+          if (isClosed || generation != _repliesWatchGeneration) return;
+          add(ThreadRepliesUpdated(replies, rootNoteId));
+        },
+        onError: (_) => _scheduleRepliesWatchRetry(generation, subscribe),
+        onDone: () => _scheduleRepliesWatchRetry(generation, subscribe),
+      );
+    }
+
+    subscribe();
+  }
+
+  void _scheduleRepliesWatchRetry(
+    int generation,
+    void Function() subscribe,
+  ) {
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!isClosed && generation == _repliesWatchGeneration) subscribe();
     });
   }
 
@@ -448,177 +496,48 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (state is! ThreadLoaded) return;
     final currentState = state as ThreadLoaded;
     final rootNoteId = currentState.rootNoteId;
+    if (event.rootNoteId != rootNoteId) return;
 
-    final incomingMap = <String, FeedNote>{
-      for (final r in event.replies) r.id: r,
-    };
-    final incomingIds = incomingMap.keys.toSet();
-    final existingIds =
-        currentState.replies.map((r) => r['id'] as String? ?? '').toSet();
-
-    final newIds =
-        incomingIds.where((id) => !existingIds.contains(id)).toList();
-    if (newIds.isEmpty) return;
-
-    final shouldFullRefresh = newIds.length > 3 ||
-        currentState.threadStructure.childrenMap.length < 2;
-
-    Map<String, dynamic>? freshStructure;
-    if (shouldFullRefresh) {
-      try {
-        final json = await rust_db.dbGetHydratedThreadStructure(
-          rootNoteId: rootNoteId,
-          currentUserPubkeyHex: currentState.currentUserHex.isNotEmpty
-              ? currentState.currentUserHex
-              : null,
-          limit: 500,
-        );
-        final data = jsonDecode(json) as Map<String, dynamic>;
-        if (!data.containsKey('error')) {
-          freshStructure = data;
-        }
-      } catch (_) {}
-
-      if (isClosed) return;
-    }
-
-    Map<String, List<Map<String, dynamic>>> childrenMap;
-    Map<String, Map<String, dynamic>> notesMap;
-    List<Map<String, dynamic>> repliesMap;
-    int quoteCount;
-
-    if (freshStructure != null) {
-      repliesMap = (freshStructure['allReplies'] as List<dynamic>?)
-              ?.cast<Map<String, dynamic>>() ??
-          [];
-      quoteCount = (freshStructure['quoteCount'] as int?) ?? 0;
-      notesMap = (freshStructure['notesMap'] as Map<String, dynamic>?)?.map(
-            (k, v) => MapEntry(k, v as Map<String, dynamic>),
-          ) ??
-          {};
-      childrenMap = (freshStructure['childrenMap'] as Map<String, dynamic>?)
-              ?.map(
-                (k, v) => MapEntry(
-                    k, (v as List<dynamic>).cast<Map<String, dynamic>>()),
-              ) ??
-          {};
-    } else {
-      notesMap = Map<String, Map<String, dynamic>>.from(
-          currentState.threadStructure.notesMap);
-      childrenMap = {
-        for (final entry in currentState.threadStructure.childrenMap.entries)
-          entry.key: List<Map<String, dynamic>>.from(entry.value),
-      };
-      repliesMap = List<Map<String, dynamic>>.from(currentState.replies);
-      quoteCount = currentState.quoteCount;
-
-      for (final id in newIds) {
-        final feedNote = incomingMap[id];
-        if (feedNote == null) continue;
-        final noteMap = feedNote.toMap();
-        if (feedNote.isQuote && feedNote.quotedNoteId == rootNoteId) {
-          quoteCount++;
-          notesMap[id] = noteMap;
-          continue;
-        }
-        if (_noteIsQuoteOf(noteMap, rootNoteId)) {
-          quoteCount++;
-          notesMap[id] = noteMap;
-          continue;
-        }
-        notesMap[id] = noteMap;
-        repliesMap.add(noteMap);
-        final parentId =
-            _resolveLocalParent(noteMap, rootNoteId, notesMap.keys.toSet());
-        childrenMap.putIfAbsent(parentId, () => []).add(noteMap);
-      }
-
-      for (final list in childrenMap.values) {
-        list.sort((a, b) {
-          final ta = a['created_at'] as int? ?? 0;
-          final tb = b['created_at'] as int? ?? 0;
-          return ta.compareTo(tb);
-        });
-      }
-    }
-
-    final threadStructure = ThreadStructure(
-      rootNote: currentState.rootNote,
-      childrenMap: childrenMap,
-      notesMap: notesMap,
-      totalReplies: repliesMap.length,
+    final existingIds = currentState.threadStructure.notesMap.keys.toSet();
+    final localThreadData = await _loadFromLocalDb(
+      rootNoteId,
+      currentUserHex: currentState.currentUserHex.isNotEmpty
+          ? currentState.currentUserHex
+          : null,
     );
+    if (isClosed ||
+        state is! ThreadLoaded ||
+        (state as ThreadLoaded).rootNoteId != rootNoteId ||
+        localThreadData == null) {
+      return;
+    }
+    final latestState = state as ThreadLoaded;
 
-    emit(
-      currentState.copyWith(
-        replies: repliesMap,
-        threadStructure: threadStructure,
-        quoteCount: quoteCount,
-      ),
+    final refreshed = _buildLoadedState(
+      localThreadData,
+      latestState.chain,
+      latestState.currentUserHex,
+      repliesSynced: latestState.repliesSynced,
     );
+    if (refreshed == null) return;
 
-    final newNotes = repliesMap
-        .where((r) => !existingIds.contains(r['id'] as String? ?? ''))
+    final mergedProfiles = Map<String, Map<String, dynamic>>.from(
+      latestState.userProfiles,
+    )..addAll(refreshed.userProfiles);
+    emit(refreshed.copyWith(
+      userProfiles: mergedProfiles,
+      currentUser: latestState.currentUser,
+      isRefreshing: latestState.isRefreshing,
+    ));
+
+    final newNotes = refreshed.threadStructure.notesMap.entries
+        .where((entry) => !existingIds.contains(entry.key))
+        .map((entry) => entry.value)
         .toList();
     if (newNotes.isNotEmpty) {
       _loadAndSyncProfilesForNotes(newNotes);
-      final newFeedNotes = event.replies
-          .where((n) => newIds.contains(n.id))
-          .toList();
-      if (newFeedNotes.isNotEmpty) {
-        _interactionService.populateFromNotes(newFeedNotes);
-      }
     }
-  }
-
-  static String _resolveLocalParent(
-    Map<String, dynamic> note,
-    String rootNoteId,
-    Set<String> knownIds,
-  ) {
-    final parentId = note['parentId'] as String? ?? '';
-    if (parentId.isNotEmpty &&
-        (parentId == rootNoteId || knownIds.contains(parentId))) {
-      return parentId;
-    }
-    final rootId = note['rootId'] as String? ?? '';
-    if (rootId.isNotEmpty &&
-        (rootId == rootNoteId || knownIds.contains(rootId))) {
-      return rootId;
-    }
-
-    final tags = note['tags'] as List<dynamic>? ?? [];
-    String? replyMarker;
-    String? rootMarker;
-    final positional = <String>[];
-    for (final tag in tags) {
-      if (tag is! List || tag.length < 2 || tag[0] != 'e') continue;
-      final refId = tag[1] as String? ?? '';
-      if (refId.isEmpty) continue;
-      final marker = tag.length >= 4 ? tag[3] as String? : null;
-      switch (marker) {
-        case 'reply':
-          replyMarker = refId;
-        case 'root':
-          rootMarker = refId;
-        case 'mention':
-          break;
-        default:
-          positional.add(refId);
-      }
-    }
-    final candidate = replyMarker ?? rootMarker;
-    if (candidate != null &&
-        (candidate == rootNoteId || knownIds.contains(candidate))) {
-      return candidate;
-    }
-    if (positional.isNotEmpty) {
-      final last = positional.last;
-      if (last == rootNoteId || knownIds.contains(last)) {
-        return last;
-      }
-    }
-    return rootNoteId;
+    _interactionService.populateFromNotes(event.replies);
   }
 
   void _loadInteractionCountsInBackground(List<String> initialIds) {
@@ -702,6 +621,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     ThreadNetworkFailed event,
     Emitter<ThreadState> emit,
   ) {
+    if (event.requestId != _loadRequestId) return;
     if (state is! ThreadLoaded) {
       emit(const ThreadError('Failed to load thread from network'));
     }
@@ -711,24 +631,42 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     ThreadRefreshed event,
     Emitter<ThreadState> emit,
   ) async {
-    if (_currentRootNoteId == null) return;
+    if (state is! ThreadLoaded) return;
+    final rootNoteId = _currentRootNoteId ?? (state as ThreadLoaded).rootNoteId;
+    if (rootNoteId.isEmpty) return;
+    _currentRootNoteId = rootNoteId;
+    emit((state as ThreadLoaded).copyWith(isRefreshing: true));
     try {
-      await _syncService.syncReplies(_currentRootNoteId!);
+      await _syncService
+          .syncReplies(rootNoteId)
+          .timeout(const Duration(seconds: 15));
 
-      if (state is ThreadLoaded) {
-        final allIds = <String>[_currentRootNoteId!];
+      if (state is ThreadLoaded &&
+          (state as ThreadLoaded).rootNoteId == rootNoteId) {
+        final allIds = <String>[rootNoteId];
         for (final reply in (state as ThreadLoaded).replies) {
           final id = reply['id'] as String? ?? '';
           if (id.isNotEmpty) allIds.add(id);
         }
 
-        await _interactionService.fetchCountsFromRelays(allIds);
+        await _interactionService
+            .fetchCountsFromRelays(allIds)
+            .timeout(const Duration(seconds: 15));
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      if (!isClosed &&
+          state is ThreadLoaded &&
+          (state as ThreadLoaded).rootNoteId == rootNoteId) {
+        emit((state as ThreadLoaded).copyWith(isRefreshing: false));
+      }
+    }
   }
 
   @override
   Future<void> close() {
+    _loadRequestId++;
+    _repliesWatchGeneration++;
     _repliesSubscription?.cancel();
     return super.close();
   }

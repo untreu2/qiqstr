@@ -1542,7 +1542,7 @@ async fn hydrate_notes(
         let mut repost_created_at: Option<u64> = None;
         let mut repost_event_id: Option<String> = None;
 
-        let tags: Vec<Vec<String>> = event.tags.iter()
+        let mut tags: Vec<Vec<String>> = event.tags.iter()
             .map(|tag| tag.clone().to_vec())
             .collect();
 
@@ -1630,6 +1630,7 @@ async fn hydrate_notes(
                 if let Some(parsed_tags) = parsed["tags"].as_array() {
                     let embedded_tags = json_tags_to_vecs(parsed_tags);
                     let embedded_refs = extract_note_references(&embedded_tags);
+                    tags = embedded_tags;
                     root_id = embedded_refs.root_id;
                     parent_id = embedded_refs.parent_id;
                     is_quote = embedded_refs.is_quote;
@@ -2106,6 +2107,32 @@ async fn hydrate_notes(
     Ok(serde_json::to_string(&notes)?)
 }
 
+fn hydrated_note_timestamp(note: &serde_json::Value) -> i64 {
+    note["repostCreatedAt"]
+        .as_i64()
+        .unwrap_or_else(|| note["created_at"].as_i64().unwrap_or(0))
+}
+
+fn truncate_hydrated_notes(
+    hydrated_json: String,
+    limit: u32,
+    deduplicate: bool,
+) -> Result<String> {
+    let mut notes: Vec<serde_json::Value> = serde_json::from_str(&hydrated_json)?;
+    notes.sort_by(|a, b| hydrated_note_timestamp(b).cmp(&hydrated_note_timestamp(a)));
+
+    if deduplicate {
+        let mut seen_ids: HashSet<String> = HashSet::new();
+        notes.retain(|note| {
+            let id = note["id"].as_str().unwrap_or("");
+            !id.is_empty() && seen_ids.insert(id.to_string())
+        });
+    }
+
+    notes.truncate(limit as usize);
+    Ok(serde_json::to_string(&notes)?)
+}
+
 pub async fn db_get_hydrated_feed_notes(
     user_pubkey_hex: String,
     authors_hex: Option<Vec<String>>,
@@ -2130,17 +2157,28 @@ pub async fn db_get_hydrated_feed_notes(
         .filter_map(|h| PublicKey::from_hex(h).ok())
         .collect();
 
+    if authors.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let query_limit = if filter_replies {
+        limit.saturating_mul(4)
+    } else {
+        limit
+    };
     let filter = Filter::new()
         .authors(authors)
         .kinds([Kind::TextNote, Kind::Repost])
-        .limit(limit as usize);
+        .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events.into_iter()
         .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
-    hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await
+    let hydrated =
+        hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
+    truncate_hydrated_notes(hydrated, limit, true)
 }
 
 pub async fn db_get_hydrated_profile_notes(
@@ -2155,10 +2193,15 @@ pub async fn db_get_hydrated_profile_notes(
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
 
+    let query_limit = if filter_replies {
+        limit.saturating_mul(4)
+    } else {
+        limit
+    };
     let mut filter = Filter::new()
         .author(pk)
         .kinds([Kind::TextNote, Kind::Repost])
-        .limit(limit as usize);
+        .limit(query_limit as usize);
     if let Some(until) = until_timestamp {
         if until > 0 {
             filter = filter.until(Timestamp::from(until as u64));
@@ -2170,7 +2213,9 @@ pub async fn db_get_hydrated_profile_notes(
         .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
-    hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await
+    let hydrated =
+        hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
+    truncate_hydrated_notes(hydrated, limit, true)
 }
 
 pub async fn db_get_hydrated_hashtag_notes(
@@ -2185,14 +2230,15 @@ pub async fn db_get_hydrated_hashtag_notes(
     let filter = Filter::new()
         .kind(Kind::TextNote)
         .hashtag(hashtag)
-        .limit(limit as usize);
+        .limit(limit.saturating_mul(4) as usize);
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events.into_iter()
         .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
         .collect();
 
-    hydrate_notes(&client, &filtered, true, current_user_pubkey_hex).await
+    let hydrated = hydrate_notes(&client, &filtered, true, current_user_pubkey_hex).await?;
+    truncate_hydrated_notes(hydrated, limit, true)
 }
 
 pub async fn db_get_hydrated_notes_by_ids(
@@ -2813,16 +2859,24 @@ pub(crate) async fn hydrate_notes_pub(
     hydrate_notes(client, events, filter_replies, current_user_pubkey_hex).await
 }
 
-fn content_media_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)https?://\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov)").unwrap()
-    })
-}
-
 fn content_link_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)https?://\S+").unwrap())
+    RE.get_or_init(|| Regex::new(r#"(?i)https?://[^\s<>"']+"#).unwrap())
+}
+
+fn normalize_content_url(url: &str) -> &str {
+    url.trim_end_matches(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}'))
+}
+
+fn is_media_url(url: &str) -> bool {
+    let path = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .to_ascii_lowercase();
+    ["jpg", "jpeg", "png", "webp", "gif", "mp4", "mov"]
+        .iter()
+        .any(|extension| path.ends_with(&format!(".{extension}")))
 }
 
 fn content_quote_re() -> &'static Regex {
@@ -2846,27 +2900,27 @@ fn content_mention_re() -> &'static Regex {
 
 #[flutter_rust_bridge::frb(sync)]
 pub fn parse_note_content(content: String) -> String {
-    let media_re = content_media_re();
     let link_re = content_link_re();
     let quote_re = content_quote_re();
     let article_re = content_article_re();
     let mention_re = content_mention_re();
 
-    let media_urls: Vec<String> = media_re
+    let mut seen_urls = HashSet::new();
+    let urls: Vec<String> = link_re
         .find_iter(&content)
-        .map(|m| m.as_str().to_string())
+        .map(|m| normalize_content_url(m.as_str()))
+        .filter(|url| !url.is_empty() && seen_urls.insert((*url).to_string()))
+        .map(str::to_string)
         .collect();
-
-    let media_set: HashSet<&str> = media_urls.iter().map(|s| s.as_str()).collect();
-    let link_urls: Vec<String> = link_re
-        .find_iter(&content)
-        .map(|m| m.as_str().to_string())
-        .filter(|u| {
-            let lower = u.to_lowercase();
-            !media_set.contains(u.as_str())
-                && !lower.ends_with(".mp4")
-                && !lower.ends_with(".mov")
-        })
+    let media_urls: Vec<String> = urls
+        .iter()
+        .filter(|url| is_media_url(url))
+        .cloned()
+        .collect();
+    let link_urls: Vec<String> = urls
+        .iter()
+        .filter(|url| !is_media_url(url))
+        .cloned()
         .collect();
 
     let quote_ids: Vec<String> = quote_re
@@ -2880,9 +2934,7 @@ pub fn parse_note_content(content: String) -> String {
         .collect();
 
     let mut to_remove: Vec<String> = Vec::new();
-    for m in media_re.find_iter(&content) {
-        to_remove.push(m.as_str().to_string());
-    }
+    to_remove.extend(media_urls.iter().cloned());
     for c in quote_re.captures_iter(&content) {
         to_remove.push(c.get(0).unwrap().as_str().to_string());
     }
@@ -3222,10 +3274,19 @@ pub async fn db_get_hydrated_feed_notes_sorted(
         .filter_map(|h| PublicKey::from_hex(h).ok())
         .collect();
 
+    if authors.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let query_limit = if filter_replies {
+        limit.saturating_mul(4)
+    } else {
+        limit
+    };
     let filter = Filter::new()
         .authors(authors)
         .kinds([Kind::TextNote, Kind::Repost])
-        .limit(limit as usize);
+        .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
 
     let filtered: Vec<Event> = events
@@ -3236,8 +3297,15 @@ pub async fn db_get_hydrated_feed_notes_sorted(
     let json_str =
         hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
 
+    let mut notes: Vec<serde_json::Value> = serde_json::from_str(&json_str)?;
+    notes.sort_by(|a, b| hydrated_note_timestamp(b).cmp(&hydrated_note_timestamp(a)));
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    notes.retain(|note| {
+        let id = note["id"].as_str().unwrap_or("");
+        !id.is_empty() && seen_ids.insert(id.to_string())
+    });
+
     if sort_mode == "most_interacted" {
-        let mut notes: Vec<serde_json::Value> = serde_json::from_str(&json_str)?;
         notes.sort_by(|a, b| {
             let score_a = a["reactionCount"].as_i64().unwrap_or(0)
                 + a["repostCount"].as_i64().unwrap_or(0)
@@ -3247,18 +3315,13 @@ pub async fn db_get_hydrated_feed_notes_sorted(
                 + b["repostCount"].as_i64().unwrap_or(0)
                 + b["replyCount"].as_i64().unwrap_or(0)
                 + b["zapCount"].as_i64().unwrap_or(0);
-            let time_a = a["repostCreatedAt"]
-                .as_i64()
-                .unwrap_or_else(|| a["created_at"].as_i64().unwrap_or(0));
-            let time_b = b["repostCreatedAt"]
-                .as_i64()
-                .unwrap_or_else(|| b["created_at"].as_i64().unwrap_or(0));
+            let time_a = hydrated_note_timestamp(a);
+            let time_b = hydrated_note_timestamp(b);
             score_b.cmp(&score_a).then_with(|| time_b.cmp(&time_a))
         });
-        Ok(serde_json::to_string(&notes)?)
-    } else {
-        Ok(json_str)
     }
+    notes.truncate(limit as usize);
+    Ok(serde_json::to_string(&notes)?)
 }
 
 // ---------------------------------------------------------------------------
@@ -3285,7 +3348,7 @@ pub async fn db_get_hydrated_thread_structure(
     let mut collected: HashMap<String, Event> = HashMap::new();
     collected.insert(root_event.id.to_hex(), root_event.clone());
 
-    let max_depth: u32 = 6;
+    let max_depth: u32 = 64;
     let max_total: usize = (limit as usize).max(50);
 
     let mut frontier: Vec<EventId> = vec![root_event.id];
@@ -3828,3 +3891,38 @@ pub async fn db_get_notifications_missing_profiles(
 // #11 is_event_new_and_track is defined at the top of this file
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
+mod tests {
+    use super::parse_note_content;
+
+    #[test]
+    fn parse_note_content_preserves_media_query_parameters() {
+        let parsed: serde_json::Value = serde_json::from_str(&parse_note_content(
+            "Photo https://cdn.example/image.JPG?token=abc, link https://example.com/page."
+                .to_string(),
+        ))
+        .unwrap();
+
+        assert_eq!(
+            parsed["mediaUrls"],
+            serde_json::json!(["https://cdn.example/image.JPG?token=abc"])
+        );
+        assert_eq!(
+            parsed["linkUrls"],
+            serde_json::json!(["https://example.com/page"])
+        );
+    }
+
+    #[test]
+    fn parse_note_content_deduplicates_urls() {
+        let parsed: serde_json::Value = serde_json::from_str(&parse_note_content(
+            "https://example.com/a https://example.com/a".to_string(),
+        ))
+        .unwrap();
+
+        assert_eq!(
+            parsed["linkUrls"],
+            serde_json::json!(["https://example.com/a"])
+        );
+    }
+}

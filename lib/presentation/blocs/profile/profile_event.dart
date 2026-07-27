@@ -65,16 +65,22 @@ class ProfileUserNotePublished extends ProfileEvent {
 }
 
 class ProfileProfilesLoaded extends ProfileEvent {
+  final String pubkeyHex;
   final Map<String, Map<String, dynamic>> profiles;
 
-  const ProfileProfilesLoaded(this.profiles);
+  const ProfileProfilesLoaded(this.pubkeyHex, this.profiles);
 
   @override
-  List<Object?> get props => [profiles];
+  List<Object?> get props => [pubkeyHex, profiles];
 }
 
 class ProfileSyncCompleted extends ProfileEvent {
-  const ProfileSyncCompleted();
+  final String pubkeyHex;
+
+  const ProfileSyncCompleted(this.pubkeyHex);
+
+  @override
+  List<Object?> get props => [pubkeyHex];
 }
 
 class ProfileRepliesLoaded extends ProfileEvent {
@@ -130,14 +136,16 @@ class ProfileFollowErrorCleared extends ProfileEvent {
 }
 
 class ProfilePinnedNotesUpdated extends ProfileEvent {
+  final String pubkeyHex;
   final List<String> pinnedNoteIds;
   final List<Map<String, dynamic>> pinnedNotes;
 
   const ProfilePinnedNotesUpdated({
+    required this.pubkeyHex,
     required this.pinnedNoteIds,
     required this.pinnedNotes,
   });
 
   @override
-  List<Object?> get props => [pinnedNoteIds, pinnedNotes];
+  List<Object?> get props => [pubkeyHex, pinnedNoteIds, pinnedNotes];
 }

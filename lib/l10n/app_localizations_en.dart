@@ -90,6 +90,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get emptyNoteMessage => 'Please enter a note or add media';
 
   @override
+  String maxMediaFilesAllowed(int count) {
+    return 'Maximum $count media files allowed';
+  }
+
+  @override
+  String onlyMoreMediaFiles(int count) {
+    return 'Only $count more media files can be added';
+  }
+
+  @override
+  String get invalidMediaFileType =>
+      'Invalid file type. Only images and videos are allowed';
+
+  @override
   String get addMediaText => 'Add media';
 
   @override
@@ -106,9 +120,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addMediaFilesToPost => 'Add media files to your post';
-
-  @override
-  String get addGifFromGiphy => 'Add GIF from Giphy';
 
   @override
   String get postYourNote => 'Post your note';
@@ -2269,6 +2280,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String cashuMeltAllConfirm(int amount) {
     return 'Send all $amount sats to your Lightning address?';
   }
+
+  @override
+  String get mediaUploadFailed => 'Media upload failed. Please try again.';
 
   @override
   String cashuMeltAllSuccess(int amount) {

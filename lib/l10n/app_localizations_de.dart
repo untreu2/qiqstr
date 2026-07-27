@@ -93,6 +93,20 @@ class AppLocalizationsDe extends AppLocalizations {
       'Bitte geben Sie eine Notiz ein oder fügen Sie Medien hinzu';
 
   @override
+  String maxMediaFilesAllowed(int count) {
+    return 'Maximal $count Mediendateien sind erlaubt';
+  }
+
+  @override
+  String onlyMoreMediaFiles(int count) {
+    return 'Es können nur noch $count Mediendateien hinzugefügt werden';
+  }
+
+  @override
+  String get invalidMediaFileType =>
+      'Ungültiger Dateityp. Nur Bilder und Videos sind erlaubt';
+
+  @override
   String get addMediaText => 'Medien hinzufügen';
 
   @override
@@ -110,9 +124,6 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get addMediaFilesToPost =>
       'Fügen Sie Mediendateien zu Ihrem Beitrag hinzu';
-
-  @override
-  String get addGifFromGiphy => 'GIF von Giphy hinzufügen';
 
   @override
   String get postYourNote => 'Notiz veröffentlichen';
@@ -2305,6 +2316,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String cashuMeltAllConfirm(int amount) {
     return '$amount Sats an Ihre Lightning-Adresse senden?';
   }
+
+  @override
+  String get mediaUploadFailed =>
+      'Medien konnten nicht hochgeladen werden. Bitte versuchen Sie es erneut.';
 
   @override
   String cashuMeltAllSuccess(int amount) {

@@ -59,8 +59,6 @@ class SyncService {
     Duration(seconds: 30),
   ];
 
-
-
   Stream<SyncOperationStatus> get syncStatus => _syncStatusController.stream;
 
   Stream<bool> get connectivityStream => Connectivity()
@@ -841,6 +839,7 @@ class SyncService {
     String? replyToId,
     required String parentAuthor,
     String? replyAuthor,
+    List<List<String>>? tags,
   }) =>
       _publish(() => _publisher.createReply(
             content: content,
@@ -848,16 +847,19 @@ class SyncService {
             replyToId: replyToId,
             rootAuthor: parentAuthor,
             replyAuthor: replyAuthor,
+            additionalTags: tags ?? const [],
           ));
 
   Future<Map<String, dynamic>> publishQuote(
           {required String content,
           required String quotedNoteId,
-          String? quotedAuthor}) =>
+          String? quotedAuthor,
+          List<List<String>>? tags}) =>
       _publish(() => _publisher.createQuote(
           content: content,
           quotedNoteId: quotedNoteId,
-          quotedAuthor: quotedAuthor));
+          quotedAuthor: quotedAuthor,
+          additionalTags: tags ?? const []));
 
   Future<Map<String, dynamic>> publishReaction(
           {required String targetEventId,
@@ -881,10 +883,8 @@ class SyncService {
       {required List<String> eventIds, String? reason}) async {
     final event = await _publish(
         () => _publisher.createDeletion(eventIds: eventIds, reason: reason));
-    try {
-      await rust_db.dbDeleteEventsByIds(eventIds: eventIds);
-      await rust_db.dbSaveEvents(eventsJson: jsonEncode([event]));
-    } catch (_) {}
+    await rust_db.dbDeleteEventsByIds(eventIds: eventIds);
+    _db.notifyChange();
     return event;
   }
 
@@ -1169,22 +1169,22 @@ class SyncService {
   Future<Map<String, dynamic>> _publish(
       Future<Map<String, dynamic>> Function() createEvent) async {
     final event = await createEvent();
-
-    await rust_db.dbSaveEvents(eventsJson: jsonEncode([event]));
-
     final eventJson = jsonEncode(event);
-    try {
-      final result = await _relayService.sendEvent(eventJson);
-      if (kDebugMode) {
-        print('[SyncService] Event dispatched: ${result['id']} '
-            'success=${result['success']} failed=${result['failed']}');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('[SyncService] Failed to dispatch event: $e');
-      }
+    final result = await _relayService.sendEvent(eventJson);
+    final success = (result['success'] as List<dynamic>?) ?? const [];
+    if (success.isEmpty) {
+      final failed = result['failed'];
+      throw StateError(
+          'No relay accepted the event${failed == null ? '' : ': $failed'}');
     }
 
+    await rust_db.dbSaveEvents(eventsJson: jsonEncode([event]));
+    _db.notifyChange();
+
+    if (kDebugMode) {
+      print('[SyncService] Event dispatched: ${result['id']} '
+          'success=${success.length} failed=${result['failed']}');
+    }
     return event;
   }
 
@@ -1315,8 +1315,8 @@ class SyncService {
   void _fetchThreadAncestorsInBackground(List<Map<String, dynamic>> events) {
     Future.microtask(() async {
       try {
-        var replyEventIds = await rust_db.filterReplyEventIds(
-            eventsJson: jsonEncode(events));
+        var replyEventIds =
+            await rust_db.filterReplyEventIds(eventsJson: jsonEncode(events));
         if (replyEventIds.isEmpty) return;
         if (replyEventIds.length > 40) {
           replyEventIds = replyEventIds.sublist(0, 40);

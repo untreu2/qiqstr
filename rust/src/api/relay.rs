@@ -1071,14 +1071,24 @@ pub async fn fetch_events_multi_filter(filters_json: String, timeout_secs: u32) 
 pub async fn send_event(event_json: String) -> Result<String> {
     let client = get_client().await?;
     let event = Event::from_json(&event_json)?;
-    let event_id = event.id;
+    let output = tokio::time::timeout(
+        Duration::from_secs(12),
+        client.send_event(&event),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("event dispatch timed out"))??;
 
-    tokio::spawn(async move {
-        let _ = client.send_event(&event).await;
-    });
+    let success: Vec<String> = output.success.iter().map(|u| u.to_string()).collect();
+    let failed: HashMap<String, String> = output
+        .failed
+        .iter()
+        .map(|(u, e)| (u.to_string(), e.to_string()))
+        .collect();
 
     let result = serde_json::json!({
-        "id": event_id.to_hex(),
+        "id": output.id().to_hex(),
+        "success": success,
+        "failed": failed,
     });
 
     Ok(result.to_string())

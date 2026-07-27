@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:giphy_get/giphy_get.dart';
 
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -13,7 +12,6 @@ import '../../../presentation/blocs/note/note_bloc.dart';
 import '../../../presentation/blocs/note/note_event.dart';
 import '../../../presentation/blocs/note/note_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../constants/giphy_api_key.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/note/quote_widget.dart';
@@ -23,12 +21,14 @@ import '../../../l10n/app_localizations.dart';
 class ShareNotePage extends StatefulWidget {
   final String? initialText;
   final String? replyToNoteId;
+  final String? rootNoteId;
   final String? parentAuthor;
 
   const ShareNotePage({
     super.key,
     this.initialText,
     this.replyToNoteId,
+    this.rootNoteId,
     this.parentAuthor,
   });
 
@@ -36,7 +36,10 @@ class ShareNotePage extends StatefulWidget {
   State<ShareNotePage> createState() => _ShareNotePageState();
 
   static Future<bool?> show(BuildContext context,
-      {String? initialText, String? replyToNoteId, String? parentAuthor}) {
+      {String? initialText,
+      String? replyToNoteId,
+      String? rootNoteId,
+      String? parentAuthor}) {
     return showModalBottomSheet<bool>(
       context: context,
       useRootNavigator: true,
@@ -45,6 +48,7 @@ class ShareNotePage extends StatefulWidget {
       builder: (context) => ShareNotePage(
         initialText: initialText,
         replyToNoteId: replyToNoteId,
+        rootNoteId: rootNoteId,
         parentAuthor: parentAuthor,
       ),
     );
@@ -63,16 +67,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   static const double _lineHeight = 1.4;
   static const double _smallFontSize = 13.0;
 
-  static const String _errorSelectingMedia = 'Error selecting media';
-  static const String _errorSelectingUser = 'Error selecting user';
-  static const String _errorSharingNote = 'Error sharing note';
-  static const String _maxMediaFilesMessage =
-      'Maximum $_maxMediaFiles media files allowed';
-  static const String _fileTooLargeMessage = 'File is too large (max 50MB)';
-  static const String _invalidFileTypeMessage =
-      'Invalid file type. Only images and videos are allowed';
-  static const String _emptyNoteMessage = 'Please enter a note or add media';
-
   static const List<String> _allowedExtensions = [
     'jpg',
     'jpeg',
@@ -89,8 +83,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
     'm4v',
   ];
 
-  static const String _retryText = 'Retry';
-
   late _MentionTextEditingController _noteController;
   final FocusNode _focusNode = FocusNode();
   final Map<String, String> _mentionMap = {};
@@ -106,8 +98,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
     );
 
     if (widget.replyToNoteId != null && widget.parentAuthor != null) {
+      final replyToId = _decodeEventId(widget.replyToNoteId!);
+      final rootId = _decodeEventId(widget.rootNoteId ?? widget.replyToNoteId!);
       _noteBloc.add(NoteReplySetup(
-        rootId: widget.replyToNoteId!,
+        rootId: rootId,
+        replyId: replyToId == rootId ? null : replyToId,
         parentAuthor: widget.parentAuthor!,
       ));
     }
@@ -115,7 +110,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     if (widget.initialText != null &&
         widget.initialText!.startsWith('nostr:')) {
       final cleanId = widget.initialText!.replaceFirst('nostr:', '');
-      _noteBloc.add(NoteQuoteSetup(cleanId));
+      _noteBloc.add(NoteQuoteSetup(_decodeEventId(cleanId)));
       isQuote = true;
     }
 
@@ -179,41 +174,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
       await _processSelectedFiles(result.files);
     } catch (e) {
       if (mounted) {
-        _showErrorSnackBar('$_errorSelectingMedia: ${e.toString()}');
-      }
-    }
-  }
-
-  Future<void> _selectGif() async {
-    if (!mounted) return;
-
-    try {
-      final state = _noteBloc.state;
-      final isUploading =
-          state is NoteComposeState ? state.isUploadingMedia : false;
-      if (isUploading || !_canAddMoreMedia()) return;
-
-      final gif = await GiphyGet.getGif(
-        context: context,
-        apiKey: giphyApiKey,
-        lang: GiphyLanguage.english,
-        tabColor: context.colors.textPrimary,
-        showGIFs: true,
-        showStickers: false,
-        showEmojis: false,
-      );
-
-      if (gif != null && gif.images != null) {
-        final gifUrl = gif.images!.original?.url ?? gif.images!.downsized?.url;
-        if (gifUrl != null && gifUrl.isNotEmpty) {
-          if (mounted) {
-            _noteBloc.add(NoteMediaUploaded([gifUrl]));
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('Error selecting GIF: ${e.toString()}');
+        final l10n = AppLocalizations.of(context)!;
+        _showErrorSnackBar('${l10n.errorSelectingMedia}: ${e.toString()}');
       }
     }
   }
@@ -222,7 +184,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final state = _noteBloc.state;
     final mediaCount = state is NoteComposeState ? state.mediaUrls.length : 0;
     if (mediaCount >= _maxMediaFiles) {
-      _showErrorSnackBar(_maxMediaFilesMessage);
+      _showErrorSnackBar(
+        AppLocalizations.of(context)!.maxMediaFilesAllowed(_maxMediaFiles),
+      );
       return false;
     }
     return true;
@@ -243,17 +207,20 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final filesToProcess = files.take(remainingSlots).toList();
 
     if (files.length > remainingSlots) {
-      _showErrorSnackBar('Only $remainingSlots more files can be added');
+      _showErrorSnackBar(
+        AppLocalizations.of(context)!.onlyMoreMediaFiles(remainingSlots),
+      );
     }
 
+    final l10n = AppLocalizations.of(context)!;
     final validFiles = filesToProcess.where((file) {
       if (file.path == null) return false;
       if (!_isFileTypeValid(file)) {
-        _showErrorSnackBar('${file.name}: $_invalidFileTypeMessage');
+        _showErrorSnackBar('${file.name}: ${l10n.invalidMediaFileType}');
         return false;
       }
       if (!_isFileSizeValid(file)) {
-        _showErrorSnackBar('${file.name} $_fileTooLargeMessage');
+        _showErrorSnackBar('${file.name}: ${l10n.fileTooLarge}');
         return false;
       }
       return true;
@@ -344,6 +311,20 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return true;
   }
 
+  String _decodeEventId(String value) {
+    if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(value)) {
+      return value.toLowerCase();
+    }
+    if (value.startsWith('note1')) {
+      return AuthService.instance.decodeNoteId(value) ?? value;
+    }
+    if (value.startsWith('nevent1')) {
+      final decoded = AuthService.instance.decodeTlvBech32(value) ?? {};
+      return decoded['id'] as String? ?? value;
+    }
+    return value;
+  }
+
   String _replaceMentions(String noteText, NoteComposeState state) {
     _mentionMap.forEach((key, value) {
       noteText = noteText.replaceAll(key, value);
@@ -353,7 +334,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   bool _hasContent(String noteText, bool hasQuote, NoteComposeState state) {
     if (noteText.isEmpty && state.mediaUrls.isEmpty && !hasQuote) {
-      _showErrorSnackBar(_emptyNoteMessage);
+      _showErrorSnackBar(AppLocalizations.of(context)!.emptyNoteMessage);
       return false;
     }
     return true;
@@ -373,40 +354,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     final additionalTags = <List<String>>[];
     additionalTags.addAll(tags);
-
-    if (_isReply() && widget.replyToNoteId != null) {
-      try {
-        String eventIdHex;
-        if (widget.replyToNoteId!.startsWith('note1')) {
-          eventIdHex =
-              AuthService.instance.decodeNoteId(widget.replyToNoteId!) ??
-                  widget.replyToNoteId!;
-        } else if (RegExp(r'^[0-9a-fA-F]{64}$')
-            .hasMatch(widget.replyToNoteId!)) {
-          eventIdHex = widget.replyToNoteId!;
-        } else {
-          eventIdHex = widget.replyToNoteId!;
-        }
-
-        bool hasETag = false;
-        for (final tag in additionalTags) {
-          if (tag.isNotEmpty &&
-              tag[0] == 'e' &&
-              tag.length > 1 &&
-              tag[1] == eventIdHex) {
-            hasETag = true;
-            break;
-          }
-        }
-
-        if (!hasETag) {
-          additionalTags.add(['e', eventIdHex]);
-          if (kDebugMode) debugPrint('[ShareNotePage] Added e tag for reply: $eventIdHex');
-        }
-      } catch (e) {
-        if (kDebugMode) debugPrint('[ShareNotePage] Error processing replyToNoteId: $e');
-      }
-    }
 
     final state = _noteBloc.state;
     if (state is! NoteComposeState) return;
@@ -513,7 +460,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
       _insertMention(user, atIndex, cursorPos);
       _clearUserSearch();
     } catch (e) {
-      _showErrorSnackBar('$_errorSelectingUser: ${e.toString()}');
+      final l10n = AppLocalizations.of(context)!;
+      _showErrorSnackBar('${l10n.errorSelectingUser}: ${e.toString()}');
     }
   }
 
@@ -573,11 +521,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   void _showRetryableError(String error) {
     if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
     AppSnackbar.error(
       context,
-      '$_errorSharingNote: $error',
+      '${l10n.errorSharingNote}: $error',
       action: SnackBarAction(
-        label: _retryText,
+        label: l10n.retryText,
         onPressed: _shareNote,
       ),
     );
@@ -628,8 +577,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Widget _buildAppBarActions() {
     return Row(
       children: [
-        _buildGifButton(),
-        const SizedBox(width: 8),
         _buildMediaButton(),
         const SizedBox(width: 8),
         _buildPostButton(),
@@ -650,7 +597,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
               }
             });
           } else if (state is NoteError) {
-            AppSnackbar.error(context, state.message);
+            AppSnackbar.error(context, _noteErrorMessage(state.failure));
           }
         },
         child: BlocBuilder<NoteBloc, NoteState>(
@@ -677,6 +624,16 @@ class _ShareNotePageState extends State<ShareNotePage> {
         ),
       ),
     );
+  }
+
+  String _noteErrorMessage(NoteFailure failure) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (failure) {
+      NoteFailure.invalidContent => l10n.emptyNoteMessage,
+      NoteFailure.authenticationRequired => l10n.authenticationRequired,
+      NoteFailure.publishFailed => l10n.errorSharingNote,
+      NoteFailure.mediaUploadFailed => l10n.mediaUploadFailed,
+    };
   }
 
   Widget _buildMediaButton() {
@@ -744,52 +701,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
     );
   }
 
-  Widget _buildGifButton() {
-    final l10n = AppLocalizations.of(context)!;
-    return BlocSelector<NoteBloc, NoteState, bool>(
-      selector: (state) =>
-          state is NoteComposeState ? state.isUploadingMedia : false,
-      builder: (context, isUploading) {
-        return Material(
-          color: Colors.transparent,
-          child: IgnorePointer(
-            ignoring: isUploading,
-            child: InkWell(
-              onTap: _selectGif,
-              borderRadius: BorderRadius.circular(16),
-              child: Semantics(
-                label: l10n.addGifFromGiphy,
-                button: true,
-                enabled: !isUploading,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: context.colors.overlayLight,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    'GIF',
-                    style: TextStyle(
-                      color: context.colors.textPrimary,
-                      fontSize: _smallFontSize,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildPostButton() {
     final l10n = AppLocalizations.of(context)!;
     return BlocSelector<NoteBloc, NoteState, bool>(
-      selector: (state) => state is NoteLoading,
+      selector: (state) =>
+          state is NoteComposeState &&
+          (state.isPublishing || state.isUploadingMedia),
       builder: (context, isLoading) {
         return Material(
           color: Colors.transparent,
@@ -902,7 +819,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
               : null,
           backgroundColor: context.colors.surfaceTransparent,
           child: profileImage.isEmpty
-              ? PhosphorIcon(PhosphorIcons.user(), color: context.colors.textPrimary, size: 20)
+              ? PhosphorIcon(PhosphorIcons.user(),
+                  color: context.colors.textPrimary, size: 20)
               : null,
         );
       },
@@ -957,9 +875,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
         scrollDirection: Axis.horizontal,
         itemCount: state.mediaUrls.length,
         onReorderItem: (oldIndex, newIndex) {
-          final url = state.mediaUrls[oldIndex];
-          _noteBloc.add(NoteMediaRemoved(url));
-          _noteBloc.add(NoteMediaUploaded([url]));
+          var targetIndex = newIndex;
+          if (targetIndex > oldIndex) targetIndex--;
+          targetIndex = targetIndex.clamp(0, state.mediaUrls.length - 1);
+          _noteBloc.add(NoteMediaReordered(
+            oldIndex: oldIndex,
+            newIndex: targetIndex,
+          ));
         },
         itemBuilder: (context, index) {
           final url = state.mediaUrls[index];
@@ -1066,11 +988,15 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
       if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(cleanId)) {
         final encoded = AuthService.instance.encodeNoteId(cleanId);
-        if (kDebugMode) debugPrint('[ShareNotePage] Encoded hex to note1: $encoded');
+        if (kDebugMode) {
+          debugPrint('[ShareNotePage] Encoded hex to note1: $encoded');
+        }
         return encoded;
       }
 
-      if (kDebugMode) debugPrint('[ShareNotePage] Using event ID as is: $cleanId');
+      if (kDebugMode) {
+        debugPrint('[ShareNotePage] Using event ID as is: $cleanId');
+      }
       return cleanId;
     } catch (e) {
       if (kDebugMode) debugPrint('[ShareNotePage] Error encoding event ID: $e');

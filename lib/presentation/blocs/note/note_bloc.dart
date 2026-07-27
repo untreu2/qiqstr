@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/sync/sync_service.dart';
@@ -21,13 +22,20 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         _syncService = syncService,
         _authService = authService,
         super(const NoteComposeState(content: '')) {
-    on<NoteComposed>(_onNoteComposed);
+    on<NoteComposed>(_onNoteComposed, transformer: droppable());
     on<NoteContentChanged>(_onNoteContentChanged);
-    on<NoteMediaUploaded>(_onNoteMediaUploaded);
+    on<NoteMediaUploaded>(
+      _onNoteMediaUploaded,
+      transformer: sequential(),
+    );
     on<NoteMediaRemoved>(_onNoteMediaRemoved);
+    on<NoteMediaReordered>(_onNoteMediaReordered);
     on<NoteMentionAdded>(_onNoteMentionAdded);
     on<NoteContentCleared>(_onNoteContentCleared);
-    on<NoteUserSearchRequested>(_onNoteUserSearchRequested);
+    on<NoteUserSearchRequested>(
+      _onNoteUserSearchRequested,
+      transformer: restartable(),
+    );
     on<NoteReplySetup>(_onNoteReplySetup);
     on<NoteQuoteSetup>(_onNoteQuoteSetup);
   }
@@ -40,44 +48,53 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
 
-    if (!currentState.canPost) {
-      emit(const NoteError('Cannot post. Please add content or media.'));
-      await Future.delayed(const Duration(milliseconds: 100));
+    if (!currentState.canPost ||
+        currentState.isUploadingMedia ||
+        currentState.isPublishing) {
+      emit(const NoteError(NoteFailure.invalidContent));
       emit(currentState);
       return;
     }
 
     final currentUserHex = _authService.currentUserPubkeyHex;
     if (currentUserHex == null) {
-      emit(const NoteError('Not authenticated. Please log in first.'));
-      await Future.delayed(const Duration(milliseconds: 100));
+      emit(const NoteError(NoteFailure.authenticationRequired));
       emit(currentState);
       return;
     }
 
-    emit(NoteComposedSuccess({'content': event.content}));
-    add(const NoteContentCleared());
-
-    _publishInBackground(event, currentState);
+    emit(currentState.copyWith(isPublishing: true));
+    try {
+      final published = await _publish(event, currentState);
+      emit(NoteComposedSuccess(published));
+    } catch (_) {
+      emit(const NoteError(NoteFailure.publishFailed));
+      emit(currentState.copyWith(isPublishing: false));
+    }
   }
 
-  void _publishInBackground(NoteComposed event, NoteComposeState currentState) {
+  Future<Map<String, dynamic>> _publish(
+    NoteComposed event,
+    NoteComposeState currentState,
+  ) {
     if (currentState.isReply &&
         currentState.rootId != null &&
         currentState.parentAuthor != null) {
-      _syncService.publishReply(
+      return _syncService.publishReply(
         content: event.content,
         rootId: currentState.rootId!,
         replyToId: currentState.replyId,
         parentAuthor: currentState.parentAuthor!,
+        tags: event.tags,
       );
     } else if (currentState.isQuote && currentState.quoteEventId != null) {
-      _syncService.publishQuote(
+      return _syncService.publishQuote(
         content: _buildQuoteContent(event.content, currentState.quoteEventId!),
         quotedNoteId: currentState.quoteEventId!,
+        tags: event.tags,
       );
     } else {
-      _syncService.publishNote(
+      return _syncService.publishNote(
         content: event.content,
         tags: event.tags,
       );
@@ -93,7 +110,8 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         : const NoteComposeState(content: '');
     final trimmedContent = event.content.trim();
     final hasMedia = currentState.mediaUrls.isNotEmpty;
-    final canPost = trimmedContent.isNotEmpty || hasMedia;
+    final canPost =
+        trimmedContent.isNotEmpty || hasMedia || currentState.isQuote;
 
     emit(currentState.copyWith(
       content: event.content,
@@ -121,7 +139,10 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     }
 
     if (directUrls.isNotEmpty && pathsToUpload.isEmpty) {
-      final updatedMediaUrls = [...currentState.mediaUrls, ...directUrls];
+      final updatedMediaUrls = {
+        ...currentState.mediaUrls,
+        ...directUrls,
+      }.toList();
       emit(currentState.copyWith(
         mediaUrls: updatedMediaUrls,
         canPost: true,
@@ -131,42 +152,54 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
 
     emit(currentState.copyWith(isUploadingMedia: true));
 
-    final List<String> uploadedUrls = [...directUrls];
-    final Map<String, String> newDimensions = {};
+    try {
+      final List<String> uploadedUrls = [...directUrls];
+      final Map<String, String> newDimensions = {};
 
-    for (final filePath in pathsToUpload) {
-      String? dim;
-      if (_isImageFile(filePath)) {
-        dim = await _getImageDimensions(filePath);
-      }
+      for (final filePath in pathsToUpload) {
+        String? dim;
+        if (_isImageFile(filePath)) {
+          dim = await _getImageDimensions(filePath);
+        }
 
-      final url = await _syncService.uploadMedia(filePath);
-      if (url != null) {
-        uploadedUrls.add(url);
-        if (dim != null) {
-          newDimensions[url] = dim;
+        final url = await _syncService.uploadMedia(filePath);
+        if (url != null) {
+          uploadedUrls.add(url);
+          if (dim != null) {
+            newDimensions[url] = dim;
+          }
         }
       }
-    }
 
-    if (uploadedUrls.isNotEmpty) {
-      final updatedMediaUrls = [...currentState.mediaUrls, ...uploadedUrls];
-      final updatedDimensions = {
-        ...currentState.mediaDimensions,
-        ...newDimensions,
-      };
       final latestState = state is NoteComposeState
           ? (state as NoteComposeState)
           : currentState;
-      emit(latestState.copyWith(
-        mediaUrls: updatedMediaUrls,
-        mediaDimensions: updatedDimensions,
-        isUploadingMedia: false,
-        canPost: true,
-      ));
-    } else {
-      emit(currentState.copyWith(isUploadingMedia: false));
-      emit(const NoteError('No media files were uploaded successfully'));
+      if (uploadedUrls.isNotEmpty) {
+        final updatedMediaUrls = {
+          ...latestState.mediaUrls,
+          ...uploadedUrls,
+        }.toList();
+        final updatedDimensions = {
+          ...latestState.mediaDimensions,
+          ...newDimensions,
+        };
+        emit(latestState.copyWith(
+          mediaUrls: updatedMediaUrls,
+          mediaDimensions: updatedDimensions,
+          isUploadingMedia: false,
+          canPost: true,
+        ));
+        return;
+      }
+
+      emit(const NoteError(NoteFailure.mediaUploadFailed));
+      emit(latestState.copyWith(isUploadingMedia: false));
+    } catch (_) {
+      final latestState = state is NoteComposeState
+          ? (state as NoteComposeState)
+          : currentState;
+      emit(const NoteError(NoteFailure.mediaUploadFailed));
+      emit(latestState.copyWith(isUploadingMedia: false));
     }
   }
 
@@ -183,12 +216,33 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         Map<String, String>.from(currentState.mediaDimensions)
           ..remove(event.url);
     final trimmedContent = currentState.content.trim();
-    final canPost = trimmedContent.isNotEmpty || updatedMediaUrls.isNotEmpty;
+    final canPost = trimmedContent.isNotEmpty ||
+        updatedMediaUrls.isNotEmpty ||
+        currentState.isQuote;
     emit(currentState.copyWith(
       mediaUrls: updatedMediaUrls,
       mediaDimensions: updatedDimensions,
       canPost: canPost,
     ));
+  }
+
+  void _onNoteMediaReordered(
+    NoteMediaReordered event,
+    Emitter<NoteState> emit,
+  ) {
+    if (state is! NoteComposeState) return;
+    final currentState = state as NoteComposeState;
+    if (event.oldIndex < 0 ||
+        event.oldIndex >= currentState.mediaUrls.length ||
+        event.newIndex < 0 ||
+        event.newIndex >= currentState.mediaUrls.length) {
+      return;
+    }
+
+    final reordered = List<String>.from(currentState.mediaUrls);
+    final item = reordered.removeAt(event.oldIndex);
+    reordered.insert(event.newIndex, item);
+    emit(currentState.copyWith(mediaUrls: reordered));
   }
 
   void _onNoteMentionAdded(
@@ -255,6 +309,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     try {
       final profiles =
           await _profileRepository.searchProfiles(event.query, limit: 10);
+      if (emit.isDone) return;
       final users = profiles.map((p) => p.toMap()).toList();
       final latestState = state is NoteComposeState
           ? (state as NoteComposeState)
@@ -264,6 +319,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         userSuggestions: users,
       ));
     } catch (e) {
+      if (emit.isDone) return;
       final latestState = state is NoteComposeState
           ? (state as NoteComposeState)
           : currentState;
@@ -299,11 +355,17 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
       isReply: false,
       isQuote: true,
       quoteEventId: event.quoteEventId,
+      canPost: true,
     ));
   }
 
   String _buildQuoteContent(String content, String quoteEventId) {
-    return '$content\nnostr:$quoteEventId';
+    final encodedId = quoteEventId.startsWith('note1')
+        ? quoteEventId
+        : _authService.encodeNoteId(quoteEventId);
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return 'nostr:$encodedId';
+    return '$trimmed\nnostr:$encodedId';
   }
 
   static const _imageExtensions = [

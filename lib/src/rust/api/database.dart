@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `_is_quote_of_root`, `_resolve_thread_parent`, `active_muted_pubkeys`, `active_muted_words`, `content_article_re`, `content_link_re`, `content_media_re`, `content_mention_re`, `content_quote_re`, `extract_bolt11_amount_sats`, `extract_content_references`, `extract_first_e_tag`, `extract_note_references`, `extract_reply_parent_id`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes_pub`, `hydrate_notes`, `hydrate_notification_events`, `is_event_muted`, `is_future_dated`, `json_tags_to_vecs`, `metadata_to_flat_json`, `mute_state`, `seen_ids`, `tags_from_event`
+// These functions are ignored because they are not marked as `pub`: `_is_quote_of_root`, `_resolve_thread_parent`, `active_muted_pubkeys`, `active_muted_words`, `content_article_re`, `content_link_re`, `content_mention_re`, `content_quote_re`, `extract_bolt11_amount_sats`, `extract_content_references`, `extract_first_e_tag`, `extract_note_references`, `extract_reply_parent_id`, `extract_zap_amount_sats`, `extract_zap_comment`, `extract_zap_sender`, `hydrate_article_events`, `hydrate_notes_pub`, `hydrate_notes`, `hydrate_notification_events`, `hydrated_note_timestamp`, `is_event_muted`, `is_future_dated`, `is_media_url`, `json_tags_to_vecs`, `metadata_to_flat_json`, `mute_state`, `normalize_content_url`, `seen_ids`, `tags_from_event`, `truncate_hydrated_notes`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MuteState`, `NoteReferences`
 
 Future<void> setActiveMuteList(

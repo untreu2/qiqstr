@@ -32,6 +32,7 @@ class NoteComposeState extends NoteState {
   final List<String> mediaUrls;
   final Map<String, String> mediaDimensions;
   final bool isUploadingMedia;
+  final bool isPublishing;
   final bool isSearchingUsers;
   final List<Map<String, dynamic>> userSuggestions;
   final bool canPost;
@@ -47,6 +48,7 @@ class NoteComposeState extends NoteState {
     this.mediaUrls = const [],
     this.mediaDimensions = const {},
     this.isUploadingMedia = false,
+    this.isPublishing = false,
     this.isSearchingUsers = false,
     this.userSuggestions = const [],
     this.canPost = false,
@@ -64,6 +66,7 @@ class NoteComposeState extends NoteState {
         mediaUrls,
         mediaDimensions,
         isUploadingMedia,
+        isPublishing,
         isSearchingUsers,
         userSuggestions,
         canPost,
@@ -80,6 +83,7 @@ class NoteComposeState extends NoteState {
     List<String>? mediaUrls,
     Map<String, String>? mediaDimensions,
     bool? isUploadingMedia,
+    bool? isPublishing,
     bool? isSearchingUsers,
     List<Map<String, dynamic>>? userSuggestions,
     bool? canPost,
@@ -95,6 +99,7 @@ class NoteComposeState extends NoteState {
       mediaUrls: mediaUrls ?? this.mediaUrls,
       mediaDimensions: mediaDimensions ?? this.mediaDimensions,
       isUploadingMedia: isUploadingMedia ?? this.isUploadingMedia,
+      isPublishing: isPublishing ?? this.isPublishing,
       isSearchingUsers: isSearchingUsers ?? this.isSearchingUsers,
       userSuggestions: userSuggestions ?? this.userSuggestions,
       canPost: canPost ?? this.canPost,
@@ -102,11 +107,18 @@ class NoteComposeState extends NoteState {
   }
 }
 
-class NoteError extends NoteState {
-  final String message;
+enum NoteFailure {
+  invalidContent,
+  authenticationRequired,
+  publishFailed,
+  mediaUploadFailed,
+}
 
-  const NoteError(this.message);
+class NoteError extends NoteState {
+  final NoteFailure failure;
+
+  const NoteError(this.failure);
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [failure];
 }

@@ -43,6 +43,7 @@ class EventPublisher {
     String? replyToId,
     required String rootAuthor,
     String? replyAuthor,
+    List<List<String>> additionalTags = const [],
   }) async {
     final privateKey = await _getPrivateKey();
     final relays = await RustRelayService.instance.getRelayList();
@@ -59,6 +60,9 @@ class EventPublisher {
         ['p', rootAuthor],
       ],
       for (final url in relays) ['r', url],
+      ...additionalTags.where(
+        (tag) => tag.isNotEmpty && tag.first != 'e' && tag.first != 'p',
+      ),
     ];
 
     final json = rust_events.createReplyEvent(
@@ -73,6 +77,7 @@ class EventPublisher {
     required String content,
     required String quotedNoteId,
     String? quotedAuthor,
+    List<List<String>> additionalTags = const [],
   }) async {
     final privateKey = await _getPrivateKey();
     final json = rust_events.createQuoteEvent(
@@ -81,7 +86,11 @@ class EventPublisher {
       quotedEventPubkey: quotedAuthor,
       relayUrl: '',
       privateKeyHex: privateKey,
-      additionalTags: [],
+      additionalTags: additionalTags
+          .where(
+            (tag) => tag.isNotEmpty && tag.first != 'q' && tag.first != 'p',
+          )
+          .toList(),
     );
     return jsonDecode(json) as Map<String, dynamic>;
   }

@@ -149,9 +149,9 @@ interacts exclusively through auto-generated bridge code.
 git clone https://github.com/untreu2/qiqstr.git
 cd qiqstr
 
-# 2. Provide the required environment variables
-cp .env.example .env
-# then edit .env and fill in GIPHY_API_KEY and BREEZ_API_KEY
+# 2. Provide build-time configuration
+cp build_config.example.json build_config.json
+# then fill in BREEZ_API_KEY
 
 # 3. Fetch Dart dependencies
 flutter pub get
@@ -160,11 +160,12 @@ flutter pub get
 flutter_rust_bridge_codegen generate
 
 # 5. Run the app
-flutter run
+flutter run --dart-define-from-file=build_config.json
 ```
 
-> **Note:** `.env` requires `GIPHY_API_KEY` (GIF picker) and `BREEZ_API_KEY` (Lightning wallet).
-> See [`.env.example`](.env.example) for the expected keys.
+> **Note:** `build_config.json` supplies `BREEZ_API_KEY` (Lightning wallet) at
+> compile time and is excluded from version control. Use the same
+> `--dart-define-from-file=build_config.json` option for release builds.
 
 ## Usage
 

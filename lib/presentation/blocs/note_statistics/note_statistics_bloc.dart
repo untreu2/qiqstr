@@ -1,3 +1,4 @@
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/interaction_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -25,8 +26,14 @@ class NoteStatisticsBloc
         _authService = authService,
         _syncService = syncService,
         super(const NoteStatisticsInitial()) {
-    on<NoteStatisticsInitialized>(_onNoteStatisticsInitialized);
-    on<NoteStatisticsRefreshed>(_onNoteStatisticsRefreshed);
+    on<NoteStatisticsInitialized>(
+      _onNoteStatisticsInitialized,
+      transformer: droppable(),
+    );
+    on<NoteStatisticsRefreshed>(
+      _onNoteStatisticsRefreshed,
+      transformer: droppable(),
+    );
   }
 
   Future<void> _onNoteStatisticsInitialized(
@@ -34,18 +41,33 @@ class NoteStatisticsBloc
     Emitter<NoteStatisticsState> emit,
   ) async {
     emit(const NoteStatisticsLoading());
-    await _syncService.syncInteractionsForNote(noteId);
-    final interactions = await _interactionRepository.getDetails(noteId);
-    await _buildInteractionsList(emit, interactions);
+    try {
+      final cached = await _interactionRepository.getDetails(noteId);
+      await _buildInteractionsList(emit, cached);
+      await _syncService.syncInteractionsForNote(noteId);
+      final refreshed = await _interactionRepository.getDetails(noteId);
+      await _buildInteractionsList(emit, refreshed);
+    } catch (_) {
+      if (state is! NoteStatisticsLoaded) {
+        emit(const NoteStatisticsLoaded(
+          interactions: [],
+          users: {},
+        ));
+      }
+    }
   }
 
   Future<void> _onNoteStatisticsRefreshed(
     NoteStatisticsRefreshed event,
     Emitter<NoteStatisticsState> emit,
   ) async {
-    await _syncService.syncInteractionsForNote(noteId);
-    final interactions = await _interactionRepository.getDetails(noteId);
-    await _buildInteractionsList(emit, interactions);
+    try {
+      await _syncService.syncInteractionsForNote(noteId);
+    } catch (_) {}
+    try {
+      final interactions = await _interactionRepository.getDetails(noteId);
+      await _buildInteractionsList(emit, interactions);
+    } catch (_) {}
   }
 
   Future<void> _buildInteractionsList(
@@ -81,8 +103,10 @@ class NoteStatisticsBloc
             pubkeysList.where((pk) => !profiles.containsKey(pk)).toList();
 
         if (missingPubkeys.isNotEmpty) {
-          await _syncService.syncProfiles(missingPubkeys);
-          profiles = await _profileRepository.getProfiles(pubkeysList);
+          try {
+            await _syncService.syncProfiles(missingPubkeys);
+            profiles = await _profileRepository.getProfiles(pubkeysList);
+          } catch (_) {}
         }
 
         for (final entry in profiles.entries) {

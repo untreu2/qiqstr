@@ -80,6 +80,7 @@ class _InteractionBarState extends State<InteractionBar> {
     ShareNotePage.show(
       context,
       replyToNoteId: widget.noteId,
+      rootNoteId: widget.note?['rootId'] as String?,
       parentAuthor: widget.note?['pubkey'] as String?,
     );
   }
@@ -273,8 +274,7 @@ class _InteractionBarState extends State<InteractionBar> {
       }
       if (!mounted) return;
 
-      final authorHex =
-          note['pubkey'] as String? ?? '';
+      final authorHex = note['pubkey'] as String? ?? '';
       bool profileValid = false;
       if (authorHex.isNotEmpty) {
         profileValid = await verifier.verifyProfile(authorHex);

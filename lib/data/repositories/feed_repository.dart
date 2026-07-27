@@ -55,6 +55,7 @@ abstract interface class FeedRepository {
     String userPubkey, {
     List<String>? authors,
     int limit,
+    String sortMode,
   });
 
   Stream<List<FeedNote>> watchNotes(String pubkey, {int limit});
@@ -144,29 +145,8 @@ class FeedRepositoryImpl implements FeedRepository {
         .bufferTime(const Duration(milliseconds: 300))
         .where((batch) => batch.isNotEmpty);
 
-    await for (final batch in feedEvents) {
-      final allIds = <String>{};
-      bool hasUntargeted = false;
-      for (final e in batch) {
-        if (e.ids.isEmpty) {
-          hasUntargeted = true;
-          break;
-        }
-        allIds.addAll(e.ids);
-      }
-
-      if (hasUntargeted || allIds.isEmpty) {
-        yield await _fetchFeedUpdate(userPubkey, authors, limit, sortMode);
-      } else {
-        try {
-          final changed = await getNotesByIds(allIds.toList());
-          if (changed.isNotEmpty) {
-            yield FeedDelta(changed: changed);
-          }
-        } catch (e) {
-          if (kDebugMode) print('[FeedRepository] delta fetch error: $e');
-        }
-      }
+    await for (final _ in feedEvents) {
+      yield await _fetchFeedUpdate(userPubkey, authors, limit, sortMode);
     }
   }
 
@@ -206,56 +186,34 @@ class FeedRepositoryImpl implements FeedRepository {
     }
   }
 
-  Future<List<FeedNote>> _fetchFeed(
-    String userPubkey,
-    List<String>? authors,
-    int limit,
-    String sortMode,
-  ) async {
-    try {
-      return await _fetchFeedOrThrow(userPubkey, authors, limit, sortMode);
-    } catch (e) {
-      if (kDebugMode) print('[FeedRepository] fetchFeed error: $e');
-      return [];
-    }
-  }
-
   @override
   Future<List<FeedNote>> getFeed(
     String userPubkey, {
     List<String>? authors,
     int limit = 100,
+    String sortMode = 'latest',
   }) =>
-      _fetchFeed(userPubkey, authors, limit, 'latest');
+      _fetchFeedOrThrow(userPubkey, authors, limit, sortMode);
 
   @override
-  Stream<List<FeedNote>> watchNotes(String pubkey, {int limit = 50}) async* {
-    final initial = await _fetchNotes(pubkey, limit);
-    if (initial.isNotEmpty) {
-      yield initial.map((m) => FeedNote.fromMap(m)).toList();
-    }
-    yield* _onChange(() => _fetchNotes(pubkey, limit))
+  Stream<List<FeedNote>> watchNotes(String pubkey, {int limit = 50}) {
+    return _onChange(() => _fetchNotes(pubkey, limit))
         .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
   Future<List<Map<String, dynamic>>> _fetchNotes(String pubkey, int limit,
       {int? untilTimestamp}) async {
-    try {
-      final json = await rust_db.dbGetHydratedProfileNotes(
-        pubkeyHex: pubkey,
-        limit: limit,
-        mutedPubkeys: _mutedPubkeys,
-        mutedWords: _mutedWords,
-        filterReplies: true,
-        currentUserPubkeyHex: _currentUserHex,
-        untilTimestamp: untilTimestamp,
-      );
-      final decoded = jsonDecode(json) as List<dynamic>;
-      return decoded.cast<Map<String, dynamic>>();
-    } catch (e) {
-      if (kDebugMode) print('[FeedRepository] getNotes error: $e');
-      return [];
-    }
+    final json = await rust_db.dbGetHydratedProfileNotes(
+      pubkeyHex: pubkey,
+      limit: limit,
+      mutedPubkeys: _mutedPubkeys,
+      mutedWords: _mutedWords,
+      filterReplies: true,
+      currentUserPubkeyHex: _currentUserHex,
+      untilTimestamp: untilTimestamp,
+    );
+    final decoded = jsonDecode(json) as List<dynamic>;
+    return decoded.cast<Map<String, dynamic>>();
   }
 
   @override
@@ -267,33 +225,23 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   @override
-  Stream<List<FeedNote>> watchUserReplies(String pubkey,
-      {int limit = 50}) async* {
-    final initial = await _fetchUserReplies(pubkey, limit);
-    if (initial.isNotEmpty) {
-      yield initial.map((m) => FeedNote.fromMap(m)).toList();
-    }
-    yield* _onChange(() => _fetchUserReplies(pubkey, limit))
+  Stream<List<FeedNote>> watchUserReplies(String pubkey, {int limit = 50}) {
+    return _onChange(() => _fetchUserReplies(pubkey, limit))
         .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
   Future<List<Map<String, dynamic>>> _fetchUserReplies(String pubkey, int limit,
       {int? untilTimestamp}) async {
-    try {
-      final json = await rust_db.dbGetHydratedProfileReplies(
-        pubkeyHex: pubkey,
-        limit: limit,
-        mutedPubkeys: _mutedPubkeys,
-        mutedWords: _mutedWords,
-        currentUserPubkeyHex: _currentUserHex,
-        untilTimestamp: untilTimestamp,
-      );
-      final decoded = jsonDecode(json) as List<dynamic>;
-      return decoded.cast<Map<String, dynamic>>();
-    } catch (e) {
-      if (kDebugMode) print('[FeedRepository] getUserReplies error: $e');
-      return [];
-    }
+    final json = await rust_db.dbGetHydratedProfileReplies(
+      pubkeyHex: pubkey,
+      limit: limit,
+      mutedPubkeys: _mutedPubkeys,
+      mutedWords: _mutedWords,
+      currentUserPubkeyHex: _currentUserHex,
+      untilTimestamp: untilTimestamp,
+    );
+    final decoded = jsonDecode(json) as List<dynamic>;
+    return decoded.cast<Map<String, dynamic>>();
   }
 
   @override
@@ -312,8 +260,7 @@ class FeedRepositoryImpl implements FeedRepository {
     int repliesLimit = 200,
     int debounceMs = 500,
   }) async* {
-    Future<({List<FeedNote> notes, List<FeedNote> replies})>
-        fetchBoth() async {
+    Future<({List<FeedNote> notes, List<FeedNote> replies})> fetchBoth() async {
       final results = await Future.wait([
         _fetchNotes(pubkey, notesLimit),
         _fetchUserReplies(pubkey, repliesLimit),
@@ -333,31 +280,22 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   @override
-  Stream<List<FeedNote>> watchLikes(String pubkey, {int limit = 50}) async* {
-    final initial = await _fetchLikes(pubkey, limit);
-    if (initial.isNotEmpty) {
-      yield initial.map((m) => FeedNote.fromMap(m)).toList();
-    }
-    yield* _onChange(() => _fetchLikes(pubkey, limit))
+  Stream<List<FeedNote>> watchLikes(String pubkey, {int limit = 50}) {
+    return _onChange(() => _fetchLikes(pubkey, limit))
         .map((maps) => maps.map((m) => FeedNote.fromMap(m)).toList());
   }
 
   Future<List<Map<String, dynamic>>> _fetchLikes(
       String pubkey, int limit) async {
-    try {
-      final json = await rust_db.dbGetHydratedReactionNotes(
-        pubkeyHex: pubkey,
-        limit: limit,
-        mutedPubkeys: _mutedPubkeys,
-        mutedWords: _mutedWords,
-        currentUserPubkeyHex: _currentUserHex,
-      );
-      final decoded = jsonDecode(json) as List<dynamic>;
-      return decoded.cast<Map<String, dynamic>>();
-    } catch (e) {
-      if (kDebugMode) print('[FeedRepository] getLikes error: $e');
-      return [];
-    }
+    final json = await rust_db.dbGetHydratedReactionNotes(
+      pubkeyHex: pubkey,
+      limit: limit,
+      mutedPubkeys: _mutedPubkeys,
+      mutedWords: _mutedWords,
+      currentUserPubkeyHex: _currentUserHex,
+    );
+    final decoded = jsonDecode(json) as List<dynamic>;
+    return decoded.cast<Map<String, dynamic>>();
   }
 
   @override
@@ -383,12 +321,7 @@ class FeedRepositoryImpl implements FeedRepository {
 
   @override
   Future<List<FeedNote>> getHashtag(String hashtag, {int limit = 50}) async {
-    try {
-      return await _fetchHashtagOrThrow(hashtag, limit);
-    } catch (e) {
-      if (kDebugMode) print('[FeedRepository] getHashtag error: $e');
-      return <FeedNote>[];
-    }
+    return _fetchHashtagOrThrow(hashtag, limit);
   }
 
   @override
@@ -410,29 +343,8 @@ class FeedRepositoryImpl implements FeedRepository {
         .bufferTime(const Duration(milliseconds: 300))
         .where((batch) => batch.isNotEmpty);
 
-    await for (final batch in feedEvents) {
-      final allIds = <String>{};
-      bool hasUntargeted = false;
-      for (final e in batch) {
-        if (e.ids.isEmpty) {
-          hasUntargeted = true;
-          break;
-        }
-        allIds.addAll(e.ids);
-      }
-
-      if (hasUntargeted || allIds.isEmpty) {
-        yield await fetch();
-      } else {
-        try {
-          final changed = await getNotesByIds(allIds.toList());
-          if (changed.isNotEmpty) {
-            yield FeedDelta(changed: changed);
-          }
-        } catch (e) {
-          if (kDebugMode) print('[FeedRepository] hashtag delta error: $e');
-        }
-      }
+    await for (final _ in feedEvents) {
+      yield await fetch();
     }
   }
 

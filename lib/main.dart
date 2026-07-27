@@ -4,7 +4,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -82,9 +81,6 @@ void main() {
     await _sanitizeLmdbBeforeRust();
     await RustLib.init();
     await BreezSdkSparkLib.init();
-    try {
-      await dotenv.load(fileName: '.env');
-    } catch (_) {}
 
     PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
     PaintingBinding.instance.imageCache.maximumSize = 300;
