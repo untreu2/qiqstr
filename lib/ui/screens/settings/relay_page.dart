@@ -848,6 +848,7 @@ class _RelayPageState extends State<RelayPage> {
                       ? context.colors.switchActive
                       : Colors.transparent,
                   width: 1.5,
+                  strokeAlign: BorderSide.strokeAlignInside,
                 ),
               ),
               child: Text(
