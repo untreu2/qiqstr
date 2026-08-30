@@ -119,7 +119,10 @@ class BlocsModule extends DIModule {
     );
 
     AppDI.registerLazySingleton<DmIndicatorBloc>(
-      () => DmIndicatorBloc(dmBloc: AppDI.get<DmBloc>()),
+      () => DmIndicatorBloc(
+        dmBloc: AppDI.get<DmBloc>(),
+        authService: AppDI.get<AuthService>(),
+      ),
       dispose: (bloc) => bloc.close(),
     );
 

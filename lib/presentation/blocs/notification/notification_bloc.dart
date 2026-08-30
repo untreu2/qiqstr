@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/repositories/notification_repository.dart';
@@ -19,6 +21,7 @@ class NotificationBloc
   final Set<String> _olderIds = {};
   String? _currentUserHex;
   StreamSubscription<List<NotificationItem>>? _notificationSubscription;
+  int _watchGeneration = 0;
 
   static const int _liveWatchLimit = 200;
   static const int _loadMorePageSize = 100;
@@ -32,16 +35,25 @@ class NotificationBloc
         _authService = authService,
         super(const NotificationInitial()) {
     on<notification_event.NotificationsLoadRequested>(
-        _onNotificationsLoadRequested);
+      _onNotificationsLoadRequested,
+      transformer: restartable(),
+    );
     on<notification_event.NotificationsRefreshRequested>(
-        _onNotificationsRefreshRequested);
+      _onNotificationsRefreshRequested,
+      transformer: droppable(),
+    );
     on<notification_event.NotificationsLoadMoreRequested>(
-        _onNotificationsLoadMoreRequested);
+      _onNotificationsLoadMoreRequested,
+      transformer: droppable(),
+    );
     on<notification_event.NotificationRead>(_onNotificationRead);
     on<notification_event.AllNotificationsRead>(_onAllNotificationsRead);
     on<notification_event.NotificationsMarkAllAsReadRequested>(
         _onNotificationsMarkAllAsReadRequested);
-    on<_NotificationsUpdated>(_onNotificationsUpdated);
+    on<_NotificationsUpdated>(
+      _onNotificationsUpdated,
+      transformer: restartable(),
+    );
 
     _loadCurrentUser();
   }
@@ -58,15 +70,23 @@ class NotificationBloc
     Emitter<NotificationState> emit,
   ) async {
     final currentUserHex = _authService.currentUserPubkeyHex;
-    if (currentUserHex == null) {
-      emit(const NotificationError('Not authenticated'));
-      return;
-    }
-
+    final generation = ++_watchGeneration;
     _currentUserHex = currentUserHex;
     _olderNotifications.clear();
     _olderIds.clear();
-    await _loadReadIds(currentUserHex);
+    await _notificationSubscription?.cancel();
+    _notificationSubscription = null;
+    if (generation != _watchGeneration || emit.isDone) return;
+    if (currentUserHex == null || currentUserHex.isEmpty) {
+      _readNotificationIds.clear();
+      emit(const NotificationError('Not authenticated'));
+      return;
+    }
+    final readIds = await _loadReadIds(currentUserHex);
+    if (isClosed || generation != _watchGeneration || emit.isDone) return;
+    _readNotificationIds
+      ..clear()
+      ..addAll(readIds);
 
     emit(NotificationsLoaded(
       notifications: const [],
@@ -74,17 +94,20 @@ class NotificationBloc
       currentUserHex: currentUserHex,
     ));
 
-    _watchNotifications(currentUserHex);
-    _syncInBackground(currentUserHex);
+    _watchNotifications(currentUserHex, generation);
+    _syncInBackground(currentUserHex, generation);
   }
 
-  void _watchNotifications(String userHex) {
-    _notificationSubscription?.cancel();
+  void _watchNotifications(String userHex, int generation) {
     _notificationSubscription = _notificationRepository
         .watchNotifications(userHex, limit: _liveWatchLimit)
         .listen((notifications) {
-      if (isClosed) return;
-      add(_NotificationsUpdated(notifications));
+      if (isClosed ||
+          generation != _watchGeneration ||
+          _currentUserHex != userHex) {
+        return;
+      }
+      add(_NotificationsUpdated(notifications, userHex, generation));
     });
   }
 
@@ -92,7 +115,11 @@ class NotificationBloc
     _NotificationsUpdated event,
     Emitter<NotificationState> emit,
   ) {
-    if (state is! NotificationsLoaded) return;
+    if (event.generation != _watchGeneration ||
+        event.userHex != _currentUserHex ||
+        state is! NotificationsLoaded) {
+      return;
+    }
     final currentState = state as NotificationsLoaded;
 
     final merged = _mergeWithOlder(event.notifications);
@@ -122,21 +149,23 @@ class NotificationBloc
     return combined;
   }
 
-  Future<void> _loadReadIds(String userHex) async {
+  Future<Set<String>> _loadReadIds(String userHex) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final ids = prefs.getStringList('notif_read_$userHex') ?? const [];
-      _readNotificationIds
-        ..clear()
-        ..addAll(ids);
-    } catch (_) {}
+      return ids.toSet();
+    } catch (_) {
+      return <String>{};
+    }
   }
 
   Future<void> _persistReadIds() async {
     final userHex = _currentUserHex;
     if (userHex == null) return;
+    final generation = _watchGeneration;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (generation != _watchGeneration || _currentUserHex != userHex) return;
       var ids = _readNotificationIds.toList();
       if (ids.length > 1000) {
         ids = ids.sublist(ids.length - 1000);
@@ -145,9 +174,13 @@ class NotificationBloc
     } catch (_) {}
   }
 
-  void _syncInBackground(String userHex) {
+  void _syncInBackground(String userHex, int generation) {
     Future.microtask(() async {
-      if (isClosed) return;
+      if (isClosed ||
+          generation != _watchGeneration ||
+          _currentUserHex != userHex) {
+        return;
+      }
       try {
         await _syncService.syncNotifications(userHex);
       } catch (_) {}
@@ -173,6 +206,7 @@ class NotificationBloc
     if (currentState.isLoadingMore || currentState.hasReachedEnd) return;
     final userHex = _currentUserHex;
     if (userHex == null) return;
+    final generation = _watchGeneration;
 
     final notifications = currentState.notifications;
     if (notifications.isEmpty) return;
@@ -188,7 +222,11 @@ class NotificationBloc
       limit: _loadMorePageSize,
     );
 
-    if (isClosed) return;
+    if (isClosed ||
+        generation != _watchGeneration ||
+        _currentUserHex != userHex) {
+      return;
+    }
 
     final localOlder = await _notificationRepository.getNotificationsBefore(
       userHex,
@@ -196,7 +234,11 @@ class NotificationBloc
       limit: _loadMorePageSize,
     );
 
-    if (isClosed) return;
+    if (isClosed ||
+        generation != _watchGeneration ||
+        _currentUserHex != userHex) {
+      return;
+    }
 
     var addedNew = false;
     for (final item in localOlder) {
@@ -217,21 +259,30 @@ class NotificationBloc
       ));
       return;
     }
+    if (!addedNew && remoteCount < 0) {
+      emit(latestState.copyWith(isLoadingMore: false));
+      return;
+    }
 
-    final liveIds = notifications.map((n) => n['id'] as String? ?? '').toSet();
-    final liveAsItems = notifications.map((n) {
-      return NotificationItem(
-        id: n['id'] as String? ?? '',
-        type: _parseType(n['type'] as String? ?? ''),
-        fromPubkey: n['fromPubkey'] as String? ?? '',
-        targetNoteId: n['targetEventId'] as String?,
-        content: n['content'] as String?,
-        createdAt: n['createdAt'] as int? ?? 0,
-        fromName: n['fromName'] as String?,
-        fromImage: n['fromImage'] as String?,
-        zapAmount: n['zapAmount'] as int?,
-      );
-    }).where((i) => liveIds.contains(i.id)).toList();
+    final latestNotifications = latestState.notifications;
+    final liveIds =
+        latestNotifications.map((n) => n['id'] as String? ?? '').toSet();
+    final liveAsItems = latestNotifications
+        .map((n) {
+          return NotificationItem(
+            id: n['id'] as String? ?? '',
+            type: _parseType(n['type'] as String? ?? ''),
+            fromPubkey: n['fromPubkey'] as String? ?? '',
+            targetNoteId: n['targetEventId'] as String?,
+            content: n['content'] as String?,
+            createdAt: n['createdAt'] as int? ?? 0,
+            fromName: n['fromName'] as String?,
+            fromImage: n['fromImage'] as String?,
+            zapAmount: n['zapAmount'] as int?,
+          );
+        })
+        .where((i) => liveIds.contains(i.id))
+        .toList();
 
     final merged = _mergeWithOlder(liveAsItems);
     final processed = _processNotifications(merged);
@@ -346,6 +397,7 @@ class NotificationBloc
 
   @override
   Future<void> close() {
+    _watchGeneration++;
     _notificationSubscription?.cancel();
     return super.close();
   }
@@ -353,8 +405,15 @@ class NotificationBloc
 
 class _NotificationsUpdated extends notification_event.NotificationEvent {
   final List<NotificationItem> notifications;
-  const _NotificationsUpdated(this.notifications);
+  final String userHex;
+  final int generation;
+
+  const _NotificationsUpdated(
+    this.notifications,
+    this.userHex,
+    this.generation,
+  );
 
   @override
-  List<Object?> get props => [notifications];
+  List<Object?> get props => [notifications, userHex, generation];
 }

@@ -1,3 +1,4 @@
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
@@ -10,6 +11,7 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
   final ProfileRepository _profileRepository;
   final AuthService _authService;
   final SyncService? _syncService;
+  int _generation = 0;
 
   NoteContentBloc({
     required ProfileRepository profileRepository,
@@ -19,7 +21,10 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
         _authService = authService,
         _syncService = syncService,
         super(const NoteContentInitial()) {
-    on<NoteContentInitialized>(_onNoteContentInitialized);
+    on<NoteContentInitialized>(
+      _onNoteContentInitialized,
+      transformer: restartable(),
+    );
     on<_MentionProfileUpdated>(_onMentionProfileUpdated);
   }
 
@@ -58,6 +63,7 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
     NoteContentInitialized event,
     Emitter<NoteContentState> emit,
   ) async {
+    final generation = ++_generation;
     final mentionUsers = <String, Map<String, dynamic>>{};
     final mentionIds = event.textParts
         .where((part) => part['type'] == 'mention')
@@ -97,6 +103,7 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
     try {
       final profiles =
           await _profileRepository.getProfiles(pubkeysNeedingFetch);
+      if (isClosed || generation != _generation || emit.isDone) return;
 
       final updatedMentionUsers =
           Map<String, Map<String, dynamic>>.from(mentionUsers);
@@ -117,10 +124,12 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
       emit(NoteContentLoaded(mentionUsers: updatedMentionUsers));
 
       if (stillMissing.isNotEmpty) {
-        _syncAndApplyProfiles(stillMissing, updatedMentionUsers);
+        _syncAndApplyProfiles(stillMissing, generation);
       }
     } catch (e) {
-      _syncAndApplyProfiles(pubkeysNeedingFetch, mentionUsers);
+      if (generation == _generation) {
+        _syncAndApplyProfiles(pubkeysNeedingFetch, generation);
+      }
     }
   }
 
@@ -138,25 +147,27 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
     };
   }
 
-  void _syncAndApplyProfiles(List<String> pubkeys,
-      Map<String, Map<String, dynamic>> currentMentionUsers) {
+  void _syncAndApplyProfiles(List<String> pubkeys, int generation) {
     final syncService = _syncService;
     if (syncService == null || pubkeys.isEmpty) return;
 
     Future.microtask(() async {
-      if (isClosed) return;
+      if (isClosed || generation != _generation) return;
       try {
         await syncService.syncProfiles(pubkeys);
-        if (isClosed) return;
+        if (isClosed || generation != _generation) return;
 
         final profiles = await _profileRepository.getProfiles(pubkeys);
-        if (isClosed) return;
+        if (isClosed || generation != _generation) return;
 
         for (final entry in profiles.entries) {
           final profile = entry.value;
           if ((profile.name ?? '').isNotEmpty) {
             add(_MentionProfileUpdated(
-                entry.key, _profileToMap(entry.key, profile)));
+              entry.key,
+              _profileToMap(entry.key, profile),
+              generation,
+            ));
           }
         }
       } catch (_) {}
@@ -167,7 +178,7 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
     _MentionProfileUpdated event,
     Emitter<NoteContentState> emit,
   ) {
-    if (state is! NoteContentLoaded) return;
+    if (event.generation != _generation || state is! NoteContentLoaded) return;
     final currentState = state as NoteContentLoaded;
 
     final updatedMentionUsers =
@@ -186,9 +197,14 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
 class _MentionProfileUpdated extends NoteContentEvent {
   final String pubkey;
   final Map<String, dynamic> profileData;
+  final int generation;
 
-  const _MentionProfileUpdated(this.pubkey, this.profileData);
+  const _MentionProfileUpdated(
+    this.pubkey,
+    this.profileData,
+    this.generation,
+  );
 
   @override
-  List<Object?> get props => [pubkey, profileData];
+  List<Object?> get props => [pubkey, profileData, generation];
 }

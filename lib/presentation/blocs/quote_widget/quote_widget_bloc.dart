@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -12,10 +13,11 @@ import 'quote_widget_state.dart';
 
 class _InternalProfileUpdate extends QuoteWidgetEvent {
   final Map<String, dynamic> user;
-  const _InternalProfileUpdate(this.user);
+  final int generation;
+  const _InternalProfileUpdate(this.user, this.generation);
 
   @override
-  List<Object?> get props => [user];
+  List<Object?> get props => [user, generation];
 }
 
 class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
@@ -25,6 +27,7 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
   final String bech32;
 
   StreamSubscription? _profileSubscription;
+  int _generation = 0;
 
   QuoteWidgetBloc({
     required FeedRepository feedRepository,
@@ -35,7 +38,10 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
         _profileRepository = profileRepository,
         _syncService = syncService,
         super(const QuoteWidgetInitial()) {
-    on<QuoteWidgetLoadRequested>(_onQuoteWidgetLoadRequested);
+    on<QuoteWidgetLoadRequested>(
+      _onQuoteWidgetLoadRequested,
+      transformer: restartable(),
+    );
     on<_InternalProfileUpdate>(_onInternalProfileUpdate);
   }
 
@@ -43,6 +49,7 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
     _InternalProfileUpdate event,
     Emitter<QuoteWidgetState> emit,
   ) {
+    if (event.generation != _generation) return;
     final currentState = state;
     if (currentState is QuoteWidgetLoaded) {
       emit(QuoteWidgetLoaded(
@@ -55,11 +62,11 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
     }
   }
 
-  void _watchProfile(String pubkey) {
+  void _watchProfile(String pubkey, int generation) {
     _profileSubscription?.cancel();
     _profileSubscription =
         _profileRepository.watchProfile(pubkey).listen((profile) {
-      if (isClosed || profile == null) return;
+      if (isClosed || generation != _generation || profile == null) return;
 
       final user = {
         'pubkey': pubkey,
@@ -69,12 +76,13 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
         'nip05': profile.nip05 ?? '',
       };
 
-      add(_InternalProfileUpdate(user));
+      add(_InternalProfileUpdate(user, generation));
     });
   }
 
   @override
   Future<void> close() {
+    _generation++;
     _profileSubscription?.cancel();
     return super.close();
   }
@@ -132,6 +140,10 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
     QuoteWidgetLoadRequested event,
     Emitter<QuoteWidgetState> emit,
   ) async {
+    final generation = ++_generation;
+    await _profileSubscription?.cancel();
+    _profileSubscription = null;
+    if (emit.isDone) return;
     emit(const QuoteWidgetLoading());
 
     final eventId = _extractEventId(event.bech32);
@@ -142,6 +154,7 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
 
     try {
       var feedNote = await _feedRepository.getNote(eventId);
+      if (emit.isDone) return;
       Map<String, dynamic>? eventData;
 
       if (feedNote == null) {
@@ -149,10 +162,12 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
           eventId: eventId,
           timeoutSecs: 5,
         );
+        if (emit.isDone) return;
 
         if (eventJson != null) {
           eventData = jsonDecode(eventJson) as Map<String, dynamic>;
           await _feedRepository.save([eventData]);
+          if (emit.isDone) return;
         } else {
           emit(const QuoteWidgetError());
           return;
@@ -205,16 +220,17 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
             'picture': hydratedImage,
             'nip05': hydratedNip05,
           };
-          _watchProfile(noteAuthor);
+          _watchProfile(noteAuthor, generation);
         } else {
           var profile = await _profileRepository.getProfile(noteAuthor);
+          if (emit.isDone || generation != _generation) return;
 
           if (profile == null ||
-              (profile.name ?? '').isEmpty &&
-                  (profile.picture ?? '').isEmpty) {
+              (profile.name ?? '').isEmpty && (profile.picture ?? '').isEmpty) {
             await _syncService.syncProfile(noteAuthor);
-            if (isClosed) return;
+            if (isClosed || emit.isDone || generation != _generation) return;
             profile = await _profileRepository.getProfile(noteAuthor);
+            if (emit.isDone || generation != _generation) return;
           }
 
           if (profile != null) {
@@ -227,10 +243,11 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
             };
           }
 
-          _watchProfile(noteAuthor);
+          _watchProfile(noteAuthor, generation);
         }
       }
 
+      if (emit.isDone || generation != _generation) return;
       emit(QuoteWidgetLoaded(
         note: note,
         user: user,
@@ -239,7 +256,9 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
         shouldTruncate: shouldTruncate,
       ));
     } catch (e) {
-      emit(const QuoteWidgetError());
+      if (!emit.isDone && generation == _generation) {
+        emit(const QuoteWidgetError());
+      }
     }
   }
 }

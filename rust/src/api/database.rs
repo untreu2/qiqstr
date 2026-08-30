@@ -3602,12 +3602,19 @@ pub fn extract_pubkeys_from_events(events_json: String) -> Result<Vec<String>> {
     let mut pubkeys: HashSet<String> = HashSet::new();
 
     for event in &events {
-        if let Some(pk) = event["pubkey"].as_str() {
+        let kind = event["kind"].as_i64().unwrap_or(1);
+        let zap_sender = if kind == 9735 {
+            Event::from_json(event.to_string())
+                .ok()
+                .and_then(|event| extract_zap_sender(&event))
+        } else {
+            None
+        };
+        if let Some(pk) = zap_sender.as_deref().or(event["pubkey"].as_str()) {
             if !pk.is_empty() {
                 pubkeys.insert(pk.to_string());
             }
         }
-        let kind = event["kind"].as_i64().unwrap_or(1);
         if kind == 6 {
             if let Some(tags) = event["tags"].as_array() {
                 for tag in tags {
@@ -3857,7 +3864,11 @@ pub async fn db_get_notifications_missing_profiles(
 
     let mut pubkeys: HashSet<String> = HashSet::new();
     for ev in events.iter() {
-        let pk_hex = ev.pubkey.to_hex();
+        let pk_hex = if ev.kind == Kind::ZapReceipt {
+            extract_zap_sender(ev).unwrap_or_else(|| ev.pubkey.to_hex())
+        } else {
+            ev.pubkey.to_hex()
+        };
         if pk_hex != user_pubkey_hex {
             pubkeys.insert(pk_hex);
         }

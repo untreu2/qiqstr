@@ -52,6 +52,7 @@ class SyncService {
   int _notificationReconnectAttempts = 0;
   int? _feedLastEventTs;
   int? _notificationLastEventTs;
+  int _realtimeGeneration = 0;
   static const List<Duration> _reconnectBackoff = [
     Duration(seconds: 2),
     Duration(seconds: 5),
@@ -353,6 +354,7 @@ class SyncService {
       if (missingPubkeys.isNotEmpty) {
         await _syncMissingProfiles(missingPubkeys.toSet());
         _notifyProfileChanged();
+        _notifyNotificationChange();
       }
 
       _markSynced(key);
@@ -380,13 +382,11 @@ class SyncService {
         await rust_db.dbSaveEvents(eventsJson: jsonEncode(events));
         _db.notifyNotificationChange();
 
-        final missingPubkeys = await rust_db.dbGetNotificationsMissingProfiles(
-          userPubkeyHex: userPubkey,
-          limit: 200,
-        );
+        final missingPubkeys = await _extractAllPubkeys(events);
         if (missingPubkeys.isNotEmpty) {
-          await _syncMissingProfiles(missingPubkeys.toSet());
+          await _syncMissingProfiles(missingPubkeys);
           _notifyProfileChanged();
+          _notifyNotificationChange();
         }
       }
       return events.length;
@@ -394,7 +394,7 @@ class SyncService {
       if (kDebugMode) {
         print('[SyncService] syncOlderNotifications error: $e');
       }
-      return 0;
+      return -1;
     }
   }
 
@@ -890,11 +890,20 @@ class SyncService {
 
   Future<Map<String, dynamic>> publishFollow(
       {required List<String> followingPubkeys}) async {
+    final currentUserHex = AuthService.instance.currentUserPubkeyHex;
+    final publishedFollows = followingPubkeys
+        .where((pubkey) =>
+            pubkey.isNotEmpty &&
+            (currentUserHex == null ||
+                pubkey.toLowerCase() != currentUserHex.toLowerCase()))
+        .toSet()
+        .toList();
     final event = await _publish(
-        () => _publisher.createFollow(followingPubkeys: followingPubkeys));
+      () => _publisher.createFollow(followingPubkeys: publishedFollows),
+    );
     final pubkey = event['pubkey'] as String? ?? '';
 
-    final listWithUser = followingPubkeys.toSet()..add(pubkey);
+    final listWithUser = publishedFollows.toSet()..add(pubkey);
     await rust_db.dbSaveFollowingList(
         pubkeyHex: pubkey, followsHex: listWithUser.toList());
 
@@ -969,23 +978,58 @@ class SyncService {
   }
 
   Future<void> startRealtimeSubscriptions(String userPubkey) async {
+    if (userPubkey.isEmpty) return;
+    final userChanged = _realtimeUserPubkey != userPubkey;
+    final generation = ++_realtimeGeneration;
+    if (userChanged) {
+      _feedLastEventTs = null;
+      _notificationLastEventTs = null;
+    }
     _realtimeUserPubkey = userPubkey;
     _realtimeStopped = false;
     _feedReconnectAttempts = 0;
     _notificationReconnectAttempts = 0;
     _feedReconnectTimer?.cancel();
     _notificationReconnectTimer?.cancel();
+    final feedSubscriptionToCancel = _feedSubscription;
+    final notificationSubscriptionToCancel = _notificationSubscription;
     await Future.wait([
-      _startFeedSubscription(userPubkey),
-      _startNotificationSubscription(userPubkey),
+      if (feedSubscriptionToCancel != null) feedSubscriptionToCancel.cancel(),
+      if (notificationSubscriptionToCancel != null)
+        notificationSubscriptionToCancel.cancel(),
+    ]);
+    if (generation != _realtimeGeneration) return;
+    if (identical(_feedSubscription, feedSubscriptionToCancel)) {
+      _feedSubscription = null;
+    }
+    if (identical(
+      _notificationSubscription,
+      notificationSubscriptionToCancel,
+    )) {
+      _notificationSubscription = null;
+    }
+    await Future.wait([
+      _startFeedSubscription(userPubkey, generation),
+      _startNotificationSubscription(userPubkey, generation),
     ]);
   }
 
-  Future<void> _startFeedSubscription(String userPubkey) async {
-    _feedSubscription?.cancel();
+  bool _isCurrentRealtimeRequest(String userPubkey, int generation) {
+    return !_realtimeStopped &&
+        generation == _realtimeGeneration &&
+        _realtimeUserPubkey == userPubkey;
+  }
+
+  Future<void> _startFeedSubscription(
+    String userPubkey,
+    int generation,
+  ) async {
     try {
       final follows = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
-      if (follows.isEmpty) return;
+      if (follows.isEmpty ||
+          !_isCurrentRealtimeRequest(userPubkey, generation)) {
+        return;
+      }
 
       final since = _feedLastEventTs != null
           ? _feedLastEventTs! - 1
@@ -1000,15 +1044,22 @@ class SyncService {
       final stream = _relayService.subscribeToEvents(filter);
       _feedSubscription = stream.listen(
         (eventData) async {
+          if (!_isCurrentRealtimeRequest(userPubkey, generation)) return;
           try {
-            final eventId = eventData['id'] as String?;
-            if (_isDuplicate(eventId)) return;
-            final kind = (eventData['kind'] as num?)?.toInt();
+            _feedReconnectAttempts = 0;
             final createdAt = (eventData['created_at'] as num?)?.toInt();
             if (createdAt != null &&
                 (_feedLastEventTs == null || createdAt > _feedLastEventTs!)) {
               _feedLastEventTs = createdAt;
             }
+            final eventId = eventData['id'] as String?;
+            if (_isDuplicate(eventId)) {
+              _db.notifyFeedChange(
+                ids: eventId == null ? const [] : [eventId],
+              );
+              return;
+            }
+            final kind = (eventData['kind'] as num?)?.toInt();
             if (kind == 5) {
               await rust_db.dbSaveEvents(eventsJson: jsonEncode([eventData]));
               await rust_db.dbProcessDeletionEvents();
@@ -1029,19 +1080,27 @@ class SyncService {
           } catch (_) {}
         },
         onError: (_) {
+          if (!_isCurrentRealtimeRequest(userPubkey, generation)) return;
           _feedSubscription = null;
-          _scheduleReconnect(isFeed: true);
+          _scheduleReconnect(isFeed: true, generation: generation);
         },
         onDone: () {
+          if (!_isCurrentRealtimeRequest(userPubkey, generation)) return;
           _feedSubscription = null;
-          _scheduleReconnect(isFeed: true);
+          _scheduleReconnect(isFeed: true, generation: generation);
         },
       );
-    } catch (_) {}
+    } catch (_) {
+      if (_isCurrentRealtimeRequest(userPubkey, generation)) {
+        _scheduleReconnect(isFeed: true, generation: generation);
+      }
+    }
   }
 
-  Future<void> _startNotificationSubscription(String userPubkey) async {
-    _notificationSubscription?.cancel();
+  Future<void> _startNotificationSubscription(
+    String userPubkey,
+    int generation,
+  ) async {
     try {
       final since = _notificationLastEventTs != null
           ? _notificationLastEventTs! - 1
@@ -1056,35 +1115,58 @@ class SyncService {
       final stream = _relayService.subscribeToEvents(filter);
       _notificationSubscription = stream.listen(
         (eventData) async {
+          if (!_isCurrentRealtimeRequest(userPubkey, generation)) return;
           try {
-            final eventId = eventData['id'] as String?;
-            if (_isDuplicate(eventId)) return;
-            if (muteService.shouldFilterEvent(eventData)) return;
+            _notificationReconnectAttempts = 0;
             final createdAt = (eventData['created_at'] as num?)?.toInt();
             if (createdAt != null &&
                 (_notificationLastEventTs == null ||
                     createdAt > _notificationLastEventTs!)) {
               _notificationLastEventTs = createdAt;
             }
+            final eventId = eventData['id'] as String?;
+            if (_isDuplicate(eventId)) {
+              _db.notifyNotificationChange(
+                ids: eventId == null ? const [] : [eventId],
+              );
+              return;
+            }
+            if (muteService.shouldFilterEvent(eventData)) return;
             await rust_db.dbSaveEvents(eventsJson: jsonEncode([eventData]));
             _notifyNotificationChange();
-            _syncMissingProfilesInBackground([eventData]);
+            _syncMissingProfilesInBackground(
+              [eventData],
+              onComplete: _notifyNotificationChange,
+            );
           } catch (_) {}
         },
         onError: (_) {
+          if (!_isCurrentRealtimeRequest(userPubkey, generation)) return;
           _notificationSubscription = null;
-          _scheduleReconnect(isFeed: false);
+          _scheduleReconnect(isFeed: false, generation: generation);
         },
         onDone: () {
+          if (!_isCurrentRealtimeRequest(userPubkey, generation)) return;
           _notificationSubscription = null;
-          _scheduleReconnect(isFeed: false);
+          _scheduleReconnect(isFeed: false, generation: generation);
         },
       );
-    } catch (_) {}
+    } catch (_) {
+      if (_isCurrentRealtimeRequest(userPubkey, generation)) {
+        _scheduleReconnect(isFeed: false, generation: generation);
+      }
+    }
   }
 
-  void _scheduleReconnect({required bool isFeed}) {
-    if (_realtimeStopped || _realtimeUserPubkey == null) return;
+  void _scheduleReconnect({
+    required bool isFeed,
+    required int generation,
+  }) {
+    final userPubkey = _realtimeUserPubkey;
+    if (userPubkey == null ||
+        !_isCurrentRealtimeRequest(userPubkey, generation)) {
+      return;
+    }
     final attempts =
         isFeed ? _feedReconnectAttempts : _notificationReconnectAttempts;
     final backoff = attempts < _reconnectBackoff.length
@@ -1095,22 +1177,23 @@ class SyncService {
       _feedReconnectAttempts++;
       _feedReconnectTimer?.cancel();
       _feedReconnectTimer = Timer(backoff, () {
-        if (!_realtimeStopped && _realtimeUserPubkey != null) {
-          _startFeedSubscription(_realtimeUserPubkey!);
+        if (_isCurrentRealtimeRequest(userPubkey, generation)) {
+          _startFeedSubscription(userPubkey, generation);
         }
       });
     } else {
       _notificationReconnectAttempts++;
       _notificationReconnectTimer?.cancel();
       _notificationReconnectTimer = Timer(backoff, () {
-        if (!_realtimeStopped && _realtimeUserPubkey != null) {
-          _startNotificationSubscription(_realtimeUserPubkey!);
+        if (_isCurrentRealtimeRequest(userPubkey, generation)) {
+          _startNotificationSubscription(userPubkey, generation);
         }
       });
     }
   }
 
   void stopRealtimeSubscriptions() {
+    _realtimeGeneration++;
     _realtimeStopped = true;
     _feedReconnectTimer?.cancel();
     _notificationReconnectTimer?.cancel();
@@ -1263,15 +1346,27 @@ class SyncService {
     }
   }
 
-  void _syncMissingProfilesInBackground(List<Map<String, dynamic>> events) {
+  void _syncMissingProfilesInBackground(
+    List<Map<String, dynamic>> events, {
+    void Function()? onComplete,
+  }) {
     Future.microtask(() async {
       final pubkeys = await _extractAllPubkeys(events);
-      if (pubkeys.isEmpty) return;
-      _fetchMissingProfilesInBackground(pubkeys.toList());
+      if (pubkeys.isEmpty) {
+        onComplete?.call();
+        return;
+      }
+      _fetchMissingProfilesInBackground(
+        pubkeys.toList(),
+        onComplete: onComplete,
+      );
     });
   }
 
-  void _fetchMissingProfilesInBackground(List<String> pubkeys) {
+  void _fetchMissingProfilesInBackground(
+    List<String> pubkeys, {
+    void Function()? onComplete,
+  }) {
     if (pubkeys.isEmpty) return;
     Future.microtask(() async {
       try {
@@ -1285,6 +1380,8 @@ class SyncService {
           await _syncMissingProfiles(pubkeys.toSet());
           _db.notifyProfileChange(ids: pubkeys);
         } catch (_) {}
+      } finally {
+        onComplete?.call();
       }
     });
   }

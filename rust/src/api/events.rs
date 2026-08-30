@@ -187,4 +187,3 @@ pub fn create_relay_list_event_with_markers(
         .collect();
     create_signed_event(10002, String::new(), tags, private_key_hex)
 }
-

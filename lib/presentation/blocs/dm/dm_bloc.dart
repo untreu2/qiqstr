@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/services/dm_service.dart';
 import '../../../data/services/auth_service.dart';
@@ -20,10 +22,15 @@ class DmBloc extends Bloc<DmEvent, DmState> {
   String? _currentChatPubkeyHex;
   Timer? _conversationsTimer;
   List<Map<String, dynamic>>? _cachedConversations;
+  String? _conversationsUserHex;
+  int _conversationsGeneration = 0;
+  int _chatGeneration = 0;
 
   List<Map<String, dynamic>> _fullMessages = [];
   int _chatDisplayLimit = 20;
   static const int _chatPageSize = 20;
+
+  String? get conversationsUserHex => _conversationsUserHex;
 
   List<Map<String, dynamic>>? get cachedConversations => _cachedConversations;
 
@@ -39,11 +46,23 @@ class DmBloc extends Bloc<DmEvent, DmState> {
         _authService = authService,
         _syncService = syncService,
         super(const DmInitial()) {
-    on<DmConversationsLoadRequested>(_onDmConversationsLoadRequested);
-    on<DmConversationsRefreshRequested>(_onDmConversationsRefreshRequested);
-    on<DmConversationOpened>(_onDmConversationOpened);
-    on<DmMessageSent>(_onDmMessageSent);
-    on<DmEncryptedMediaSent>(_onDmEncryptedMediaSent);
+    on<DmConversationsLoadRequested>(
+      _onDmConversationsLoadRequested,
+      transformer: restartable(),
+    );
+    on<DmConversationsRefreshRequested>(
+      _onDmConversationsRefreshRequested,
+      transformer: droppable(),
+    );
+    on<DmConversationOpened>(
+      _onDmConversationOpened,
+      transformer: restartable(),
+    );
+    on<DmMessageSent>(_onDmMessageSent, transformer: sequential());
+    on<DmEncryptedMediaSent>(
+      _onDmEncryptedMediaSent,
+      transformer: sequential(),
+    );
     on<DmMessageDeleted>(_onDmMessageDeleted);
     on<DmConversationRefreshed>(_onDmConversationRefreshed);
     on<DmMessagesUpdated>(_onDmMessagesUpdated);
@@ -54,8 +73,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
   void _emitChatState(String pubkeyHex, Emitter<DmState> emit) {
     final total = _fullMessages.length;
-    final displayCount =
-        total > _chatDisplayLimit ? _chatDisplayLimit : total;
+    final displayCount = total > _chatDisplayLimit ? _chatDisplayLimit : total;
     final displayMessages = total > _chatDisplayLimit
         ? _fullMessages.sublist(total - displayCount)
         : List<Map<String, dynamic>>.from(_fullMessages);
@@ -70,7 +88,10 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmMessagesUpdated event,
     Emitter<DmState> emit,
   ) {
-    if (event.pubkeyHex != _currentChatPubkeyHex) return;
+    if (event.pubkeyHex != _currentChatPubkeyHex ||
+        event.generation != _chatGeneration) {
+      return;
+    }
     _fullMessages = List<Map<String, dynamic>>.from(event.messages);
     _emitChatState(event.pubkeyHex, emit);
   }
@@ -79,6 +100,10 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmMessagesError event,
     Emitter<DmState> emit,
   ) {
+    if (event.pubkeyHex != _currentChatPubkeyHex ||
+        event.generation != _chatGeneration) {
+      return;
+    }
     emit(DmError(event.error));
   }
 
@@ -86,14 +111,40 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmConversationsLoadRequested event,
     Emitter<DmState> emit,
   ) async {
-    if (state is DmConversationsLoaded) {
+    final userHex = _authService.currentUserPubkeyHex;
+    if (userHex != null &&
+        userHex.isNotEmpty &&
+        _conversationsUserHex == userHex &&
+        state is DmConversationsLoaded) {
+      return;
+    }
+
+    final generation = ++_conversationsGeneration;
+    if (_conversationsUserHex != userHex) {
+      _cachedConversations = null;
+      _conversationsTimer?.cancel();
+      await _conversationsSubscription?.cancel();
+      _conversationsSubscription = null;
+      _chatGeneration++;
+      _currentChatPubkeyHex = null;
+      for (final subscription in _subscriptions) {
+        await subscription.cancel();
+      }
+      _subscriptions.clear();
+      _fullMessages = [];
+    }
+    _conversationsUserHex = userHex;
+    if (generation != _conversationsGeneration || emit.isDone) return;
+    if (userHex == null || userHex.isEmpty) {
+      _cachedConversations = null;
+      emit(const DmError('Not authenticated'));
       return;
     }
 
     if (_cachedConversations != null) {
       emit(DmConversationsLoaded(_cachedConversations!));
-      _startConversationsPolling();
-      _startConversationsStreamListener();
+      _startConversationsPolling(userHex, generation);
+      _startConversationsStreamListener(userHex, generation);
       _dmService.startRealtimeSubscription();
       return;
     }
@@ -101,7 +152,9 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     emit(const DmLoading());
 
     final result = await _dmService.getConversations();
-    if (isClosed) return;
+    if (!_isCurrentConversationsRequest(userHex, generation) || emit.isDone) {
+      return;
+    }
 
     if (result.isError) {
       emit(DmError(result.error!));
@@ -110,13 +163,15 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
     final conversations = result.data!;
     final enriched = await _enrichConversations(conversations);
-    if (isClosed) return;
+    if (!_isCurrentConversationsRequest(userHex, generation) || emit.isDone) {
+      return;
+    }
 
     _cachedConversations = enriched;
     emit(DmConversationsLoaded(enriched));
 
-    _startConversationsPolling();
-    _startConversationsStreamListener();
+    _startConversationsPolling(userHex, generation);
+    _startConversationsStreamListener(userHex, generation);
     _dmService.startRealtimeSubscription();
   }
 
@@ -124,12 +179,18 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmConversationsRefreshRequested event,
     Emitter<DmState> emit,
   ) async {
+    final userHex = _conversationsUserHex;
+    if (userHex == null) return;
+    final generation = _conversationsGeneration;
     try {
       final result = await _dmService.getConversations(forceRefresh: true);
-      if (isClosed) return;
+      if (!_isCurrentConversationsRequest(userHex, generation)) return;
       if (result.isSuccess && result.data != null) {
         final enriched = await _enrichConversations(result.data!);
-        if (isClosed) return;
+        if (!_isCurrentConversationsRequest(userHex, generation) ||
+            emit.isDone) {
+          return;
+        }
         _cachedConversations = enriched;
         if (state is DmConversationsLoaded || state is DmLoading) {
           emit(DmConversationsLoaded(enriched));
@@ -138,17 +199,25 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     } catch (_) {}
   }
 
-  void _startConversationsStreamListener() {
+  bool _isCurrentConversationsRequest(String userHex, int generation) {
+    return !isClosed &&
+        _authService.currentUserPubkeyHex == userHex &&
+        _conversationsUserHex == userHex &&
+        _conversationsGeneration == generation;
+  }
+
+  void _startConversationsStreamListener(String userHex, int generation) {
     _conversationsSubscription?.cancel();
     _conversationsSubscription = _dmService.conversationsStream.listen(
       (conversations) async {
         final enriched = await _enrichConversations(conversations);
-        add(DmConversationsUpdated(enriched));
+        if (!_isCurrentConversationsRequest(userHex, generation)) return;
+        add(DmConversationsUpdated(enriched, userHex, generation));
       },
     );
   }
 
-  void _startConversationsPolling() {
+  void _startConversationsPolling(String userHex, int generation) {
     _conversationsTimer?.cancel();
     _conversationsTimer =
         Timer.periodic(const Duration(seconds: 15), (_) async {
@@ -156,7 +225,8 @@ class DmBloc extends Bloc<DmEvent, DmState> {
         final result = await _dmService.getConversations(forceRefresh: true);
         if (result.isSuccess && result.data != null) {
           final enriched = await _enrichConversations(result.data!);
-          add(DmConversationsUpdated(enriched));
+          if (!_isCurrentConversationsRequest(userHex, generation)) return;
+          add(DmConversationsUpdated(enriched, userHex, generation));
         }
       } catch (_) {}
     });
@@ -166,6 +236,9 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     DmConversationsUpdated event,
     Emitter<DmState> emit,
   ) {
+    if (!_isCurrentConversationsRequest(event.userHex, event.generation)) {
+      return;
+    }
     _cachedConversations = event.conversations;
     if (state is DmConversationsLoaded) {
       emit(DmConversationsLoaded(event.conversations));
@@ -248,6 +321,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     }
     _subscriptions.clear();
 
+    final generation = ++_chatGeneration;
     _currentChatPubkeyHex = event.pubkeyHex;
     _chatDisplayLimit = _chatPageSize;
     _fullMessages = [];
@@ -256,17 +330,35 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     _subscriptions.add(
       _dmService.subscribeToMessages(event.pubkeyHex).listen(
         (messages) {
-          add(DmMessagesUpdated(
-              pubkeyHex: event.pubkeyHex, messages: messages));
+          if (_currentChatPubkeyHex == event.pubkeyHex &&
+              generation == _chatGeneration) {
+            add(DmMessagesUpdated(
+              pubkeyHex: event.pubkeyHex,
+              messages: messages,
+              generation: generation,
+            ));
+          }
         },
         onError: (error) {
-          add(DmMessagesError(error.toString()));
+          if (_currentChatPubkeyHex == event.pubkeyHex &&
+              generation == _chatGeneration) {
+            add(DmMessagesError(
+              pubkeyHex: event.pubkeyHex,
+              error: error.toString(),
+              generation: generation,
+            ));
+          }
         },
       ),
     );
 
     final result = await _dmService.getMessages(event.pubkeyHex);
-    if (isClosed) return;
+    if (isClosed ||
+        emit.isDone ||
+        generation != _chatGeneration ||
+        _currentChatPubkeyHex != event.pubkeyHex) {
+      return;
+    }
     result.fold(
       (messages) {
         _fullMessages = List<Map<String, dynamic>>.from(messages);
@@ -294,7 +386,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
     Emitter<DmState> emit,
   ) async {
     final result = await _dmService.sendMessage(event.pubkeyHex, event.content);
-    if (isClosed) return;
+    if (isClosed || event.pubkeyHex != _currentChatPubkeyHex) return;
     result.fold(
       (_) {},
       (error) => emit(DmError(error)),
@@ -315,7 +407,7 @@ class DmBloc extends Bloc<DmEvent, DmState> {
       originalHash: event.originalHash,
       fileSize: event.fileSize,
     );
-    if (isClosed) return;
+    if (isClosed || event.recipientPubkeyHex != _currentChatPubkeyHex) return;
     result.fold(
       (_) {},
       (error) => emit(DmError(error)),
@@ -354,6 +446,8 @@ class DmBloc extends Bloc<DmEvent, DmState> {
 
   @override
   Future<void> close() {
+    _conversationsGeneration++;
+    _chatGeneration++;
     _conversationsTimer?.cancel();
     _conversationsSubscription?.cancel();
     for (final subscription in _subscriptions) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/article_repository.dart';
 import '../../../data/sync/sync_service.dart';
@@ -17,7 +18,10 @@ class ArticleQuoteWidgetBloc
   })  : _articleRepository = articleRepository,
         _syncService = syncService,
         super(const ArticleQuoteWidgetInitial()) {
-    on<ArticleQuoteWidgetLoadRequested>(_onLoadRequested);
+    on<ArticleQuoteWidgetLoadRequested>(
+      _onLoadRequested,
+      transformer: restartable(),
+    );
   }
 
   Future<void> _onLoadRequested(
@@ -49,15 +53,16 @@ class ArticleQuoteWidgetBloc
               identifier: identifier,
             )
           : null;
+      if (emit.isDone) return;
 
       if (article == null && pubkey != null && identifier != null) {
         article = await _syncService
             .fetchArticleByNaddr(pubkey: pubkey, identifier: identifier)
             .timeout(const Duration(seconds: 10));
-        if (isClosed) return;
+        if (isClosed || emit.isDone) return;
       }
 
-      if (isClosed) return;
+      if (isClosed || emit.isDone) return;
 
       if (article != null) {
         emit(ArticleQuoteWidgetLoaded(article: article));
@@ -65,7 +70,9 @@ class ArticleQuoteWidgetBloc
         emit(const ArticleQuoteWidgetError());
       }
     } catch (_) {
-      if (!isClosed) emit(const ArticleQuoteWidgetError());
+      if (!isClosed && !emit.isDone) {
+        emit(const ArticleQuoteWidgetError());
+      }
     }
   }
 

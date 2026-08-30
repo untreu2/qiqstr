@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -14,6 +16,7 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
   final AuthService _authService;
 
   StreamSubscription<List<String>>? _followingSubscription;
+  int _generation = 0;
 
   FollowingBloc({
     required FollowingRepository followingRepository,
@@ -25,14 +28,21 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
         _syncService = syncService,
         _authService = authService,
         super(const FollowingInitial()) {
-    on<FollowingLoadRequested>(_onFollowingLoadRequested);
-    on<_FollowingListUpdated>(_onFollowingListUpdated);
+    on<FollowingLoadRequested>(
+      _onFollowingLoadRequested,
+      transformer: restartable(),
+    );
+    on<_FollowingListUpdated>(
+      _onFollowingListUpdated,
+      transformer: restartable(),
+    );
   }
 
   Future<void> _onFollowingLoadRequested(
     FollowingLoadRequested event,
     Emitter<FollowingState> emit,
   ) async {
+    final generation = ++_generation;
     String? userHex;
     if (event.userNpub.startsWith('npub1')) {
       userHex = _authService.npubToHex(event.userNpub);
@@ -41,31 +51,43 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
     }
 
     if (userHex == null || userHex.isEmpty) {
+      await _followingSubscription?.cancel();
+      _followingSubscription = null;
+      if (emit.isDone) return;
       emit(const FollowingError('Invalid user npub'));
       return;
     }
 
     emit(const FollowingLoaded(followingUsers: [], loadedUsers: {}));
 
-    _watchFollowing(userHex);
-    _syncInBackground(userHex);
+    await _followingSubscription?.cancel();
+    if (isClosed || generation != _generation || emit.isDone) return;
+    _watchFollowing(userHex, generation);
+    _syncInBackground(userHex, generation);
   }
 
-  void _watchFollowing(String userHex) {
-    _followingSubscription?.cancel();
-    _followingSubscription =
-        _followingRepository.watchFollowing(userHex).listen((pubkeys) {
-      if (isClosed) return;
-      add(_FollowingListUpdated(pubkeys));
-    });
+  void _watchFollowing(String userHex, int generation) {
+    void subscribe() {
+      if (isClosed || generation != _generation) return;
+      _followingSubscription =
+          _followingRepository.watchFollowing(userHex).listen((pubkeys) {
+        if (isClosed || generation != _generation) return;
+        add(_FollowingListUpdated(pubkeys, userHex, generation));
+      }, onError: (_) {
+        Future.delayed(const Duration(seconds: 2), subscribe);
+      }, onDone: () {
+        Future.delayed(const Duration(seconds: 2), subscribe);
+      });
+    }
+
+    subscribe();
   }
 
   Future<void> _onFollowingListUpdated(
     _FollowingListUpdated event,
     Emitter<FollowingState> emit,
   ) async {
-    if (state is! FollowingLoaded) return;
-    final currentState = state as FollowingLoaded;
+    if (event.generation != _generation || state is! FollowingLoaded) return;
 
     if (event.pubkeys.isEmpty) {
       emit(const FollowingLoaded(followingUsers: [], loadedUsers: {}));
@@ -73,38 +95,30 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
     }
 
     final profiles = await _profileRepository.getProfiles(event.pubkeys);
-    final result = _buildFollowingResult(event.pubkeys, profiles);
-
-    final existingKeys = <String>{};
-    for (final user in currentState.followingUsers) {
-      existingKeys.add(user['pubkey'] as String? ?? '');
+    if (isClosed ||
+        event.generation != _generation ||
+        state is! FollowingLoaded ||
+        emit.isDone) {
+      return;
     }
-
-    final merged = List<Map<String, dynamic>>.from(currentState.followingUsers);
-    final mergedLoaded =
-        Map<String, Map<String, dynamic>>.from(currentState.loadedUsers);
-
-    for (final user in result.users) {
-      final pk = user['pubkey'] as String? ?? '';
-      if (!existingKeys.contains(pk)) {
-        merged.add(user);
-        existingKeys.add(pk);
-      }
-      final npub = user['npub'] as String? ?? '';
-      if (npub.isNotEmpty) {
-        mergedLoaded[npub] = user;
-      }
-    }
+    final currentState = state as FollowingLoaded;
+    final existingByPubkey = <String, Map<String, dynamic>>{
+      for (final user in currentState.followingUsers)
+        if ((user['pubkey'] as String? ?? '').isNotEmpty)
+          user['pubkey'] as String: user,
+    };
+    final result =
+        _buildFollowingResult(event.pubkeys, profiles, existingByPubkey);
 
     emit(FollowingLoaded(
-      followingUsers: merged,
-      loadedUsers: mergedLoaded,
+      followingUsers: result.users,
+      loadedUsers: result.loadedUsers,
     ));
   }
 
-  void _syncInBackground(String userHex) {
+  void _syncInBackground(String userHex, int generation) {
     Future.microtask(() async {
-      if (isClosed) return;
+      if (isClosed || generation != _generation) return;
       try {
         await _syncService.syncFollowingList(userHex);
         final pubkeys = await _followingRepository.getFollowing(userHex);
@@ -119,7 +133,10 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
     List<Map<String, dynamic>> users,
     Map<String, Map<String, dynamic>> loadedUsers
   }) _buildFollowingResult(
-      List<String> pubkeys, Map<String, dynamic> profiles) {
+    List<String> pubkeys,
+    Map<String, dynamic> profiles,
+    Map<String, Map<String, dynamic>> existingByPubkey,
+  ) {
     final followingUsers = <Map<String, dynamic>>[];
     final loadedUsers = <String, Map<String, dynamic>>{};
 
@@ -127,20 +144,25 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
       final profile = profiles[pubkey];
       final npub = _authService.hexToNpub(pubkey) ?? pubkey;
 
-      if (profile == null) continue;
-
-      final userWithNpub = <String, dynamic>{
-        'pubkey': pubkey,
-        'npub': npub,
-        'name': profile.name ?? profile.displayName,
-        'display_name': profile.displayName,
-        'about': profile.about ?? '',
-        'picture': profile.picture ?? '',
-        'banner': profile.banner ?? '',
-        'nip05': profile.nip05 ?? '',
-        'lud16': profile.lud16 ?? '',
-        'website': profile.website ?? '',
-      };
+      final userWithNpub = profile == null
+          ? existingByPubkey[pubkey] ??
+              <String, dynamic>{
+                'pubkey': pubkey,
+                'npub': npub,
+                'name': pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey,
+              }
+          : <String, dynamic>{
+              'pubkey': pubkey,
+              'npub': npub,
+              'name': profile.name ?? profile.displayName,
+              'display_name': profile.displayName,
+              'about': profile.about ?? '',
+              'picture': profile.picture ?? '',
+              'banner': profile.banner ?? '',
+              'nip05': profile.nip05 ?? '',
+              'lud16': profile.lud16 ?? '',
+              'website': profile.website ?? '',
+            };
       followingUsers.add(userWithNpub);
       loadedUsers[npub] = userWithNpub;
     }
@@ -150,6 +172,7 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
 
   @override
   Future<void> close() {
+    _generation++;
     _followingSubscription?.cancel();
     return super.close();
   }
@@ -157,8 +180,10 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
 
 class _FollowingListUpdated extends FollowingEvent {
   final List<String> pubkeys;
-  const _FollowingListUpdated(this.pubkeys);
+  final String userHex;
+  final int generation;
+  const _FollowingListUpdated(this.pubkeys, this.userHex, this.generation);
 
   @override
-  List<Object?> get props => [pubkeys];
+  List<Object?> get props => [pubkeys, userHex, generation];
 }

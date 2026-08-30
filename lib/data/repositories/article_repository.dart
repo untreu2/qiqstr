@@ -18,7 +18,7 @@ class ArticleRepository {
   List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;
 
   Stream<List<Article>> watchArticles({List<String>? authors, int limit = 50}) {
-    return _events.onChange
+    return _events.onFeedChange
         .debounceTime(const Duration(milliseconds: 250))
         .startWith(null)
         .asyncMap((_) => getArticles(authors: authors, limit: limit));

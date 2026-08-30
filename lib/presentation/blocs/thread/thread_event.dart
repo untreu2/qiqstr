@@ -1,5 +1,4 @@
 import '../../../core/bloc/base/base_event.dart';
-import '../../../domain/entities/feed_note.dart';
 
 abstract class ThreadEvent extends BaseEvent {
   const ThreadEvent();
@@ -24,30 +23,32 @@ class ThreadRefreshed extends ThreadEvent {
 
 class ThreadProfilesUpdated extends ThreadEvent {
   final Map<String, Map<String, dynamic>> profiles;
+  final int requestId;
 
-  const ThreadProfilesUpdated(this.profiles);
+  const ThreadProfilesUpdated(this.profiles, this.requestId);
 
   @override
-  List<Object?> get props => [profiles];
+  List<Object?> get props => [profiles, requestId];
 }
 
 class ThreadRepliesUpdated extends ThreadEvent {
-  final List<FeedNote> replies;
+  final Map<String, dynamic>? threadData;
   final String rootNoteId;
 
-  const ThreadRepliesUpdated(this.replies, this.rootNoteId);
+  const ThreadRepliesUpdated(this.threadData, this.rootNoteId);
 
   @override
-  List<Object?> get props => [replies, rootNoteId];
+  List<Object?> get props => [threadData, rootNoteId];
 }
 
 class ThreadCurrentUserLoaded extends ThreadEvent {
   final Map<String, dynamic> profileMap;
+  final int requestId;
 
-  const ThreadCurrentUserLoaded(this.profileMap);
+  const ThreadCurrentUserLoaded(this.profileMap, this.requestId);
 
   @override
-  List<Object?> get props => [profileMap];
+  List<Object?> get props => [profileMap, requestId];
 }
 
 class ThreadNetworkDataLoaded extends ThreadEvent {

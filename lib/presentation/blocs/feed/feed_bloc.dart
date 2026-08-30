@@ -58,8 +58,11 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
         _syncService = syncService,
         _followSetService = followSetService,
         super(const FeedInitial()) {
-    on<feed_event.FeedInitialized>(_onFeedInitialized);
-    on<feed_event.FeedRefreshed>(_onFeedRefreshed);
+    on<feed_event.FeedInitialized>(
+      _onFeedInitialized,
+      transformer: restartable(),
+    );
+    on<feed_event.FeedRefreshed>(_onFeedRefreshed, transformer: droppable());
     on<feed_event.FeedLoadMoreRequested>(
       _onFeedLoadMoreRequested,
       transformer: droppable(),
@@ -104,11 +107,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     _activeListPubkeys = null;
     _cancelFeedWatch();
     _resetAccumulators();
-    _contextGeneration++;
+    final generation = ++_contextGeneration;
 
     final initialProfiles = <String, Map<String, dynamic>>{};
     final cachedCurrentUser =
         await _profileRepository.getProfile(event.userHex);
+    if (isClosed || generation != _contextGeneration || emit.isDone) return;
     if (cachedCurrentUser != null) {
       _currentUserProfile = cachedCurrentUser.toMap();
       initialProfiles[event.userHex] = _currentUserProfile!;
@@ -643,6 +647,9 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
       if (isClosed || generation != _contextGeneration) return;
 
+      if (state is! FeedLoaded) return;
+      final latestState = state as FeedLoaded;
+
       final knownIds = <String>{
         for (final n in _topPageNotes) n.id,
         for (final n in _olderNotes) n.id,
@@ -651,7 +658,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
       if (additions.isEmpty) {
         _canLoadMoreOlder = false;
-        emit(currentState.copyWith(
+        emit(latestState.copyWith(
           isLoadingMore: false,
           canLoadMore: false,
         ));
@@ -672,9 +679,9 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
       final combined = _combinedNotes();
       final seededProfiles =
-          _buildProfilesFromNotes(combined, currentState.profiles);
+          _buildProfilesFromNotes(combined, latestState.profiles);
 
-      emit(currentState.copyWith(
+      emit(latestState.copyWith(
         notes: combined,
         profiles: seededProfiles,
         isLoadingMore: false,

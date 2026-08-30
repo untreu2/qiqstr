@@ -16,9 +16,11 @@ class FollowingRepository {
   Future<List<String>?> getFollowing(String userPubkey) async {
     try {
       final list = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
-      if (list.isEmpty) return null;
-      if (!list.contains(userPubkey)) return [...list, userPubkey];
-      return list;
+      final normalizedUserPubkey = userPubkey.toLowerCase();
+      final following = list
+          .where((pubkey) => pubkey.toLowerCase() != normalizedUserPubkey)
+          .toList();
+      return following.isEmpty ? null : following;
     } catch (e) {
       if (kDebugMode) print('[FollowingRepository] getFollowing error: $e');
       return null;
@@ -26,7 +28,10 @@ class FollowingRepository {
   }
 
   Stream<List<String>> watchFollowing(String userPubkey) {
-    return _events.onChange
+    return Rx.merge<void>([
+      _events.onFeedChange,
+      _events.onProfileChange,
+    ])
         .debounceTime(const Duration(milliseconds: 250))
         .startWith(null)
         .asyncMap((_) async {

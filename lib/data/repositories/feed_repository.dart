@@ -96,6 +96,16 @@ abstract interface class FeedRepository {
 
   Stream<List<FeedNote>> watchThreadAllReplies(String rootNoteId, {int limit});
 
+  Future<Map<String, dynamic>?> getThreadStructure(
+    String rootNoteId, {
+    int limit,
+  });
+
+  Stream<Map<String, dynamic>?> watchThreadStructure(
+    String rootNoteId, {
+    int limit,
+  });
+
   Future<List<FeedNote>> getNotesByIds(List<String> noteIds);
 
   Future<List<FeedNote>> searchNotes(String query, {int limit});
@@ -403,13 +413,8 @@ class FeedRepositoryImpl implements FeedRepository {
   Future<List<FeedNote>> getThreadAllReplies(String rootNoteId,
       {int limit = 500}) async {
     try {
-      final json = await rust_db.dbGetHydratedThreadStructure(
-        rootNoteId: rootNoteId,
-        currentUserPubkeyHex: _currentUserHex,
-        limit: limit,
-      );
-      final data = jsonDecode(json);
-      if (data is! Map<String, dynamic> || data.containsKey('error')) {
+      final data = await getThreadStructure(rootNoteId, limit: limit);
+      if (data == null) {
         return getThreadReplies(rootNoteId, limit: limit);
       }
       final allReplies =
@@ -431,6 +436,41 @@ class FeedRepositoryImpl implements FeedRepository {
         .debounceTime(const Duration(milliseconds: 250))
         .startWith(null)
         .asyncMap((_) => getThreadAllReplies(rootNoteId, limit: limit));
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getThreadStructure(
+    String rootNoteId, {
+    int limit = 500,
+  }) async {
+    try {
+      final json = await rust_db.dbGetHydratedThreadStructure(
+        rootNoteId: rootNoteId,
+        currentUserPubkeyHex: _currentUserHex,
+        limit: limit,
+      );
+      final decoded = jsonDecode(json);
+      if (decoded is! Map<String, dynamic> || decoded.containsKey('error')) {
+        return null;
+      }
+      return decoded;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[FeedRepository] getThreadStructure error: $e');
+      }
+      return null;
+    }
+  }
+
+  @override
+  Stream<Map<String, dynamic>?> watchThreadStructure(
+    String rootNoteId, {
+    int limit = 500,
+  }) {
+    return _events.onFeedChange
+        .debounceTime(const Duration(milliseconds: 250))
+        .startWith(null)
+        .asyncMap((_) => getThreadStructure(rootNoteId, limit: limit));
   }
 
   @override

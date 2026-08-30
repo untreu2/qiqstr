@@ -86,29 +86,46 @@ class DmConversationRefreshed extends DmEvent {
 class DmMessagesUpdated extends DmEvent {
   final String pubkeyHex;
   final List<Map<String, dynamic>> messages;
+  final int generation;
 
-  const DmMessagesUpdated({required this.pubkeyHex, required this.messages});
+  const DmMessagesUpdated({
+    required this.pubkeyHex,
+    required this.messages,
+    required this.generation,
+  });
 
   @override
-  List<Object?> get props => [pubkeyHex, messages];
+  List<Object?> get props => [pubkeyHex, messages, generation];
 }
 
 class DmMessagesError extends DmEvent {
+  final String pubkeyHex;
   final String error;
+  final int generation;
 
-  const DmMessagesError(this.error);
+  const DmMessagesError({
+    required this.pubkeyHex,
+    required this.error,
+    required this.generation,
+  });
 
   @override
-  List<Object?> get props => [error];
+  List<Object?> get props => [pubkeyHex, error, generation];
 }
 
 class DmConversationsUpdated extends DmEvent {
   final List<Map<String, dynamic>> conversations;
+  final String userHex;
+  final int generation;
 
-  const DmConversationsUpdated(this.conversations);
+  const DmConversationsUpdated(
+    this.conversations,
+    this.userHex,
+    this.generation,
+  );
 
   @override
-  List<Object?> get props => [conversations];
+  List<Object?> get props => [conversations, userHex, generation];
 }
 
 class DmLoadMoreMessagesRequested extends DmEvent {

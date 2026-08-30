@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/following_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -10,11 +12,40 @@ import 'profile_info_event.dart';
 import 'profile_info_state.dart';
 
 class _InternalStateUpdate extends ProfileInfoEvent {
-  final ProfileInfoLoaded newState;
-  const _InternalStateUpdate(this.newState);
+  final Map<String, dynamic>? user;
+  final bool? isFollowing;
+  final bool? isMuted;
+  final bool? doesUserFollowMe;
+  final int? followingCount;
+  final int? followerCount;
+  final bool? isLoadingCounts;
+  final int? followScoreCount;
+  final List<String>? followScoreAvatars;
+
+  const _InternalStateUpdate({
+    this.user,
+    this.isFollowing,
+    this.isMuted,
+    this.doesUserFollowMe,
+    this.followingCount,
+    this.followerCount,
+    this.isLoadingCounts,
+    this.followScoreCount,
+    this.followScoreAvatars,
+  });
 
   @override
-  List<Object?> get props => [newState];
+  List<Object?> get props => [
+        user,
+        isFollowing,
+        isMuted,
+        doesUserFollowMe,
+        followingCount,
+        followerCount,
+        isLoadingCounts,
+        followScoreCount,
+        followScoreAvatars,
+      ];
 }
 
 class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
@@ -26,6 +57,8 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   StreamSubscription<UserProfile?>? _profileSubscription;
   Timer? _followingPollTimer;
   Timer? _followsYouPollTimer;
+  int _followMutationGeneration = 0;
+  int _muteMutationGeneration = 0;
 
   ProfileInfoBloc({
     required FollowingRepository followingRepository,
@@ -38,11 +71,23 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
         _syncService = syncService,
         _authService = authService,
         super(const ProfileInfoInitial()) {
-    on<ProfileInfoInitialized>(_onProfileInfoInitialized);
+    on<ProfileInfoInitialized>(
+      _onProfileInfoInitialized,
+      transformer: restartable(),
+    );
     on<ProfileInfoUserUpdated>(_onProfileInfoUserUpdated);
-    on<ProfileInfoFollowToggled>(_onProfileInfoFollowToggled);
-    on<ProfileInfoMuteToggled>(_onProfileInfoMuteToggled);
-    on<ProfileInfoReportSubmitted>(_onProfileInfoReportSubmitted);
+    on<ProfileInfoFollowToggled>(
+      _onProfileInfoFollowToggled,
+      transformer: droppable(),
+    );
+    on<ProfileInfoMuteToggled>(
+      _onProfileInfoMuteToggled,
+      transformer: droppable(),
+    );
+    on<ProfileInfoReportSubmitted>(
+      _onProfileInfoReportSubmitted,
+      transformer: droppable(),
+    );
     on<_InternalStateUpdate>(_onInternalStateUpdate);
   }
 
@@ -68,6 +113,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       final localFollows = await _followingRepository.getFollowing(targetHex);
       if (localFollows != null) followingCount = localFollows.length;
     } catch (_) {}
+    if (isClosed || emit.isDone) return;
 
     emit(ProfileInfoLoaded(
       user: event.user ?? {},
@@ -105,9 +151,9 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
         if (follows != null && follows.isNotEmpty) {
           timer.cancel();
           if (!isClosed && state is ProfileInfoLoaded) {
-            add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            add(_InternalStateUpdate(
               followingCount: follows.length,
-            )));
+            ));
           }
         }
       } catch (_) {}
@@ -125,21 +171,13 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       if (isClosed || profile == null) return;
       final currentState = state;
       if (currentState is! ProfileInfoLoaded) return;
-
-      final updatedUser = Map<String, dynamic>.from(currentState.user);
-      updatedUser['name'] = profile.name ?? updatedUser['name'];
-      updatedUser['picture'] =
-          profile.picture ?? updatedUser['picture'];
-      updatedUser['banner'] = profile.banner ?? updatedUser['banner'];
-      updatedUser['about'] = profile.about ?? updatedUser['about'];
-      updatedUser['nip05'] = profile.nip05 ?? updatedUser['nip05'];
-      updatedUser['website'] = profile.website ?? updatedUser['website'];
-
-      add(_InternalStateUpdate(currentState.copyWith(user: updatedUser)));
+      add(_InternalStateUpdate(user: profile.toMap()));
     });
   }
 
   void _loadFollowStateInBackground(String targetHex, String currentUserHex) {
+    final followGeneration = _followMutationGeneration;
+    final muteGeneration = _muteMutationGeneration;
     Future.wait([
       _followingRepository.isFollowing(currentUserHex, targetHex),
       _followingRepository.isMuted(currentUserHex, targetHex),
@@ -147,10 +185,12 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
       if (isClosed) return;
       final currentState = state;
       if (currentState is ProfileInfoLoaded) {
-        add(_InternalStateUpdate(currentState.copyWith(
-          isFollowing: results[0],
-          isMuted: results[1],
-        )));
+        add(_InternalStateUpdate(
+          isFollowing:
+              followGeneration == _followMutationGeneration ? results[0] : null,
+          isMuted:
+              muteGeneration == _muteMutationGeneration ? results[1] : null,
+        ));
       }
       _refreshDoesUserFollowMeInBackground(targetHex, currentUserHex);
     }).catchError((_) {});
@@ -161,30 +201,30 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     final pubkeyHex = rawPubkey.isNotEmpty ? rawPubkey : userPubkeyHex;
     if (pubkeyHex.isEmpty) {
       if (!isClosed && state is ProfileInfoLoaded) {
-        add(_InternalStateUpdate(
-            (state as ProfileInfoLoaded).copyWith(isLoadingCounts: false)));
+        add(const _InternalStateUpdate(isLoadingCounts: false));
       }
       return;
     }
 
     Future.wait([
       _profileRepository.getFollowerCount(pubkeyHex),
-      _syncService.syncFollowingList(pubkeyHex).then((_) =>
-          _followingRepository.getFollowing(pubkeyHex)),
+      _syncService
+          .syncFollowingList(pubkeyHex)
+          .then((_) => _followingRepository.getFollowing(pubkeyHex)),
     ]).then((results) {
       if (isClosed || state is! ProfileInfoLoaded) return;
       final followerCount = results[0] as int;
       final follows = results[1] as List<String>?;
-      add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+      add(_InternalStateUpdate(
         followerCount: followerCount,
         followingCount: follows?.length ?? 0,
         isLoadingCounts: false,
-      )));
+      ));
     }).catchError((_) {
       if (isClosed || state is! ProfileInfoLoaded) return;
-      add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+      add(const _InternalStateUpdate(
         isLoadingCounts: false,
-      )));
+      ));
     });
 
     _calculateFollowScoreInBackground(pubkeyHex, currentState.currentUserHex);
@@ -195,12 +235,14 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     if (currentUserHex == null || currentUserHex.isEmpty) return;
     if (currentUserHex.toLowerCase() == targetHex.toLowerCase()) return;
 
-    _followingRepository.getFollowScore(currentUserHex, targetHex).then((result) {
+    _followingRepository
+        .getFollowScore(currentUserHex, targetHex)
+        .then((result) {
       if (result != null && !isClosed && state is ProfileInfoLoaded) {
-        add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+        add(_InternalStateUpdate(
           followScoreCount: result.count,
           followScoreAvatars: result.avatarUrls,
-        )));
+        ));
       }
     }).catchError((_) {});
   }
@@ -214,8 +256,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
             .any((f) => f.toLowerCase() == currentUserHex.toLowerCase());
         final currentState = state;
         if (currentState is ProfileInfoLoaded) {
-          add(_InternalStateUpdate(
-              currentState.copyWith(doesUserFollowMe: doesUserFollowMe)));
+          add(_InternalStateUpdate(doesUserFollowMe: doesUserFollowMe));
         }
       } else {
         _startFollowsYouPoll(targetHex, currentUserHex);
@@ -243,9 +284,9 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
           final doesUserFollowMe = targetFollows
               .any((f) => f.toLowerCase() == currentUserHex.toLowerCase());
           if (!isClosed && state is ProfileInfoLoaded) {
-            add(_InternalStateUpdate((state as ProfileInfoLoaded).copyWith(
+            add(_InternalStateUpdate(
               doesUserFollowMe: doesUserFollowMe,
-            )));
+            ));
           }
         }
       } catch (_) {}
@@ -256,7 +297,22 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
     _InternalStateUpdate event,
     Emitter<ProfileInfoState> emit,
   ) {
-    emit(event.newState);
+    if (state is! ProfileInfoLoaded) return;
+    final currentState = state as ProfileInfoLoaded;
+    final updatedUser = event.user == null
+        ? null
+        : <String, dynamic>{...currentState.user, ...event.user!};
+    emit(currentState.copyWith(
+      user: updatedUser,
+      isFollowing: event.isFollowing,
+      isMuted: event.isMuted,
+      doesUserFollowMe: event.doesUserFollowMe,
+      followingCount: event.followingCount,
+      followerCount: event.followerCount,
+      isLoadingCounts: event.isLoadingCounts,
+      followScoreCount: event.followScoreCount,
+      followScoreAvatars: event.followScoreAvatars,
+    ));
   }
 
   Future<void> _onProfileInfoUserUpdated(
@@ -276,6 +332,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   ) async {
     final currentState = state;
     if (currentState is! ProfileInfoLoaded) return;
+    _followMutationGeneration++;
 
     final currentIsFollowing = currentState.isFollowing ?? false;
 
@@ -308,6 +365,7 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   ) async {
     final currentState = state;
     if (currentState is! ProfileInfoLoaded) return;
+    _muteMutationGeneration++;
 
     final currentIsMuted = currentState.isMuted ?? false;
 

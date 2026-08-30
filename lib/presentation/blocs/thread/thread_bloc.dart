@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -9,7 +9,6 @@ import '../../../data/services/auth_service.dart';
 import '../../../data/services/encrypted_mute_service.dart';
 import '../../../data/services/interaction_service.dart';
 import '../../../domain/entities/feed_note.dart';
-import '../../../src/rust/api/database.dart' as rust_db;
 import 'thread_event.dart';
 import 'thread_state.dart';
 
@@ -22,9 +21,11 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   final InteractionService _interactionService;
 
   String? _currentRootNoteId;
-  StreamSubscription<List<FeedNote>>? _repliesSubscription;
+  StreamSubscription<Map<String, dynamic>?>? _repliesSubscription;
   int _loadRequestId = 0;
   int _repliesWatchGeneration = 0;
+  final Set<int> _completedLocalLoads = <int>{};
+  final Set<int> _failedNetworkLoads = <int>{};
 
   ThreadBloc({
     required FeedRepository feedRepository,
@@ -40,10 +41,11 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         _muteService = muteService,
         _interactionService = interactionService,
         super(const ThreadInitial()) {
-    on<ThreadLoadRequested>(_onThreadLoaded);
-    on<ThreadRefreshed>(_onThreadRefreshed);
+    on<ThreadLoadRequested>(_onThreadLoaded, transformer: restartable());
+    on<ThreadRefreshed>(_onThreadRefreshed, transformer: droppable());
     on<ThreadProfilesUpdated>(_onThreadProfilesUpdated);
-    on<ThreadRepliesUpdated>(_onThreadRepliesUpdated);
+    on<ThreadRepliesUpdated>(_onThreadRepliesUpdated,
+        transformer: restartable());
     on<ThreadCurrentUserLoaded>(_onThreadCurrentUserLoaded);
     on<ThreadNetworkDataLoaded>(_onThreadNetworkDataLoaded);
     on<ThreadNetworkFailed>(_onThreadNetworkFailed);
@@ -53,6 +55,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     ThreadProfilesUpdated event,
     Emitter<ThreadState> emit,
   ) {
+    if (event.requestId != _loadRequestId) return;
     if (state is ThreadLoaded) {
       final currentState = state as ThreadLoaded;
       final merged = Map<String, Map<String, dynamic>>.from(
@@ -66,6 +69,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     ThreadCurrentUserLoaded event,
     Emitter<ThreadState> emit,
   ) {
+    if (event.requestId != _loadRequestId) return;
     if (state is ThreadLoaded) {
       final currentState = state as ThreadLoaded;
       final merged = Map<String, Map<String, dynamic>>.from(
@@ -85,6 +89,8 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     Emitter<ThreadState> emit,
   ) async {
     final requestId = ++_loadRequestId;
+    _completedLocalLoads.removeWhere((id) => id < requestId);
+    _failedNetworkLoads.removeWhere((id) => id < requestId);
     _repliesWatchGeneration++;
     await _repliesSubscription?.cancel();
     _repliesSubscription = null;
@@ -137,7 +143,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             repliesSynced: false,
           ),
         );
-        _loadCurrentUserProfile(currentUserHex);
+        _loadCurrentUserProfile(currentUserHex, requestId);
       }
 
       _fetchNetworkThread(focusedNoteId, chain, currentUserHex, requestId);
@@ -147,7 +153,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         currentUserHex: currentUserHex.isNotEmpty ? currentUserHex : null,
       );
 
-      if (isClosed || requestId != _loadRequestId) return;
+      _completedLocalLoads.add(requestId);
+
+      if (isClosed || requestId != _loadRequestId || emit.isDone) return;
 
       if (localThreadData != null) {
         final localState = _buildLoadedState(
@@ -164,9 +172,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
             _interactionService.setCurrentUser(currentUserHex);
           }
           _watchReplies(localState.rootNoteId);
-          _loadCurrentUserProfile(currentUserHex);
+          _loadCurrentUserProfile(currentUserHex, requestId);
           _loadAndSyncProfilesForNotes(
             [...localState.chainNotes, ...localState.replies],
+            requestId,
           );
           final localIds = <String>[localState.rootNoteId];
           for (final r in localState.replies) {
@@ -176,7 +185,11 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
           _loadInteractionCountsInBackground(localIds);
         }
       } else if (state is! ThreadLoaded) {
-        emit(const ThreadLoading());
+        if (_failedNetworkLoads.contains(requestId)) {
+          emit(const ThreadError('Failed to load thread'));
+        } else {
+          emit(const ThreadLoading());
+        }
       }
     } catch (e) {
       if (!isClosed && state is! ThreadLoaded) {
@@ -189,33 +202,20 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     String noteId, {
     String? currentUserHex,
   }) async {
+    final structure =
+        await _feedRepository.getThreadStructure(noteId, limit: 500);
+    if (structure != null) {
+      return _convertStructureToThreadData(structure);
+    }
     try {
-      final json = await rust_db.dbGetHydratedThreadStructure(
-        rootNoteId: noteId,
+      return await _syncService.fetchFullThreadLocal(
+        noteId,
         currentUserPubkeyHex: currentUserHex,
-        limit: 500,
+        mutedPubkeys: _muteService.mutedPubkeys,
+        mutedWords: _muteService.mutedWords,
       );
-      final data = jsonDecode(json) as Map<String, dynamic>;
-      if (data.containsKey('error')) {
-        return await _syncService.fetchFullThreadLocal(
-          noteId,
-          currentUserPubkeyHex: currentUserHex,
-          mutedPubkeys: _muteService.mutedPubkeys,
-          mutedWords: _muteService.mutedWords,
-        );
-      }
-      return _convertStructureToThreadData(data);
     } catch (_) {
-      try {
-        return await _syncService.fetchFullThreadLocal(
-          noteId,
-          currentUserPubkeyHex: currentUserHex,
-          mutedPubkeys: _muteService.mutedPubkeys,
-          mutedWords: _muteService.mutedWords,
-        );
-      } catch (_) {
-        return null;
-      }
+      return null;
     }
   }
 
@@ -271,14 +271,23 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     });
   }
 
-  void _onThreadNetworkDataLoaded(
+  Future<void> _onThreadNetworkDataLoaded(
     ThreadNetworkDataLoaded event,
     Emitter<ThreadState> emit,
-  ) {
+  ) async {
     if (event.requestId != _loadRequestId) return;
 
+    final networkRoot = event.threadData['rootNote'] as Map<String, dynamic>?;
+    final networkRootId = networkRoot?['id'] as String? ?? event.chain.first;
+    final localThreadData = await _loadFromLocalDb(
+      networkRootId,
+      currentUserHex:
+          event.currentUserHex.isNotEmpty ? event.currentUserHex : null,
+    );
+    if (isClosed || event.requestId != _loadRequestId || emit.isDone) return;
+
     final newState = _buildLoadedState(
-      event.threadData,
+      localThreadData ?? event.threadData,
       event.chain,
       event.currentUserHex,
       repliesSynced: true,
@@ -296,7 +305,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     emit(newState.copyWith(userProfiles: mergedProfiles));
 
     _watchReplies(newState.rootNoteId);
-    _loadCurrentUserProfile(event.currentUserHex);
+    _loadCurrentUserProfile(event.currentUserHex, event.requestId);
 
     final allIds = <String>[newState.rootNoteId];
     for (final r in newState.replies) {
@@ -307,7 +316,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       _interactionService.setCurrentUser(event.currentUserHex);
     }
     _loadInteractionCountsInBackground(allIds);
-    _loadAndSyncProfilesForNotes([...newState.chainNotes, ...newState.replies]);
+    _loadAndSyncProfilesForNotes(
+      [...newState.chainNotes, ...newState.replies],
+      event.requestId,
+    );
   }
 
   ThreadLoaded? _buildLoadedState(
@@ -450,12 +462,14 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     return hasQToTarget || hasMentionMarkerToTarget;
   }
 
-  void _loadCurrentUserProfile(String currentUserHex) {
+  void _loadCurrentUserProfile(String currentUserHex, int requestId) {
     if (currentUserHex.isEmpty) return;
     _profileRepository.getProfile(currentUserHex).then((profile) {
-      if (isClosed || state is! ThreadLoaded) return;
+      if (isClosed || requestId != _loadRequestId || state is! ThreadLoaded) {
+        return;
+      }
       if (profile != null) {
-        add(ThreadCurrentUserLoaded(profile.toMap()));
+        add(ThreadCurrentUserLoaded(profile.toMap(), requestId));
       }
     }).catchError((_) {});
   }
@@ -467,10 +481,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     void subscribe() {
       if (isClosed || generation != _repliesWatchGeneration) return;
       _repliesSubscription =
-          _feedRepository.watchThreadAllReplies(rootNoteId).listen(
-        (replies) {
+          _feedRepository.watchThreadStructure(rootNoteId).listen(
+        (threadData) {
           if (isClosed || generation != _repliesWatchGeneration) return;
-          add(ThreadRepliesUpdated(replies, rootNoteId));
+          add(ThreadRepliesUpdated(threadData, rootNoteId));
         },
         onError: (_) => _scheduleRepliesWatchRetry(generation, subscribe),
         onDone: () => _scheduleRepliesWatchRetry(generation, subscribe),
@@ -499,12 +513,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     if (event.rootNoteId != rootNoteId) return;
 
     final existingIds = currentState.threadStructure.notesMap.keys.toSet();
-    final localThreadData = await _loadFromLocalDb(
-      rootNoteId,
-      currentUserHex: currentState.currentUserHex.isNotEmpty
-          ? currentState.currentUserHex
-          : null,
-    );
+    final localThreadData = event.threadData;
     if (isClosed ||
         state is! ThreadLoaded ||
         (state as ThreadLoaded).rootNoteId != rootNoteId ||
@@ -535,9 +544,11 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         .map((entry) => entry.value)
         .toList();
     if (newNotes.isNotEmpty) {
-      _loadAndSyncProfilesForNotes(newNotes);
+      _loadAndSyncProfilesForNotes(newNotes, _loadRequestId);
     }
-    _interactionService.populateFromNotes(event.replies);
+    final refreshedReplies =
+        refreshed.replies.map(FeedNote.fromMap).toList(growable: false);
+    _interactionService.populateFromNotes(refreshedReplies);
   }
 
   void _loadInteractionCountsInBackground(List<String> initialIds) {
@@ -554,8 +565,13 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     _interactionService.fetchCountsFromRelays(ids).catchError((_) {});
   }
 
-  void _loadAndSyncProfilesForNotes(List<Map<String, dynamic>> notes) async {
-    if (isClosed || state is! ThreadLoaded) return;
+  void _loadAndSyncProfilesForNotes(
+    List<Map<String, dynamic>> notes,
+    int requestId,
+  ) async {
+    if (isClosed || requestId != _loadRequestId || state is! ThreadLoaded) {
+      return;
+    }
 
     final currentState = state as ThreadLoaded;
     final authorIds = notes
@@ -573,7 +589,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       final syncFuture = _syncService.syncProfiles(authorIds);
 
       final profiles = await profilesFuture;
-      if (isClosed) return;
+      if (isClosed || requestId != _loadRequestId) return;
 
       final updatedProfiles = <String, Map<String, dynamic>>{};
       final missingPubkeys = <String>[];
@@ -593,15 +609,15 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       }
 
       if (updatedProfiles.isNotEmpty && !isClosed) {
-        add(ThreadProfilesUpdated(updatedProfiles));
+        add(ThreadProfilesUpdated(updatedProfiles, requestId));
       }
 
       await syncFuture;
-      if (isClosed) return;
+      if (isClosed || requestId != _loadRequestId) return;
 
       if (missingPubkeys.isNotEmpty) {
         final synced = await _profileRepository.getProfiles(missingPubkeys);
-        if (isClosed) return;
+        if (isClosed || requestId != _loadRequestId) return;
 
         final syncedProfiles = <String, Map<String, dynamic>>{};
         for (final entry in synced.entries) {
@@ -611,7 +627,7 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
         }
 
         if (syncedProfiles.isNotEmpty && !isClosed) {
-          add(ThreadProfilesUpdated(syncedProfiles));
+          add(ThreadProfilesUpdated(syncedProfiles, requestId));
         }
       }
     } catch (_) {}
@@ -622,7 +638,9 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
     Emitter<ThreadState> emit,
   ) {
     if (event.requestId != _loadRequestId) return;
-    if (state is! ThreadLoaded) {
+    _failedNetworkLoads.add(event.requestId);
+    if (_completedLocalLoads.contains(event.requestId) &&
+        state is! ThreadLoaded) {
       emit(const ThreadError('Failed to load thread from network'));
     }
   }
