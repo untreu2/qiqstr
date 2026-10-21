@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -153,33 +154,7 @@ class _UserProfileHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colors.avatarPlaceholder,
-                  image: () {
-                    final profileImage = user['picture'] as String? ?? '';
-                    return profileImage.isNotEmpty
-                        ? DecorationImage(
-                            image: NetworkImage(profileImage),
-                            fit: BoxFit.cover,
-                          )
-                        : null;
-                  }(),
-                ),
-                child: () {
-                  final profileImage = user['picture'] as String? ?? '';
-                  return profileImage.isEmpty
-                      ? PhosphorIcon(
-                          PhosphorIcons.user(),
-                          size: 28,
-                          color: colors.textSecondary,
-                        )
-                      : null;
-                }(),
-              ),
+              _buildAvatar(),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -225,6 +200,42 @@ class _UserProfileHeader extends StatelessWidget {
           _buildFollowerInfo(context),
         ],
       ),
+    );
+  }
+
+  Widget _buildAvatar() {
+    const size = 56.0;
+    final profileImage = user['picture'] as String? ?? '';
+
+    final fallback = PhosphorIcon(
+      PhosphorIcons.user(),
+      size: 28,
+      color: colors.textSecondary,
+    );
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: colors.avatarPlaceholder,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: profileImage.isEmpty
+          ? Center(child: fallback)
+          : CachedNetworkImage(
+              imageUrl: profileImage,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              fadeInDuration: Duration.zero,
+              fadeOutDuration: Duration.zero,
+              memCacheWidth: (size * 3).toInt(),
+              maxHeightDiskCache: (size * 3).toInt(),
+              maxWidthDiskCache: (size * 3).toInt(),
+              placeholder: (context, url) => Center(child: fallback),
+              errorWidget: (context, url, error) => Center(child: fallback),
+            ),
     );
   }
 
