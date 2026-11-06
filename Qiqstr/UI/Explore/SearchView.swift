@@ -1,128 +1,114 @@
 import SwiftUI
-import QiqstrCore
-
-@MainActor
-@Observable
-final class NoteSearchModel {
-    private(set) var notes: [Note] = []
-    private(set) var isSearching = false
-    private var task: Task<Void, Never>?
-
-    func search(_ text: String) {
-        task?.cancel()
-        let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2, !query.hasPrefix("npub1"), !query.hasPrefix("nprofile1") else {
-            notes = []
-            isSearching = false
-            return
-        }
-        isSearching = true
-        task = Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            let raw = try? await dbSearchNotes(query: query, limit: 40)
-            let ids = JSON.array(raw).compactMap { $0.str("id") }
-            let hydrated = ids.isEmpty ? [] : Note.list(try? await dbGetHydratedNotesByIds(eventIds: ids, mutedPubkeys: Session.shared.mutedPubkeys, mutedWords: Session.shared.mutedWords, currentUserPubkeyHex: Session.shared.pubkey))
-            guard !Task.isCancelled else { return }
-            notes = hydrated.sorted { $0.createdAt > $1.createdAt }
-            isSearching = false
-        }
-    }
-}
 
 struct SearchView: View {
-    @State private var people = UserSearchModel()
-    @State private var notes = NoteSearchModel()
-
-    private var query: String { people.trimmedQuery }
-
-    private var hashtag: String? {
-        let tag = query.hasPrefix("#") ? String(query.dropFirst()) : query
-        guard !tag.isEmpty, tag.count <= 40, tag.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else { return nil }
-        return tag.lowercased()
-    }
+    @State private var model = SearchViewModel()
 
     var body: some View {
         List {
-            if query.isEmpty {
-                suggested
+            if model.trimmedQuery.isEmpty {
+                SearchDiscoverySections(model: model)
             } else {
-                results
+                SearchResultSections(model: model)
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(AppColors.background)
         .scrollDismissesKeyboard(.immediately)
         .overlay { emptyOverlay }
         .navigationTitle(L("search"))
         .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $people.query, prompt: L("searchByNameOrNpub"))
+        .searchable(text: $model.query, prompt: L("searchPrompt"))
+        .searchScopes($model.scope, activation: .onSearchPresentation) {
+            ForEach(SearchScope.allCases) { scope in
+                Text(scope.title).tag(scope)
+            }
+        }
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .onSubmit(of: .search) {
-            if let pubkey = people.resolvedPubkey { Router.shared.push(.profile(pubkey)) }
-        }
-        .onChange(of: people.query) { notes.search(people.query) }
-        .task { await people.loadSuggestions() }
+        .onSubmit(of: .search) { model.submit() }
+        .refreshable { await model.refresh() }
+        .sensoryFeedback(.selection, trigger: model.scope)
+        .sensoryFeedback(.impact(weight: .light), trigger: model.opened)
+        .task { await model.start() }
         .accessibilityIdentifier("search-list")
     }
 
     @ViewBuilder
-    private var suggested: some View {
-        if !people.suggestions.isEmpty {
-            Section(L("suggestedFollows")) {
-                ForEach(people.suggestions.prefix(15)) { profile in
-                    UserRowView(pubkey: profile.pubkey)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var results: some View {
-        if let pubkey = people.resolvedPubkey {
-            Section {
-                UserRowView(pubkey: pubkey)
-            }
-        }
-        if let hashtag {
-            Section {
-                NavigationLink(value: Route.hashtag(hashtag)) {
-                    Label("#\(hashtag)", systemImage: "number")
-                        .font(.body.weight(.medium))
-                }
-                .accessibilityIdentifier("search-hashtag")
-            }
-        }
-        if !people.results.isEmpty {
-            Section {
-                ForEach(people.results.prefix(5)) { profile in
-                    UserRowView(pubkey: profile.pubkey)
-                }
-            } header: {
-                HStack {
-                    Text(L("users"))
-                    Spacer()
-                    if people.results.count > 5 {
-                        NavigationLink(L("exploreSeeAll"), value: Route.userSearch)
-                            .font(.subheadline)
-                    }
-                }
-            }
-        }
-        if !notes.notes.isEmpty {
-            Section(L("notes")) {
-                ForEach(notes.notes, id: \.listId) { note in
-                    NoteRowView(note: note)
-                        .listRowInsets(EdgeInsets())
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
     private var emptyOverlay: some View {
-        if !query.isEmpty, hashtag == nil, people.resolvedPubkey == nil, people.results.isEmpty, notes.notes.isEmpty, !people.isSearching, !notes.isSearching {
-            ContentUnavailableView.search(text: query)
+        if model.showsEmptyResults {
+            ContentUnavailableView.search(text: model.trimmedQuery)
         }
+    }
+}
+
+struct SearchSectionHeader: View {
+    let title: String
+    var isLoading = false
+    var seeAll: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title).font(.headline).foregroundStyle(.primary)
+            if isLoading { ProgressView().controlSize(.small) }
+            Spacer()
+            if let seeAll {
+                Button(L("exploreSeeAll"), action: seeAll)
+                    .font(.subheadline)
+                    .buttonStyle(.borderless)
+            }
+        }
+        .textCase(nil)
+    }
+}
+
+struct SearchPersonSkeletonRow: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle().fill(.quaternary).frame(width: 46, height: 46)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: "Placeholder name").font(.body.weight(.semibold))
+                Text(verbatim: "name@example.com").font(.subheadline)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
+    }
+}
+
+struct SearchNoteSkeletonRow: View {
+    var lines = 2
+
+    var body: some View {
+        FeedSkeletonRow(lines: lines)
+            .redacted(reason: .placeholder)
+            .accessibilityHidden(true)
+    }
+}
+
+struct SearchInlineMessage: View {
+    let text: String
+    var systemImage = "wifi.slash"
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+}
+
+extension View {
+    func searchNoteRow() -> some View {
+        listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+    }
+
+    func searchArticleRow() -> some View {
+        listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
