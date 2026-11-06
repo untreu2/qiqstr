@@ -62,3 +62,9 @@
 "clipboardOpenLink" = "Open copied link";
 "clipboardNoLink" = "There is no nostr link in the clipboard.";
 "clipboardDismiss" = "Dismiss";
+"authNcryptsecDetected" = "This is an encrypted key. Enter its password to continue.";
+"authNcryptsecPassword" = "Backup password";
+"authNcryptsecPasswordHeader" = "Password";
+"authNcryptsecWrongPassword" = "Wrong password, or the backup is damaged.";
+"authNcryptsecPasswordRequired" = "Enter the password for this encrypted key.";
+"authDecrypting" = "Decrypting…";

@@ -13,7 +13,7 @@ struct StoredAccount: Codable, Hashable, Identifiable, Sendable {
 }
 
 enum AuthError: LocalizedError {
-    case invalidKey, invalidMnemonic, accountNotFound, keyMismatch, differentAccount
+    case invalidKey, invalidMnemonic, accountNotFound, keyMismatch, differentAccount, wrongPassword, passwordRequired
     case nip05NotFound(String)
     var errorDescription: String? {
         switch self {
@@ -22,6 +22,8 @@ enum AuthError: LocalizedError {
         case .accountNotFound: "Account not found"
         case .keyMismatch: "Stored account keys do not match"
         case .differentAccount: L("addKeyMismatch")
+        case .wrongPassword: L("authNcryptsecWrongPassword")
+        case .passwordRequired: L("authNcryptsecPasswordRequired")
         case .nip05NotFound(let address): L("nip05NotFound", ["address": address])
         }
     }
@@ -77,7 +79,14 @@ final class AccountStore {
         return account
     }
 
+    func login(input: String, password: String) throws -> StoredAccount {
+        guard Ncryptsec.matches(input) else { return try login(input: input) }
+        let hex = try Ncryptsec.decryptSync(input, password: password)
+        return try store(privateKeyHex: hex)
+    }
+
     func login(input: String) throws -> StoredAccount {
+        if Ncryptsec.matches(input) { throw AuthError.passwordRequired }
         if let pubkey = Self.readOnlyPubkey(input) { return try storeReadOnly(pubkeyHex: pubkey) }
         let key = try Self.signingKey(from: input)
         return try store(privateKeyHex: key.hex, mnemonic: key.mnemonic)
@@ -113,6 +122,11 @@ final class AccountStore {
         return try store(privateKeyHex: key.hex, mnemonic: key.mnemonic)
     }
 
+    func upgrade(npub: String, input: String, password: String) throws -> StoredAccount {
+        guard Ncryptsec.matches(input) else { return try upgrade(npub: npub, input: input) }
+        return try upgrade(npub: npub, input: Ncryptsec.decryptSync(input, password: password))
+    }
+
     func createAccount() throws -> StoredAccount {
         let phrase = try generateMnemonic()
         let key = try mnemonicToPrivateKey(mnemonic: phrase)
@@ -136,5 +150,38 @@ final class AccountStore {
     func logoutActive() -> StoredAccount? {
         if let current = active { remove(npub: current.npub) }
         return active
+    }
+}
+
+enum Ncryptsec {
+    nonisolated static let minimumPasswordLength = 8
+
+    nonisolated static func normalized(_ input: String) -> String {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return value.hasPrefix("nostr:") ? String(value.dropFirst(6)) : value
+    }
+
+    nonisolated static func matches(_ input: String) -> Bool {
+        normalized(input).hasPrefix("ncryptsec1")
+    }
+
+    nonisolated static func decryptSync(_ input: String, password: String) throws -> String {
+        let value = normalized(input)
+        let hex: String
+        do {
+            hex = try ncryptsecDecrypt(ncryptsec: value, password: password)
+        } catch {
+            throw AuthError.wrongPassword
+        }
+        guard hex.count == 64, hex.allSatisfy(\.isHexDigit) else { throw AuthError.wrongPassword }
+        return hex.lowercased()
+    }
+
+    nonisolated static func decrypt(_ input: String, password: String) async throws -> String {
+        try await Task.detached(priority: .userInitiated) { try decryptSync(input, password: password) }.value
+    }
+
+    nonisolated static func encrypt(privateKeyHex: String, password: String) async throws -> String {
+        try await Task.detached(priority: .userInitiated) { try ncryptsecEncrypt(privateKeyHex: privateKeyHex, password: password) }.value
     }
 }

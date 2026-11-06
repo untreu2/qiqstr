@@ -62,3 +62,9 @@
 "clipboardOpenLink" = "Kopierten Link öffnen";
 "clipboardNoLink" = "In der Zwischenablage ist kein Nostr-Link.";
 "clipboardDismiss" = "Schließen";
+"authNcryptsecDetected" = "Dies ist ein verschlüsselter Schlüssel. Gib sein Passwort ein, um fortzufahren.";
+"authNcryptsecPassword" = "Passwort der Sicherung";
+"authNcryptsecPasswordHeader" = "Passwort";
+"authNcryptsecWrongPassword" = "Falsches Passwort oder die Sicherung ist beschädigt.";
+"authNcryptsecPasswordRequired" = "Gib das Passwort für diesen verschlüsselten Schlüssel ein.";
+"authDecrypting" = "Wird entschlüsselt…";

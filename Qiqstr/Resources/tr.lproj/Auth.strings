@@ -62,3 +62,9 @@
 "clipboardOpenLink" = "Kopyalanan bağlantıyı aç";
 "clipboardNoLink" = "Panoda nostr bağlantısı yok.";
 "clipboardDismiss" = "Kapat";
+"authNcryptsecDetected" = "Bu şifreli bir anahtar. Devam etmek için parolasını gir.";
+"authNcryptsecPassword" = "Yedek parolası";
+"authNcryptsecPasswordHeader" = "Parola";
+"authNcryptsecWrongPassword" = "Parola yanlış ya da yedek bozuk.";
+"authNcryptsecPasswordRequired" = "Bu şifreli anahtarın parolasını gir.";
+"authDecrypting" = "Şifre çözülüyor…";

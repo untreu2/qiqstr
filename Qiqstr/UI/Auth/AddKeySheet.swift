@@ -7,11 +7,18 @@ final class AddKeyViewModel {
     var input = ""
     var isRevealed = false
     var isSaving = false
+    var isDecrypting = false
     var errorMessage: String?
+    var password = ""
+    var passwordError: String?
     var failureCount = 0
     var successCount = 0
 
-    var canSubmit: Bool { !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving }
+    var isEncryptedInput: Bool { Ncryptsec.matches(input) }
+    var canSubmit: Bool {
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !isSaving else { return false }
+        return !isEncryptedInput || !password.isEmpty
+    }
 
     func paste() {
         guard let text = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
@@ -28,9 +35,26 @@ final class AddKeyViewModel {
         guard canSubmit else { return false }
         isSaving = true
         errorMessage = nil
-        defer { isSaving = false }
+        passwordError = nil
+        defer {
+            isSaving = false
+            isDecrypting = false
+        }
+        var key = input
+        if isEncryptedInput {
+            isDecrypting = true
+            do {
+                key = try await Ncryptsec.decrypt(input, password: password)
+            } catch {
+                passwordError = coreMessage(error)
+                failureCount += 1
+                return false
+            }
+            isDecrypting = false
+            password = ""
+        }
         do {
-            try await Session.shared.addKey(input)
+            try await Session.shared.addKey(key)
             successCount += 1
             ToastCenter.shared.show(L("addKeySuccess"), style: .success)
             return true
@@ -48,6 +72,7 @@ struct AddKeySheet: View {
     @State private var cache = ProfileCache.shared
     @State private var showScanner = false
     @FocusState private var focused: Bool
+    @FocusState private var passwordFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     private var accountName: String {
@@ -105,6 +130,9 @@ struct AddKeySheet: View {
                         Text(L("addKeySubtitle", ["name": accountName]))
                     }
                 }
+                if model.isEncryptedInput {
+                    passwordSection
+                }
             }
             .navigationTitle(L("addKeyTitle"))
             .navigationBarTitleDisplayMode(.inline)
@@ -126,6 +154,12 @@ struct AddKeySheet: View {
                 AuthQRScannerSheet { model.applyScanned($0) }
             }
             .animation(.snappy, value: model.errorMessage)
+            .animation(.snappy, value: model.passwordError)
+            .animation(.snappy, value: model.isEncryptedInput)
+            .onChange(of: model.isEncryptedInput) { _, encrypted in
+                if encrypted { passwordFocused = true }
+            }
+            .onChange(of: model.password) { _, _ in model.passwordError = nil }
             .sensoryFeedback(.error, trigger: model.failureCount)
             .sensoryFeedback(.success, trigger: model.successCount)
             .onAppear { focused = true }
@@ -136,8 +170,37 @@ struct AddKeySheet: View {
         .accessibilityIdentifier("add-key-sheet")
     }
 
+    private var passwordSection: some View {
+        Section {
+            SecureField(L("authNcryptsecPassword"), text: $model.password)
+                .textContentType(.password)
+                .focused($passwordFocused)
+                .submitLabel(.done)
+                .onSubmit(submit)
+                .accessibilityIdentifier("add-key-ncryptsec-password")
+            if model.isDecrypting {
+                Label {
+                    Text(L("authDecrypting"))
+                } icon: {
+                    ProgressView()
+                }
+                .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text(L("authNcryptsecPasswordHeader"))
+        } footer: {
+            if let message = model.passwordError {
+                AuthErrorText(message: message)
+                    .accessibilityIdentifier("add-key-ncryptsec-error")
+            } else {
+                Text(L("authNcryptsecDetected"))
+            }
+        }
+    }
+
     private func submit() {
         focused = false
+        passwordFocused = false
         Task {
             if await model.submit() { dismiss() }
         }

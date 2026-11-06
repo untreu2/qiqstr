@@ -7,10 +7,17 @@ final class AuthLoginViewModel {
     var input = ""
     var isObscured = true
     var isLoading = false
+    var isDecrypting = false
     var errorMessage: String?
+    var password = ""
+    var passwordError: String?
     var failureCount = 0
 
-    var canSubmit: Bool { !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isLoading }
+    var isEncryptedInput: Bool { Ncryptsec.matches(input) }
+    var canSubmit: Bool {
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !isLoading else { return false }
+        return !isEncryptedInput || !password.isEmpty
+    }
     var isViewOnlyInput: Bool { AccountStore.readOnlyPubkey(input) != nil || Nip05Resolver.looksLikeAddress(input) }
 
     func paste() {
@@ -26,16 +33,35 @@ final class AuthLoginViewModel {
 
     func login() async {
         let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, !isLoading else { return }
+        guard canSubmit else { return }
         isLoading = true
         errorMessage = nil
+        passwordError = nil
+        defer {
+            isLoading = false
+            isDecrypting = false
+        }
         do {
-            try await Session.shared.login(value)
+            if isEncryptedInput {
+                isDecrypting = true
+                let key: String
+                do {
+                    key = try await Ncryptsec.decrypt(value, password: password)
+                } catch {
+                    passwordError = coreMessage(error)
+                    failureCount += 1
+                    return
+                }
+                isDecrypting = false
+                password = ""
+                try await Session.shared.login(key)
+            } else {
+                try await Session.shared.login(value)
+            }
         } catch {
             errorMessage = L("errorPrefix", ["message": coreMessage(error)])
             failureCount += 1
         }
-        isLoading = false
     }
 }
 
@@ -43,6 +69,7 @@ struct AuthLoginView: View {
     @State private var model = AuthLoginViewModel()
     @State private var showScanner = false
     @FocusState private var focused: Bool
+    @FocusState private var passwordFocused: Bool
 
     var body: some View {
         ScrollView {
@@ -61,6 +88,9 @@ struct AuthLoginView: View {
                     .accessibilityIdentifier("login-input")
                     if let message = model.errorMessage {
                         AuthErrorText(message: message)
+                    }
+                    if model.isEncryptedInput {
+                        passwordField
                     }
                     if model.isViewOnlyInput {
                         Label(L("readOnlyLoginHint"), systemImage: "eye")
@@ -89,6 +119,7 @@ struct AuthLoginView: View {
         .safeAreaInset(edge: .bottom) {
             PrimaryButton(title: L("login"), isLoading: model.isLoading, isEnabled: model.canSubmit) {
                 focused = false
+                passwordFocused = false
                 Task { await model.login() }
             }
             .accessibilityIdentifier("login-submit")
@@ -115,8 +146,45 @@ struct AuthLoginView: View {
         }
         .animation(.snappy, value: model.errorMessage)
         .animation(.snappy, value: model.isViewOnlyInput)
+        .animation(.snappy, value: model.isEncryptedInput)
+        .animation(.snappy, value: model.passwordError)
+        .onChange(of: model.isEncryptedInput) { _, encrypted in
+            if encrypted { passwordFocused = true }
+        }
+        .onChange(of: model.password) { _, _ in model.passwordError = nil }
         .sensoryFeedback(.error, trigger: model.failureCount)
         .disabled(model.isLoading)
+    }
+
+    private var passwordField: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(L("authNcryptsecDetected"), systemImage: "lock")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+            QiqTextField(placeholder: L("authNcryptsecPassword"), text: $model.password, isSecure: true)
+                .textContentType(.password)
+                .focused($passwordFocused)
+                .submitLabel(.go)
+                .onSubmit { Task { await model.login() } }
+                .accessibilityIdentifier("login-ncryptsec-password")
+            if let message = model.passwordError {
+                AuthErrorText(message: message)
+                    .accessibilityIdentifier("login-ncryptsec-error")
+            }
+            if model.isDecrypting {
+                Label {
+                    Text(L("authDecrypting"))
+                } icon: {
+                    ProgressView().controlSize(.small)
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+            }
+        }
+        .transition(.opacity)
     }
 
     private var trailingControls: some View {

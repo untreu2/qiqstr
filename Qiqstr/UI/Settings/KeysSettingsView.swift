@@ -15,14 +15,17 @@ final class KeysSettingsModel {
     private(set) var mnemonic: String?
     private(set) var revealed: Set<SettingsSecretKind> = []
     private(set) var copied: String?
+    private(set) var privateKeyHex: String?
     var pendingCopy: SettingsSecretKind?
+    var isBackupPresented = false
     var showAdvanced = false
     var copyCount = 0
 
     func load() {
         let account = Session.shared.account
         npub = account?.npub ?? ""
-        nsec = account.flatMap { Nip19.nsec($0.privateKeyHex) }
+        privateKeyHex = account?.signingKey
+        nsec = account?.signingKey.flatMap { Nip19.nsec($0) }
         mnemonic = account?.mnemonic?.nilIfEmpty
     }
 
@@ -53,6 +56,11 @@ final class KeysSettingsModel {
     func copyNpub() {
         SettingsClipboard.copy(npub)
         markCopied("npub", label: "NPUB")
+    }
+
+    func requestBackup() async {
+        guard privateKeyHex != nil, await authenticate() else { return }
+        isBackupPresented = true
     }
 
     func hideAll() { revealed.removeAll() }
@@ -117,6 +125,21 @@ struct KeysSettingsView: View {
                 Text(L("useThisToRecoverAccount"))
             }
 
+            if model.privateKeyHex != nil {
+                Section {
+                    Button {
+                        Task { await model.requestBackup() }
+                    } label: {
+                        SettingsRowLabel(title: L("keysBackupCreate"), systemImage: "lock.doc")
+                    }
+                    .accessibilityIdentifier("keys-backup-create")
+                } header: {
+                    Text(L("keysBackupHeader"))
+                } footer: {
+                    Text(L("keysBackupFooter"))
+                }
+            }
+
             Section {
                 Button {
                     withAnimation(.snappy) { model.showAdvanced.toggle() }
@@ -154,6 +177,12 @@ struct KeysSettingsView: View {
         .onAppear { model.load() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.hideAll() }
+            if phase == .background { model.isBackupPresented = false }
+        }
+        .sheet(isPresented: $model.isBackupPresented) {
+            if let key = model.privateKeyHex {
+                KeysBackupSheet(privateKeyHex: key)
+            }
         }
         .alert(L("warning"), isPresented: Binding(get: { model.pendingCopy != nil }, set: { if !$0 { model.pendingCopy = nil } })) {
             Button(L("cancel"), role: .cancel) { model.pendingCopy = nil }
