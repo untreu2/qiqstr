@@ -18,6 +18,7 @@ enum ServiceRegistry {
             HashtagFollowService.shared.reset()
             WebOfTrustService.shared.reset()
             Router.shared.reset()
+            LiveService.shared.reset()
             ReadOnlyGate.shared.reset()
         }
         SessionHooks.onBootstrap { pubkey in

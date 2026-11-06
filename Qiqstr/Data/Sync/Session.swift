@@ -216,9 +216,26 @@ final class NotificationBadge {
     private(set) var hasUnreadNotifications = false
     var hasUnreadMessages = false
 
-    func markUnread() { hasUnreadNotifications = true }
-    func markRead() { hasUnreadNotifications = false }
-    func reset() { hasUnreadNotifications = false; hasUnreadMessages = false }
+    private var unreadCount = 0
+
+    func markUnread(from name: String? = nil) {
+        hasUnreadNotifications = true
+        unreadCount += 1
+        WidgetBridge.update(unread: unreadCount, latestName: name)
+    }
+
+    func markRead() {
+        hasUnreadNotifications = false
+        unreadCount = 0
+        WidgetBridge.markRead()
+    }
+
+    func reset() {
+        hasUnreadNotifications = false
+        hasUnreadMessages = false
+        unreadCount = 0
+        WidgetBridge.clear()
+    }
 }
 
 @MainActor

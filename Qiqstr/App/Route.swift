@@ -103,7 +103,7 @@ final class Router {
     func open(url: URL) {
         if let link = NostrLink(url: url) ?? NostrLink(entity: url.absoluteString) {
             open(link)
-        } else if let scheme = url.scheme?.lowercased(), scheme != "nostr" {
+        } else if let scheme = url.scheme?.lowercased(), scheme != "nostr", scheme != "qiqstr" {
             UIApplication.shared.open(url)
         }
     }

@@ -86,6 +86,10 @@ final class ComposeViewModel {
         if let draft = pending?.contextKey == contextKey ? pending : store.latest(contextKey: contextKey) {
             apply(draft)
         }
+        if context == .newNote, let shared = SharedInbox.defaults?.string(forKey: "compose_prefill_text"), !shared.isEmpty {
+            text = text.isEmpty ? shared : text + "\n" + shared
+            SharedInbox.shared.consume()
+        }
     }
 
     var contextKey: String {
