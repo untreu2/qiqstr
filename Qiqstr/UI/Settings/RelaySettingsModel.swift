@@ -96,7 +96,7 @@ final class RelaySettingsModel {
     func flags(for relay: String) -> SettingsRelayFlags { flags[relay] ?? SettingsRelayFlags() }
 
     func add() async {
-        let url = newRelayURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = Self.canonicalInput(newRelayURL)
         guard !url.isEmpty else { ToastCenter.shared.show(L("pleaseEnterRelayUrl"), style: .error); return }
         guard Self.isValid(url) else { ToastCenter.shared.show(L("invalidRelayUrl"), style: .error); return }
         let normalized = Self.normalize(url)
@@ -279,6 +279,18 @@ final class RelaySettingsModel {
         guard trimmed.hasPrefix("wss://") || trimmed.hasPrefix("ws://"),
               let components = URLComponents(string: trimmed), let host = components.host, !host.isEmpty else { return false }
         return host.contains(".") || host == "localhost"
+    }
+
+    static func canonicalInput(_ raw: String) -> String {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return value }
+        if let range = value.range(of: "://", options: .backwards) {
+            let scheme = value[..<range.lowerBound].split(separator: "/").last.map(String.init)?.lowercased() ?? "wss"
+            value = (scheme == "ws" ? "ws://" : "wss://") + value[range.upperBound...]
+        } else {
+            value = "wss://" + value
+        }
+        return value
     }
 
     static func normalize(_ url: String) -> String {

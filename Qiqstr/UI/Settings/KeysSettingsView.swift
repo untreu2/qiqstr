@@ -177,10 +177,24 @@ struct KeysSettingsView: View {
         let revealed = model.isRevealed(kind)
         VStack(alignment: .leading, spacing: 12) {
             ZStack {
-                content()
-                    .blur(radius: revealed ? 0 : 9)
-                    .accessibilityHidden(!revealed)
-                    .allowsHitTesting(revealed)
+                if revealed {
+                    content()
+                } else {
+                    content()
+                        .hidden()
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(AppColors.tile)
+                                .overlay {
+                                    Text(String(repeating: "•••• ", count: 18))
+                                        .font(.system(size: 15, design: .monospaced))
+                                        .foregroundStyle(AppColors.textSecondary)
+                                        .blur(radius: 6)
+                                        .padding(16)
+                                }
+                                .accessibilityHidden(true)
+                        }
+                }
                 if !revealed {
                     Label(L("keysTapToReveal"), systemImage: "faceid")
                         .font(.system(size: 14, weight: .semibold))

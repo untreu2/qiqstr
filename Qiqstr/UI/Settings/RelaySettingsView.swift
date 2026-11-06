@@ -193,12 +193,12 @@ struct RelaySettingsView: View {
                     .submitLabel(.done)
                     .onSubmit { Task { await model.add() } }
                     .accessibilityIdentifier("relays-add-field")
-                if !model.newRelayURL.isEmpty && !RelaySettingsModel.isValid(model.newRelayURL) {
+                if !model.newRelayURL.isEmpty && !RelaySettingsModel.isValid(RelaySettingsModel.canonicalInput(model.newRelayURL)) {
                     Text(L("invalidRelayUrl"))
                         .font(.system(size: 13))
                         .foregroundStyle(AppColors.error)
                 }
-                PrimaryButton(title: L("addRelay"), isEnabled: RelaySettingsModel.isValid(model.newRelayURL)) {
+                PrimaryButton(title: L("addRelay"), isEnabled: RelaySettingsModel.isValid(RelaySettingsModel.canonicalInput(model.newRelayURL))) {
                     Task { await model.add() }
                 }
                 .accessibilityIdentifier("relays-add-confirm")

@@ -179,6 +179,12 @@ struct WalletOnboardingView: View {
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                VStack(spacing: 10) {
+                    PrimaryButton(title: L("walletConnectWallet")) { model.sheet = .connect(nil) }
+                        .accessibilityIdentifier("wallet-connect")
+                    SecondaryButton(title: L("scanQRCode"), systemImage: "qrcode.viewfinder") { model.showScanner = true }
+                        .accessibilityIdentifier("wallet-connect-scan")
+                }
                 Text(L("nwcDisclaimer"))
                     .font(.system(size: 13))
                     .foregroundStyle(AppColors.textSecondary)
@@ -189,16 +195,6 @@ struct WalletOnboardingView: View {
             .padding(.bottom, 24)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 10) {
-                PrimaryButton(title: L("walletConnectWallet")) { model.sheet = .connect(nil) }
-                    .accessibilityIdentifier("wallet-connect")
-                SecondaryButton(title: L("scanQRCode"), systemImage: "qrcode.viewfinder") { model.showScanner = true }
-                    .accessibilityIdentifier("wallet-connect-scan")
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-        }
         .accessibilityIdentifier("wallet-onboarding")
     }
 
