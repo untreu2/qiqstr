@@ -3135,3 +3135,27 @@ mod tests {
         assert!(db_path_state().read().await.is_none());
     }
 }
+
+pub async fn fetch_events_from_relays(
+    filter_json: String,
+    relay_urls: Vec<String>,
+    timeout_secs: u32,
+) -> Result<String> {
+    let filter = Filter::from_json(&filter_json)?;
+    let client = Client::default();
+    for url in &relay_urls {
+        RelayUrl::parse(url)?;
+        client.add_relay(url.as_str()).await?;
+    }
+    client.connect().await;
+    let events = client
+        .fetch_events(filter, Duration::from_secs(timeout_secs as u64))
+        .await;
+    client.shutdown().await;
+    let events = events?;
+    let list: Vec<serde_json::Value> = events
+        .into_iter()
+        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .collect();
+    Ok(serde_json::to_string(&list)?)
+}

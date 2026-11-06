@@ -2755,6 +2755,20 @@ public func fetchEventsByIds(eventIds: [String], timeoutSecs: UInt32)async throw
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
+public func fetchEventsFromRelays(filterJson: String, relayUrls: [String], timeoutSecs: UInt32)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_fetch_events_from_relays(FfiConverterString.lower(filterJson),FfiConverterSequenceString.lower(relayUrls),FfiConverterUInt32.lower(timeoutSecs)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_qiqstr_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
+}
 public func fetchEventsMultiFilter(filtersJson: String, timeoutSecs: UInt32)async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
@@ -3862,6 +3876,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_fetch_events_by_ids() != 11900) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_fetch_events_from_relays() != 37407) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_fetch_events_multi_filter() != 60454) {

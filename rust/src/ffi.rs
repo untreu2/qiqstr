@@ -566,3 +566,6 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
 
 #[uniffi::export]
 pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String, QiqError> { on_rt(async move { api::relay::fetch_follower_counts(pubkey_hexes).await }).await }
+
+#[uniffi::export]
+pub async fn fetch_events_from_relays(filter_json: String, relay_urls: Vec<String>, timeout_secs: u32) -> Result<String, QiqError> { on_rt(async move { api::relay::fetch_events_from_relays(filter_json, relay_urls, timeout_secs).await }).await }
