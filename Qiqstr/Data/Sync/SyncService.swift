@@ -318,6 +318,7 @@ final class SyncService {
                     if created > (notificationLastEventTs ?? 0) { notificationLastEventTs = created }
                     _ = try? await dbSaveEvents(eventsJson: "[\(raw)]")
                     if event.str("pubkey") != me { NotificationBadge.shared.markUnread() }
+                    LocalNotificationService.shared.handleRealtime(event, me: me)
                     bus.notificationsChanged()
                     fetchMissingProfiles([event.str("pubkey") ?? ""].filter { !$0.isEmpty })
                 }
