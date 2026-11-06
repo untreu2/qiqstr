@@ -115,6 +115,7 @@ struct ProfileMenu: View {
     @Binding var confirmMute: Bool
     @Binding var showReport: Bool
     @State private var mutes = MuteService.shared
+    @State private var showAddToList = false
 
     var body: some View {
         Menu {
@@ -123,10 +124,26 @@ struct ProfileMenu: View {
                 ToastCenter.shared.show(L("copiedNpub"), style: .success)
             } label: { Label(L("profileCopyNpub"), systemImage: "doc.on.doc") }
             .accessibilityIdentifier("menu-copy-npub")
-            ShareLink(item: URL(string: "nostr:\(model.npub)") ?? URL(string: "nostr:")!) {
-                Label(L("share"), systemImage: "square.and.arrow.up")
+            Button {
+                UIPasteboard.general.url = model.profileLink
+                ToastCenter.shared.show(L("profileLinkCopied"), style: .success)
+            } label: { Label(L("profileCopyLink"), systemImage: "link") }
+            .accessibilityIdentifier("menu-copy-link")
+            ShareLink(item: model.profileLink, subject: Text(model.displayName)) {
+                Label(L("shareProfile"), systemImage: "square.and.arrow.up")
             }
             .accessibilityIdentifier("menu-share")
+            Button { Router.shared.sheet = .shareProfile(model.pubkey) } label: {
+                Label(L("profileShowQRCode"), systemImage: "qrcode")
+            }
+            .accessibilityIdentifier("menu-qr")
+            if !model.isMe, Session.shared.privateKey != nil {
+                Divider()
+                Button { showAddToList = true } label: {
+                    Label(L("addToList"), systemImage: "text.badge.plus")
+                }
+                .accessibilityIdentifier("menu-add-to-list")
+            }
             if !model.isMe, Session.shared.pubkey != nil {
                 Divider()
                 if mutes.isMuted(model.pubkey) {
@@ -150,5 +167,8 @@ struct ProfileMenu: View {
         }
         .accessibilityLabel(L("profileMoreActions"))
         .accessibilityIdentifier("profile-menu")
+        .sheet(isPresented: $showAddToList) {
+            AddToListSheet(pubkey: model.pubkey, displayName: model.displayName)
+        }
     }
 }

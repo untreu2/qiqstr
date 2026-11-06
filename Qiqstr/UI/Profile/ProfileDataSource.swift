@@ -126,6 +126,24 @@ enum ProfileDataSource {
         return FollowScore(count: count, avatarUrls: obj.strings("avatarUrls"))
     }
 
+    static func mutualFollowers(target: String) async -> [String] {
+        guard let me = session.pubkey, me != target else { return [] }
+        let mine = await following(me).filter { $0 != me && $0 != target }
+        guard !mine.isEmpty else { return [] }
+        var matched = Set<String>()
+        for start in stride(from: 0, to: mine.count, by: 500) {
+            let chunk = Array(mine[start..<min(start + 500, mine.count)])
+            let filter = JSON.string(["kinds": [3], "authors": chunk, "#p": [target]])
+            for event in JSON.array(try? await dbQueryEvents(filterJson: filter, limit: UInt32(chunk.count))) {
+                if let author = event.str("pubkey") { matched.insert(author) }
+            }
+        }
+        if matched.isEmpty {
+            for pubkey in mine where await following(pubkey).contains(target) { matched.insert(pubkey) }
+        }
+        return mine.filter { matched.contains($0) }
+    }
+
     static func followers(_ pubkey: String) async -> [String] {
         let events = await SyncService.shared.fetchEvents(["kinds": [3], "#p": [pubkey], "limit": 500], timeout: 12)
         var newestByAuthor: [String: Int] = [:]

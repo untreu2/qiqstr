@@ -8,6 +8,7 @@ struct ProfileView: View {
     @State private var mutes = MuteService.shared
     @State private var scrollOffset: CGFloat = 0
     @State private var viewerImage: ViewableImage?
+    @State private var mediaSelection: ProfileMediaSelection?
     @State private var confirmMute = false
     @State private var showReport = false
 
@@ -29,6 +30,9 @@ struct ProfileView: View {
         .navigationTitle(model.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $viewerImage) { ProfileImageViewer(url: $0.url) }
+        .fullScreenCover(item: $mediaSelection) { selection in
+            ProfileMediaPager(entries: model.media, startIndex: selection.index)
+        }
     }
 
     private var content: some View {
@@ -164,23 +168,16 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var photoGrid: some View {
-        let photos = model.photos
-        if photos.isEmpty {
+        if model.media.isEmpty {
             if model.isSyncingNotes || !model.hasLoadedNotes {
                 loadingRow
             } else {
-                EmptyStateView(systemImage: "photo.on.rectangle", title: L("noPhotosYet"))
+                EmptyStateView(systemImage: "photo.on.rectangle", title: L("profileNoMedia"))
                     .padding(.top, 12)
                     .accessibilityIdentifier("profile-photos-empty")
             }
         } else {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
-                ForEach(photos) { photo in
-                    PhotoTile(photo: photo) { viewerImage = ViewableImage(url: photo.url) }
-                }
-            }
-            .padding(.horizontal, 2)
-            .accessibilityIdentifier("profile-photos")
+            ProfileMediaGrid(entries: model.media) { mediaSelection = ProfileMediaSelection(index: $0) }
         }
     }
 
@@ -190,7 +187,7 @@ struct ProfileView: View {
             switch model.tab {
             case .notes: !model.notes.isEmpty
             case .replies: !model.replies.isEmpty
-            case .photos: !model.photos.isEmpty
+            case .photos: !model.media.isEmpty
             case .likes: !model.likes.isEmpty
             }
         }()
@@ -257,28 +254,5 @@ private struct PinnedNoteRow: View {
         } catch {
             ToastCenter.shared.error(error)
         }
-    }
-}
-
-private struct PhotoTile: View {
-    let photo: PhotoEntry
-    var onView: () -> Void
-
-    var body: some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                RemoteImage(url: photo.url, maxPixel: 500) {
-                    Rectangle().fill(AppColors.tile)
-                }
-            }
-            .clipped()
-            .contentShape(Rectangle())
-            .onTapGesture { Router.shared.push(.thread(photo.noteId)) }
-            .contextMenu {
-                Button(action: onView) { Label(L("profileViewImage"), systemImage: "arrow.up.left.and.arrow.down.right") }
-                Button { Router.shared.push(.thread(photo.noteId)) } label: { Label(L("profileOpenNote"), systemImage: "text.bubble") }
-            }
-            .accessibilityIdentifier("profile-photo-tile")
     }
 }
