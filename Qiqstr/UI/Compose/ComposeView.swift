@@ -56,6 +56,7 @@ struct ComposeView: View {
                         }
                     }
                     .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
                     .disabled(!model.canPost)
                     .accessibilityIdentifier("compose-post")
                 }

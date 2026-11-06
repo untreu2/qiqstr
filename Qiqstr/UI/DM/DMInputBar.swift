@@ -36,6 +36,7 @@ struct DMInputBar: View {
                                 .frame(width: 22, height: 22)
                         }
                         .buttonStyle(.glassProminent)
+                        .foregroundStyle(AppColors.background)
                         .buttonBorderShape(.circle)
                         .disabled(!model.canSend)
                         .opacity(model.canSend ? 1 : 0.35)

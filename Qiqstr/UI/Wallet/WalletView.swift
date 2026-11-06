@@ -193,6 +193,7 @@ struct WalletOnboardingView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
                     .buttonBorderShape(.capsule)
                     .controlSize(.large)
                     .accessibilityIdentifier("wallet-connect")

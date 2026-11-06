@@ -25,7 +25,11 @@ final class QiqstrUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Wallet"].exists)
         XCTAssertTrue(app.buttons["Notifications"].exists)
         app.buttons["Wallet"].tap()
-        XCTAssertTrue(app.buttons["wallet-connect"].waitForExistence(timeout: 10))
+        let connect = app.buttons["wallet-connect"]
+        for _ in 0..<5 where !connect.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(connect.waitForExistence(timeout: 10))
     }
 
     private static func randomKeyHex() -> String {

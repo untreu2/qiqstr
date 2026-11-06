@@ -207,6 +207,7 @@ struct FeedEmptyState: View {
         } actions: {
             Button(L("suggestedFollows")) { Router.shared.push(.suggestedFollows) }
                 .buttonStyle(.glassProminent)
+                .foregroundStyle(AppColors.background)
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .accessibilityIdentifier("feed-empty-suggested")

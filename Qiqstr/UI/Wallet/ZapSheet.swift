@@ -145,6 +145,7 @@ struct ZapSheet: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
                     .buttonBorderShape(.capsule)
                     .controlSize(.extraLarge)
                     .disabled(!model.canSubmit)
@@ -185,7 +186,7 @@ struct ZapSheet: View {
                     .font(.headline)
                     .lineLimit(1)
                 Group {
-                    if model.isLoadingRecipient {
+                    if model.isLoadingRecipient && model.canZap {
                         Text(L("loading"))
                     } else if let address = model.recipient?.lightningAddress {
                         Label(address, systemImage: "bolt.fill")
@@ -228,6 +229,7 @@ struct ZapSheet: View {
             if selected {
                 Button { select(preset) } label: { label }
                     .buttonStyle(.borderedProminent)
+                    .foregroundStyle(AppColors.background)
             } else {
                 Button { select(preset) } label: { label }
                     .buttonStyle(.bordered)
@@ -263,6 +265,7 @@ struct ZapSheet: View {
                         .font(.headline)
                 }
                 .buttonStyle(.glassProminent)
+                .foregroundStyle(AppColors.background)
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .padding(.top, 4)

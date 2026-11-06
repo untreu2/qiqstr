@@ -67,6 +67,7 @@ struct EditProfileView: View {
                 } else {
                     Button(L("save")) { save() }
                         .buttonStyle(.glassProminent)
+                        .foregroundStyle(AppColors.background)
                         .disabled(!model.canSave)
                         .accessibilityIdentifier("edit-profile-save")
                 }

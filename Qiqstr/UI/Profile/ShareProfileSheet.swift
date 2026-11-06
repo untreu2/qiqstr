@@ -146,6 +146,7 @@ struct ShareProfileSheet: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
+            .foregroundStyle(AppColors.background)
             .buttonBorderShape(.capsule)
             .controlSize(.extraLarge)
             .accessibilityIdentifier("share-profile-sharelink")

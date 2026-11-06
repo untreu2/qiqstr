@@ -127,6 +127,7 @@ struct AuthLoginView: View {
                     .font(.body.weight(.semibold))
             }
             .buttonStyle(.glassProminent)
+            .foregroundStyle(AppColors.background)
             .buttonBorderShape(.circle)
             .controlSize(.small)
             .accessibilityLabel(L("authPaste"))

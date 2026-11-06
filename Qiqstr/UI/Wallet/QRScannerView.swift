@@ -100,6 +100,7 @@ struct QRScannerView: View {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                 }
                 .buttonStyle(.glassProminent)
+                .foregroundStyle(AppColors.background)
                 .tint(.white)
                 .foregroundStyle(.black)
                 .padding(.top, 6)

@@ -227,6 +227,7 @@ struct SendSheet: View {
                                 model.submit()
                             }
                             .buttonStyle(.glassProminent)
+                            .foregroundStyle(AppColors.background)
                             .disabled(!model.canSubmit)
                             .accessibilityIdentifier("send-submit")
                         }

@@ -217,6 +217,7 @@ struct ReportNoteSheet: View {
                         if let reason { actions.report(note, reason: reason) }
                     }
                     .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
                     .disabled(reason == nil || actions.isWorking)
                     .accessibilityIdentifier("report-submit")
                 }

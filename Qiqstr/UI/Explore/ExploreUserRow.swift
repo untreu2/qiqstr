@@ -60,7 +60,7 @@ struct ExploreFollowButton: View {
         if following {
             button.buttonStyle(.bordered)
         } else {
-            button.buttonStyle(.borderedProminent)
+            button.buttonStyle(.borderedProminent).foregroundStyle(AppColors.background)
         }
     }
 

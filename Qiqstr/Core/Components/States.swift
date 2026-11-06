@@ -22,6 +22,7 @@ struct EmptyStateView: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
                     .buttonBorderShape(.capsule)
             }
         }

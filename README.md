@@ -53,7 +53,7 @@ MIT
 
 | Feed | Thread | Profile | Messages |
 |---|---|---|---|
-| ![](docs/screenshots/01-feed.png) | ![](docs/screenshots/02-thread.png) | ![](docs/screenshots/04-profile.png) | ![](docs/screenshots/08-chat.png) |
+| ![](docs/screenshots/01-feed.png) | ![](docs/screenshots/02-thread.png) | ![](docs/screenshots/04-profile.png) | ![](docs/screenshots/07-messages.png) |
 | **Wallet** | **Notifications** | **Reads** | **Settings** |
 | ![](docs/screenshots/09-wallet.png) | ![](docs/screenshots/10-notifications.png) | ![](docs/screenshots/11-reads.png) | ![](docs/screenshots/16-settings.png) |
 

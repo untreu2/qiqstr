@@ -16,6 +16,7 @@ struct PrimaryButton: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.glassProminent)
+        .foregroundStyle(AppColors.background)
         .buttonBorderShape(.capsule)
         .controlSize(.extraLarge)
         .disabled(!isEnabled || isLoading)
@@ -54,6 +55,7 @@ struct PillButton: View {
         if filled {
             Button(action: action) { label }
                 .buttonStyle(.glassProminent)
+                .foregroundStyle(AppColors.background)
                 .buttonBorderShape(.capsule)
         } else {
             Button(action: action) { label }

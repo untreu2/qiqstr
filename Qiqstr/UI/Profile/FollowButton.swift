@@ -52,7 +52,7 @@ struct FollowButton: View {
         if isFollowing {
             button.buttonStyle(.glass)
         } else {
-            button.buttonStyle(.glassProminent)
+            button.buttonStyle(.glassProminent).foregroundStyle(AppColors.background)
         }
     }
 
