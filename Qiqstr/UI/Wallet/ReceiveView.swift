@@ -210,7 +210,7 @@ struct ReceiveView: View {
                 .buttonStyle(PressableStyle())
                 .disabled(model.isExpired)
                 Text(verbatim: "\(Sats.format(invoice.amountSats)) \(L("walletSats"))")
-                    .font(.title.weight(.bold))
+                    .font(.title.weight(.semibold))
                     .fontDesign(.rounded)
                     .monospacedDigit()
                     .accessibilityIdentifier("receive-invoice-amount")

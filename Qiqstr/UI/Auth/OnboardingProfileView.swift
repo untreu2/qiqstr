@@ -207,7 +207,7 @@ struct OnboardingProfileView: View {
                     }
                 }
                 .frame(width: 84, height: 84)
-                .padding(3)
+                .padding(4)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
             }
             .buttonStyle(.plain)

@@ -59,7 +59,7 @@ struct DMMessageBubble: View {
                 .tint(mine ? AppColors.background : AppColors.textPrimary)
                 .textSelection(.disabled)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 11)
+                .padding(.vertical, 12)
                 .background(mine ? AppColors.textPrimary : AppColors.tile, in: bubbleShape)
                 .opacity(message.state == .sending ? 0.7 : 1)
                 .contentShape(.contextMenuPreview, bubbleShape)

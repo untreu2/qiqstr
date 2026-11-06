@@ -375,15 +375,15 @@ struct PaymentSuccessView: View {
                 .imageScale(.large)
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.white, AppColors.success)
-                .symbolEffect(.bounce, value: appeared)
-                .scaleEffect(appeared ? 1.6 : 0.6)
+                .scaleEffect(1.6)
+                .offset(y: appeared ? 0 : 8)
                 .opacity(appeared ? 1 : 0)
                 .padding(.bottom, 16)
             Text(title)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
             Text(verbatim: "\(Sats.format(amount)) \(L("walletSats"))")
-                .font(.largeTitle.weight(.bold))
+                .font(.largeTitle.weight(.semibold))
                 .fontDesign(.rounded)
                 .monospacedDigit()
             if let fee, fee > 0 {
@@ -396,7 +396,7 @@ struct PaymentSuccessView: View {
                 .accessibilityIdentifier("payment-success-done")
         }
         .padding(20)
-        .onAppear { withAnimation(.spring(duration: 0.45, bounce: 0.4)) { appeared = true } }
+        .onAppear { withAnimation(.easeOut(duration: 0.25)) { appeared = true } }
         .accessibilityIdentifier("payment-success")
     }
 }

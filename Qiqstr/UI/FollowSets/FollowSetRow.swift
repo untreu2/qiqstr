@@ -19,7 +19,7 @@ struct FollowSetRow: View {
     var body: some View {
         HStack(spacing: 14) {
             FollowSetAvatarStack(pubkeys: Array(set.pubkeys.prefix(3)), fallbackIcon: "person.2")
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(set.displayTitle)
                         .font(.headline)

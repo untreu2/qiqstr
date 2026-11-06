@@ -117,7 +117,7 @@ struct SidebarView: View {
                     ProfileAvatar(pubkey: me, size: 60)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile?.bestName.nilIfEmpty ?? L("anonymous"))
-                            .font(.title2.bold())
+                            .font(.title2.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         if let nip05 = profile?.nip05.nilIfEmpty {

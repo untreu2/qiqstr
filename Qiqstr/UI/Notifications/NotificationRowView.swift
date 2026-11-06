@@ -120,7 +120,7 @@ struct NotificationRowView: View {
                 Text(emoji).font(.caption2)
             } else {
                 Image(systemName: group.kind.symbol)
-                    .font(.caption2.weight(.bold))
+                    .font(.caption2.weight(.semibold))
                     .imageScale(.small)
                     .foregroundStyle(group.kind.tint)
             }

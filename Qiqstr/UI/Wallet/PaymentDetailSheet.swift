@@ -57,7 +57,7 @@ struct PaymentDetailSheet: View {
         VStack(spacing: 10) {
             TransactionIcon(isIncoming: transaction.isIncoming, textStyle: .title)
             Text(verbatim: "\(WalletFormat.signed(transaction.amountSats, incoming: transaction.isIncoming)) \(L("walletSats"))")
-                .font(.largeTitle.weight(.bold))
+                .font(.largeTitle.weight(.semibold))
                 .fontDesign(.rounded)
                 .monospacedDigit()
                 .foregroundStyle(transaction.isIncoming ? AppColors.success : .primary)

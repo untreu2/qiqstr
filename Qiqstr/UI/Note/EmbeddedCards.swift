@@ -126,7 +126,7 @@ struct NoteArticleCard: View {
                     IconTile(systemImage: "doc.richtext", size: 72, tint: AppColors.textSecondary)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L("article").uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(L("article")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Text(article.map { $0.title.isEmpty ? L("untitledArticle") : $0.title } ?? (failed ? L("articleNotFound") : L("article")))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.textPrimary)

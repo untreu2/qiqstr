@@ -25,7 +25,7 @@ struct QiqTextField: View {
             if let trailing { trailing }
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 15)
+        .padding(.vertical, 16)
         .background(AppColors.inputFill, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }

@@ -71,7 +71,7 @@ struct ShareProfileSheet: View {
         VStack(spacing: 16) {
             HStack(spacing: 12) {
                 ProfileAvatar(pubkey: pubkey, size: 52)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(profile?.bestName ?? L("anonymous"))
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)

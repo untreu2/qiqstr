@@ -211,7 +211,7 @@ struct DMConversationRow: View {
                 }
             }
             .frame(width: 10, height: 10)
-            .padding(.top, 21)
+            .padding(.top, 20)
             ProfileAvatar(pubkey: conversation.peer, size: 52)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {

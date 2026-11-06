@@ -26,12 +26,12 @@ struct DMInputBar: View {
                     .lineLimit(1...6)
                     .textInputAutocapitalization(.sentences)
                     .focused(focus)
-                    .padding(.vertical, 9)
+                    .padding(.vertical, 8)
                     .accessibilityIdentifier("dm-input")
 
                 Button(action: model.send) {
                     Image(systemName: "arrow.up")
-                        .font(.body.weight(.bold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(AppColors.background)
                         .frame(width: 40, height: 40)
                         .background(AppColors.textPrimary, in: Circle())
@@ -82,7 +82,7 @@ struct DMInputBar: View {
                             model.removeAttachment(attachment.id)
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.caption2.weight(.bold))
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .frame(width: 22, height: 22)
                         }

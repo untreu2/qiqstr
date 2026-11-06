@@ -13,7 +13,7 @@
 "authStepOf" = "Step {current} of {total}";
 "authSuggestedBrowseSubtitle" = "Popular people on Nostr. Pick anyone you would like to follow.";
 "authSuggestedSubtitle" = "Select at least 3 people to follow to get started.";
-"authTermsTitle" = "Terms of Use";
+"authTermsTitle" = "Terms of use";
 "authThemeDark" = "Dark";
 "authThemeLight" = "Light";
 "authThemeSystem" = "System";

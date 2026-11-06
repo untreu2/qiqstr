@@ -38,11 +38,11 @@
 "walletExpiresIn" = "Kalan süre";
 "walletAmountRange" = "Tutar {min} ile {max} sats arasında olmalı.";
 "walletAmountlessInvoice" = "Tutarsız faturalar desteklenmiyor.";
-"walletInvoiceExpired" = "Bu faturanın süresi doldu.";
+"walletInvoiceExpired" = "Bu faturanın süresi doldu";
 "walletWrongNetwork" = "Bu fatura Bitcoin ana ağı için değil.";
 "walletInvoiceAmountMismatch" = "Fatura tutarı istenen tutarla eşleşmiyor.";
 "walletEmptyInvoice" = "Cüzdan bir fatura döndürmedi.";
-"walletNoAccount" = "Etkin hesap yok.";
+"walletNoAccount" = "Etkin hesap yok";
 "walletCreateInvoice" = "Fatura oluştur";
 "walletNewInvoice" = "Yeni fatura";
 "walletWaitingForPayment" = "Ödeme bekleniyor…";
@@ -56,7 +56,7 @@
 "walletNoQRCodeFound" = "Bu görselde QR kod bulunamadı";
 "walletCustomAmount" = "Özel tutar (sats)";
 "walletZapAmount" = "{amount} sats zap at";
-"walletZapped" = "{user} kullanıcısına {sats} sats zap atıldı!";
+"walletZapped" = "{user} kullanıcısına {sats} sats zap atıldı";
 "walletZapConnectTitle" = "Zap atmak için cüzdan bağla";
 "walletZapConnectMessage" = "Zaplar Lightning cüzdanından ödenir. Cüzdan sekmesinden Nostr Wallet Connect ile bir cüzdan bağla.";
 "zapNotSupported" = "Bu Lightning adresi Nostr zaplarını desteklemiyor.";

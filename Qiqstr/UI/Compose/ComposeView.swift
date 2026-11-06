@@ -84,7 +84,7 @@ struct ComposeView: View {
                         .font(.body)
                         .foregroundStyle(.tertiary)
                         .padding(.top, 8)
-                        .padding(.leading, 5)
+                        .padding(.leading, 4)
                         .allowsHitTesting(false)
                 }
                 TextEditor(text: $model.text, selection: $model.selection)
@@ -230,7 +230,7 @@ struct ComposeAttachmentTile: View {
         .overlay(alignment: .topTrailing) {
             Button(action: onRemove) {
                 Image(systemName: "xmark")
-                    .font(.caption.weight(.bold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColors.textPrimary)
                     .frame(width: 26, height: 26)
             }

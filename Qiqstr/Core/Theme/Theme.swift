@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 enum AppColors {
-    static let accent = Color(light: Color(red: 210/255, green: 100/255, blue: 0), dark: Color(red: 240/255, green: 160/255, blue: 90/255))
+    static let accent = Color(uiColor: .link)
     static let background = Color(light: .white, dark: Color(red: 10/255, green: 10/255, blue: 10/255))
     static let surface = Color(light: .white, dark: Color(red: 15/255, green: 15/255, blue: 15/255))
     static let textPrimary = Color(light: .black, dark: .white)
@@ -21,6 +21,7 @@ enum AppColors {
     static let zap = Color(hex: 0xECB200)
     static let switchActive = Color(hex: 0x2E9E4F)
     static let link = Color(uiColor: .link)
+    static let settingsTile = Color(light: Color(hex: 0x3A3A3C), dark: Color(hex: 0x48484A))
     static let tile = Color(light: Color.black.opacity(0.08), dark: Color.white.opacity(0.08))
 }
 

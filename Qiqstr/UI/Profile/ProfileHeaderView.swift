@@ -62,7 +62,7 @@ struct ProfileHeaderView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(model.displayName)
-                    .font(.title2.weight(.bold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .accessibilityIdentifier("profile-name")
@@ -82,7 +82,7 @@ struct ProfileHeaderView: View {
                     Text(L("mutedButton"))
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
+                        .padding(.vertical, 4)
                         .background(AppColors.tile, in: Capsule())
                         .foregroundStyle(.secondary)
                 }
@@ -91,7 +91,7 @@ struct ProfileHeaderView: View {
                 Text(handle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
             }
             Button(action: copyNpub) {
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     Text(Profile.shortNpub(model.pubkey))
                         .font(.subheadline.monospaced())
                     Image(systemName: "doc.on.doc").font(.caption)
@@ -108,7 +108,7 @@ struct ProfileHeaderView: View {
     private var details: some View {
         let hasDetails = !profile.nip05.isEmpty || !profile.lud16.isEmpty || model.websiteURL != nil || !profile.location.isEmpty
         if hasDetails {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 8) {
                 if !profile.nip05.isEmpty {
                     DetailRow(systemImage: model.nip05Verified ? "checkmark.seal" : "at", text: Nip05Verifier.display(profile.nip05))
                         .accessibilityIdentifier("profile-nip05")
@@ -156,7 +156,7 @@ struct ProfileHeaderView: View {
                 Text(L("followingYou"))
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 4)
                     .background(AppColors.tile, in: Capsule())
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("profile-follows-you")

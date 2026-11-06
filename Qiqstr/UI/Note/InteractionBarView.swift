@@ -94,7 +94,7 @@ struct InteractionBarView: View {
     }
 
     private func barLabel(_ symbol: String, count: Int, tint: Color?) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Image(systemName: symbol)
                 .foregroundStyle(tint ?? Color.secondary)
             if count > 0 {

@@ -56,7 +56,7 @@ struct AuthTermsSheet: View {
         switch block {
         case .heading(let level, let text):
             Text(inline(text))
-                .font(level == 1 ? .title.bold() : level == 2 ? .title2.weight(.semibold) : level == 3 ? .headline : .subheadline.weight(.semibold))
+                .font(level == 1 ? .title.weight(.semibold) : level == 2 ? .title2.weight(.semibold) : level == 3 ? .headline : .subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .padding(.top, level <= 2 ? 10 : 6)
         case .bullet(let text):

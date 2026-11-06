@@ -19,35 +19,35 @@ struct SettingsView: View {
                 Section { accountHeader(pubkey) }
             }
             Section {
-                link(.keys, L("keys"), "key.horizontal.fill", fill: .gray)
-                link(.relays, L("relays"), "point.3.connected.trianglepath.dotted", fill: .blue)
-                link(.muted, L("muted"), "bell.slash.fill", fill: .red)
+                link(.keys, L("keys"), "key.horizontal.fill", fill: AppColors.settingsTile)
+                link(.relays, L("relays"), "point.3.connected.trianglepath.dotted", fill: AppColors.settingsTile)
+                link(.muted, L("muted"), "bell.slash.fill", fill: AppColors.settingsTile)
             }
             Section {
-                link(.display, L("display"), "circle.lefthalf.filled", fill: .indigo)
-                link(.language, L("language"), "character.bubble", fill: .blue, value: currentLanguageName)
-                link(.payments, L("payments"), "bolt.fill", fill: .orange)
+                link(.display, L("display"), "circle.lefthalf.filled", fill: AppColors.settingsTile)
+                link(.language, L("language"), "character.bubble", fill: AppColors.settingsTile, value: currentLanguageName)
+                link(.payments, L("payments"), "bolt.fill", fill: AppColors.settingsTile)
             }
             Section {
-                link(.database, L("databaseCache"), "internaldrive.fill", fill: .gray)
-                link(.eventManager, L("yourDataOnRelays"), "antenna.radiowaves.left.and.right", fill: .green)
+                link(.database, L("databaseCache"), "internaldrive.fill", fill: AppColors.settingsTile)
+                link(.eventManager, L("yourDataOnRelays"), "antenna.radiowaves.left.and.right", fill: AppColors.settingsTile)
             }
             Section {
                 Button { router.sheet = .switchAccount } label: {
-                    SettingsRowLabel(title: L("switchAccount"), systemImage: "person.2.fill", value: session.accounts.count > 1 ? "\(session.accounts.count)" : nil, fill: .purple)
+                    SettingsRowLabel(title: L("switchAccount"), systemImage: "person.2.fill", value: session.accounts.count > 1 ? "\(session.accounts.count)" : nil, fill: AppColors.settingsTile)
                 }
                 .accessibilityIdentifier("settings-switch-account")
             }
             Section {
                 Button { router.sheet = .url(Self.termsURL) } label: {
-                    SettingsRowLabel(title: L("settingsTerms"), systemImage: "doc.text.fill", fill: .gray)
+                    SettingsRowLabel(title: L("settingsTerms"), systemImage: "doc.text.fill", fill: AppColors.settingsTile)
                 }
                 .accessibilityIdentifier("settings-terms")
                 Button { router.sheet = .url(Self.sourceURL) } label: {
-                    SettingsRowLabel(title: L("settingsSourceCode"), systemImage: "chevron.left.forwardslash.chevron.right", fill: .gray)
+                    SettingsRowLabel(title: L("settingsSourceCode"), systemImage: "chevron.left.forwardslash.chevron.right", fill: AppColors.settingsTile)
                 }
                 .accessibilityIdentifier("settings-source")
-                SettingsRowLabel(title: L("version"), systemImage: "info", value: Self.versionString, fill: .gray)
+                SettingsRowLabel(title: L("version"), systemImage: "info", value: Self.versionString, fill: AppColors.settingsTile)
                     .accessibilityIdentifier("settings-version")
             }
             Section {

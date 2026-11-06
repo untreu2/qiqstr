@@ -64,9 +64,9 @@ struct DMChatView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
             }
-            .padding(.leading, 5)
+            .padding(.leading, 4)
             .padding(.trailing, 16)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .frame(maxWidth: 230)
             .contentShape(Capsule())
         }

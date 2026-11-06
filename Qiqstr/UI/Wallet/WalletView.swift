@@ -159,7 +159,7 @@ struct WalletOnboardingView: View {
                         .foregroundStyle(AppColors.zap)
                         .symbolRenderingMode(.hierarchical)
                     Text(L("nwcTitle"))
-                        .font(.title2.bold())
+                        .font(.title2.weight(.semibold))
                         .multilineTextAlignment(.center)
                     Text(L("walletNwcIntro"))
                         .font(.subheadline)
@@ -470,7 +470,7 @@ struct TransactionIcon: View {
     var body: some View {
         let color = isIncoming ? AppColors.success : AppColors.textPrimary
         Image(systemName: isIncoming ? "arrow.down.left" : "arrow.up.right")
-            .font(.system(textStyle).weight(.bold))
+            .font(.system(textStyle).weight(.semibold))
             .foregroundStyle(color)
             .frame(width: baseSize * scale, height: baseSize * scale)
             .background(color.opacity(0.12), in: Circle())

@@ -160,7 +160,7 @@ struct NoteStatisticsView: View {
     }
 
     private func zapAmount(_ sats: Int) -> some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Image(systemName: "bolt.fill").foregroundStyle(AppColors.zap)
             Text(Sats.format(sats)).font(.subheadline.weight(.semibold)).monospacedDigit()
         }

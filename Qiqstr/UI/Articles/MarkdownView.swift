@@ -131,7 +131,7 @@ struct MarkdownListView: View {
                 .foregroundStyle(.secondary)
         } else {
             Text("•")
-                .font(.body.bold())
+                .font(.body.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
     }

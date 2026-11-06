@@ -119,8 +119,8 @@ struct NoteLinkPreviewView: View {
                     }
                     .clipped()
             }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(m.site.uppercased())
+            VStack(alignment: .leading, spacing: 4) {
+                Text(m.site)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

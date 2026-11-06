@@ -85,12 +85,12 @@ struct FeedView: View {
                         .font(.headline)
                         .lineLimit(1)
                     Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 9)
+                .padding(.vertical, 8)
                 .frame(maxWidth: 220)
                 .contentShape(Capsule())
             }

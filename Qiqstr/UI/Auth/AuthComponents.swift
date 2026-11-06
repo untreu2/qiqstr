@@ -10,7 +10,7 @@ struct AuthHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.custom("Poppins-Bold", size: titleSize, relativeTo: .largeTitle))
+                .font(.custom("Poppins-SemiBold", size: titleSize, relativeTo: .largeTitle))
                 .foregroundStyle(.primary)
                 .kerning(-titleSize * 0.02)
                 .fixedSize(horizontal: false, vertical: true)

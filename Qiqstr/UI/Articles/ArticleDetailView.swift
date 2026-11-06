@@ -155,7 +155,7 @@ struct ArticleDetailView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(article.displayTitle)
-                            .font(.largeTitle.bold())
+                            .font(.largeTitle.weight(.semibold))
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)

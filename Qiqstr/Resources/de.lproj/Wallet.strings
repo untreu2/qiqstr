@@ -38,11 +38,11 @@
 "walletExpiresIn" = "Läuft ab in";
 "walletAmountRange" = "Der Betrag muss zwischen {min} und {max} Sats liegen.";
 "walletAmountlessInvoice" = "Rechnungen ohne Betrag werden nicht unterstützt.";
-"walletInvoiceExpired" = "Diese Rechnung ist abgelaufen.";
+"walletInvoiceExpired" = "Diese Rechnung ist abgelaufen";
 "walletWrongNetwork" = "Diese Rechnung ist nicht für das Bitcoin-Mainnet.";
 "walletInvoiceAmountMismatch" = "Der Rechnungsbetrag stimmt nicht mit dem angeforderten Betrag überein.";
 "walletEmptyInvoice" = "Die Wallet hat keine Rechnung zurückgegeben.";
-"walletNoAccount" = "Kein aktives Konto.";
+"walletNoAccount" = "Kein aktives Konto";
 "walletCreateInvoice" = "Rechnung erstellen";
 "walletNewInvoice" = "Neue Rechnung";
 "walletWaitingForPayment" = "Warte auf Zahlung…";
@@ -56,7 +56,7 @@
 "walletNoQRCodeFound" = "In diesem Bild wurde kein QR-Code gefunden";
 "walletCustomAmount" = "Eigener Betrag (Sats)";
 "walletZapAmount" = "{amount} Sats zappen";
-"walletZapped" = "{sats} Sats an {user} gezappt!";
+"walletZapped" = "{sats} Sats an {user} gezappt";
 "walletZapConnectTitle" = "Verbinde eine Wallet zum Zappen";
 "walletZapConnectMessage" = "Zaps werden aus deiner Lightning-Wallet bezahlt. Verbinde eine Wallet über Nostr Wallet Connect im Wallet-Tab.";
 "zapNotSupported" = "Diese Lightning-Adresse unterstützt keine Nostr-Zaps.";

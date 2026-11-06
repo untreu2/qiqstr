@@ -129,7 +129,7 @@ struct CompactArticleCard: View {
                 IconTile(systemImage: "doc.richtext", size: 72, tint: AppColors.textSecondary)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(L("article").uppercased())
+                Text(L("article"))
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(article.displayTitle)
