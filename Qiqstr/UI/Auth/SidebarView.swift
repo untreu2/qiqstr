@@ -154,7 +154,7 @@ struct SidebarView: View {
             }
             HStack(spacing: 18) {
                 countButton(model.followingCount, label: L("followingCount"), identifier: "sidebar-following-count") { open(.followList(me, .following)) }
-                countButton(model.followerCount, label: L("followers"), identifier: "sidebar-followers-count") { open(.followList(me, .followers)) }
+                countButton(model.followerCount, label: L(model.followerCount == 1 ? "followerSingular" : "followers"), identifier: "sidebar-followers-count") { open(.followList(me, .followers)) }
                 Spacer(minLength: 0)
             }
         }

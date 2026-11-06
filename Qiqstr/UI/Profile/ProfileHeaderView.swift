@@ -145,7 +145,7 @@ struct ProfileHeaderView: View {
                 Router.shared.push(.followList(model.pubkey, .following))
             }
             .accessibilityIdentifier("profile-following-count")
-            CountButton(value: model.followerCount, label: L("followers")) {
+            CountButton(value: model.followerCount, label: L(model.followerCount == 1 ? "followerSingular" : "followers")) {
                 Router.shared.push(.followList(model.pubkey, .followers))
             }
             .accessibilityIdentifier("profile-followers-count")
