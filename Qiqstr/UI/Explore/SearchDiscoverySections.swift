@@ -6,6 +6,7 @@ struct SearchDiscoverySections: View {
     var body: some View {
         if !model.recents.isEmpty { recentSection }
         if !model.trendingHashtags.isEmpty { hashtagSection }
+        LiveNowSection()
         if !model.suggestions.isEmpty { peopleSection }
         trendingSection
     }
