@@ -100,6 +100,11 @@ struct NoteLinkPreviewView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("note-link-preview")
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
             }
         }
         .task(id: url) {
