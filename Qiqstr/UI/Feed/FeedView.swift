@@ -25,7 +25,7 @@ struct FeedView: View {
         .navigationTitle(model.source.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
-        .toolbarTitleMenu { feedMenu }
+        .scrollEdgeEffectStyle(.soft, for: .top)
         .task { model.start() }
         .task(id: bus.feedVersion) { await model.reload() }
         .task(id: bus.listsVersion) { await model.loadLists() }
@@ -66,22 +66,38 @@ struct FeedView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Button { Router.shared.showSidebar = true } label: {
-                if let me = session.pubkey {
-                    ProfileAvatar(pubkey: me, size: 32)
-                } else {
-                    Image(systemName: "person.crop.circle")
+                Group {
+                    if let me = session.pubkey {
+                        ProfileAvatar(pubkey: me, size: 30)
+                    } else {
+                        Image(systemName: "person.crop.circle")
+                    }
                 }
+                .frame(width: 30, height: 30)
             }
             .accessibilityLabel(L("profile"))
             .accessibilityIdentifier("feed-avatar")
         }
-        .sharedBackgroundVisibility(.hidden)
-        ToolbarItem(placement: .title) {
-            Text(model.source.title)
-                .font(.headline)
-                .lineLimit(1)
-                .accessibilityIdentifier("feed-title")
+        ToolbarItem(placement: .principal) {
+            Menu { feedMenu } label: {
+                HStack(spacing: 6) {
+                    Text(model.source.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .frame(maxWidth: 220)
+                .contentShape(Capsule())
+            }
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .accessibilityIdentifier("feed-title")
         }
+        .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
             Button(L("newPost"), systemImage: "square.and.pencil") { Router.shared.compose() }
                 .accessibilityIdentifier("feed-compose")
@@ -120,6 +136,7 @@ struct NoteList: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(AppColors.background)
                     .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                    .listRowSeparator(note.listId == notes.first?.listId ? .hidden : .visible, edges: .top)
                     .noteSwipeActions(note)
                     .onAppear { onAppearNote(note) }
             }
