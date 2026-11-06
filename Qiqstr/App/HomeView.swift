@@ -58,14 +58,36 @@ struct HomeView: View {
         .zapRetryToast()
         .task {
             router.openPendingLink()
+            SharedInbox.shared.check()
             await clipboard.becameActive()
         }
+        .onOpenURL(perform: openDeepLink)
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active: Task { await clipboard.becameActive() }
+            case .active:
+                SharedInbox.shared.check()
+                Task { await clipboard.becameActive() }
             case .background: clipboard.enteredBackground()
             default: break
             }
+        }
+    }
+
+    private func openDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "qiqstr" else { return }
+        switch url.host()?.lowercased() {
+        case "compose":
+            SharedInbox.shared.handle(url)
+        case "search":
+            router.selectedTab = .search
+        case "messages":
+            router.selectedTab = .dm
+        case "notifications":
+            router.selectedTab = .notifications
+            badge.markRead()
+            WidgetBridge.markRead()
+        default:
+            break
         }
     }
 
@@ -88,7 +110,10 @@ struct HomeView: View {
                 } else {
                     if tab == router.selectedTab { router.popToRoot(tab) }
                     router.selectedTab = tab
-                    if tab == .notifications { badge.markRead() }
+                    if tab == .notifications {
+                        badge.markRead()
+                        WidgetBridge.markRead()
+                    }
                 }
             }
         )

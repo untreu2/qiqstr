@@ -1,0 +1,11 @@
+"widgetQuickActionsTitle" = "Hızlı işlemler";
+"widgetQuickActionsDescription" = "Gönderi başlat, ara veya mesajlarını aç.";
+"widgetNewPost" = "Yeni gönderi";
+"widgetSearch" = "Ara";
+"widgetMessages" = "Mesajlar";
+"widgetNotificationsTitle" = "Bildirimler";
+"widgetNotificationsDescription" = "Seni bekleyen bildirimlerin sayısını gör.";
+"widgetUnread" = "Okunmamış";
+"widgetNoNew" = "Yeni bildirim yok";
+"widgetLatestFrom %@" = "Son: %@";
+"widgetUnreadCount %lld" = "%lld okunmamış";
