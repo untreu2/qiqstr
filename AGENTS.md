@@ -56,7 +56,7 @@ It should feel like a native iOS 26 app with **Liquid Glass**: system `TabView` 
 
 ## Testing
 
-Debug builds accept `-QIQ_LOGIN <nsec|hex|mnemonic>` as a launch argument to sign in automatically when no account is stored. Use generated test keys only. Never message, react to, or zap real users from test accounts.
+Always test in light mode (simulator appearance light, in-app theme System). Debug builds accept `-QIQ_LOGIN <nsec|hex|mnemonic>` as a launch argument to sign in automatically when no account is stored. Use generated test keys only. Never message, react to, or zap real users from test accounts.
 
 ## Adding strings
 
