@@ -52,7 +52,7 @@ struct NoteMediaGridView: View {
                         if images.count > 4 {
                             ZStack {
                                 Color.black.opacity(0.45)
-                                Text("+\(images.count - 4)").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
+                                Text("+\(images.count - 4)").font(.title2.weight(.semibold)).foregroundStyle(.white)
                             }
                             .allowsHitTesting(false)
                         }
@@ -124,7 +124,7 @@ struct NotePhotoViewer: View {
                         Spacer()
                         if urls.count > 1 {
                             Text("\(index + 1) / \(urls.count)")
-                                .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                                .font(.subheadline.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 14)
                                 .frame(height: 36)
@@ -134,7 +134,7 @@ struct NotePhotoViewer: View {
                         if let url = URL(string: urls[min(index, urls.count - 1)]) {
                             ShareLink(item: url) {
                                 Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 17, weight: .semibold))
+                                    .font(.body.weight(.semibold))
                                     .foregroundStyle(.white)
                                     .frame(width: 44, height: 44)
                             }
@@ -261,7 +261,7 @@ struct NoteVideoView: View {
                     p.play()
                 } label: {
                     Image(systemName: "play.fill")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(width: 64, height: 64)
                 }

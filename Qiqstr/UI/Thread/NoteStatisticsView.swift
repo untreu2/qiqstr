@@ -80,14 +80,13 @@ struct NoteStatisticsView: View {
                 ForEach(model.reactionGroups) { group in
                     Section {
                         ForEach(group.items) { item in
-                            NoteInteractionUserRow(detail: item, trailing: AnyView(Text(group.emoji).font(.system(size: 20))))
+                            NoteInteractionUserRow(detail: item, trailing: AnyView(Text(group.emoji).font(.title3)))
                         }
                     } header: {
                         HStack(spacing: 6) {
-                            Text(group.emoji).font(.system(size: 17))
-                            Text("\(group.items.count)").font(.system(size: 14, weight: .semibold).monospacedDigit())
+                            Text(group.emoji)
+                            Text("\(group.items.count)").monospacedDigit()
                         }
-                        .foregroundStyle(AppColors.textSecondary)
                     }
                 }
             case .reposts:
@@ -103,11 +102,11 @@ struct NoteStatisticsView: View {
                     }
                 } header: {
                     if model.totalZapped > 0 {
-                        HStack(spacing: 4) {
+                        Label {
+                            Text("\(Sats.format(model.totalZapped)) \(L("feedSats"))").monospacedDigit()
+                        } icon: {
                             Image(systemName: "bolt.fill").foregroundStyle(AppColors.zap)
-                            Text("\(Sats.format(model.totalZapped)) \(L("feedSats"))").font(.system(size: 14, weight: .semibold).monospacedDigit())
                         }
-                        .foregroundStyle(AppColors.textSecondary)
                     }
                 }
             }
@@ -163,7 +162,7 @@ struct NoteStatisticsView: View {
     private func zapAmount(_ sats: Int) -> some View {
         HStack(spacing: 3) {
             Image(systemName: "bolt.fill").foregroundStyle(AppColors.zap)
-            Text(Sats.format(sats)).font(.system(size: 15, weight: .semibold).monospacedDigit())
+            Text(Sats.format(sats)).font(.subheadline.weight(.semibold)).monospacedDigit()
         }
     }
 }
@@ -180,17 +179,17 @@ struct NoteInteractionUserRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(cache.profile(detail.pubkey)?.bestName ?? Profile.shortNpub(detail.pubkey))
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppColors.textPrimary)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                         if let nip05 = cache.profile(detail.pubkey)?.nip05, !nip05.isEmpty {
-                            Image(systemName: "checkmark.seal.fill").font(.system(size: 11)).foregroundStyle(AppColors.textSecondary)
+                            Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     if detail.kind == .zap, !detail.content.isEmpty {
-                        Text(detail.content).font(.system(size: 14)).foregroundStyle(AppColors.textSecondary).lineLimit(2)
+                        Text(detail.content).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                     } else {
-                        Text(TimeFormat.relative(detail.createdAt)).font(.system(size: 13)).foregroundStyle(AppColors.textSecondary)
+                        Text(TimeFormat.relative(detail.createdAt)).font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
                 Spacer(minLength: 8)

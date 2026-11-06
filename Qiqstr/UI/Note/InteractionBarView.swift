@@ -7,8 +7,6 @@ struct InteractionBarView: View {
     var actions: NoteActionHandler
     @State private var store = NoteInteractionStore.shared
 
-    private var iconSize: CGFloat { compact ? 15 : 17 }
-
     var body: some View {
         HStack(spacing: 0) {
             replyButton
@@ -21,8 +19,8 @@ struct InteractionBarView: View {
             Spacer(minLength: 4)
             moreMenu
         }
-        .font(.system(size: iconSize))
-        .foregroundStyle(AppColors.textSecondary)
+        .font(compact ? .subheadline : .body)
+        .foregroundStyle(.secondary)
         .sensoryFeedback(.impact(weight: .light), trigger: model.counts.hasReacted)
         .sensoryFeedback(.impact(weight: .medium), trigger: model.counts.hasReposted)
     }
@@ -98,11 +96,12 @@ struct InteractionBarView: View {
     private func barLabel(_ symbol: String, count: Int, tint: Color?) -> some View {
         HStack(spacing: 5) {
             Image(systemName: symbol)
-                .foregroundStyle(tint ?? AppColors.textSecondary)
+                .foregroundStyle(tint ?? Color.secondary)
             if count > 0 {
                 Text(Sats.compact(count))
-                    .font(.system(size: compact ? 12 : 13, weight: .medium).monospacedDigit())
-                    .foregroundStyle(tint ?? AppColors.textSecondary)
+                    .font((compact ? Font.caption : Font.footnote).monospacedDigit())
+                    .foregroundStyle(tint ?? Color.secondary)
+                    .lineLimit(1)
                     .contentTransition(.numericText(value: Double(count)))
             }
         }

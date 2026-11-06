@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NoteContentView: View {
     let note: Note
-    var fontSize: CGFloat = 16
+    var font: Font = .body
     var selectable = false
     var expandedByDefault = false
     @State private var expanded = false
@@ -20,7 +20,7 @@ struct NoteContentView: View {
                             withAnimation(.snappy(duration: 0.25)) { expanded = true }
                         } label: {
                             Text(L("feedShowMore"))
-                                .font(.system(size: fontSize - 1, weight: .semibold))
+                                .font(font.weight(.semibold))
                                 .foregroundStyle(AppColors.accent)
                         }
                         .buttonStyle(.plain)
@@ -50,8 +50,8 @@ struct NoteContentView: View {
 
     @ViewBuilder
     private func textView(_ content: NoteContent, truncated: Bool) -> some View {
-        let text = Text(content.attributed(truncated ? (content.truncatedSegments ?? content.segments) : content.segments, size: fontSize, cache: cache))
-            .font(.system(size: fontSize))
+        let text = Text(content.attributed(truncated ? (content.truncatedSegments ?? content.segments) : content.segments, font: font, cache: cache))
+            .font(font)
             .foregroundStyle(AppColors.textPrimary)
             .lineSpacing(2)
             .multilineTextAlignment(.leading)

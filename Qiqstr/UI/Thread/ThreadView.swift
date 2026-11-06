@@ -55,8 +55,8 @@ struct ThreadView: View {
                 Group {
                     if model.repliesSynced {
                         Text(L("noRepliesFound"))
-                            .font(.system(size: 15))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     } else {
                         ProgressView()
                     }
@@ -103,11 +103,12 @@ struct ThreadView: View {
         case .loadMore(let remaining):
             Button { withAnimation(.snappy) { model.showMoreTopLevel() } } label: {
                 Text("\(L("loadMore")) (\(remaining))")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
             }
             .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
             .padding(16)
             .listRowSeparator(.hidden)
             .accessibilityIdentifier("thread-load-more")
@@ -131,11 +132,11 @@ struct ThreadView: View {
 
     private func threadLink(_ title: String, systemImage: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: systemImage).font(.system(size: 12, weight: .semibold))
-            Text(title).font(.system(size: 14, weight: .semibold))
+            Image(systemName: systemImage).font(.footnote.weight(.semibold))
+            Text(title).font(.subheadline.weight(.semibold))
             Spacer()
         }
-        .foregroundStyle(AppColors.accent)
+        .foregroundStyle(.tint)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
@@ -168,19 +169,19 @@ struct ThreadReplyEntryButton: View {
     var body: some View {
         Button { Router.shared.compose(.reply(note)) } label: {
             HStack(spacing: 10) {
-                if let me = session.pubkey { ProfileAvatar(pubkey: me, size: 30) }
+                if let me = session.pubkey { ProfileAvatar(pubkey: me, size: 28) }
                 Text(L("addAReply"))
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppColors.textSecondary)
-                Spacer()
-                Image(systemName: "photo").foregroundStyle(AppColors.textSecondary)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Image(systemName: "arrowshape.turn.up.left")
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 10)
-            .frame(height: 46)
-            .contentShape(Capsule())
+            .font(.body)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .accessibilityIdentifier("thread-reply-entry")
@@ -206,12 +207,11 @@ struct FocusedNoteView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         NoteAuthorLine(note: note, name: name, nip05: nil, large: true)
                         if let nip05 = cache.profile(note.pubkey)?.nip05.nilIfEmpty ?? note.authorNip05 {
-                            HStack(spacing: 4) {
-                                Image(systemName: "checkmark.seal.fill").font(.system(size: 12))
-                                Text(nip05.hasPrefix("_@") ? String(nip05.dropFirst(2)) : nip05).lineLimit(1)
-                            }
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.textSecondary)
+                            Label(nip05.hasPrefix("_@") ? String(nip05.dropFirst(2)) : nip05, systemImage: "checkmark.seal.fill")
+                                .labelStyle(.titleAndIcon)
+                                .lineLimit(1)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -221,18 +221,22 @@ struct FocusedNoteView: View {
             if note.isReply, let target = replyTarget {
                 NoteReplyContextLine(pubkey: target)
             }
-            NoteContentView(note: note, fontSize: 18, selectable: true, expandedByDefault: true)
+            NoteContentView(note: note, font: note.content.count > 280 ? .body : .title3, selectable: true, expandedByDefault: true)
             Text(TimeFormat.full(note.createdAt))
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             statsRow(model.counts)
-            Divider().overlay(AppColors.divider)
+            Divider()
             InteractionBarView(note: note, model: model, actions: actions)
-            Divider().overlay(AppColors.divider)
+            Divider()
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
-        .contextMenu { NoteMenuItems(note: note, actions: actions) }
+        .contextMenu {
+            NoteMenuItems(note: note, actions: actions)
+        } preview: {
+            NoteContextPreview(note: note, authorName: name)
+        }
         .noteActionDialogs(actions)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("thread-focused")
@@ -256,21 +260,25 @@ struct FocusedNoteView: View {
             (counts.zapAmount, L("feedSats"), .noteStatistics(note.id)),
         ].filter { $0.0 > 0 }
         if !items.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(items, id: \.1) { item in
-                        Button { Router.shared.push(item.2) } label: {
-                            HStack(spacing: 4) {
-                                Text(Sats.compact(item.0)).font(.system(size: 15, weight: .semibold).monospacedDigit()).foregroundStyle(AppColors.textPrimary)
-                                Text(item.1).font(.system(size: 15)).foregroundStyle(AppColors.textSecondary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("thread-stat-\(item.1)")
-                    }
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) { statButtons(items) }
+                VStack(alignment: .leading, spacing: 6) { statButtons(items) }
             }
-            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
+    private func statButtons(_ items: [(Int, String, Route)]) -> some View {
+        ForEach(items, id: \.1) { item in
+            Button { Router.shared.push(item.2) } label: {
+                HStack(spacing: 4) {
+                    Text(Sats.compact(item.0)).fontWeight(.semibold).monospacedDigit().foregroundStyle(.primary)
+                    Text(item.1).foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+                .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("thread-stat-\(item.1)")
         }
     }
 }

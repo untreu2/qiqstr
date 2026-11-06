@@ -172,7 +172,7 @@ final class NoteContent {
         return s.count > 36 ? "\(s.prefix(34))…" : s
     }
 
-    func attributed(_ segments: [NoteContentSegment], size: CGFloat, cache: ProfileCache) -> AttributedString {
+    func attributed(_ segments: [NoteContentSegment], font: Font = .body, cache: ProfileCache) -> AttributedString {
         var result = AttributedString()
         for segment in segments {
             switch segment {
@@ -194,7 +194,7 @@ final class NoteContent {
                 var part = AttributedString("@\(name)")
                 part.link = hex.map(NoteLink.profile)
                 part.foregroundColor = AppColors.accent
-                part.font = .system(size: size, weight: .medium)
+                part.font = font.weight(.medium)
                 result += part
             }
         }

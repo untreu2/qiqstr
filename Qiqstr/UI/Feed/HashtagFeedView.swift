@@ -109,7 +109,7 @@ struct HashtagFeedView: View {
                             if let first = model.notes.first?.listId { withAnimation { proxy.scrollTo(first, anchor: .top) } }
                         } label: {
                             Text("#\(model.tag)")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.headline)
                                 .foregroundStyle(AppColors.background)
                                 .padding(.horizontal, 14)
                                 .frame(height: 32)

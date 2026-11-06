@@ -41,7 +41,7 @@ struct NoteRowView: View {
                     if showsThreadContext, note.isReply, let target = replyTarget {
                         NoteReplyContextLine(pubkey: target)
                     }
-                    NoteContentView(note: note, fontSize: compact ? 15 : 16)
+                    NoteContentView(note: note, font: compact ? .subheadline : .body)
                     InteractionBarView(note: note, model: store.model(for: note), compact: compact, actions: actions)
                         .padding(.top, 2)
                 }
@@ -54,6 +54,8 @@ struct NoteRowView: View {
         .onTapGesture { Router.shared.push(.thread(note.id)) }
         .contextMenu {
             NoteMenuItems(note: note, actions: actions)
+        } preview: {
+            NoteContextPreview(note: note, authorName: authorName)
         }
         .noteActionDialogs(actions)
         .accessibilityElement(children: .contain)
@@ -84,26 +86,26 @@ struct NoteAuthorLine: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(name)
-                .font(.system(size: large ? 17 : 15, weight: .semibold))
-                .foregroundStyle(AppColors.textPrimary)
+                .font(large ? .headline : .subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .layoutPriority(1)
             if let nip05, !nip05.isEmpty {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: large ? 14 : 12))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(large ? .subheadline : .caption)
+                    .foregroundStyle(.secondary)
                     .accessibilityLabel(L("nip05"))
                 if large {
                     Text(nip05.hasPrefix("_@") ? String(nip05.dropFirst(2)) : nip05)
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
             if !large {
                 Text("· \(TimeFormat.relative(note.createdAt))")
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -120,12 +122,12 @@ struct NoteRepostHeader: View {
     var body: some View {
         Button { Router.shared.push(.profile(pubkey)) } label: {
             HStack(spacing: 6) {
-                Image(systemName: "arrow.2.squarepath").font(.system(size: 12, weight: .semibold))
+                Image(systemName: "arrow.2.squarepath")
                 Text(L("feedRepostedBy", ["name": cache.profile(pubkey)?.bestName ?? fallbackName ?? Profile.shortNpub(pubkey)]))
-                    .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(AppColors.textSecondary)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("note-repost-header")
@@ -142,20 +144,54 @@ struct NoteReplyContextLine: View {
     var body: some View {
         Button { Router.shared.push(.profile(pubkey)) } label: {
             HStack(spacing: 4) {
-                Image(systemName: "arrowshape.turn.up.left").font(.system(size: 11, weight: .semibold))
-                Text(L("replyingTo")).font(.system(size: 13))
+                Image(systemName: "arrowshape.turn.up.left").font(.caption)
+                Text(L("replyingTo"))
                 Text("@\(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))")
-                    .font(.system(size: 13, weight: .medium))
+                    .fontWeight(.medium)
                     .foregroundStyle(AppColors.accent)
                     .lineLimit(1)
             }
-            .foregroundStyle(AppColors.textSecondary)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("note-reply-context")
         .task(id: pubkey) {
             if cache.profile(pubkey) == nil { await cache.load([pubkey]) }
         }
+    }
+}
+
+struct NoteContextPreview: View {
+    let note: Note
+    let authorName: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ProfileAvatar(pubkey: note.pubkey, size: 36, fallbackURL: note.authorImage)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(authorName).font(.headline).lineLimit(1)
+                    Text(TimeFormat.relative(note.createdAt)).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            let content = NoteContentCache.content(for: note)
+            if !content.isEmptyText {
+                Text(content.attributed(content.truncatedSegments ?? content.segments, cache: ProfileCache.shared))
+                    .font(.body)
+                    .lineLimit(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let image = content.images.first {
+                Color.clear
+                    .frame(height: 180)
+                    .overlay { RemoteImage(url: image.url, maxPixel: 800) { Rectangle().fill(AppColors.tile) } }
+                    .clipShape(.rect(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .padding(16)
+        .frame(width: 340, alignment: .leading)
+        .background(AppColors.background)
     }
 }
 

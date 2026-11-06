@@ -121,18 +121,18 @@ struct NoteLinkPreviewView: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(m.site.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Text(m.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 if let summary = m.summary, !summary.isEmpty {
                     Text(summary)
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }

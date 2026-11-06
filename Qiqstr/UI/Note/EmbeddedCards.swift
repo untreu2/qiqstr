@@ -53,8 +53,8 @@ struct NoteQuoteCard: View {
     private func placeholder(_ text: String?) -> some View {
         HStack(spacing: 8) {
             if let text {
-                Image(systemName: "exclamationmark.bubble").foregroundStyle(AppColors.textSecondary)
-                Text(text).font(.system(size: 14)).foregroundStyle(AppColors.textSecondary)
+                Image(systemName: "exclamationmark.bubble").foregroundStyle(.secondary)
+                Text(text).font(.subheadline).foregroundStyle(.secondary)
             } else {
                 ProgressView().controlSize(.small)
             }
@@ -72,13 +72,13 @@ struct NoteQuoteCard: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 ProfileAvatar(pubkey: note.pubkey, size: 22, fallbackURL: note.authorImage)
-                Text(name).font(.system(size: 14, weight: .semibold)).foregroundStyle(AppColors.textPrimary).lineLimit(1)
-                Text("· \(TimeFormat.relative(note.createdAt))").font(.system(size: 13)).foregroundStyle(AppColors.textSecondary).lineLimit(1)
+                Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(AppColors.textPrimary).lineLimit(1)
+                Text("· \(TimeFormat.relative(note.createdAt))").font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
             }
             if !parsed.isEmptyText {
-                Text(parsed.attributed(parsed.truncatedSegments ?? parsed.segments, size: 15, cache: cache))
-                    .font(.system(size: 15))
+                Text(parsed.attributed(parsed.truncatedSegments ?? parsed.segments, font: .subheadline, cache: cache))
+                    .font(.subheadline)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(6)
                     .multilineTextAlignment(.leading)
@@ -90,7 +90,7 @@ struct NoteQuoteCard: View {
                     .overlay { RemoteImage(url: first.url, maxPixel: 800) { Rectangle().fill(AppColors.tile) } }
                     .clipShape(.rect(cornerRadius: 12, style: .continuous))
             } else if parsed.videos.first != nil {
-                Label(L("videoTapToPlay"), systemImage: "play.rectangle").font(.system(size: 13)).foregroundStyle(AppColors.textSecondary)
+                Label(L("videoTapToPlay"), systemImage: "play.rectangle").font(.footnote).foregroundStyle(.secondary)
             }
             if depth == 0, let nested = parsed.quoteIds.first {
                 NoteQuoteCard(noteId: nested, depth: depth + 1)
@@ -126,23 +126,23 @@ struct NoteArticleCard: View {
                     IconTile(systemImage: "doc.richtext", size: 72, tint: AppColors.textSecondary)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L("article").uppercased()).font(.system(size: 11, weight: .semibold)).foregroundStyle(AppColors.textSecondary)
+                    Text(L("article").uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Text(article.map { $0.title.isEmpty ? L("untitledArticle") : $0.title } ?? (failed ? L("articleNotFound") : L("article")))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if let article {
                         Text(cache.profile(article.pubkey)?.bestName ?? article.authorName ?? Profile.shortNpub(article.pubkey))
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     } else if !failed {
                         ProgressView().controlSize(.mini)
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(AppColors.textSecondary)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
             }
             .padding(10)
             .background(AppColors.inputFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

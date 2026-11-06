@@ -67,6 +67,7 @@ struct ComposeView: View {
             }
         }
         .interactiveDismissDisabled(model.hasContent)
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .sensoryFeedback(.success, trigger: model.didPost)
         .onChange(of: model.pickerItems) { Task { await model.handlePicked() } }
@@ -79,14 +80,14 @@ struct ComposeView: View {
             ZStack(alignment: .topLeading) {
                 if model.text.isEmpty {
                     Text(model.placeholder)
-                        .font(.system(size: 17))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
                         .padding(.top, 8)
                         .padding(.leading, 5)
                         .allowsHitTesting(false)
                 }
                 TextEditor(text: $model.text, selection: $model.selection)
-                    .font(.system(size: 17))
+                    .font(.body)
                     .scrollContentBackground(.hidden)
                     .scrollDisabled(true)
                     .frame(minHeight: 140)
@@ -106,25 +107,24 @@ struct ComposeView: View {
             HStack(spacing: 12) {
                 PhotosPicker(selection: $model.pickerItems, maxSelectionCount: max(1, ComposeViewModel.maxAttachments - model.attachments.count), matching: .any(of: [.images, .videos]), photoLibrary: .shared()) {
                     Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(AppColors.textPrimary)
-                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
                 .disabled(model.attachments.count >= ComposeViewModel.maxAttachments)
                 .accessibilityLabel(L("addMediaText"))
                 .accessibilityIdentifier("compose-media")
                 if model.isUploading {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text(L("uploadingDotDotDot")).font(.system(size: 13)).foregroundStyle(AppColors.textSecondary)
+                        Text(L("uploadingDotDotDot")).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
                 Text("\(model.text.count)")
-                    .font(.system(size: 13, weight: .medium).monospacedDigit())
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("compose-count")
             }
@@ -148,17 +148,17 @@ struct ReplyTargetPreview: View {
             VStack(alignment: .leading, spacing: 4) {
                 NoteAuthorLine(note: note, name: cache.profile(note.pubkey)?.bestName ?? note.authorName ?? Profile.shortNpub(note.pubkey), nip05: note.authorNip05)
                 let content = NoteContentCache.content(for: note)
-                Text(content.attributed(content.truncatedSegments ?? content.segments, size: 15, cache: cache))
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppColors.textSecondary)
+                Text(content.attributed(content.truncatedSegments ?? content.segments, font: .subheadline, cache: cache))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .lineLimit(5)
                 HStack(spacing: 4) {
                     Text(L("replyingTo"))
                     Text("@\(cache.profile(note.pubkey)?.bestName ?? note.authorName ?? Profile.shortNpub(note.pubkey))")
                         .foregroundStyle(AppColors.accent)
                 }
-                .font(.system(size: 13))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .padding(.top, 4)
                 .padding(.bottom, 8)
             }
@@ -196,7 +196,7 @@ struct ComposeAttachmentTile: View {
                 } else {
                     ZStack {
                         Rectangle().fill(AppColors.tile)
-                        Image(systemName: attachment.isVideo ? "video.fill" : "photo").font(.system(size: 24)).foregroundStyle(AppColors.textSecondary)
+                        Image(systemName: attachment.isVideo ? "video.fill" : "photo").font(.title2).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -212,7 +212,7 @@ struct ComposeAttachmentTile: View {
                 Button(action: onRetry) {
                     ZStack {
                         Color.black.opacity(0.45)
-                        Image(systemName: "arrow.clockwise").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white)
+                        Image(systemName: "arrow.clockwise").font(.title3.weight(.semibold)).foregroundStyle(.white)
                     }
                 }
                 .buttonStyle(.plain)
@@ -220,7 +220,7 @@ struct ComposeAttachmentTile: View {
                 .accessibilityIdentifier("compose-attachment-retry")
             case .uploaded:
                 if attachment.isVideo {
-                    Image(systemName: "play.circle.fill").font(.system(size: 28)).foregroundStyle(.white).shadow(radius: 4)
+                    Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white).shadow(radius: 4)
                 }
             }
         }
@@ -229,7 +229,7 @@ struct ComposeAttachmentTile: View {
         .overlay(alignment: .topTrailing) {
             Button(action: onRemove) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(AppColors.textPrimary)
                     .frame(width: 26, height: 26)
             }
@@ -255,16 +255,17 @@ struct ComposeMentionSuggestions: View {
                             HStack(spacing: 8) {
                                 AvatarView(url: profile.picture.nilIfEmpty, size: 28)
                                 VStack(alignment: .leading, spacing: 0) {
-                                    Text(profile.bestName).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                                    Text(profile.bestName).font(.subheadline.weight(.semibold)).lineLimit(1)
                                     if !profile.nip05.isEmpty {
-                                        Text(profile.nip05).font(.system(size: 11)).foregroundStyle(AppColors.textSecondary).lineLimit(1)
+                                        Text(profile.nip05).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     }
                                 }
                             }
                             .foregroundStyle(AppColors.textPrimary)
                             .padding(.leading, 6)
                             .padding(.trailing, 12)
-                            .frame(height: 42)
+                            .padding(.vertical, 6)
+                            .frame(minHeight: 42)
                         }
                         .buttonStyle(.plain)
                         .glassEffect(.regular.interactive(), in: .capsule)
