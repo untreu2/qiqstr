@@ -279,7 +279,7 @@ struct EventManagerSettingsView: View {
                             IconTile(systemImage: EventManagerModel.kindIcon(kind), size: 32)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(EventManagerModel.kindName(kind)).font(.system(size: 15, weight: .medium))
-                                Text("kind \(kind)").font(.system(size: 12).monospaced()).foregroundStyle(AppColors.textSecondary)
+                                Text(verbatim: "kind \(kind)").font(.system(size: 12).monospaced()).foregroundStyle(AppColors.textSecondary)
                             }
                             Spacer()
                             Text(Sats.compact(model.countsByKind[kind] ?? 0))

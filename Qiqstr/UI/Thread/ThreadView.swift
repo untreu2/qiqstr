@@ -250,9 +250,9 @@ struct FocusedNoteView: View {
     @ViewBuilder
     private func statsRow(_ counts: InteractionCounts) -> some View {
         let items: [(Int, String, Route)] = [
-            (counts.reposts, L("reposts"), .noteStatistics(note.id)),
+            (counts.reposts, L(counts.reposts == 1 ? "repost" : "reposts"), .noteStatistics(note.id)),
             (quoteCount, L("quotes"), .quotes(note.id)),
-            (counts.reactions, L("reactions"), .noteStatistics(note.id)),
+            (counts.reactions, L(counts.reactions == 1 ? "reaction" : "reactions"), .noteStatistics(note.id)),
             (counts.zapAmount, L("feedSats"), .noteStatistics(note.id)),
         ].filter { $0.0 > 0 }
         if !items.isEmpty {

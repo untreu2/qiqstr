@@ -1089,28 +1089,51 @@ async fn publish_event(
     if selected.is_empty() {
         return Err(anyhow!("No publication relays configured"));
     }
-    let requests = selected.into_iter().map(|(url, relay)| async move {
-        let result = tokio::time::timeout(Duration::from_secs(12), relay.send_event(event)).await;
-        let result = match result {
-            Ok(result) => result.map_err(|error| error.to_string()),
-            Err(_) => Err("Event dispatch timed out".to_string()),
-        };
-        (url, result)
-    });
+    let mut pending: futures::stream::FuturesUnordered<_> = selected
+        .into_iter()
+        .map(|(url, relay)| {
+            let event = event.clone();
+            async move {
+                let result = tokio::time::timeout(Duration::from_secs(12), relay.send_event(&event)).await;
+                let result = match result {
+                    Ok(result) => result.map(|_| ()).map_err(|error| error.to_string()),
+                    Err(_) => Err("Event dispatch timed out".to_string()),
+                };
+                (url, result)
+            }
+        })
+        .collect();
     let mut output = Output {
         val: event.id,
         success: HashSet::new(),
         failed: HashMap::new(),
     };
-    for (url, result) in futures::future::join_all(requests).await {
+    let mut deadline: Option<tokio::time::Instant> = None;
+    loop {
+        let next = match deadline {
+            Some(at) => match tokio::time::timeout_at(at, futures::StreamExt::next(&mut pending)).await {
+                Ok(next) => next,
+                Err(_) => break,
+            },
+            None => futures::StreamExt::next(&mut pending).await,
+        };
+        let Some((url, result)) = next else { break };
         match result {
-            Ok(_) => {
+            Ok(()) => {
                 output.success.insert(url);
+                if deadline.is_none() {
+                    deadline = Some(tokio::time::Instant::now() + Duration::from_millis(1500));
+                }
             }
             Err(error) => {
                 output.failed.insert(url, error);
             }
         }
+    }
+    if !pending.is_empty() {
+        tokio::spawn(async move {
+            while futures::StreamExt::next(&mut pending).await.is_some() {}
+        });
     }
     if !output.success.is_empty() {
         client.database().save_event(event).await?;
