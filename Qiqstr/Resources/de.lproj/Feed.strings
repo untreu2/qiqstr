@@ -63,3 +63,16 @@
 "feedPollShowResults" = "Ergebnisse anzeigen";
 "feedPollHideResults" = "Ergebnisse ausblenden";
 "feedPollVoteFailed" = "Deine Stimme konnte nicht gesendet werden";
+"feedTopics" = "Themen";
+"feedAllTopics" = "Alle Themen";
+"feedFollowingPlusTopics" = "Folge ich + Themen";
+"feedManageTopics" = "Themen verwalten";
+"feedAddTopic" = "Thema hinzufügen";
+"feedRemoveTopic" = "Entfernen";
+"feedTopicPlaceholder" = "Hashtag hinzufügen";
+"feedTopicsFooter" = "Notizen mit diesen Hashtags erscheinen in deinen Themen-Feeds. Deine Themen werden in deiner Nostr-Interessenliste gespeichert.";
+"feedNoTopics" = "Noch keine Themen";
+"feedNoTopicsMessage" = "Folge einem Hashtag, um passende Notizen in deinem Feed zu sehen.";
+"feedTopicInvalid" = "Verwende Buchstaben, Zahlen, Bindestriche oder Unterstriche.";
+"feedTopicsUnavailable" = "Deine Themen konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.";
+"feedTopicPostsLastDay" = "{count, plural, =1{1 Beitrag in den letzten 24 Stunden} other{# Beiträge in den letzten 24 Stunden}}";

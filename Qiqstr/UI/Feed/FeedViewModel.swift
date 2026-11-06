@@ -4,11 +4,15 @@ import Observation
 enum FeedSource: Hashable {
     case following
     case list(FeedFollowSet)
+    case topic(String)
+    case topics
 
     var id: String {
         switch self {
         case .following: "following"
         case .list(let set): set.id
+        case .topic(let tag): "topic_\(tag)"
+        case .topics: "topics"
         }
     }
 
@@ -16,6 +20,15 @@ enum FeedSource: Hashable {
         switch self {
         case .following: L("all")
         case .list(let set): set.title
+        case .topic(let tag): "#\(tag)"
+        case .topics: L("feedTopics")
+        }
+    }
+
+    var isTopicFeed: Bool {
+        switch self {
+        case .topic, .topics: true
+        default: false
         }
     }
 }
@@ -41,6 +54,15 @@ final class FeedViewModel {
             resetForContextChange()
         }
     }
+    var includeTopics: Bool {
+        didSet {
+            guard includeTopics != oldValue else { return }
+            UserDefaults.standard.set(includeTopics, forKey: "feed_include_topics")
+            guard source == .following else { return }
+            resetForContextChange()
+            if includeTopics { syncTopicsInBackground() }
+        }
+    }
 
     @ObservationIgnored private var fetched: [Note] = []
     @ObservationIgnored private var limit = FeedViewModel.pageSize
@@ -55,11 +77,119 @@ final class FeedViewModel {
 
     init() {
         sort = FeedSortMode(rawValue: UserDefaults.standard.string(forKey: "feed_sort_mode") ?? "") ?? .latest
+        includeTopics = UserDefaults.standard.bool(forKey: "feed_include_topics")
     }
 
     private var authors: [String]? {
         if case .list(let set) = source { return set.pubkeys }
         return nil
+    }
+
+    var followedTopics: [String] { HashtagFollowService.shared.tags }
+
+    private var activeTopics: [String] {
+        switch source {
+        case .topic(let tag): [tag]
+        case .topics: followedTopics
+        case .following: includeTopics ? followedTopics : []
+        case .list: []
+        }
+    }
+
+    private func query(limit: Int) async -> [Note] {
+        let topics = activeTopics
+        if source.isTopicFeed { return await Self.topicNotes(topics, limit: limit, includeReplies: true) }
+        let home = await NoteRepository.feed(authors: authors, limit: limit, sort: sort)
+        guard !topics.isEmpty else { return home }
+        let extra = await Self.topicNotes(topics, limit: limit, includeReplies: false)
+        return Self.interleave(home, extra, limit: limit, sort: sort)
+    }
+
+    private static func topicNotes(_ tags: [String], limit: Int, includeReplies: Bool) async -> [Note] {
+        var merged: [Note] = []
+        var seen: Set<String> = []
+        for tag in tags {
+            for note in await NoteRepository.hashtag(tag, limit: limit) where includeReplies || !note.isReply {
+                if seen.insert(note.listId).inserted { merged.append(note) }
+            }
+        }
+        merged.sort { $0.displayTimestamp > $1.displayTimestamp }
+        return Array(merged.prefix(limit))
+    }
+
+    private static func interleave(_ home: [Note], _ extra: [Note], limit: Int, sort: FeedSortMode) -> [Note] {
+        var listIds = Set(home.map(\.listId))
+        var originals = Set(home.map(\.id))
+        var merged = home
+        for note in extra where !originals.contains(note.id) && listIds.insert(note.listId).inserted {
+            originals.insert(note.id)
+            merged.append(note)
+        }
+        switch sort {
+        case .latest:
+            merged.sort { $0.displayTimestamp > $1.displayTimestamp }
+        case .mostInteracted:
+            merged.sort { lhs, rhs in
+                let l = lhs.reactionCount + lhs.repostCount + lhs.replyCount + lhs.zapCount
+                let r = rhs.reactionCount + rhs.repostCount + rhs.replyCount + rhs.zapCount
+                return l == r ? lhs.displayTimestamp > rhs.displayTimestamp : l > r
+            }
+        }
+        return Array(merged.prefix(limit))
+    }
+
+    private func syncTopics(_ tags: [String], force: Bool = false) async {
+        await withTaskGroup(of: Void.self) { group in
+            for tag in tags {
+                group.addTask { await SyncService.shared.syncHashtag(tag, force: force) }
+            }
+        }
+    }
+
+    private func syncTopicsInBackground() {
+        let tags = activeTopics
+        guard !tags.isEmpty else { return }
+        let generation = self.generation
+        Task { [weak self] in
+            await self?.syncTopics(tags)
+            guard let self, generation == self.generation, self.source.isTopicFeed, self.notes.isEmpty else { return }
+            self.isSyncing = false
+        }
+    }
+
+    private func fetchOlder(until: Int) async -> Int {
+        var received = 0
+        if !source.isTopicFeed {
+            var pubkeys = authors ?? []
+            if pubkeys.isEmpty, let me = Session.shared.pubkey { pubkeys = Array(Set(await NoteRepository.following() + [me])) }
+            received += await NoteRepository.fetchOlder(authors: pubkeys, until: until)
+        }
+        for tag in activeTopics {
+            received += await NoteRepository.fetchOlderHashtag(tag, until: until)
+        }
+        return received
+    }
+
+    func topicsChanged() {
+        let tags = followedTopics
+        switch source {
+        case .topic(let tag):
+            if !tags.contains(tag) { select(.following) }
+        case .topics:
+            if tags.isEmpty { select(.following) } else { refreshTopicsQuietly() }
+        case .following:
+            if includeTopics { refreshTopicsQuietly() }
+        case .list:
+            break
+        }
+    }
+
+    private func refreshTopicsQuietly() {
+        let tags = activeTopics
+        Task { [weak self] in
+            await self?.reload()
+            await self?.syncTopics(tags)
+        }
     }
 
     func start() {
@@ -69,13 +199,14 @@ final class FeedViewModel {
             try? await Task.sleep(for: .seconds(8))
             self?.isSyncing = false
         }
+        syncTopicsInBackground()
     }
 
     func reload() async {
         let generation = self.generation
         try? await Task.sleep(for: .milliseconds(120))
         guard !Task.isCancelled, generation == self.generation else { return }
-        let result = await NoteRepository.feed(authors: authors, limit: limit, sort: sort)
+        let result = await query(limit: limit)
         guard generation == self.generation else { return }
         apply(result)
     }
@@ -163,8 +294,12 @@ final class FeedViewModel {
     func refresh() async {
         acceptNext = true
         switch source {
-        case .following: await SyncService.shared.syncFeed(force: true)
+        case .following:
+            async let feed: Void = SyncService.shared.syncFeed(force: true)
+            async let topics: Void = syncTopics(activeTopics, force: true)
+            _ = await (feed, topics)
         case .list(let set): await SyncService.shared.syncListFeed(set.pubkeys, force: true)
+        case .topic, .topics: await syncTopics(activeTopics, force: true)
         }
         acceptNext = true
         await reload()
@@ -183,16 +318,14 @@ final class FeedViewModel {
         let generation = self.generation
         let previousCount = fetched.count
         limit += Self.pageSize
-        var result = await NoteRepository.feed(authors: authors, limit: limit, sort: sort)
+        var result = await query(limit: limit)
         guard generation == self.generation else { return }
         if result.count <= previousCount || result.count < limit {
             let oldest = (result.isEmpty ? notes : result).map(\.createdAt).filter { $0 > 0 }.min() ?? TimeFormat.now
-            var pubkeys = authors ?? []
-            if pubkeys.isEmpty, let me = Session.shared.pubkey { pubkeys = Array(Set(await NoteRepository.following() + [me])) }
-            let received = await NoteRepository.fetchOlder(authors: pubkeys, until: oldest)
+            let received = await fetchOlder(until: oldest)
             guard generation == self.generation else { return }
             if received == 0 { exhaustedRelays = true }
-            result = await NoteRepository.feed(authors: authors, limit: limit, sort: sort)
+            result = await query(limit: limit)
             guard generation == self.generation else { return }
         }
         mergeOlder(result)
@@ -216,8 +349,10 @@ final class FeedViewModel {
         guard source != self.source else { return }
         self.source = source
         resetForContextChange()
-        if case .list(let set) = source {
-            Task { await SyncService.shared.syncListFeed(set.pubkeys) }
+        switch source {
+        case .list(let set): Task { await SyncService.shared.syncListFeed(set.pubkeys) }
+        case .topic, .topics: syncTopicsInBackground()
+        case .following: if includeTopics { syncTopicsInBackground() }
         }
     }
 

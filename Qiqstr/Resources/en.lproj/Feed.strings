@@ -63,3 +63,16 @@
 "feedPollShowResults" = "Show results";
 "feedPollHideResults" = "Hide results";
 "feedPollVoteFailed" = "Couldn’t send your vote";
+"feedTopics" = "Topics";
+"feedAllTopics" = "All topics";
+"feedFollowingPlusTopics" = "Following + topics";
+"feedManageTopics" = "Manage topics";
+"feedAddTopic" = "Add topic";
+"feedRemoveTopic" = "Remove";
+"feedTopicPlaceholder" = "Add a hashtag";
+"feedTopicsFooter" = "Notes with these hashtags appear in your topic feeds. Your topics are saved to your Nostr interests list.";
+"feedNoTopics" = "No topics yet";
+"feedNoTopicsMessage" = "Follow a hashtag to see notes about it in your feed.";
+"feedTopicInvalid" = "Use letters, numbers, hyphens or underscores.";
+"feedTopicsUnavailable" = "Couldn’t load your topics. Check your connection and try again.";
+"feedTopicPostsLastDay" = "{count, plural, =1{1 post in the last day} other{# posts in the last day}}";
