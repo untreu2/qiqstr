@@ -57,3 +57,7 @@ It should feel like a native iOS 26 app with **Liquid Glass**: system `TabView` 
 ## Testing
 
 Debug builds accept `-QIQ_LOGIN <nsec|hex|mnemonic>` as a launch argument to sign in automatically when no account is stored. Use generated test keys only. Never message, react to, or zap real users from test accounts.
+
+## Adding strings
+
+Feature strings go in their own table, `Qiqstr/Resources/{en,tr,de}.lproj/<Table>.strings`, where `<Table>` is one of `Auth`, `Feed`, `Profile`, `Explore`, `DM`, `Wallet`, `Settings`. `L(key)` searches every table. Reuse the existing `Localizable.strings` keys (ported from the Flutter ARB files) wherever one fits.

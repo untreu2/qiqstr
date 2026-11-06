@@ -33,14 +33,23 @@ nonisolated final class Localizer: @unchecked Sendable {
         }
     }
 
+    private static let tables = ["Localizable", "Auth", "Feed", "Profile", "Explore", "DM", "Wallet", "Settings"]
+
     func string(_ key: String) -> String {
         lock.lock(); defer { lock.unlock() }
-        let value = bundle.localizedString(forKey: key, value: "\u{0}", table: nil)
-        if value != "\u{0}" { return value }
-        if let path = Bundle.main.path(forResource: "en", ofType: "lproj"), let en = Bundle(path: path) {
-            return en.localizedString(forKey: key, value: key, table: nil)
+        if let value = lookup(key, in: bundle) { return value }
+        if let path = Bundle.main.path(forResource: "en", ofType: "lproj"), let en = Bundle(path: path), let value = lookup(key, in: en) {
+            return value
         }
         return key
+    }
+
+    private func lookup(_ key: String, in bundle: Bundle) -> String? {
+        for table in Self.tables {
+            let value = bundle.localizedString(forKey: key, value: "\u{0}", table: table)
+            if value != "\u{0}" { return value }
+        }
+        return nil
     }
 }
 
