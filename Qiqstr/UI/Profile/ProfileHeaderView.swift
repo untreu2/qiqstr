@@ -8,7 +8,7 @@ struct ProfileHeaderView: View {
     @State private var mutes = MuteService.shared
     @State private var copiedTrigger = 0
 
-    static let avatarSize: CGFloat = 88
+    static let avatarSize: CGFloat = 76
 
     private var profile: Profile { model.profile }
 
@@ -17,7 +17,12 @@ struct ProfileHeaderView: View {
             StretchyBanner(url: profile.banner.nilIfEmpty, height: bannerHeight + topInset) {
                 if let banner = profile.banner.nilIfEmpty { onViewImage(banner) }
             }
-            VStack(alignment: .leading, spacing: 12) {
+            .overlay(alignment: .bottomTrailing) {
+                ProfileActionButtons(model: model)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 12)
+            }
+            VStack(alignment: .leading, spacing: 10) {
                 avatarRow
                 identity
                 if !profile.about.isEmpty {
@@ -48,9 +53,7 @@ struct ProfileHeaderView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L("profileImage"))
             .accessibilityIdentifier("profile-avatar")
-            Spacer(minLength: 8)
-            ProfileActionButtons(model: model)
-                .padding(.bottom, 6)
+            Spacer(minLength: 0)
         }
         .padding(.top, -(Self.avatarSize / 2 + 4))
     }
@@ -59,7 +62,7 @@ struct ProfileHeaderView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(model.displayName)
-                    .font(.title.weight(.bold))
+                    .font(.title2.weight(.bold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .accessibilityIdentifier("profile-name")

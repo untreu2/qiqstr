@@ -23,15 +23,12 @@ struct ProfileActionButtons: View {
                 }
                 .accessibilityIdentifier("profile-share")
                 if model.isMe {
-                    Button { Router.shared.push(.editProfile) } label: {
-                        Text(L("editProfileButton"))
-                            .font(.subheadline.weight(.semibold))
+                    GlassIconButton(systemImage: "pencil", size: 40, accessibilityLabel: L("editProfileButton")) {
+                        Router.shared.push(.editProfile)
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
                     .accessibilityIdentifier("profile-edit")
                 } else if Session.shared.pubkey != nil {
-                    FollowButton(pubkey: model.pubkey, displayName: model.displayName)
+                    FollowButton(pubkey: model.pubkey, displayName: model.displayName, circular: true)
                 }
             }
         }

@@ -34,7 +34,7 @@ struct ProfileView: View {
     private var content: some View {
         GeometryReader { outer in
             let topInset = outer.safeAreaInsets.top
-            let bannerHeight = min(max(outer.size.width * 0.35, 120), 200)
+            let bannerHeight = min(max(outer.size.width * 0.3, 110), 160)
             let titleVisible = scrollOffset > bannerHeight + 70
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
