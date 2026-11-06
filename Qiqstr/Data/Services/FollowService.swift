@@ -89,6 +89,7 @@ final class FollowService {
             try? await dbSaveFollowingList(pubkeyHex: me, followsHex: Array(list))
             following = list
             DataBus.shared.feedChanged()
+            Task { await SyncService.shared.syncFeed(force: true) }
         } catch {
             if generation == self.generation { following = snapshot }
             throw error

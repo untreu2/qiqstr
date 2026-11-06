@@ -55,9 +55,9 @@ final class SyncService {
 
     func syncFeed(force: Bool = false) async {
         guard let me = session.pubkey else { return }
-        let key = "feed_\(me)"
+        let follows = Array(Set(await followingList(me) + [me])).sorted()
+        let key = "feed_\(me)_\(follows.joined().hashValue)"
         guard force || shouldSync(key) else { return }
-        let follows = Array(Set(await followingList(me) + [me]))
         let since = since(key) ?? (TimeFormat.now - 86400 * 2)
         async let notes = fetchAndStore(["authors": follows, "kinds": [1, 5, 6], "since": since, "limit": 100])
         async let articles = fetchAndStore(["kinds": [30023], "authors": follows, "since": since, "limit": 30])
