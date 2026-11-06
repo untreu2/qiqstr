@@ -46,40 +46,32 @@ final class BookmarksViewModel {
 struct BookmarksView: View {
     @State private var model = BookmarksViewModel()
     @State private var service = BookmarkService.shared
+    @State private var query = ""
+
+    private var visibleNotes: [Note] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return model.notes }
+        let cache = ProfileCache.shared
+        return model.notes.filter { note in
+            note.content.localizedCaseInsensitiveContains(q)
+                || (note.authorName ?? "").localizedCaseInsensitiveContains(q)
+                || (cache.profile(note.pubkey)?.bestName.localizedCaseInsensitiveContains(q) ?? false)
+        }
+    }
 
     var body: some View {
         List {
-            Section {
-                Text(L("bookmarksSubtitle"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-            }
-            ForEach(model.notes) { note in
-                NoteRowView(note: note)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .opacity(model.removing.contains(note.id) ? 0.4 : 1)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            Task { await model.remove(note) }
-                        } label: {
-                            Label(L("removeBookmark"), systemImage: "bookmark.slash")
-                        }
-                        .accessibilityIdentifier("bookmark-remove-\(note.id)")
+            if !visibleNotes.isEmpty {
+                Section {
+                    ForEach(visibleNotes) { note in row(note) }
+                } header: {
+                    if query.isEmpty {
+                        Text(L("bookmarksSubtitle")).textCase(nil)
                     }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            Task { await model.remove(note) }
-                        } label: {
-                            Label(L("removeBookmark"), systemImage: "bookmark.slash")
-                        }
-                    }
-                    .accessibilityIdentifier("bookmark-row-\(note.id)")
+                }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(AppColors.background)
         .accessibilityIdentifier("bookmarks-list")
@@ -87,12 +79,35 @@ struct BookmarksView: View {
         .animation(.snappy, value: model.notes.map(\.id))
         .navigationTitle(L("bookmarksTitle"))
         .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $query, prompt: L("search"))
         .refreshable { await model.refresh() }
         .sensoryFeedback(.success, trigger: model.removedCount)
         .task { await model.load() }
         .onChange(of: service.bookmarkedIds) {
             Task { await model.reload() }
         }
+    }
+
+    private func row(_ note: Note) -> some View {
+        NoteRowView(note: note)
+            .listRowInsets(EdgeInsets())
+            .opacity(model.removing.contains(note.id) ? 0.4 : 1)
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button(role: .destructive) {
+                    Task { await model.remove(note) }
+                } label: {
+                    Label(L("removeBookmark"), systemImage: "bookmark.slash")
+                }
+                .accessibilityIdentifier("bookmark-remove-\(note.id)")
+            }
+            .contextMenu {
+                Button(role: .destructive) {
+                    Task { await model.remove(note) }
+                } label: {
+                    Label(L("removeBookmark"), systemImage: "bookmark.slash")
+                }
+            }
+            .accessibilityIdentifier("bookmark-row-\(note.id)")
     }
 
     @ViewBuilder
@@ -103,6 +118,8 @@ struct BookmarksView: View {
             } else {
                 EmptyStateView(systemImage: "bookmark", title: L("noBookmarks"), message: L("youHaventBookmarkedAnyNotesYet"))
             }
+        } else if visibleNotes.isEmpty {
+            EmptyStateView(systemImage: "magnifyingglass", title: L("noResultsFound"), message: L("trySearchingDifferentTerm"))
         }
     }
 }

@@ -22,24 +22,24 @@ struct FollowSetRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(set.displayTitle)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     if isFavorite {
                         Image(systemName: "pin.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                             .accessibilityLabel(L("exploreInFeed"))
                     }
                 }
                 Text(subtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .task(id: set.id) {
             await cache.load(Array(set.pubkeys.prefix(3)) + (showsOwner ? [set.pubkey] : []))
@@ -62,7 +62,7 @@ struct FollowSetAvatarStack: View {
     var body: some View {
         ZStack {
             if pubkeys.isEmpty {
-                IconTile(systemImage: fallbackIcon, size: 46, tint: AppColors.textSecondary)
+                IconTile(systemImage: fallbackIcon, size: 46, tint: .secondary)
             } else {
                 ForEach(Array(pubkeys.enumerated()), id: \.offset) { index, pubkey in
                     ProfileAvatar(pubkey: pubkey, size: size)

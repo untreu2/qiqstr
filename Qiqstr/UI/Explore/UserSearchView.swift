@@ -19,7 +19,7 @@ struct UserSearchView: View {
         .accessibilityIdentifier("user-search-list")
         .overlay { overlay }
         .navigationTitle(L("users"))
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .searchable(text: $model.query, placement: .navigationBarDrawer(displayMode: .always), prompt: L("searchByNameOrNpub"))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
@@ -29,8 +29,7 @@ struct UserSearchView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { paste() } label: { Image(systemName: "doc.on.clipboard") }
-                    .accessibilityLabel(L("explorePaste"))
+                Button { paste() } label: { Label(L("explorePaste"), systemImage: "doc.on.clipboard") }
                     .accessibilityIdentifier("user-search-paste")
             }
         }
@@ -42,8 +41,8 @@ struct UserSearchView: View {
     private var suggestionsSection: some View {
         Section {
             Text(L("exploreSearchHint"))
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
         }
@@ -51,7 +50,7 @@ struct UserSearchView: View {
             Section {
                 ForEach(model.suggestions) { profile in row(profile) }
             } header: {
-                SectionHeader(title: L("exploreSuggested"))
+                Text(L("exploreSuggested")).font(.headline).foregroundStyle(.primary).textCase(nil)
             }
         }
     }
@@ -62,8 +61,7 @@ struct UserSearchView: View {
             Section {
                 NavigationLink(value: Route.profile(pubkey)) {
                     Label(L("exploreOpenProfile"), systemImage: "person.crop.circle.badge.checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.headline)
                 }
                 .listRowBackground(Color.clear)
                 .accessibilityIdentifier("user-search-open-resolved")
@@ -72,11 +70,10 @@ struct UserSearchView: View {
         Section {
             ForEach(model.results) { profile in row(profile) }
             if model.isSearching, !model.results.isEmpty {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text(L("searchingForUsers")).font(.system(size: 14)).foregroundStyle(AppColors.textSecondary)
-                }
-                .frame(maxWidth: .infinity)
+                ProgressView(L("searchingForUsers"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
             }
@@ -95,10 +92,9 @@ struct UserSearchView: View {
     private var overlay: some View {
         if !model.trimmedQuery.isEmpty, model.results.isEmpty {
             if model.isSearching {
-                VStack(spacing: 12) {
-                    ProgressView().controlSize(.large)
-                    Text(L("searchingForUsers")).font(.system(size: 15)).foregroundStyle(AppColors.textSecondary)
-                }
+                ProgressView(L("searchingForUsers"))
+                    .controlSize(.large)
+                    .foregroundStyle(.secondary)
             } else if model.hasSearched {
                 EmptyStateView(systemImage: "person.fill.questionmark", title: L("noUsersFound"), message: L("trySearchingDifferentTerm"), actionTitle: L("retry")) {
                     model.retry()

@@ -79,7 +79,7 @@ struct FollowSetEditorSheet: View {
                     }
                     Section {
                         HStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass").foregroundStyle(AppColors.textSecondary)
+                            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                             TextField(L("searchUsers"), text: $search.query)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
@@ -92,15 +92,16 @@ struct FollowSetEditorSheet: View {
                                 HStack {
                                     ExploreUserRow(profile: profile, showsFollowButton: false, avatarSize: 38)
                                     Image(systemName: selected.contains(profile.pubkey) ? "checkmark.circle.fill" : "circle")
-                                        .font(.system(size: 22))
-                                        .foregroundStyle(selected.contains(profile.pubkey) ? AppColors.textPrimary : AppColors.textSecondary)
+                                        .font(.title2)
+                                        .foregroundStyle(selected.contains(profile.pubkey) ? .primary : .secondary)
+                                        .contentTransition(.symbolEffect(.replace))
                                 }
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("followset-candidate-\(profile.pubkey)")
                         }
                         if !search.trimmedQuery.isEmpty, search.hasSearched, !search.isSearching, search.results.isEmpty {
-                            Text(L("noUsersFound")).foregroundStyle(AppColors.textSecondary)
+                            Text(L("noUsersFound")).foregroundStyle(.secondary)
                         }
                     } header: {
                         Text(search.trimmedQuery.isEmpty ? L("following") : L("users"))
@@ -112,16 +113,14 @@ struct FollowSetEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel(L("cancel"))
+                    Button(L("cancel"), role: .cancel) { dismiss() }
                         .accessibilityIdentifier("followset-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) { Task { await save() } } label: {
-                        if saving { ProgressView() } else { Image(systemName: "checkmark") }
+                        if saving { ProgressView() } else { Text(mode == .create ? L("create") : L("save")) }
                     }
                     .disabled(!canSave)
-                    .accessibilityLabel(mode == .create ? L("create") : L("save"))
                     .accessibilityIdentifier("followset-save")
                 }
             }
@@ -199,14 +198,14 @@ private struct SelectedMemberChip: View {
                 ProfileAvatar(pubkey: pubkey, size: 44)
                     .overlay(alignment: .topTrailing) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
+                            .font(.body)
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(AppColors.background, AppColors.textPrimary)
                             .offset(x: 4, y: -4)
                     }
                 Text(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppColors.textPrimary)
+                    .font(.caption2)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .frame(width: 60)
             }
