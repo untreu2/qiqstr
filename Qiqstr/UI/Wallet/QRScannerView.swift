@@ -90,9 +90,11 @@ struct QRScannerView: View {
 
     private func permissionMessage(title: String, message: String, showSettings: Bool) -> some View {
         VStack(spacing: 14) {
-            IconTile(systemImage: "camera", size: 64, tint: .white)
-            Text(title).font(.system(size: 19, weight: .semibold)).foregroundStyle(.white)
-            Text(message).font(.system(size: 15)).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
+            Image(systemName: "camera")
+                .font(.largeTitle)
+                .foregroundStyle(.white)
+            Text(title).font(.title3.weight(.semibold)).foregroundStyle(.white)
+            Text(message).font(.subheadline).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
             if showSettings {
                 Button(L("walletOpenSettings")) {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -112,7 +114,7 @@ struct QRScannerView: View {
             GlassIconButton(systemImage: "xmark", accessibilityLabel: L("closeDialog")) { dismiss() }
                 .accessibilityIdentifier("qr-close")
             Spacer()
-            Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+            Text(title).font(.headline).foregroundStyle(.white)
             Spacer()
             if model.permission == .authorized && model.hasTorch {
                 GlassIconButton(systemImage: model.torchOn ? "flashlight.on.fill" : "flashlight.off.fill", accessibilityLabel: L("walletFlashlight")) {
@@ -130,7 +132,7 @@ struct QRScannerView: View {
             HStack(spacing: 12) {
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     Label(L("walletChoosePhoto"), systemImage: "photo")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
                 .buttonStyle(.glass)
@@ -139,7 +141,7 @@ struct QRScannerView: View {
                     if let text = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { deliver(text) }
                 } label: {
                     Label(L("walletPaste"), systemImage: "doc.on.clipboard")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
                 .buttonStyle(.glass)

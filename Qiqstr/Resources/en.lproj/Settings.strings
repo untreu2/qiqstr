@@ -41,3 +41,5 @@
 "settingsWipeFooter" = "Deletes every cached event on this device. Data is fetched again from your relays.";
 "userMuted" = "User muted";
 "userUnmuted" = "User unmuted";
+"settingsAdd" = "Add";
+"settingsRelayTraffic" = "Data transferred";

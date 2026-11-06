@@ -219,19 +219,23 @@ struct EventManagerSettingsView: View {
 
     var body: some View {
         List {
-            SettingsPageHeader(subtitle: L("yourDataOnRelaysDescription"))
             Section {
                 HStack(spacing: 12) {
-                    if model.isScanning { ProgressView() } else { Image(systemName: "checkmark.circle.fill").foregroundStyle(AppColors.success) }
-                    Text(model.isScanning ? L("scanningEventsFound", ["count": model.events.count]) : L("eventsOnRelays", ["count": model.events.count]))
-                        .font(.system(size: 16, weight: .semibold))
-                        .contentTransition(.numericText())
+                    Label {
+                        Text(model.isScanning ? L("scanningEventsFound", ["count": model.events.count]) : L("eventsOnRelays", ["count": model.events.count]))
+                            .contentTransition(.numericText())
+                    } icon: {
+                        if model.isScanning {
+                            ProgressView()
+                        } else {
+                            SettingsIcon(systemImage: "checkmark", tint: AppColors.success)
+                        }
+                    }
                     Spacer()
                     if !model.isScanning {
-                        Button { model.scan() } label: { Image(systemName: "arrow.clockwise") }
-                            .buttonStyle(.glass)
-                            .buttonBorderShape(.circle)
-                            .accessibilityLabel(L("retry"))
+                        Button(L("retry"), systemImage: "arrow.clockwise") { model.scan() }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
                             .accessibilityIdentifier("events-rescan")
                     }
                 }
@@ -240,51 +244,44 @@ struct EventManagerSettingsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView(value: model.broadcastProgress).tint(AppColors.textPrimary)
                         Text(L("broadcastProgress", ["sent": model.broadcastSent, "total": model.broadcastTotal]))
-                            .font(.system(size: 13).monospacedDigit())
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.footnote.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
                     .accessibilityIdentifier("events-broadcast-progress")
                 }
+            } footer: {
+                Text(L("yourDataOnRelaysDescription"))
             }
             Section {
-                HStack(spacing: 10) {
-                    Button { model.rebroadcast() } label: {
-                        Label(model.isBroadcasting ? L("broadcastProgress", ["sent": model.broadcastSent, "total": model.broadcastTotal]) : L("rebroadcast"), systemImage: "antenna.radiowaves.left.and.right")
-                            .font(.system(size: 15, weight: .semibold))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 36)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(AppColors.textPrimary)
-                    .foregroundStyle(AppColors.background)
-                    .disabled(model.isBusy || model.events.isEmpty)
-                    .accessibilityIdentifier("events-rebroadcast")
-                    Button { Task { await model.export() } } label: {
-                        Label(model.isExporting ? L("exporting") : L("exportData"), systemImage: "square.and.arrow.up")
-                            .font(.system(size: 15, weight: .semibold))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 36)
-                    }
-                    .buttonStyle(.glass)
-                    .disabled(model.isExporting || model.events.isEmpty)
-                    .accessibilityIdentifier("events-export")
+                Button { model.rebroadcast() } label: {
+                    SettingsRowLabel(title: model.isBroadcasting ? L("broadcastProgress", ["sent": model.broadcastSent, "total": model.broadcastTotal]) : L("rebroadcast"), systemImage: "antenna.radiowaves.left.and.right")
                 }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
+                .disabled(model.isBusy || model.events.isEmpty)
+                .accessibilityIdentifier("events-rebroadcast")
+                Button { Task { await model.export() } } label: {
+                    HStack {
+                        SettingsRowLabel(title: model.isExporting ? L("exporting") : L("exportData"), systemImage: "square.and.arrow.up")
+                        Spacer()
+                        if model.isExporting { ProgressView() }
+                    }
+                }
+                .disabled(model.isExporting || model.events.isEmpty)
+                .accessibilityIdentifier("events-export")
             }
             if !model.sortedKinds.isEmpty {
                 Section {
                     ForEach(model.sortedKinds, id: \.self) { kind in
-                        HStack(spacing: 12) {
-                            IconTile(systemImage: EventManagerModel.kindIcon(kind), size: 32)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(EventManagerModel.kindName(kind)).font(.system(size: 15, weight: .medium))
-                                Text(verbatim: "kind \(kind)").font(.system(size: 12).monospaced()).foregroundStyle(AppColors.textSecondary)
-                            }
-                            Spacer()
+                        LabeledContent {
                             Text(Sats.compact(model.countsByKind[kind] ?? 0))
-                                .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                                .monospacedDigit()
                                 .contentTransition(.numericText())
+                        } label: {
+                            Label {
+                                Text(EventManagerModel.kindName(kind))
+                                Text(verbatim: "kind \(kind)").font(.footnote.monospaced())
+                            } icon: {
+                                SettingsIcon(systemImage: EventManagerModel.kindIcon(kind))
+                            }
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("events-kind-\(kind)")
@@ -293,9 +290,11 @@ struct EventManagerSettingsView: View {
             }
             Section {
                 Button(role: .destructive) { model.beginDelete() } label: {
-                    HStack {
-                        SettingsRowLabel(title: L("deleteAccount"), systemImage: "person.crop.circle.badge.xmark", tint: AppColors.error)
+                    HStack(spacing: 8) {
+                        Spacer()
+                        Text(L("deleteAccount"))
                         if model.isDeleting { ProgressView() }
+                        Spacer()
                     }
                 }
                 .disabled(model.isBusy || model.isScanning)
@@ -306,6 +305,7 @@ struct EventManagerSettingsView: View {
         }
         .settingsListStyle()
         .navigationTitle(L("yourDataOnRelays"))
+        .navigationBarTitleDisplayMode(.large)
         .animation(.snappy, value: model.sortedKinds)
         .onAppear { if model.events.isEmpty && !model.isScanning { model.scan() } }
         .onDisappear { if !model.isBroadcasting && !model.isDeleting { model.stop() } }
@@ -342,25 +342,25 @@ struct EventExportSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
-                IconTile(systemImage: "doc.badge.arrow.up", size: 64)
-                Text(file.url.lastPathComponent)
-                    .font(.system(size: 14).monospaced())
-                    .foregroundStyle(AppColors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                ShareLink(item: file.url) {
-                    Label(L("exportData"), systemImage: "square.and.arrow.up")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(maxWidth: .infinity, minHeight: 50)
+            Form {
+                Section {
+                    Label {
+                        Text(file.url.lastPathComponent)
+                            .font(.subheadline.monospaced())
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        SettingsIcon(systemImage: "doc.badge.arrow.up")
+                    }
                 }
-                .buttonStyle(.glassProminent)
-                .tint(AppColors.textPrimary)
-                .foregroundStyle(AppColors.background)
-                .padding(.horizontal, 24)
-                .accessibilityIdentifier("events-export-share")
+                Section {
+                    ShareLink(item: file.url) {
+                        Label(L("exportData"), systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("events-export-share")
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle(L("exportData"))
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .close) { dismiss() }

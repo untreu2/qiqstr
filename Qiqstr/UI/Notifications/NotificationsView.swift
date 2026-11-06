@@ -16,7 +16,20 @@ struct NotificationsView: View {
         let groups = model.groups
         content(groups)
             .navigationTitle(L("notifications"))
-            .toolbarTitleDisplayMode(.inlineLarge)
+            .navigationSubtitle(model.filter == .all ? "" : model.filter.title)
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarTitleMenu { NotificationFilterPicker(selection: $model.filter) }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        NotificationFilterPicker(selection: $model.filter)
+                    } label: {
+                        Label(L("notificationFilterAll"), systemImage: model.filter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                    }
+                    .accessibilityLabel(model.filter.title)
+                    .accessibilityIdentifier("notifications-filter-menu")
+                }
+            }
             .task(id: ReloadKey(version: bus.notificationVersion, muted: session.mutedPubkeys, words: session.mutedWords)) {
                 if model.isLoaded { try? await Task.sleep(for: .milliseconds(300)) }
                 guard !Task.isCancelled else { return }
@@ -39,10 +52,12 @@ struct NotificationsView: View {
             }
         } else {
             List {
-                Section {
-                    header
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                if model.summary.total > 0 {
+                    Section {
+                        header
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                    }
                 }
                 if groups.isEmpty {
                     EmptyStateView(systemImage: "bell", title: L("noNotificationsYet"), message: L("whenSomeoneInteractsWithYourPosts"))
@@ -72,7 +87,7 @@ struct NotificationsView: View {
         }
         .buttonStyle(.plain)
         .listRowBackground(AppColors.background)
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .accessibilityIdentifier("notification-row-\(group.id)")
         .contextMenu {
             if let noteId = group.focusedNoteId {
@@ -97,13 +112,10 @@ struct NotificationsView: View {
     private var header: some View {
         let summary = model.summary
         VStack(alignment: .leading, spacing: 10) {
-            NotificationFilterChips(selection: $model.filter)
-            if summary.total > 0 {
-                summaryText(summary)
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppColors.textSecondary)
-                NotificationActivityBar(summary: summary)
-            }
+            summaryText(summary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            NotificationActivityBar(summary: summary)
         }
     }
 
@@ -122,7 +134,7 @@ struct NotificationsView: View {
         for (i, part) in parts.enumerated() {
             if i > 0 { text.append(AttributedString(i == parts.count - 1 ? L("notificationSummaryAnd") : ", ")) }
             var run = AttributedString(part)
-            run.font = .system(size: 15, weight: .semibold)
+            run.font = .subheadline.weight(.semibold)
             run.foregroundColor = AppColors.textPrimary
             text.append(run)
         }
@@ -136,12 +148,14 @@ struct NotificationsView: View {
             if model.isLoadingMore {
                 ProgressView()
             } else if model.hasReachedEnd {
-                Text("·").font(.system(size: 18)).foregroundStyle(AppColors.textSecondary.opacity(0.5))
+                Image(systemName: "checkmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
             } else {
                 Button(L("notificationLoadOlder")) { Task { await model.loadMore() } }
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .buttonStyle(.plain)
+                    .font(.subheadline)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
                     .accessibilityIdentifier("notifications-load-more")
             }
             Spacer()
@@ -194,30 +208,28 @@ struct NotificationActivityBar: View {
     }
 }
 
-struct NotificationFilterChips: View {
+struct NotificationFilterPicker: View {
     @Binding var selection: NotificationFilter
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(NotificationFilter.allCases) { filter in
-                    let selected = filter == selection
-                    Button {
-                        withAnimation(.snappy) { selection = filter }
-                    } label: {
-                        Text(filter.title)
-                            .font(.system(size: 14, weight: .semibold))
-                            .padding(.horizontal, 14)
-                            .frame(height: 34)
-                            .foregroundStyle(selected ? AppColors.background : AppColors.textPrimary)
-                            .background(selected ? AppColors.textPrimary : AppColors.overlayLight, in: Capsule())
-                    }
-                    .buttonStyle(PressableStyle())
+        Picker(L("notifications"), selection: Binding(get: { selection }, set: { value in withAnimation(.snappy) { selection = value } })) {
+            ForEach(NotificationFilter.allCases) { filter in
+                Label(filter.title, systemImage: filter.symbol)
+                    .tag(filter)
                     .accessibilityIdentifier("notifications-filter-\(filter.rawValue)")
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
             }
         }
-        .scrollClipDisabled()
+    }
+}
+
+extension NotificationFilter {
+    var symbol: String {
+        switch self {
+        case .all: "tray.full"
+        case .replies: "bubble.left"
+        case .reactions: "heart"
+        case .reposts: "arrow.2.squarepath"
+        case .zaps: "bolt"
+        }
     }
 }

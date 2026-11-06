@@ -82,35 +82,44 @@ struct ReceiveView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
+        Form {
+            Section {
                 Picker(L("receive"), selection: $model.mode) {
                     Text(L("invoice")).tag(ReceiveViewModel.Mode.invoice)
                     Text(L("token")).tag(ReceiveViewModel.Mode.token)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
                 .accessibilityIdentifier("receive-mode")
-                if !model.wallet.isConnected {
-                    EmptyStateView(systemImage: "bolt.slash", title: L("pleaseConnectWalletFirst"))
-                } else if model.mode == .invoice {
-                    invoiceContent
-                } else {
-                    CashuRedeemForm(model: cashuModel) { dismiss() }
-                }
             }
-            .padding(20)
+            if !model.wallet.isConnected {
+                Section {
+                    EmptyStateView(systemImage: "bolt.slash", title: L("pleaseConnectWalletFirst"))
+                        .listRowBackground(Color.clear)
+                }
+            } else if model.mode == .invoice {
+                invoiceContent
+            } else {
+                CashuRedeemForm(model: cashuModel) { dismiss() }
+            }
         }
         .scrollDismissesKeyboard(.interactively)
+        .scrollContentBackground(.hidden)
         .background(AppColors.background)
         .navigationTitle(L("receive"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if model.invoice != nil && !model.isPaid {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { model.reset() } label: { Image(systemName: "arrow.counterclockwise") }
-                        .accessibilityLabel(L("walletNewInvoice"))
+                    Button(L("walletNewInvoice"), systemImage: "arrow.counterclockwise") { model.reset() }
                         .accessibilityIdentifier("receive-new-invoice")
                 }
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("done")) { focused = false }
             }
         }
         .task(id: model.invoice) { await model.watch() }
@@ -128,10 +137,13 @@ struct ReceiveView: View {
 
     @ViewBuilder private var invoiceContent: some View {
         if model.isPaid, let invoice = model.invoice {
-            PaymentSuccessView(title: L("paymentReceived"), amount: invoice.amountSats, fee: nil) { dismiss() }
-                .frame(minHeight: 420)
+            Section {
+                PaymentSuccessView(title: L("paymentReceived"), amount: invoice.amountSats, fee: nil) { dismiss() }
+                    .frame(minHeight: 420)
+                    .listRowBackground(Color.clear)
+            }
         } else if let invoice = model.invoice {
-            invoiceCard(invoice)
+            invoiceSections(invoice)
         } else {
             qrPlaceholder
             form
@@ -140,112 +152,112 @@ struct ReceiveView: View {
 
     @ViewBuilder private var qrPlaceholder: some View {
         if let content = model.qrContent, let address = model.wallet.lightningAddress {
-            VStack(spacing: 12) {
-                Button { model.copy(address) } label: { QRCodeView(content: content, size: 220) }
-                    .buttonStyle(PressableStyle())
-                Label(address, systemImage: "bolt.fill")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .accessibilityIdentifier("receive-lightning-address")
+            Section {
+                VStack(spacing: 12) {
+                    Button { model.copy(address) } label: { QRCodeView(content: content, size: 200) }
+                        .buttonStyle(PressableStyle())
+                    Label(address, systemImage: "bolt.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("receive-lightning-address")
+                }
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
             }
-        } else {
-            VStack(spacing: 12) {
-                Image(systemName: "qrcode")
-                    .font(.system(size: 72))
-                    .foregroundStyle(AppColors.textSecondary.opacity(0.25))
-                Text(L("enterAmountToGenerateInvoice"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, minHeight: 200)
         }
     }
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            QiqTextField(placeholder: L("amountInSats"), text: $model.amountText, keyboard: .numberPad)
-                .focused($focused)
-                .accessibilityIdentifier("receive-amount")
-            QiqTextField(placeholder: L("listDescriptionHint"), text: $model.descriptionText, autocapitalize: true)
+        Section {
+            LabeledContent(L("amountInSats")) {
+                TextField(L("walletSats"), text: $model.amountText)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .focused($focused)
+                    .accessibilityIdentifier("receive-amount")
+            }
+            TextField(L("listDescriptionHint"), text: $model.descriptionText, axis: .vertical)
                 .focused($focused)
                 .accessibilityIdentifier("receive-description")
-            if let error = model.error {
-                Text(error).font(.system(size: 13)).foregroundStyle(AppColors.error).accessibilityIdentifier("receive-error")
-            }
-            PrimaryButton(title: L("walletCreateInvoice"), isLoading: model.isCreating, isEnabled: model.canCreate) {
+            Button {
                 focused = false
                 Task { await model.create() }
+            } label: {
+                HStack {
+                    Label(L("walletCreateInvoice"), systemImage: "qrcode")
+                    Spacer()
+                    if model.isCreating { ProgressView() }
+                }
             }
-            .padding(.top, 4)
+            .disabled(!model.canCreate)
             .accessibilityIdentifier("receive-create")
+        } footer: {
+            if let error = model.error {
+                Text(error).foregroundStyle(AppColors.error).accessibilityIdentifier("receive-error")
+            } else if model.qrContent == nil {
+                Text(L("enterAmountToGenerateInvoice"))
+            }
         }
     }
 
-    private func invoiceCard(_ invoice: CreatedInvoice) -> some View {
-        VStack(spacing: 16) {
-            Button { model.copy(invoice.invoice) } label: {
-                QRCodeView(content: "lightning:\(invoice.invoice)", size: 240)
-                    .opacity(model.isExpired ? 0.25 : 1)
-            }
-            .buttonStyle(PressableStyle())
-            .disabled(model.isExpired)
-            VStack(spacing: 6) {
-                Text("\(Sats.format(invoice.amountSats)) \(L("walletSats"))")
-                    .font(AppFont.brandSemibold(30))
+    @ViewBuilder
+    private func invoiceSections(_ invoice: CreatedInvoice) -> some View {
+        Section {
+            VStack(spacing: 14) {
+                Button { model.copy(invoice.invoice) } label: {
+                    QRCodeView(content: "lightning:\(invoice.invoice)", size: 220)
+                        .opacity(model.isExpired ? 0.25 : 1)
+                }
+                .buttonStyle(PressableStyle())
+                .disabled(model.isExpired)
+                Text(verbatim: "\(Sats.format(invoice.amountSats)) \(L("walletSats"))")
+                    .font(.title.weight(.bold))
+                    .fontDesign(.rounded)
+                    .monospacedDigit()
                     .accessibilityIdentifier("receive-invoice-amount")
                 if let description = invoice.description {
-                    Text(description).font(.system(size: 15)).foregroundStyle(AppColors.textSecondary).multilineTextAlignment(.center)
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                if model.isExpired {
-                    Label(L("walletInvoiceExpired"), systemImage: "clock.badge.xmark")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(AppColors.error)
-                } else if let expiry = invoice.expiresAt {
-                    HStack(spacing: 4) {
-                        Text(L("walletExpiresIn"))
+            }
+            .frame(maxWidth: .infinity)
+            .listRowBackground(Color.clear)
+        }
+        Section {
+            if model.isExpired {
+                Label(L("walletInvoiceExpired"), systemImage: "clock.badge.xmark")
+                    .foregroundStyle(AppColors.error)
+                Button { model.reset() } label: { Label(L("walletNewInvoice"), systemImage: "arrow.counterclockwise") }
+            } else {
+                if let expiry = invoice.expiresAt {
+                    LabeledContent(L("walletExpiresIn")) {
                         Text(timerInterval: Date()...expiry, countsDown: true).monospacedDigit()
                     }
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.textSecondary)
                 }
-            }
-            Button { model.copy(invoice.invoice) } label: {
-                HStack(spacing: 8) {
-                    Text(WalletFormat.truncated(invoice.invoice, head: 14, tail: 10))
-                        .font(.system(size: 13, design: .monospaced))
-                        .lineLimit(1)
-                    Image(systemName: "doc.on.doc").font(.system(size: 13))
-                }
-                .foregroundStyle(AppColors.textPrimary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-            }
-            .buttonStyle(.glass)
-            .accessibilityIdentifier("receive-invoice-chip")
-            if model.isExpired {
-                PrimaryButton(title: L("walletNewInvoice")) { model.reset() }
-            } else {
-                GlassEffectContainer(spacing: 12) {
-                    HStack(spacing: 12) {
-                        SecondaryButton(title: L("copy"), systemImage: "doc.on.doc") { model.copy(invoice.invoice) }
-                            .accessibilityIdentifier("receive-copy")
-                        ShareLink(item: invoice.invoice) {
-                            Label(L("share"), systemImage: "square.and.arrow.up")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(maxWidth: .infinity, minHeight: 50)
-                                .foregroundStyle(AppColors.textPrimary)
-                        }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.capsule)
-                        .accessibilityIdentifier("receive-share")
+                Button { model.copy(invoice.invoice) } label: {
+                    LabeledContent {
+                        Text(WalletFormat.truncated(invoice.invoice, head: 10, tail: 8))
+                            .font(.footnote.monospaced())
+                            .lineLimit(1)
+                    } label: {
+                        Label(L("copy"), systemImage: "doc.on.doc")
                     }
                 }
+                .accessibilityIdentifier("receive-copy")
+                ShareLink(item: invoice.invoice) {
+                    Label(L("share"), systemImage: "square.and.arrow.up")
+                }
+                .accessibilityIdentifier("receive-share")
+            }
+        } footer: {
+            if !model.isExpired {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text(L("walletWaitingForPayment")).font(.system(size: 14)).foregroundStyle(AppColors.textSecondary)
+                    Text(L("walletWaitingForPayment"))
                 }
-                .padding(.top, 4)
                 .accessibilityIdentifier("receive-waiting")
             }
         }

@@ -24,15 +24,21 @@ struct DisplaySettingsView: View {
     @AppStorage("app_language") private var language: String?
 
     var body: some View {
-        List {
-            SettingsPageHeader(subtitle: L("displaySubtitle"))
-            Section(L("settingsAppearance")) {
-                HStack(spacing: 10) {
+        Form {
+            Section {
+                Picker(L("settingsAppearance"), selection: $theme) {
                     ForEach(ThemePreference.allCases) { option in
-                        themeCard(option)
+                        Label(option.title, systemImage: option.symbol)
+                            .tag(option.rawValue)
+                            .accessibilityIdentifier("display-theme-\(option.rawValue)")
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } header: {
+                Text(L("settingsAppearance"))
+            } footer: {
+                Text(L("displaySubtitle"))
             }
             Section {
                 Toggle(isOn: $expandedNotes) {
@@ -43,7 +49,7 @@ struct DisplaySettingsView: View {
             } footer: {
                 Text(L("settingsExpandedNotesFooter"))
             }
-            Section(L("language")) {
+            Section {
                 NavigationLink(value: Route.settingsPage(.language)) {
                     SettingsRowLabel(title: L("language"), systemImage: "character.bubble", value: language.flatMap { AppLanguage(rawValue: $0)?.displayName } ?? L("settingsSystemDefault"))
                 }
@@ -52,31 +58,9 @@ struct DisplaySettingsView: View {
         }
         .settingsListStyle()
         .navigationTitle(L("displayTitle"))
+        .navigationBarTitleDisplayMode(.large)
         .sensoryFeedback(.selection, trigger: theme)
         .sensoryFeedback(.selection, trigger: expandedNotes)
-    }
-
-    private func themeCard(_ option: ThemePreference) -> some View {
-        let selected = theme == option.rawValue
-        return Button {
-            withAnimation(.snappy) { theme = option.rawValue }
-        } label: {
-            VStack(spacing: 8) {
-                Image(systemName: option.symbol)
-                    .font(.system(size: 22, weight: .medium))
-                    .frame(height: 28)
-                Text(option.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(maxWidth: .infinity, minHeight: 78)
-            .foregroundStyle(selected ? AppColors.background : AppColors.textPrimary)
-            .background(selected ? AppColors.textPrimary : AppColors.tile, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
-        .buttonStyle(PressableStyle())
-        .accessibilityIdentifier("display-theme-\(option.rawValue)")
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -84,39 +68,36 @@ struct LanguageSettingsView: View {
     @AppStorage("app_language") private var language: String?
 
     var body: some View {
-        List {
+        Form {
             Section {
-                row(code: nil, title: L("settingsSystemDefault"), subtitle: nil)
-                ForEach(AppLanguage.allCases) { lang in
-                    row(code: lang.rawValue, title: lang.displayName, subtitle: localizedName(lang))
+                Picker(L("language"), selection: Binding(get: { language ?? "" }, set: { apply($0.isEmpty ? nil : $0) })) {
+                    Text(L("settingsSystemDefault"))
+                        .tag("")
+                        .accessibilityIdentifier("language-system")
+                    ForEach(AppLanguage.allCases) { lang in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(lang.displayName)
+                            Text(localizedName(lang))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(lang.rawValue)
+                        .accessibilityIdentifier("language-\(lang.rawValue)")
+                    }
                 }
+                .pickerStyle(.inline)
+                .labelsHidden()
             }
         }
         .settingsListStyle()
         .navigationTitle(L("language"))
+        .navigationBarTitleDisplayMode(.large)
         .sensoryFeedback(.selection, trigger: language)
     }
 
-    private func row(code: String?, title: String, subtitle: String?) -> some View {
-        Button {
-            Localizer.shared.apply(code)
-            language = code
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 16, weight: .medium)).foregroundStyle(AppColors.textPrimary)
-                    if let subtitle {
-                        Text(subtitle).font(.system(size: 13)).foregroundStyle(AppColors.textSecondary)
-                    }
-                }
-                Spacer()
-                if language == code {
-                    Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(AppColors.textPrimary)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .accessibilityIdentifier("language-\(code ?? "system")")
+    private func apply(_ code: String?) {
+        Localizer.shared.apply(code)
+        language = code
     }
 
     private func localizedName(_ lang: AppLanguage) -> String {

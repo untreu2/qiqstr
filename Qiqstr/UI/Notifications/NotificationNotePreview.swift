@@ -79,25 +79,25 @@ struct NotificationNotePreview: View {
                     HStack(spacing: 6) {
                         ProfileAvatar(pubkey: note.pubkey, size: 18, fallbackURL: note.authorImage)
                         Text(cache.profile(note.pubkey)?.bestName ?? note.authorName ?? Profile.shortNpub(note.pubkey))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                             .lineLimit(1)
                         Text(TimeFormat.relative(note.createdAt))
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                     let text = NotificationText.readable(note.content)
                     if !text.isEmpty {
                         Text(text)
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                             .lineLimit(3)
                             .multilineTextAlignment(.leading)
                     }
                 }
             } else if store.isMissing(noteId) {
                 Text(L("noteNotFound"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             } else {
                 HStack(spacing: 8) {
                     Circle().fill(AppColors.overlayLight).frame(width: 18, height: 18)

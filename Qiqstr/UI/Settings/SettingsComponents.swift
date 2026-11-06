@@ -1,6 +1,20 @@
 import SwiftUI
 import UIKit
 
+struct SettingsIcon: View {
+    let systemImage: String
+    var tint: Color = AppColors.textPrimary
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 29
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(width: size, height: size)
+            .background(AppColors.tile, in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+    }
+}
+
 struct SettingsRowLabel: View {
     let title: String
     let systemImage: String
@@ -8,33 +22,23 @@ struct SettingsRowLabel: View {
     var value: String? = nil
 
     var body: some View {
-        HStack(spacing: 12) {
-            IconTile(systemImage: systemImage, size: 32, tint: tint)
-            Text(title)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(tint)
-            Spacer(minLength: 8)
-            if let value {
-                Text(value)
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
+        if let value {
+            LabeledContent {
+                Text(value).lineLimit(1)
+            } label: {
+                label
             }
+        } else {
+            label
         }
-        .padding(.vertical, 2)
     }
-}
 
-struct SettingsPageHeader: View {
-    let subtitle: String
-
-    var body: some View {
-        Text(subtitle)
-            .font(.system(size: 15))
-            .foregroundStyle(AppColors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
+    private var label: some View {
+        Label {
+            Text(title).foregroundStyle(tint)
+        } icon: {
+            SettingsIcon(systemImage: systemImage, tint: tint)
+        }
     }
 }
 
