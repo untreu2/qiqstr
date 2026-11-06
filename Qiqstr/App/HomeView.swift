@@ -10,11 +10,11 @@ struct HomeView: View {
                 NavigationStack(path: router.binding(.feed)) { FeedView().withRoutes() }
             }
             .accessibilityIdentifier("tab-feed")
-            Tab(L("messages"), systemImage: "bubble.left.and.bubble.right", value: AppTab.dm) {
+            Tab(L("messages"), systemImage: "message", value: AppTab.dm) {
                 NavigationStack(path: router.binding(.dm)) { DMConversationsView().withRoutes() }
             }
             .badge(badge.hasUnreadMessages ? Text("") : nil)
-            Tab(L("wallet"), systemImage: "wallet.bifold", value: AppTab.wallet) {
+            Tab(L("wallet"), systemImage: "bolt", value: AppTab.wallet) {
                 NavigationStack(path: router.binding(.wallet)) { WalletView().withRoutes() }
             }
             Tab(L("notifications"), systemImage: "bell", value: AppTab.notifications) {
