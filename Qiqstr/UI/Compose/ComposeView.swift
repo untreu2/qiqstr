@@ -53,7 +53,7 @@ struct ComposeEditor: View {
                 .padding(16)
             }
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+            .safeAreaBar(edge: .bottom) { bottomBar }
             .navigationTitle(model.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -22,6 +22,7 @@ struct LiveStreamView: View {
         .background(AppColors.background)
         .navigationTitle(model.stream?.title.nilIfEmpty ?? L("liveTitle"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             if let naddr = model.stream?.naddr {
                 ToolbarItem(placement: .topBarTrailing) {

@@ -63,7 +63,7 @@ nonisolated struct LiveStream: Identifiable, Hashable, Sendable {
         relays = tags.filter { $0.first == "relays" }.flatMap { $0.dropFirst() }.filter { $0.hasPrefix("wss://") }
         hashtags = tags.filter { $0.count > 1 && $0[0] == "t" }.map { $0[1].lowercased() }
         createdAt = json.int("created_at")
-        hasContentWarning = tags.contains { $0.first == "content-warning" } || hashtags.contains("nsfw")
+        hasContentWarning = tags.contains { $0.first == "content-warning" } || hashtags.contains { ["nsfw", "adult", "18plus", "porn"].contains($0.lowercased()) } || [title, summary].contains { $0.contains("🔞") || $0.lowercased().contains("nsfw") }
     }
 
     private static func playableURL(_ values: [String]) -> URL? {
