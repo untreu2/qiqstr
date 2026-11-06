@@ -2,11 +2,16 @@ import SwiftUI
 
 struct MarkdownView: View {
     let blocks: [MarkdownBlock]
+    var anchorPrefix: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                MarkdownBlockView(block: block)
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                if let anchorPrefix {
+                    MarkdownBlockView(block: block).id("\(anchorPrefix)-\(index)")
+                } else {
+                    MarkdownBlockView(block: block)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -14,8 +19,23 @@ struct MarkdownView: View {
     }
 }
 
+struct MarkdownHighlighting {
+    var passages: [String]
+    var onHighlight: (String) -> Void
+    var onShowHighlights: () -> Void
+
+    var segments: [String] {
+        passages.flatMap { passage -> [String] in
+            let lines = passage.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+            return lines.count == 1 ? lines.filter { $0.count >= 3 } : lines.filter { $0.count >= 8 }
+        }
+    }
+}
+
 extension EnvironmentValues {
     @Entry var markdownQuoted = false
+    @Entry var markdownLineSpacingScale: CGFloat = 1
+    @Entry var markdownHighlighting: MarkdownHighlighting? = nil
 }
 
 enum MarkdownLinkHandler {
@@ -82,18 +102,70 @@ struct MarkdownText: View {
     var style: Font.TextStyle = .body
     var weight: Font.Weight? = nil
     @Environment(\.markdownQuoted) private var quoted
+    @Environment(\.markdownLineSpacingScale) private var spacingScale
+    @Environment(\.markdownHighlighting) private var highlighting
     @State private var cache = ProfileCache.shared
     @ScaledMetric(relativeTo: .body) private var bodyLineSpacing: CGFloat = 6
 
     var body: some View {
-        Text(MarkdownInline.attributed(text) { cache.profile($0)?.bestName })
+        let rendered = MarkdownInline.attributed(text) { cache.profile($0)?.bestName }
+        let marked = highlighting.map { Self.mark(rendered, segments: $0.segments) }
+        let base = Text(marked?.text ?? rendered)
             .font(.system(style).weight(weight ?? .regular))
-            .lineSpacing(style == .body ? bodyLineSpacing : 2)
+            .lineSpacing((style == .body ? bodyLineSpacing : 2) * spacingScale)
             .foregroundStyle(quoted ? .secondary : .primary)
             .tint(AppColors.link)
-            .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
+        if let highlighting {
+            base
+                .contentShape(.contextMenuPreview, .rect(cornerRadius: 8))
+                .contextMenu {
+                    Button(L("copy"), systemImage: "doc.on.doc") {
+                        UIPasteboard.general.string = String(rendered.characters)
+                    }
+                    Button(L("highlightAction"), systemImage: "highlighter") {
+                        highlighting.onHighlight(String(rendered.characters))
+                    }
+                    if marked?.matched == true {
+                        Button(L("highlightsTitle"), systemImage: "text.quote") { highlighting.onShowHighlights() }
+                    }
+                }
+                .overlay(alignment: .leading) {
+                    if marked?.matched == true {
+                        Button(action: highlighting.onShowHighlights) {
+                            Capsule()
+                                .fill(AppColors.link.opacity(0.55))
+                                .frame(width: 3)
+                                .frame(maxHeight: .infinity)
+                                .padding(.horizontal, 6)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: -16)
+                        .accessibilityLabel(L("highlightsTitle"))
+                        .accessibilityIdentifier("article-highlight-mark")
+                    }
+                }
+        } else {
+            base.textSelection(.enabled)
+        }
+    }
+
+    private static func mark(_ source: AttributedString, segments: [String]) -> (text: AttributedString, matched: Bool) {
+        guard !segments.isEmpty else { return (source, false) }
+        var result = source
+        var matched = false
+        let line = Text.LineStyle(pattern: .solid, color: AppColors.link.opacity(0.6))
+        for segment in segments {
+            var searchStart = result.startIndex
+            while searchStart < result.endIndex, let range = result[searchStart...].range(of: segment) {
+                result[range].underlineStyle = line
+                matched = true
+                searchStart = range.upperBound
+            }
+        }
+        return (result, matched)
     }
 }
 

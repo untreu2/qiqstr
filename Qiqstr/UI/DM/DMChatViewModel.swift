@@ -37,6 +37,12 @@ final class DMChatViewModel {
     private(set) var attachments: [DMAttachmentDraft] = []
     private(set) var sentCount = 0
     private(set) var failureCount = 0
+    private(set) var focusRequest = 0
+    var infoMessage: DMMessage?
+    var searchQuery = "" {
+        didSet { if searchQuery != oldValue { matchIndex = max(searchMatches.count - 1, 0) } }
+    }
+    private(set) var matchIndex = 0
     private let service = DMService.shared
     private let groupWindow = 300
 
@@ -69,6 +75,59 @@ final class DMChatViewModel {
             rows.append(DMChatRow(id: message.id, kind: .message(message, isFirstInGroup: first, isLastInGroup: last)))
         }
         return rows
+    }
+
+    var trimmedSearch: String { searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var isSearching: Bool { !trimmedSearch.isEmpty }
+
+    var searchMatches: [String] {
+        let query = trimmedSearch
+        guard !query.isEmpty else { return [] }
+        return messages.filter { !$0.isFile && $0.content.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil }.map(\.id)
+    }
+
+    var currentMatchId: String? {
+        let matches = searchMatches
+        guard !matches.isEmpty else { return nil }
+        return matches[min(max(matchIndex, 0), matches.count - 1)]
+    }
+
+    var matchPositionText: String {
+        let matches = searchMatches
+        guard !matches.isEmpty else { return L("dmSearchNoMatches") }
+        return L("dmSearchPosition", ["current": min(matchIndex, matches.count - 1) + 1, "total": matches.count])
+    }
+
+    func previousMatch() {
+        let count = searchMatches.count
+        guard count > 0 else { return }
+        matchIndex = (min(matchIndex, count - 1) - 1 + count) % count
+    }
+
+    func nextMatch() {
+        let count = searchMatches.count
+        guard count > 0 else { return }
+        matchIndex = (min(matchIndex, count - 1) + 1) % count
+    }
+
+    func quote(_ message: DMMessage) {
+        let quoted = message.content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines)
+            .map { "> \($0)" }
+            .joined(separator: "\n")
+        let existing = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = existing.isEmpty ? "\(quoted)\n\n" : "\(quoted)\n\n\(existing)"
+        focusRequest += 1
+    }
+
+    func showInfo(_ message: DMMessage) { infoMessage = message }
+
+    func deliveryRelays(for message: DMMessage) -> [String] { service.deliveryRelays[message.id] ?? [] }
+
+    func inboxRelays() -> [String] {
+        guard let me = service.currentPubkey else { return [] }
+        return service.knownDMRelays(for: me)
     }
 
     private func grouped(_ a: DMMessage, _ b: DMMessage, _ calendar: Calendar) -> Bool {

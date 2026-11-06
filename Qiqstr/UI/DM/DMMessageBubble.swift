@@ -8,20 +8,31 @@ struct DMMessageBubble: View {
     let onCopyImage: (UIImage) -> Void
     let onRetry: (DMMessage) -> Void
     let onDiscard: (DMMessage) -> Void
+    var onQuote: (DMMessage) -> Void = { _ in }
+    var onInfo: (DMMessage) -> Void = { _ in }
+    var searchQuery = ""
+    var isCurrentMatch = false
     @State private var cache = ProfileCache.shared
 
     private var mine: Bool { message.isMine }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 0) {
+        HStack(alignment: .center, spacing: 8) {
             if mine { Spacer(minLength: 56) }
-            VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
+            if message.state == .failed { failedBadge }
+            VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
                 bubble
+                    .overlay {
+                        if isCurrentMatch {
+                            bubbleShape.stroke(AppColors.link, lineWidth: 2)
+                        }
+                    }
+                    .animation(.smooth(duration: 0.2), value: isCurrentMatch)
                 if isLastInGroup || message.state != .sent { footer }
             }
             if !mine { Spacer(minLength: 56) }
         }
-        .padding(.top, isFirstInGroup ? 8 : 2)
+        .padding(.top, isFirstInGroup ? 10 : 2)
         .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
         .accessibilityIdentifier("dm-message-\(message.id)")
     }
@@ -53,7 +64,7 @@ struct DMMessageBubble: View {
             .contentShape(bubbleShape)
             .contextMenu { menuItems }
         } else {
-            Text(DMText.attributed(message.content, mine: mine, cache: cache))
+            Text(DMText.attributed(message.content, mine: mine, cache: cache, highlighting: searchQuery))
                 .font(.body)
                 .foregroundStyle(mine ? AppColors.background : AppColors.textPrimary)
                 .tint(mine ? AppColors.background : AppColors.textPrimary)
@@ -85,8 +96,19 @@ struct DMMessageBubble: View {
             } label: {
                 Label(L("copy"), systemImage: "doc.on.doc")
             }
+            Button {
+                onQuote(message)
+            } label: {
+                Label(L("reply"), systemImage: "arrowshape.turn.up.left")
+            }
+        }
+        Button {
+            onInfo(message)
+        } label: {
+            Label(L("dmInfo"), systemImage: "info.circle")
         }
         if message.state == .failed {
+            Divider()
             Button {
                 onRetry(message)
             } label: {
@@ -98,6 +120,30 @@ struct DMMessageBubble: View {
                 Label(L("delete"), systemImage: "trash")
             }
         }
+    }
+
+    private var failedBadge: some View {
+        Menu {
+            Button {
+                onRetry(message)
+            } label: {
+                Label(L("dmTryAgain"), systemImage: "arrow.clockwise")
+            }
+            Button(role: .destructive) {
+                onDiscard(message)
+            } label: {
+                Label(L("delete"), systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.title3)
+                .foregroundStyle(AppColors.error)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(L("dmSendFailed"))
+        .accessibilityIdentifier("dm-message-failed-menu")
+        .transition(.scale.combined(with: .opacity))
     }
 
     @ViewBuilder
@@ -151,6 +197,18 @@ enum DMText {
     static func isImageURL(_ value: String) -> Bool {
         guard let url = URL(string: value), url.scheme?.hasPrefix("http") == true else { return false }
         return imageExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    static func attributed(_ text: String, mine: Bool, cache: ProfileCache, highlighting query: String) -> AttributedString {
+        var result = attributed(text, mine: mine, cache: cache)
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return result }
+        var start = result.startIndex
+        while start < result.endIndex, let range = result[start...].range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) {
+            result[range].backgroundColor = AppColors.link.opacity(mine ? 0.55 : 0.3)
+            start = range.upperBound
+        }
+        return result
     }
 
     static func attributed(_ text: String, mine: Bool, cache: ProfileCache) -> AttributedString {
