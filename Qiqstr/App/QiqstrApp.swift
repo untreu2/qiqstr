@@ -44,10 +44,7 @@ struct RootView: View {
 
 struct SplashView: View {
     var body: some View {
-        VStack(spacing: 18) {
-            Image("Logo").resizable().renderingMode(.template).scaledToFit().frame(width: 140).foregroundStyle(AppColors.textPrimary)
-            ProgressView().opacity(0.6)
-        }
-        .accessibilityIdentifier("splash")
+        ProgressView()
+            .accessibilityIdentifier("splash")
     }
 }
