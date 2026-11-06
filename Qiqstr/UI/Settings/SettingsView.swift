@@ -22,6 +22,12 @@ struct SettingsView: View {
                 link(.keys, L("keys"), "key.horizontal.fill", fill: AppColors.settingsTile)
                 link(.relays, L("relays"), "point.3.connected.trianglepath.dotted", fill: AppColors.settingsTile)
                 link(.muted, L("muted"), "bell.slash.fill", fill: AppColors.settingsTile)
+                NavigationLink {
+                    SafetySettingsView()
+                } label: {
+                    SettingsRowLabel(title: L("safetyTitle"), systemImage: "hand.raised.fill", fill: AppColors.settingsTile)
+                }
+                .accessibilityIdentifier("settings-row-safety")
             }
             Section {
                 link(.display, L("display"), "circle.lefthalf.filled", fill: AppColors.settingsTile)
