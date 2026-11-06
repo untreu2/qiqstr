@@ -13,6 +13,48 @@ struct NoteMediaItem: Hashable, Sendable, Identifiable {
     var url: String
     var isVideo: Bool
     var aspectRatio: CGFloat?
+    var blurhash: String?
+    var alt: String?
+    var poster: String?
+}
+
+struct NoteImeta: Hashable, Sendable {
+    var url: String
+    var mimeType: String?
+    var size: CGSize?
+    var blurhash: String?
+    var alt: String?
+    var poster: String?
+
+    var aspectRatio: CGFloat? { size.map { $0.width / $0.height } }
+
+    init?(tag: [String]) {
+        guard tag.first == "imeta" else { return nil }
+        var fields: [String: String] = [:]
+        for entry in tag.dropFirst() {
+            guard let space = entry.firstIndex(of: " ") else { continue }
+            let key = String(entry[..<space])
+            if fields[key] == nil { fields[key] = String(entry[entry.index(after: space)...]).trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+        guard let url = fields["url"], !url.isEmpty else { return nil }
+        self.url = url
+        mimeType = fields["m"]?.lowercased()
+        if let dim = fields["dim"] {
+            let parts = dim.lowercased().split(separator: "x").compactMap { Double($0) }
+            if parts.count == 2, parts[0] > 0, parts[1] > 0 { size = CGSize(width: parts[0], height: parts[1]) }
+        }
+        blurhash = fields["blurhash"]?.nilIfEmpty
+        alt = fields["alt"]?.nilIfEmpty
+        poster = fields["image"]?.nilIfEmpty ?? fields["thumb"]?.nilIfEmpty
+    }
+
+    static func map(_ tags: [[String]]) -> [String: NoteImeta] {
+        var result: [String: NoteImeta] = [:]
+        for tag in tags {
+            if let meta = NoteImeta(tag: tag), result[meta.url] == nil { result[meta.url] = meta }
+        }
+        return result
+    }
 }
 
 final class NoteContent {
@@ -26,10 +68,12 @@ final class NoteContent {
     let articleIds: [String]
     let mentionPubkeys: [String]
     let isEmptyText: Bool
+    let contentWarning: String?
 
     init(content: String, tags: [[String]]) {
         let parsed = NoteRepository.parse(content)
-        let dimensions = Self.dimensions(from: tags)
+        let imeta = NoteImeta.map(tags)
+        contentWarning = Note.contentWarning(content: content, tags: tags)
         var segments: [NoteContentSegment] = []
         var mentions: [String] = []
         for part in parsed.parts {
@@ -44,7 +88,9 @@ final class NoteContent {
         truncatedSegments = Self.truncate(segments, limit: Self.truncationLimit)
         media = parsed.mediaUrls.map { url in
             let lower = (URL(string: url)?.path ?? url).lowercased()
-            return NoteMediaItem(url: url, isVideo: lower.hasSuffix(".mp4") || lower.hasSuffix(".mov"), aspectRatio: dimensions[url])
+            let meta = imeta[url]
+            let isVideo = meta?.mimeType?.hasPrefix("video/") ?? (lower.hasSuffix(".mp4") || lower.hasSuffix(".mov") || lower.hasSuffix(".m4v") || lower.hasSuffix(".webm"))
+            return NoteMediaItem(url: url, isVideo: isVideo, aspectRatio: meta?.aspectRatio, blurhash: meta?.blurhash, alt: meta?.alt, poster: meta?.poster)
         }
         linkUrls = parsed.linkUrls
         var quotes: [String] = []
@@ -64,6 +110,18 @@ final class NoteContent {
 
     var images: [NoteMediaItem] { media.filter { !$0.isVideo } }
     var videos: [NoteMediaItem] { media.filter(\.isVideo) }
+    var translatableText: String {
+        segments.compactMap { segment -> String? in
+            switch segment {
+            case .text(let text): text
+            case .hashtag(let tag): "#\(tag)"
+            case .link, .mention: nil
+            }
+        }
+        .joined()
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var previewLink: String? { linkUrls.count == 1 && media.isEmpty ? linkUrls.first : nil }
 
     private static let linkRegex = try? NSRegularExpression(pattern: "https?://[^\\s<>\"']+", options: [.caseInsensitive])
@@ -147,23 +205,6 @@ final class NoteContent {
             }
         }
         return nil
-    }
-
-    private static func dimensions(from tags: [[String]]) -> [String: CGFloat] {
-        var result: [String: CGFloat] = [:]
-        for tag in tags where tag.first == "imeta" {
-            var url: String?
-            var ratio: CGFloat?
-            for entry in tag.dropFirst() {
-                if entry.hasPrefix("url ") { url = String(entry.dropFirst(4)) }
-                if entry.hasPrefix("dim ") {
-                    let parts = entry.dropFirst(4).split(separator: "x").compactMap { Double($0) }
-                    if parts.count == 2, parts[0] > 0, parts[1] > 0 { ratio = CGFloat(parts[0] / parts[1]) }
-                }
-            }
-            if let url, let ratio { result[url] = ratio }
-        }
-        return result
     }
 
     static func displayURL(_ url: String) -> String {

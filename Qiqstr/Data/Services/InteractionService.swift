@@ -304,12 +304,16 @@ final class InteractionService {
         return nil
     }
 
+    private static func imetaKey(_ entry: String) -> Substring {
+        entry.split(separator: " ", maxSplits: 1).first ?? Substring(entry)
+    }
+
     static func merge(_ base: [[String]], _ extra: [[String]]) -> [[String]] {
         var result = base
         for tag in extra where !tag.isEmpty {
             if tag.first == "imeta", let url = tag.dropFirst().first, let index = result.firstIndex(where: { $0.first == "imeta" && $0.dropFirst().first == url }) {
                 var merged = result[index]
-                for entry in tag.dropFirst(2) where !merged.contains(where: { $0.hasPrefix(String(entry.prefix(2))) }) { merged.append(entry) }
+                for entry in tag.dropFirst(2) where !merged.dropFirst().contains(where: { imetaKey($0) == imetaKey(entry) }) { merged.append(entry) }
                 result[index] = merged
             } else if !result.contains(where: { Array($0.prefix(2)) == Array(tag.prefix(2)) }) {
                 result.append(tag)

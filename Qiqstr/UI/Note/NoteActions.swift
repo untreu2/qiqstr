@@ -1,4 +1,5 @@
 import SwiftUI
+import Translation
 import UIKit
 
 @MainActor
@@ -7,6 +8,7 @@ final class NoteActionHandler {
     var pendingDelete: Note?
     var pendingMute: Note?
     var reportTarget: Note?
+    var translateTarget: Note?
     var isWorking = false
 
     static func shareURL(_ note: Note) -> URL {
@@ -114,6 +116,9 @@ struct NoteMenuItems: View {
 
     var body: some View {
         Section {
+            if NoteLanguage.needsTranslation(note) {
+                Button(L("feedTranslate"), systemImage: "translate") { actions.translateTarget = note }
+            }
             Button(L("feedCopyText"), systemImage: "doc.on.doc") { actions.copyText(note) }
             Button(L("feedCopyNoteId"), systemImage: "number") { actions.copyId(note) }
             ShareLink(item: NoteActionHandler.shareURL(note)) { Label(L("share"), systemImage: "square.and.arrow.up") }
@@ -158,6 +163,7 @@ struct NoteActionDialogs: ViewModifier {
             } message: { _ in
                 Text(L("muteUserDescription"))
             }
+            .translationPresentation(isPresented: Binding(get: { actions.translateTarget != nil }, set: { if !$0 { actions.translateTarget = nil } }), text: actions.translateTarget.map(NoteLanguage.text(for:)) ?? "")
             .sheet(item: $actions.reportTarget) { note in
                 ReportNoteSheet(note: note, actions: actions)
                     .presentationDetents([.medium, .large])

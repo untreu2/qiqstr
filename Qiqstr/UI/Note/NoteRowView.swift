@@ -172,18 +172,20 @@ struct NoteContextPreview: View {
                 }
             }
             let content = NoteContentCache.content(for: note)
-            if !content.isEmptyText {
-                Text(content.attributed(content.truncatedSegments ?? content.segments, cache: ProfileCache.shared))
-                    .font(.body)
-                    .lineLimit(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 10) {
+                if !content.isEmptyText {
+                    Text(content.attributed(content.truncatedSegments ?? content.segments, cache: ProfileCache.shared))
+                        .font(.body)
+                        .lineLimit(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let image = content.images.first {
+                    NoteMediaImage(item: image, maxPixel: 800)
+                        .frame(height: 180)
+                        .clipShape(.rect(cornerRadius: 12, style: .continuous))
+                }
             }
-            if let image = content.images.first {
-                Color.clear
-                    .frame(height: 180)
-                    .overlay { RemoteImage(url: image.url, maxPixel: 800) { Rectangle().fill(AppColors.tile) } }
-                    .clipShape(.rect(cornerRadius: 12, style: .continuous))
-            }
+            .noteSensitiveCover(note.id, reason: content.contentWarning, compact: true)
         }
         .padding(16)
         .frame(width: 340, alignment: .leading)
