@@ -1,0 +1,16 @@
+"dmAttach" = "Fotoğraf veya video ekle";
+"dmAttachment" = "Ek";
+"dmCopyNpub" = "npub'ı kopyala";
+"dmFailedTapRetry" = "Gönderilemedi. Tekrar denemek için dokun.";
+"dmMarkAllRead" = "Tümünü okundu olarak işaretle";
+"dmMarkRead" = "Okundu olarak işaretle";
+"dmMarkUnread" = "Okunmadı olarak işaretle";
+"dmNotSignedIn" = "Oturum açmadınız";
+"dmPasteNpubHint" = "Herhangi birine mesaj göndermek için bir npub veya açık anahtar yapıştırın.";
+"dmPhoto" = "Fotoğraf";
+"dmRecent" = "Son";
+"dmSendFailed" = "Mesaj gönderilemedi";
+"dmSending" = "Gönderiliyor…";
+"dmStartChat" = "Sohbet başlat";
+"dmVideo" = "Video";
+"dmViewProfile" = "Profili görüntüle";
