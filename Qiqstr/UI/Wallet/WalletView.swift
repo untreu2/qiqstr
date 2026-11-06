@@ -191,13 +191,6 @@ struct WalletOnboardingView: View {
                 feature("banknote", L("walletFeatureCashu"))
             }
             Section {
-                ForEach(WalletProvider.all) { WalletProviderRow(provider: $0) }
-            } header: {
-                Text(L("walletGetWallet"))
-            } footer: {
-                Text(L("walletGetWalletFooter"))
-            }
-            Section {
                 Text(L("walletNwcHowTo"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

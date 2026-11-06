@@ -9,7 +9,7 @@ struct ProfileBadgesRow: View {
 
     var body: some View {
         Button { showSheet = true } label: {
-            HStack(spacing: 6) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: size), spacing: 6)], alignment: .leading, spacing: 6) {
                 ForEach(badges.prefix(visibleLimit)) { badge in
                     BadgeImage(url: badge.thumbURL, size: size)
                 }

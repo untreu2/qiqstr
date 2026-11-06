@@ -32,6 +32,7 @@ struct ProfileActionButtons: View {
                 }
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 }
 

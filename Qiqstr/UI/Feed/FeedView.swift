@@ -134,6 +134,7 @@ struct FeedView: View {
         if model.notes.isEmpty {
             if !model.hasLoaded || model.isSyncing {
                 FeedSkeleton()
+                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel(L("loadingYourFeed"))
                     .accessibilityIdentifier("feed-loading")
             } else if case .list = model.source {

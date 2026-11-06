@@ -20,7 +20,7 @@ enum TimeFormat {
         return f.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
     }
 
-    static var now: Int { Int(Date().timeIntervalSince1970) }
+    nonisolated static var now: Int { Int(Date().timeIntervalSince1970) }
 }
 
 enum Sats {

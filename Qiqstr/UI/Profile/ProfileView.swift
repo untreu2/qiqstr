@@ -6,7 +6,7 @@ struct ProfileView: View {
     @State private var bus = DataBus.shared
     @State private var pins = PinnedNotesService.shared
     @State private var mutes = MuteService.shared
-    @State private var scrollOffset: CGFloat = 0
+    @State private var identityBottom: CGFloat = .infinity
     @State private var viewerImage: ViewableImage?
     @State private var mediaSelection: ProfileMediaSelection?
     @State private var confirmMute = false
@@ -39,25 +39,21 @@ struct ProfileView: View {
         GeometryReader { outer in
             let topInset = outer.safeAreaInsets.top
             let bannerHeight = min(max(outer.size.width * 0.3, 110), 160)
-            let titleVisible = scrollOffset > bannerHeight + 70
+            let titleVisible = identityBottom <= topInset
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ProfileHeaderView(model: model, topInset: topInset, bannerHeight: bannerHeight) { url in
                         viewerImage = ViewableImage(url: url)
-                    }
+                    } onIdentityPositionChange: { identityBottom = $0 }
                     tabPicker
                     tabContent
                     footer
                 }
                 .padding(.bottom, 24)
             }
+            .coordinateSpace(name: "profile-viewport")
             .ignoresSafeArea(edges: .top)
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                geo.contentOffset.y + geo.contentInsets.top
-            } action: { _, value in
-                scrollOffset = value
-            }
             .refreshable { await model.refresh() }
             .accessibilityIdentifier("profile-scroll")
             .toolbar {

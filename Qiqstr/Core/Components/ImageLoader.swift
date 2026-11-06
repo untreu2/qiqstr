@@ -4,7 +4,7 @@ import UIKit
 actor ImagePipeline {
     static let shared = ImagePipeline()
     private let cache = NSCache<NSString, UIImage>()
-    private var tasks: [URL: Task<UIImage?, Never>] = [:]
+    private var tasks: [String: Task<UIImage?, Never>] = [:]
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.urlCache = URLCache(memoryCapacity: 50_000_000, diskCapacity: 400_000_000)
@@ -17,17 +17,17 @@ actor ImagePipeline {
 
 
     func image(for url: URL, maxPixel: CGFloat) async -> UIImage? {
-        let key = "\(url.absoluteString)#\(Int(maxPixel))" as NSString
-        if let hit = cache.object(forKey: key) { return hit }
-        if let task = tasks[url] { return await task.value }
+        let key = "\(url.absoluteString)#\(maxPixel)"
+        if let hit = cache.object(forKey: key as NSString) { return hit }
+        if let task = tasks[key] { return await task.value }
         let task = Task<UIImage?, Never> {
             guard let (data, _) = try? await session.data(from: url) else { return nil }
             return await Task.detached { ImagePipeline.downsample(data, maxPixel: maxPixel) }.value
         }
-        tasks[url] = task
+        tasks[key] = task
         let image = await task.value
-        tasks[url] = nil
-        if let image { cache.setObject(image, forKey: key) }
+        tasks[key] = nil
+        if let image { cache.setObject(image, forKey: key as NSString) }
         return image
     }
 
@@ -52,7 +52,6 @@ struct RemoteImage<Placeholder: View>: View {
     var contentMode: ContentMode = .fill
     @ViewBuilder var placeholder: () -> Placeholder
     @State private var image: UIImage?
-    @State private var failed = false
 
     var body: some View {
         Group {
@@ -68,10 +67,12 @@ struct RemoteImage<Placeholder: View>: View {
                 placeholder()
             }
         }
-        .task(id: url) {
+        .task(id: "\(url ?? "")#\(maxPixel)") {
             image = nil
             guard let url, let u = URL(string: url), u.scheme?.hasPrefix("http") == true else { return }
-            image = await ImagePipeline.shared.image(for: u, maxPixel: maxPixel)
+            let loaded = await ImagePipeline.shared.image(for: u, maxPixel: maxPixel)
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }

@@ -5,10 +5,12 @@ struct ProfileHeaderView: View {
     let topInset: CGFloat
     let bannerHeight: CGFloat
     var onViewImage: (String) -> Void
+    var onIdentityPositionChange: (CGFloat) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var mutes = MuteService.shared
     @State private var copiedTrigger = 0
 
-    static let avatarSize: CGFloat = 76
+    static let avatarSize: CGFloat = 80
 
     private var profile: Profile { model.profile }
 
@@ -17,14 +19,12 @@ struct ProfileHeaderView: View {
             StretchyBanner(url: profile.banner.nilIfEmpty, height: bannerHeight + topInset) {
                 if let banner = profile.banner.nilIfEmpty { onViewImage(banner) }
             }
-            .overlay(alignment: .bottomTrailing) {
-                ProfileActionButtons(model: model)
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 12)
-            }
             VStack(alignment: .leading, spacing: 10) {
                 avatarRow
                 identity
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.frame(in: .named("profile-viewport")).maxY
+                    } action: { onIdentityPositionChange($0) }
                 if !profile.about.isEmpty {
                     ProfileBioText(text: profile.about)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -46,29 +46,44 @@ struct ProfileHeaderView: View {
     }
 
     private var avatarRow: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Button {
-                if let picture = profile.picture.nilIfEmpty { onViewImage(picture) }
-            } label: {
-                AvatarView(url: profile.picture.nilIfEmpty, size: Self.avatarSize)
-                    .padding(4)
-                    .background(AppColors.background, in: Circle())
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .bottom, spacing: 16) {
+                avatar
+                Spacer(minLength: 0)
+                ProfileActionButtons(model: model).fixedSize()
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L("profileImage"))
-            .accessibilityIdentifier("profile-avatar")
-            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 12) {
+                avatar
+                ProfileActionButtons(model: model)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
-        .padding(.top, -(Self.avatarSize / 2 + 4))
+        .padding(.top, 12)
+    }
+
+    private var avatar: some View {
+        Button {
+            if let picture = profile.picture.nilIfEmpty { onViewImage(picture) }
+        } label: {
+            AvatarView(url: profile.picture.nilIfEmpty, size: Self.avatarSize)
+                .background {
+                    Circle().fill(AppColors.background).padding(-4)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L("profileImage"))
+        .accessibilityIdentifier("profile-avatar")
+        .padding(.top, -Self.avatarSize / 2)
     }
 
     private var identity: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            identityLayout {
                 Text(model.displayName)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
                     .accessibilityIdentifier("profile-name")
                 if mutes.isMuted(model.pubkey) {
                     Text(L("mutedButton"))
@@ -80,11 +95,11 @@ struct ProfileHeaderView: View {
                 }
             }
             if model.handle != nil || showsFollowsYou {
-                HStack(spacing: 6) {
+                identityLayout {
                     if let handle = model.handle {
-                        Text(handle).lineLimit(1)
+                        Text(handle).fixedSize(horizontal: false, vertical: true)
                     }
-                    if model.handle != nil && showsFollowsYou {
+                    if model.handle != nil && showsFollowsYou && !dynamicTypeSize.isAccessibilitySize {
                         Text(verbatim: "·").accessibilityHidden(true)
                     }
                     if showsFollowsYou {
@@ -97,15 +112,16 @@ struct ProfileHeaderView: View {
                 .foregroundStyle(.secondary)
             }
             Button(action: copyNpub) {
-                HStack(spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(Profile.shortNpub(model.pubkey))
                         .font(.subheadline.monospaced())
                     Image(systemName: "doc.on.doc").font(.caption)
                 }
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(L("copiedNpub"))
+            .accessibilityLabel(L("profileCopyNpub"))
             .accessibilityIdentifier("profile-copy-npub")
         }
     }
@@ -149,7 +165,7 @@ struct ProfileHeaderView: View {
     }
 
     private var counts: some View {
-        HStack(spacing: 14) {
+        countsLayout {
             CountButton(value: model.followingCount, label: L("followingCount")) {
                 Router.shared.push(.followList(model.pubkey, .following))
             }
@@ -159,6 +175,18 @@ struct ProfileHeaderView: View {
             }
             .accessibilityIdentifier("profile-followers-count")
         }
+    }
+
+    private var identityLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+    }
+
+    private var countsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 16))
     }
 
     private var showsFollowsYou: Bool { model.followsMe && !model.isMe }
@@ -183,7 +211,7 @@ private struct DetailRow: View {
     var tint: Color = .secondary
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: systemImage)
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(tint)
@@ -191,8 +219,8 @@ private struct DetailRow: View {
             Text(text)
                 .font(.subheadline.weight(emphasized ? .medium : .regular))
                 .foregroundStyle(emphasized ? .primary : .secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
         }
         .contentShape(Rectangle())
     }
@@ -205,7 +233,7 @@ private struct CountButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if let value {
                     Text(Sats.compact(value))
                         .font(.subheadline.weight(.semibold))
