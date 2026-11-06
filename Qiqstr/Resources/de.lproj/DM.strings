@@ -1,0 +1,16 @@
+"dmAttach" = "Foto oder Video anhängen";
+"dmAttachment" = "Anhang";
+"dmCopyNpub" = "npub kopieren";
+"dmFailedTapRetry" = "Nicht gesendet. Zum Wiederholen tippen.";
+"dmMarkAllRead" = "Alle als gelesen markieren";
+"dmMarkRead" = "Als gelesen markieren";
+"dmMarkUnread" = "Als ungelesen markieren";
+"dmNotSignedIn" = "Du bist nicht angemeldet";
+"dmPasteNpubHint" = "Füge eine npub oder einen öffentlichen Schlüssel ein, um jemandem zu schreiben.";
+"dmPhoto" = "Foto";
+"dmRecent" = "Zuletzt";
+"dmSendFailed" = "Nachricht konnte nicht gesendet werden";
+"dmSending" = "Wird gesendet…";
+"dmStartChat" = "Chat starten";
+"dmVideo" = "Video";
+"dmViewProfile" = "Profil ansehen";
