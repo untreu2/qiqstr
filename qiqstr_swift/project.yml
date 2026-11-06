@@ -1,0 +1,107 @@
+name: Qiqstr
+options:
+  bundleIdPrefix: me.untreu
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    DEVELOPMENT_TEAM: ""
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+    CODE_SIGN_STYLE: Automatic
+packages:
+  QiqstrCore:
+    path: QiqstrCore
+targets:
+  Qiqstr:
+    type: application
+    platform: iOS
+    sources:
+      - path: Qiqstr
+    dependencies:
+      - package: QiqstrCore
+      - target: QiqstrShare
+        embed: true
+      - target: QiqstrWidgets
+        embed: true
+      - sdk: WidgetKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.untreu.qiqstrswift
+        CODE_SIGN_ENTITLEMENTS: Qiqstr/Qiqstr.entitlements
+        PRODUCT_NAME: qiqstr
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Qiqstr/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1"
+        OTHER_LDFLAGS: ["-lc++"]
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+  QiqstrShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+        excludes:
+          - "*.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.untreu.qiqstrswift.share
+        PRODUCT_NAME: QiqstrShare
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+  QiqstrWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+        excludes:
+          - "*.entitlements"
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.untreu.qiqstrswift.widgets
+        PRODUCT_NAME: QiqstrWidgets
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Widgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widgets/Widgets.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+  QiqstrUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: QiqstrUITests
+    dependencies:
+      - target: Qiqstr
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.untreu.qiqstrswift.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Qiqstr
+schemes:
+  Qiqstr:
+    build:
+      targets:
+        Qiqstr: all
+        QiqstrUITests: [test]
+    test:
+      targets:
+        - QiqstrUITests

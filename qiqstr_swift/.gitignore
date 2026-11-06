@@ -1,0 +1,10 @@
+.DS_Store
+build/
+DerivedData/
+rust/target/
+QiqstrCore/QiqstrCoreFFI.xcframework
+QiqstrCore/.build/
+QiqstrCore/.swiftpm/
+*.xcuserstate
+xcuserdata/
+Qiqstr.xcodeproj/
