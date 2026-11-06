@@ -25,7 +25,7 @@ final class MediaUploadService {
 
     func uploadMedia(data: Data, mimeType: String, server: String? = nil) async throws -> UploadedMedia {
         let server = server ?? RelayConfig.blossomServer
-        guard let key = Session.shared.privateKey else { throw CoreError(L("authenticationRequired")) }
+        let key = try Session.shared.requireSigner()
         let hash = await Task.detached { sha256Hash(data: data) }.value
         let expiration = Int64(TimeFormat.now + 600)
         let auth = try createBlossomAuthEvent(content: "Upload \(hash)", sha256Hash: hash, expiration: expiration, privateKeyHex: key)

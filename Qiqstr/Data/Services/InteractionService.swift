@@ -73,7 +73,7 @@ final class InteractionService {
     private var sync: SyncService { SyncService.shared }
 
     private func signingKey() throws -> String {
-        guard let key = Session.shared.privateKey, Session.shared.pubkey != nil else { throw CoreError(L("authenticationRequired")) }
+        let key = try Session.shared.requireSigner()
         return key
     }
 

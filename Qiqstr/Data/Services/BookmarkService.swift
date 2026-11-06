@@ -146,7 +146,8 @@ final class BookmarkService {
     }
 
     private func publishCurrent() async throws {
-        guard let me = Session.shared.pubkey, let sk = Session.shared.privateKey else { throw CoreError("Not signed in") }
+        let sk = try Session.shared.requireSigner()
+        guard let me = Session.shared.pubkey else { throw CoreError("Not signed in") }
         let privateTags = bookmarkedIds.map { ["e", $0] }
         let encrypted = try nip44Encrypt(content: JSON.string(privateTags), senderSkHex: sk, receiverPkHex: me)
         let json = try createSignedEvent(kind: 30001, content: encrypted, tags: [["d", Self.dTag], ["alt", "List of bookmarks"]], privateKeyHex: sk)

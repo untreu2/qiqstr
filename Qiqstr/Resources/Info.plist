@@ -24,6 +24,8 @@
 			<array>
 				<string>nostr</string>
 				<string>lightning</string>
+				<string>qiqstr</string>
+				<string>nostr+walletconnect</string>
 			</array>
 		</dict>
 	</array>

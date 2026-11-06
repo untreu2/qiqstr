@@ -51,7 +51,8 @@ final class PinnedNotesService {
     }
 
     func toggle(_ noteId: String) async throws {
-        guard let me = Session.shared.pubkey, let key = Session.shared.privateKey else { throw CoreError("Not signed in") }
+        let key = try Session.shared.requireSigner()
+        guard let me = Session.shared.pubkey else { throw CoreError("Not signed in") }
         if owner != me { _ = await cachedIds(for: me) }
         let previous = pinnedIds
         let updated = previous.contains(noteId) ? previous.filter { $0 != noteId } : previous + [noteId]

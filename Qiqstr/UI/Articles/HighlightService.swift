@@ -41,7 +41,7 @@ enum HighlightService {
     }
 
     static func publish(text: String, context: String, comment: String, article: Article) async throws -> ArticleHighlight {
-        guard let key = Session.shared.privateKey, Session.shared.pubkey != nil else { throw CoreError(L("authenticationRequired")) }
+        let key = try Session.shared.requireSigner()
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { throw CoreError(L("highlightEmpty")) }
         var tags: [[String]] = [

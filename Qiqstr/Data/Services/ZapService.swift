@@ -142,7 +142,7 @@ final class ZapService {
     func zap(note: Note?, pubkey: String, amountSats: Int, comment: String) async throws {
         guard canZap else { throw ZapError.noWallet }
         guard amountSats > 0 else { throw ZapError.invalidAmount }
-        guard let privateKey = Session.shared.privateKey else { throw ZapError.noAccount }
+        let privateKey = try Session.shared.requireSigner()
         let recipient = await recipient(pubkey)
         let params: LnurlPayParams
         if let address = recipient.lightningAddress {

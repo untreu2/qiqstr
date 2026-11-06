@@ -59,7 +59,7 @@ final class SyncService {
         let key = "feed_\(me)_\(follows.joined().hashValue)"
         guard force || shouldSync(key) else { return }
         let since = since(key) ?? (TimeFormat.now - 86400 * 2)
-        async let notes = fetchAndStore(["authors": follows, "kinds": [1, 5, 6], "since": since, "limit": 100])
+        async let notes = fetchAndStore(["authors": follows, "kinds": [1, 5, 6, 1068], "since": since, "limit": 100])
         async let articles = fetchAndStore(["kinds": [30023], "authors": follows, "since": since, "limit": 30])
         let (noteEvents, _) = await (notes, articles)
         _ = try? await dbProcessDeletionEvents()
@@ -76,7 +76,7 @@ final class SyncService {
         let key = "list_feed_\(pubkeys.sorted().joined().hashValue)"
         guard force || shouldSync(key) else { return }
         let since = since(key) ?? (TimeFormat.now - 86400 * 2)
-        let events = await fetchAndStore(["authors": pubkeys, "kinds": [1, 5, 6], "since": since, "limit": 100])
+        let events = await fetchAndStore(["authors": pubkeys, "kinds": [1, 5, 6, 1068], "since": since, "limit": 100])
         _ = try? await dbProcessDeletionEvents()
         bus.feedChanged()
         queueMissingRepostOriginals(since)
@@ -283,7 +283,7 @@ final class SyncService {
         while !Task.isCancelled, generation == realtimeGeneration {
             let follows = Array(Set(await followingList(me) + [me]))
             let since = feedLastEventTs.map { $0 - 1 } ?? (TimeFormat.now - 60)
-            let filter = JSON.string(["kinds": [1, 5, 6], "authors": follows, "since": since])
+            let filter = JSON.string(["kinds": [1, 5, 6, 1068], "authors": follows, "since": since])
             let stream = EventStream.make { sink in try await subscribeToEvents(filterJson: filter, sink: sink) }
             do {
                 for try await raw in stream {

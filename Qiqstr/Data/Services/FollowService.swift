@@ -69,7 +69,8 @@ final class FollowService {
     }
 
     private func apply(_ targets: Set<String>, _ change: (inout Set<String>) -> Void) async throws {
-        guard let me = Session.shared.pubkey, let key = Session.shared.privateKey else { throw CoreError(L("privateKeyNotFound")) }
+        let key = try Session.shared.requireSigner()
+        guard let me = Session.shared.pubkey else { throw CoreError(L("privateKeyNotFound")) }
         let generation = self.generation
         let snapshot = following
         var optimistic = following

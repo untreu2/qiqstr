@@ -71,10 +71,9 @@ struct InteractionBarView: View {
     }
 
     private var zapButton: some View {
-        Button { Router.shared.sheet = .zap(note) } label: {
-            barLabel(model.counts.hasZapped ? "bolt.fill" : "bolt", count: model.counts.zapAmount, tint: model.counts.hasZapped ? AppColors.zap : nil)
+        ZapButton(note: note, hasZapped: model.counts.hasZapped) { state in
+            barLabel(state.isZapped ? "bolt.fill" : "bolt", count: model.counts.zapAmount + state.addedSats, tint: state.isZapped ? AppColors.zap : nil)
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(L("zap"))
         .accessibilityIdentifier("note-zap")
     }

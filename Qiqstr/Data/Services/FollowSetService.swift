@@ -211,7 +211,7 @@ final class FollowSetService {
     }
 
     private func publish(_ set: FollowSet) async throws -> FollowSet {
-        guard let sk = Session.shared.privateKey else { throw CoreError("Not signed in") }
+        let sk = try Session.shared.requireSigner()
         var tags: [[String]] = [["d", set.dTag]]
         if !set.title.isEmpty { tags.append(["title", set.title]) }
         if !set.description.isEmpty { tags.append(["description", set.description]) }

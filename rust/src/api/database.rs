@@ -2242,7 +2242,7 @@ pub async fn db_get_hydrated_feed_notes(
     };
     let filter = Filter::new()
         .authors(authors)
-        .kinds([Kind::TextNote, Kind::Repost])
+        .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
         .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
 
@@ -2275,7 +2275,7 @@ pub async fn db_get_hydrated_profile_notes(
     };
     let mut filter = Filter::new()
         .author(pk)
-        .kinds([Kind::TextNote, Kind::Repost])
+        .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
         .limit(query_limit as usize);
     if let Some(until) = until_timestamp {
         if until > 0 {
@@ -3376,7 +3376,7 @@ pub async fn db_get_hydrated_feed_notes_sorted(
     };
     let filter = Filter::new()
         .authors(authors)
-        .kinds([Kind::TextNote, Kind::Repost])
+        .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
         .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
 

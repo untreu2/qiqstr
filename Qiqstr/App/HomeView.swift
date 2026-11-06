@@ -55,6 +55,7 @@ struct HomeView: View {
         }
         .overlay(alignment: .top) { ClipboardLinkBanner() }
         .readOnlyGate()
+        .zapRetryToast()
         .task {
             router.openPendingLink()
             await clipboard.becameActive()

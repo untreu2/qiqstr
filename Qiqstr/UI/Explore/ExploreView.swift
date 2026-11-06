@@ -10,6 +10,7 @@ struct ExploreView: View {
             if !model.trimmedQuery.isEmpty {
                 usersSection
             }
+            if model.trimmedQuery.isEmpty { ContinueReadingSection() }
             articlesSection
         }
         .listStyle(.plain)

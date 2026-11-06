@@ -14,7 +14,9 @@ struct QiqstrApp: App {
                 .toastOverlay()
                 .id(language ?? "system")
                 .task { await session.launch() }
-                .onOpenURL { Router.shared.open(url: $0) }
+                .onOpenURL { url in
+                    if !WalletService.shared.handleIncoming(url: url) { Router.shared.open(url: url) }
+                }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     if let url = activity.webpageURL { Router.shared.open(url: url) }
                 }

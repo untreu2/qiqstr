@@ -103,7 +103,8 @@ final class MuteService {
     }
 
     private func publish(pubkeys: [String], words: [String]) async throws {
-        guard let me = Session.shared.pubkey, let key = Session.shared.privateKey else { throw CoreError("Not authenticated") }
+        let key = try Session.shared.requireSigner()
+        guard let me = Session.shared.pubkey else { throw CoreError("Not authenticated") }
         let privateTags = pubkeys.map { ["p", $0] } + words.map { ["word", $0] }
         let encrypted = try nip44Encrypt(content: JSON.string(privateTags), senderSkHex: key, receiverPkHex: me)
         let event = try createSignedEvent(kind: 10000, content: encrypted, tags: [], privateKeyHex: key)
