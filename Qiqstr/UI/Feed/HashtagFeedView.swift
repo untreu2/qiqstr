@@ -9,6 +9,8 @@ final class HashtagFeedViewModel {
     private(set) var isSyncing = true
     private(set) var isLoadingMore = false
     private(set) var canLoadMore = true
+    private(set) var recentCount: Int?
+    private(set) var followFeedback = 0
     @ObservationIgnored private var limit = FeedViewModel.pageSize
     @ObservationIgnored private var seen: Set<String> = []
     @ObservationIgnored private var exhausted = false
@@ -17,11 +19,25 @@ final class HashtagFeedViewModel {
         self.tag = tag.hasPrefix("#") ? String(tag.dropFirst()) : tag
     }
 
+    var isFollowing: Bool { HashtagFollowService.shared.isFollowing(tag) }
+    var isFollowPending: Bool { HashtagFollowService.shared.isPending(tag) }
+
+    func toggleFollow() {
+        followFeedback &+= 1
+        Task {
+            do { try await HashtagFollowService.shared.toggle(tag) } catch { ToastCenter.shared.error(error) }
+        }
+    }
+
     func sync(force: Bool = false) async {
         isSyncing = true
         await SyncService.shared.syncHashtag(tag, force: force)
         isSyncing = false
         await reload()
+    }
+
+    func loadRecentCount() async {
+        recentCount = await HashtagFollowService.shared.recentCount(tag)
     }
 
     func reload() async {
@@ -89,7 +105,13 @@ struct HashtagFeedView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            NoteList(notes: model.notes, isLoadingMore: model.isLoadingMore, onAppearNote: model.loadMoreIfNeeded)
+            NoteList(notes: model.notes, isLoadingMore: model.isLoadingMore, onAppearNote: model.loadMoreIfNeeded) {
+                if let count = model.recentCount, count > 0, !model.notes.isEmpty {
+                    HashtagFeedHeader(count: count)
+                        .listRowBackground(AppColors.background)
+                        .listRowSeparator(.hidden)
+                }
+            }
                 .accessibilityIdentifier("hashtag-list")
                 .refreshable { await model.sync(force: true) }
                 .overlay {
@@ -118,10 +140,56 @@ struct HashtagFeedView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("hashtag-title")
                     }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        HashtagFollowButton(isFollowing: model.isFollowing, isPending: model.isFollowPending, action: model.toggleFollow)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
                 }
         }
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.sync() }
-        .task(id: bus.feedVersion) { await model.reload() }
+        .task(id: bus.feedVersion) {
+            await model.reload()
+            await model.loadRecentCount()
+        }
+        .sensoryFeedback(.selection, trigger: model.followFeedback)
+    }
+}
+
+struct HashtagFeedHeader: View {
+    let count: Int
+
+    var body: some View {
+        Label(L("feedTopicPostsLastDay", ["count": count]), systemImage: "chart.line.uptrend.xyaxis")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .listRowInsets(EdgeInsets())
+            .accessibilityIdentifier("hashtag-recent-count")
+    }
+}
+
+struct HashtagFollowButton: View {
+    let isFollowing: Bool
+    let isPending: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            if isFollowing {
+                Button(action: action) { Text(L("following")).font(.subheadline.weight(.semibold)) }
+                    .buttonStyle(.glass)
+            } else {
+                Button(action: action) { Text(L("follow")).font(.subheadline.weight(.semibold)) }
+                    .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
+            }
+        }
+        .buttonBorderShape(.capsule)
+        .disabled(isPending)
+        .animation(.snappy, value: isFollowing)
+        .accessibilityIdentifier("hashtag-follow")
     }
 }

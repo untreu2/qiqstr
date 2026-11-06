@@ -15,6 +15,7 @@ enum ServiceRegistry {
             DMService.shared.reset()
             WalletService.shared.reset()
             FollowSetService.shared.reset()
+            HashtagFollowService.shared.reset()
             WebOfTrustService.shared.reset()
             Router.shared.reset()
             ReadOnlyGate.shared.reset()
@@ -30,6 +31,7 @@ enum ServiceRegistry {
             Session.shared.mutedWords = MuteService.shared.mutedWords
             Task { await DMService.shared.start() }
             Task { await WalletService.shared.load() }
+            Task { await HashtagFollowService.shared.load() }
             Task { await WebOfTrustService.shared.load(for: pubkey) }
         }
     }

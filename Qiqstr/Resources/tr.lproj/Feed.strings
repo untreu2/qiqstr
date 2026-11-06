@@ -63,3 +63,16 @@
 "feedPollShowResults" = "Sonuçları göster";
 "feedPollHideResults" = "Sonuçları gizle";
 "feedPollVoteFailed" = "Oyunuz gönderilemedi";
+"feedTopics" = "Konular";
+"feedAllTopics" = "Tüm konular";
+"feedFollowingPlusTopics" = "Takip edilen + konular";
+"feedManageTopics" = "Konuları yönet";
+"feedAddTopic" = "Konu ekle";
+"feedRemoveTopic" = "Kaldır";
+"feedTopicPlaceholder" = "Hashtag ekle";
+"feedTopicsFooter" = "Bu hashtag’leri içeren notlar konu akışlarında görünür. Konuların Nostr ilgi alanları listene kaydedilir.";
+"feedNoTopics" = "Henüz konu yok";
+"feedNoTopicsMessage" = "Bir hashtag’i takip ederek ilgili notları akışında gör.";
+"feedTopicInvalid" = "Harf, rakam, kısa çizgi veya alt çizgi kullan.";
+"feedTopicsUnavailable" = "Konuların yüklenemedi. Bağlantını kontrol edip tekrar dene.";
+"feedTopicPostsLastDay" = "{count, plural, =1{Son 24 saatte 1 gönderi} other{Son 24 saatte # gönderi}}";
