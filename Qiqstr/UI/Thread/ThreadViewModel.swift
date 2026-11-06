@@ -6,6 +6,7 @@ enum NoteThreadRow: Identifiable, Hashable {
     case moreReplies(parentId: String, hidden: Int, depth: Int)
     case continueThread(noteId: String, count: Int, depth: Int)
     case loadMore(remaining: Int)
+    case hiddenReplies(count: Int)
 
     var id: String {
         switch self {
@@ -13,6 +14,7 @@ enum NoteThreadRow: Identifiable, Hashable {
         case .moreReplies(let parent, _, _): "m-\(parent)"
         case .continueThread(let id, _, _): "c-\(id)"
         case .loadMore: "load-more"
+        case .hiddenReplies: "hidden-replies"
         }
     }
 }
@@ -34,6 +36,8 @@ final class ThreadViewModel {
     private(set) var rows: [NoteThreadRow] = []
     private var expanded: Set<String> = []
     private var visibleTopLevel = ThreadViewModel.pageSize
+    private(set) var showsUntrusted = false
+    @ObservationIgnored private var hiddenCount = 0
     @ObservationIgnored private var stableOrder: [String] = []
     @ObservationIgnored private var liveTask: Task<Void, Never>?
     @ObservationIgnored private var liveIds: Set<String> = []
@@ -138,6 +142,21 @@ final class ThreadViewModel {
         rebuild()
     }
 
+    func revealHidden() {
+        showsUntrusted = true
+        rebuild()
+    }
+
+    private var filtersUntrusted: Bool {
+        WebOfTrustService.filtersReplies && !showsUntrusted && WebOfTrustService.shared.isReady
+    }
+
+    private func rank(_ note: Note, me: String?) -> Int {
+        if note.pubkey == me { return 0 }
+        if FollowService.shared.isFollowing(note.pubkey) { return 1 }
+        return 2
+    }
+
     func showMoreTopLevel() {
         visibleTopLevel += Self.pageSize
         rebuild()
@@ -148,10 +167,22 @@ final class ThreadViewModel {
         let me = Session.shared.pubkey
         let deleted = NoteInteractionStore.shared.deletedIds
         let muted = Set(Session.shared.mutedPubkeys)
-        let visible = children.filter { !deleted.contains($0.id) && !muted.contains($0.pubkey) }
+        let wot = WebOfTrustService.shared
+        let author = data?.focused.pubkey
+        let filters = filtersUntrusted
+        var visible: [Note] = []
+        for note in children where !deleted.contains(note.id) && !muted.contains(note.pubkey) {
+            if filters, note.pubkey != me, note.pubkey != author, !wot.isTrusted(note.pubkey) {
+                hiddenCount += 1
+            } else {
+                visible.append(note)
+            }
+        }
         let sorted = visible.sorted { a, b in
-            let aMine = a.pubkey == me, bMine = b.pubkey == me
-            if aMine != bMine { return aMine }
+            let ra = rank(a, me: me), rb = rank(b, me: me)
+            if ra != rb { return ra < rb }
+            let sa = wot.score(a.pubkey), sb = wot.score(b.pubkey)
+            if sa != sb { return sa > sb }
             return a.createdAt < b.createdAt
         }
         guard stable else { return sorted }
@@ -165,9 +196,11 @@ final class ThreadViewModel {
     func rebuild() {
         guard let focused = data?.focused else { rows = []; return }
         var result: [NoteThreadRow] = []
+        hiddenCount = 0
         let top = sortedChildren(focused.id, stable: true)
         for note in top.prefix(visibleTopLevel) { flatten(note, depth: 0, into: &result) }
         if top.count > visibleTopLevel { result.append(.loadMore(remaining: top.count - visibleTopLevel)) }
+        if hiddenCount > 0 { result.append(.hiddenReplies(count: hiddenCount)) }
         rows = result
     }
 

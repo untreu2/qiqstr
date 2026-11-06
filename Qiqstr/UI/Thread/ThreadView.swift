@@ -5,6 +5,7 @@ struct ThreadView: View {
     @State private var model: ThreadViewModel
     @State private var bus = DataBus.shared
     @State private var store = NoteInteractionStore.shared
+    @State private var wot = WebOfTrustService.shared
 
     init(noteId: String) {
         self.noteId = noteId
@@ -45,6 +46,7 @@ struct ThreadView: View {
         .task { await model.start() }
         .task(id: bus.feedVersion) { await model.reloadLocal() }
         .onChange(of: store.deletedIds) { model.rebuild() }
+        .onChange(of: wot.trustedCount) { model.rebuild() }
         .onDisappear { model.stop() }
     }
 
@@ -112,6 +114,23 @@ struct ThreadView: View {
             .padding(16)
             .listRowSeparator(.hidden)
             .accessibilityIdentifier("thread-load-more")
+        case .hiddenReplies(let count):
+            Button { withAnimation(.snappy) { model.revealHidden() } } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "eye.slash")
+                    Text("\(L("feedRepliesHidden", ["count": count])) ·")
+                    Text(L("feedSensitiveShow")).foregroundStyle(.tint)
+                    Spacer()
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .listRowSeparator(.hidden)
+            .accessibilityIdentifier("thread-hidden-replies")
         }
     }
 

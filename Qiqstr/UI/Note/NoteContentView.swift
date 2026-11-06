@@ -28,6 +28,9 @@ struct NoteContentView: View {
                     }
                 }
             }
+            if let poll = NotePoll(id: note.id, tags: note.tags) {
+                NotePollView(poll: poll, author: note.pubkey)
+            }
             if !content.media.isEmpty {
                 NoteMediaGridView(media: content.media)
             }

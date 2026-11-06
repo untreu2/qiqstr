@@ -22,7 +22,10 @@ final class ComposeAttachment: Identifiable {
     var altText = ""
     @ObservationIgnored var payload: (Data, String)?
 
-    init(preview: UIImage?, isVideo: Bool, dimensions: CGSize?, blurhash: String? = nil) {
+    let remoteURL: String?
+
+    init(preview: UIImage?, isVideo: Bool, dimensions: CGSize?, blurhash: String? = nil, remoteURL: String? = nil) {
+        self.remoteURL = remoteURL
         self.preview = preview
         self.isVideo = isVideo
         self.dimensions = dimensions
@@ -39,9 +42,16 @@ final class ComposeAttachment: Identifiable {
     }
 }
 
+struct ComposePollOption: Identifiable, Hashable {
+    let id = UUID()
+    var text = ""
+}
+
 @MainActor
 @Observable
 final class ComposeViewModel {
+    static let minPollOptions = 2
+    static let maxPollOptions = 6
     static let maxAttachments = 8
     static let maxFileSize = 50 * 1024 * 1024
 
@@ -51,6 +61,12 @@ final class ComposeViewModel {
     var pickerItems: [PhotosPickerItem] = []
     var contentWarningEnabled = false
     var contentWarningReason = ""
+    var pollEnabled = false
+    var pollOptions: [ComposePollOption] = [ComposePollOption(), ComposePollOption()]
+    var pollMultiple = false
+    var pollHasEnd = false
+    var pollEndsAt = Date().addingTimeInterval(86400)
+    private(set) var draftId = UUID().uuidString
     private(set) var attachments: [ComposeAttachment] = []
     private(set) var suggestions: [Profile] = []
     private(set) var isPosting = false
@@ -59,9 +75,157 @@ final class ComposeViewModel {
     @ObservationIgnored private var mentionRange: Range<String.Index>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var lastQuery: String?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var finished = false
 
     init(context: ComposeContext) {
         self.context = context
+        let store = DraftStore.shared
+        let pending = store.pendingDraftId.flatMap(store.draft)
+        store.pendingDraftId = nil
+        if let draft = pending?.contextKey == contextKey ? pending : store.latest(contextKey: contextKey) {
+            apply(draft)
+        }
+    }
+
+    var contextKey: String {
+        switch context {
+        case .newNote: "new"
+        case .reply(let note): "reply-\(note.id)"
+        case .quote(let note): "quote-\(note.id)"
+        }
+    }
+
+    var supportsPoll: Bool { context == .newNote }
+
+    var otherDrafts: [ComposeDraft] {
+        DraftStore.shared.drafts.filter { $0.id != draftId }
+    }
+
+    private var validPollOptions: [String] {
+        var seen: Set<String> = []
+        return pollOptions
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
+    var draftSnapshot: ComposeDraft {
+        let kind: ComposeDraft.Kind
+        switch context {
+        case .newNote: kind = .newNote
+        case .reply: kind = .reply
+        case .quote: kind = .quote
+        }
+        let media = attachments.compactMap { attachment -> ComposeDraftMedia? in
+            guard let item = attachment.uploaded else { return nil }
+            return ComposeDraftMedia(url: item.url, sha256: item.sha256, mimeType: item.mimeType, size: item.size, width: attachment.dimensions.map { Double($0.width) }, height: attachment.dimensions.map { Double($0.height) }, blurhash: attachment.blurhash, altText: attachment.altText, isVideo: attachment.isVideo)
+        }
+        let poll = pollEnabled ? ComposeDraftPoll(options: pollOptions.map(\.text), multiple: pollMultiple, endsAt: pollHasEnd ? pollEndsAt : nil) : nil
+        return ComposeDraft(id: draftId, kind: kind, targetId: target?.id, targetPubkey: target?.pubkey, text: text, mentions: mentionMap, media: media, contentWarningEnabled: contentWarningEnabled, contentWarningReason: contentWarningReason, poll: poll, updatedAt: .distantPast)
+    }
+
+    private func apply(_ draft: ComposeDraft) {
+        draftId = draft.id
+        mentionMap = draft.mentions
+        text = draft.text
+        selection = nil
+        contentWarningEnabled = draft.contentWarningEnabled
+        contentWarningReason = draft.contentWarningReason
+        attachments = draft.media.map { item in
+            let size = item.width.flatMap { w in item.height.map { CGSize(width: w, height: $0) } }
+            let attachment = ComposeAttachment(preview: nil, isVideo: item.isVideo, dimensions: size, blurhash: item.blurhash, remoteURL: item.url)
+            attachment.status = .uploaded(UploadedMedia(url: item.url, sha256: item.sha256, mimeType: item.mimeType, size: item.size))
+            attachment.altText = item.altText
+            return attachment
+        }
+        if let poll = draft.poll, supportsPoll {
+            pollEnabled = true
+            var options = poll.options.map { ComposePollOption(text: $0) }
+            while options.count < Self.minPollOptions { options.append(ComposePollOption()) }
+            pollOptions = Array(options.prefix(Self.maxPollOptions))
+            pollMultiple = poll.multiple
+            pollHasEnd = poll.endsAt != nil
+            pollEndsAt = poll.endsAt ?? Date().addingTimeInterval(86400)
+        } else {
+            pollEnabled = false
+            pollOptions = [ComposePollOption(), ComposePollOption()]
+            pollMultiple = false
+            pollHasEnd = false
+        }
+        clearSuggestions()
+    }
+
+    func scheduleSave() {
+        guard !finished else { return }
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            self?.saveDraft()
+        }
+    }
+
+    func saveDraft() {
+        saveTask?.cancel()
+        guard !finished else { return }
+        if hasContent {
+            var draft = draftSnapshot
+            draft.updatedAt = Date()
+            DraftStore.shared.save(draft)
+        } else {
+            DraftStore.shared.delete(draftId)
+        }
+    }
+
+    func finishSaving() {
+        saveDraft()
+        finished = true
+    }
+
+    func deleteDraft() {
+        saveTask?.cancel()
+        finished = true
+        DraftStore.shared.delete(draftId)
+    }
+
+    func deleteDraft(_ id: String) {
+        DraftStore.shared.delete(id)
+    }
+
+    func open(_ draft: ComposeDraft) async {
+        saveDraft()
+        if draft.contextKey == contextKey {
+            apply(draft)
+            return
+        }
+        let next: ComposeContext
+        switch draft.kind {
+        case .newNote:
+            next = .newNote
+        case .reply, .quote:
+            guard let id = draft.targetId, let note = await NoteRepository.ensureNote(id) else {
+                ToastCenter.shared.show(L("eventNotFound"), style: .error)
+                return
+            }
+            next = draft.kind == .reply ? .reply(note) : .quote(note)
+        }
+        finished = true
+        DraftStore.shared.pendingDraftId = draft.id
+        Router.shared.composeContext = next
+    }
+
+    func togglePoll() {
+        pollEnabled.toggle()
+    }
+
+    func addPollOption() {
+        guard pollOptions.count < Self.maxPollOptions else { return }
+        pollOptions.append(ComposePollOption())
+    }
+
+    func removePollOption(_ option: ComposePollOption) {
+        guard pollOptions.count > Self.minPollOptions else { return }
+        pollOptions.removeAll { $0.id == option.id }
     }
 
     var target: Note? {
@@ -72,10 +236,18 @@ final class ComposeViewModel {
     }
 
     var isUploading: Bool { attachments.contains { $0.status == .uploading } }
-    var hasContent: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty }
+    var hasContent: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+            || (pollEnabled && pollOptions.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    var isPollActive: Bool { pollEnabled && supportsPoll }
 
     var canPost: Bool {
         guard !isPosting, !isUploading else { return false }
+        if isPollActive {
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && validPollOptions.count >= Self.minPollOptions && (!pollHasEnd || pollEndsAt > Date())
+        }
         if case .quote = context { return true }
         return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachments.contains { $0.uploaded != nil }
     }
@@ -89,9 +261,10 @@ final class ComposeViewModel {
     }
 
     var placeholder: String {
+        if isPollActive { return L("feedPollQuestion") }
         switch context {
-        case .newNote, .quote: L("hintText")
-        case .reply: L("addAReply")
+        case .newNote, .quote: return L("hintText")
+        case .reply: return L("addAReply")
         }
     }
 
@@ -252,6 +425,8 @@ final class ComposeViewModel {
         let service = InteractionService.shared
         do {
             switch context {
+            case .newNote where isPollActive:
+                _ = try await service.publishPoll(question: content, options: validPollOptions, multiple: pollMultiple, endsAt: pollHasEnd ? pollEndsAt : nil, mediaUrls: urls, extraTags: extraTags)
             case .newNote:
                 _ = try await service.publishNote(content: content, mediaUrls: urls, extraTags: extraTags)
             case .reply(let note):
@@ -261,6 +436,7 @@ final class ComposeViewModel {
                 _ = try await service.publishQuote(of: note, content: content, mediaUrls: urls, extraTags: extraTags)
             }
             didPost += 1
+            deleteDraft()
             DataBus.shared.feedChanged()
             return true
         } catch {

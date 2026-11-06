@@ -3,9 +3,20 @@ import SwiftUI
 
 struct ComposeView: View {
     let context: ComposeContext
+
+    var body: some View {
+        ComposeEditor(context: context)
+            .id(context.id)
+    }
+}
+
+struct ComposeEditor: View {
+    let context: ComposeContext
     @State private var model: ComposeViewModel
     @State private var session = Session.shared
+    @State private var drafts = DraftStore.shared
     @State private var confirmDiscard = false
+    @State private var showsDrafts = false
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -22,6 +33,10 @@ struct ComposeView: View {
                         ReplyTargetPreview(note: note)
                     }
                     editor
+                    if model.isPollActive {
+                        ComposePollEditor(model: model)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if model.contentWarningEnabled {
                         ComposeContentWarningField(reason: $model.contentWarningReason)
                             .transition(.move(edge: .top).combined(with: .opacity))
@@ -48,6 +63,13 @@ struct ComposeView: View {
                     }
                     .accessibilityIdentifier("compose-cancel")
                 }
+                if !model.otherDrafts.isEmpty {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(L("feedDrafts"), systemImage: "tray.full") { showsDrafts = true }
+                            .accessibilityIdentifier("compose-drafts")
+                    }
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         Task { if await model.post() { dismiss() } }
@@ -65,10 +87,24 @@ struct ComposeView: View {
                     .accessibilityIdentifier("compose-post")
                 }
             }
-            .confirmationDialog(L("feedDiscardDraft"), isPresented: $confirmDiscard, titleVisibility: .visible) {
-                Button(L("feedDiscard"), role: .destructive) { dismiss() }
-                    .accessibilityIdentifier("compose-discard")
+            .confirmationDialog(L("feedSaveDraftTitle"), isPresented: $confirmDiscard, titleVisibility: .visible) {
+                Button(L("feedSaveDraft")) {
+                    model.finishSaving()
+                    dismiss()
+                }
+                .accessibilityIdentifier("compose-save-draft")
+                Button(L("feedDeleteDraft"), role: .destructive) {
+                    model.deleteDraft()
+                    dismiss()
+                }
+                .accessibilityIdentifier("compose-discard")
                 Button(L("feedKeepEditing"), role: .cancel) {}
+            }
+            .sheet(isPresented: $showsDrafts) {
+                ComposeDraftsSheet(drafts: model.otherDrafts, onSelect: { draft in
+                    showsDrafts = false
+                    Task { await model.open(draft) }
+                }, onDelete: { model.deleteDraft($0.id) })
             }
         }
         .interactiveDismissDisabled(model.hasContent)
@@ -77,6 +113,8 @@ struct ComposeView: View {
         .sensoryFeedback(.success, trigger: model.didPost)
         .onChange(of: model.pickerItems) { Task { await model.handlePicked() } }
         .onAppear { focused = true }
+        .onChange(of: model.draftSnapshot) { model.scheduleSave() }
+        .onDisappear { model.finishSaving() }
     }
 
     private var editor: some View {
@@ -133,6 +171,21 @@ struct ComposeView: View {
                 .accessibilityValue(model.contentWarningEnabled ? L("feedOn") : L("feedOff"))
                 .accessibilityAddTraits(model.contentWarningEnabled ? .isSelected : [])
                 .accessibilityIdentifier("compose-content-warning")
+                if model.supportsPoll {
+                    Button {
+                        withAnimation(.snappy(duration: 0.25)) { model.togglePoll() }
+                    } label: {
+                        Image(systemName: "chart.bar.xaxis")
+                            .foregroundStyle(model.pollEnabled ? AppColors.link : AppColors.textPrimary)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .accessibilityLabel(L("feedPoll"))
+                    .accessibilityValue(model.pollEnabled ? L("feedOn") : L("feedOff"))
+                    .accessibilityAddTraits(model.pollEnabled ? .isSelected : [])
+                    .accessibilityIdentifier("compose-poll")
+                }
                 if model.isUploading {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
@@ -294,6 +347,8 @@ struct ComposeAttachmentTile: View {
             Group {
                 if let preview = attachment.preview {
                     Image(uiImage: preview).resizable().scaledToFill()
+                } else if let url = attachment.remoteURL, !attachment.isVideo {
+                    RemoteImage(url: url, maxPixel: 300) { Rectangle().fill(AppColors.tile) }
                 } else {
                     ZStack {
                         Rectangle().fill(AppColors.tile)
@@ -400,5 +455,152 @@ struct ComposeMentionSuggestions: View {
             }
         }
         .accessibilityIdentifier("compose-mentions")
+    }
+}
+
+struct ComposePollEditor: View {
+    @Bindable var model: ComposeViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array($model.pollOptions.enumerated()), id: \.element.id) { index, $option in
+                HStack(spacing: 8) {
+                    TextField(L("feedPollOption", ["number": index + 1]), text: $option.text)
+                        .font(.body)
+                        .submitLabel(.next)
+                        .accessibilityIdentifier("compose-poll-option")
+                    if model.pollOptions.count > ComposeViewModel.minPollOptions {
+                        Button(L("feedPollRemoveOption"), systemImage: "minus.circle.fill") {
+                            withAnimation(.snappy) { model.removePollOption(option) }
+                        }
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary)
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("compose-poll-remove-option")
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(AppColors.inputFill, in: .rect(cornerRadius: 14, style: .continuous))
+            }
+            if model.pollOptions.count < ComposeViewModel.maxPollOptions {
+                Button(L("feedPollAddOption"), systemImage: "plus") {
+                    withAnimation(.snappy) { model.addPollOption() }
+                }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderless)
+                .foregroundStyle(AppColors.link)
+                .accessibilityIdentifier("compose-poll-add-option")
+            }
+            Picker(L("feedPollType"), selection: $model.pollMultiple) {
+                Text(L("feedPollSingle")).tag(false)
+                Text(L("feedPollMultiple")).tag(true)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("compose-poll-type")
+            Toggle(L("feedPollEndDate"), isOn: $model.pollHasEnd.animation(.snappy))
+                .font(.subheadline)
+                .accessibilityIdentifier("compose-poll-end-toggle")
+            if model.pollHasEnd {
+                DatePicker(L("feedPollEnds"), selection: $model.pollEndsAt, in: Date().addingTimeInterval(300)...)
+                    .font(.subheadline)
+                    .accessibilityIdentifier("compose-poll-end-date")
+            }
+        }
+        .padding(.leading, 52)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("compose-poll-editor")
+    }
+}
+
+struct ComposeDraftsSheet: View {
+    @State var drafts: [ComposeDraft]
+    let onSelect: (ComposeDraft) -> Void
+    let onDelete: (ComposeDraft) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(drafts) { draft in
+                    Button { onSelect(draft) } label: { ComposeDraftRow(draft: draft) }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("compose-draft-row")
+                }
+                .onDelete { offsets in
+                    for index in offsets { onDelete(drafts[index]) }
+                    drafts.remove(atOffsets: offsets)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .overlay {
+                if drafts.isEmpty {
+                    EmptyStateView(systemImage: "tray", title: L("feedNoDrafts"))
+                }
+            }
+            .navigationTitle(L("feedDrafts"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("done"), systemImage: "checkmark") { dismiss() }
+                        .accessibilityIdentifier("compose-drafts-close")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .accessibilityIdentifier("compose-drafts-sheet")
+    }
+}
+
+struct ComposeDraftRow: View {
+    let draft: ComposeDraft
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Label(kindTitle, systemImage: kindImage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text(draft.updatedAt, format: .relative(presentation: .named))
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(draft.preview.isEmpty ? L("feedDraftEmpty") : draft.preview)
+                .font(.body)
+                .foregroundStyle(draft.preview.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(AppColors.textPrimary))
+                .lineLimit(3)
+            if !draft.media.isEmpty || draft.poll != nil {
+                HStack(spacing: 12) {
+                    if !draft.media.isEmpty {
+                        Label("\(draft.media.count)", systemImage: "photo")
+                    }
+                    if draft.poll != nil {
+                        Label(L("feedPoll"), systemImage: "chart.bar.xaxis")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var kindTitle: String {
+        switch draft.kind {
+        case .newNote: L("newPost")
+        case .reply: L("reply")
+        case .quote: L("quote")
+        }
+    }
+
+    private var kindImage: String {
+        switch draft.kind {
+        case .newNote: "square.and.pencil"
+        case .reply: "arrowshape.turn.up.left"
+        case .quote: "quote.bubble"
+        }
     }
 }

@@ -173,6 +173,33 @@ final class InteractionService {
         return try await publishReturningId(event)
     }
 
+    func publishPoll(question: String, options: [String], multiple: Bool, endsAt: Date?, mediaUrls: [String], extraTags: [[String]] = []) async throws -> String {
+        let key = try signingKey()
+        let body = Self.composeContent(question, mediaUrls: mediaUrls)
+        var tags: [[String]] = options.map { ["option", Self.pollOptionId(), $0] }
+        tags.append(["polltype", multiple ? "multiplechoice" : "singlechoice"])
+        if let endsAt { tags.append(["endsAt", String(Int(endsAt.timeIntervalSince1970))]) }
+        for relay in ((try? await getRelayList()) ?? RelayConfig.mainRelays).prefix(3) where relay.hasPrefix("wss://") {
+            tags.append(["relay", relay])
+        }
+        tags = Self.merge(tags, Self.contentTags(body, mediaUrls: mediaUrls) + extraTags)
+        let event = try createSignedEvent(kind: NotePoll.kind, content: body, tags: tags, privateKeyHex: key)
+        return try await publishReturningId(event)
+    }
+
+    func publishPollResponse(pollId: String, optionIds: [String], relays: [String]) async throws {
+        let key = try signingKey()
+        let tags = [["e", pollId]] + optionIds.map { ["response", $0] }
+        let event = try createSignedEvent(kind: NotePoll.responseKind, content: "", tags: tags, privateKeyHex: key)
+        if !relays.isEmpty, (try? await sync.publish(event, to: relays)) != nil { return }
+        try await sync.publish(event)
+    }
+
+    private static func pollOptionId() -> String {
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
+        return String((0..<9).map { _ in alphabet.randomElement()! })
+    }
+
     func report(pubkey: String, noteId: String?, reason: String) async throws {
         let key = try signingKey()
         var tags: [[String]] = [["p", pubkey, reason]]

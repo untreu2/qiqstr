@@ -85,6 +85,9 @@ struct NoteQuoteCard: View {
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if let poll = NotePoll(id: note.id, tags: note.tags) {
+                    NotePollView(poll: poll, author: note.pubkey, interactive: false)
+                }
                 if let first = parsed.images.first {
                     NoteMediaImage(item: first, maxPixel: 800)
                         .frame(height: 150)
