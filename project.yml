@@ -1,0 +1,58 @@
+name: Qiqstr
+options:
+  bundleIdPrefix: me.untreu
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    DEVELOPMENT_TEAM: ""
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+    CODE_SIGN_STYLE: Automatic
+packages:
+  QiqstrCore:
+    path: QiqstrCore
+targets:
+  Qiqstr:
+    type: application
+    platform: iOS
+    sources:
+      - path: Qiqstr
+    dependencies:
+      - package: QiqstrCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.untreu.qiqstrswift
+        PRODUCT_NAME: qiqstr
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Qiqstr/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        OTHER_LDFLAGS: ["-lc++"]
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+  QiqstrUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: QiqstrUITests
+    dependencies:
+      - target: Qiqstr
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.untreu.qiqstrswift.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Qiqstr
+schemes:
+  Qiqstr:
+    build:
+      targets:
+        Qiqstr: all
+        QiqstrUITests: [test]
+    test:
+      targets:
+        - QiqstrUITests
