@@ -31,7 +31,7 @@ struct RootView: View {
             case .signedOut:
                 AuthFlowView()
             case .ready:
-                HomeView().id(session.account?.npub)
+                HomeView().id(session.account?.npub).onboardingGate()
             case .failed(let message):
                 EmptyStateView(systemImage: "exclamationmark.triangle", title: L("errorLoadingProfile"), message: message, actionTitle: L("retry")) {
                     Task { await session.launch() }

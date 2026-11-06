@@ -117,6 +117,7 @@ final class Session {
         do {
             try FileManager.default.createDirectory(at: RelayConfig.databaseURL, withIntermediateDirectories: true)
             try await initClient(relayUrls: RelayConfig.mainRelays, privateKeyHex: account.privateKeyHex, dbPath: RelayConfig.databaseURL.path, discoveryRelays: RelayConfig.discoveryRelays)
+            await applyRelayFlags()
             Task.detached { try? await connectRelays() }
             _ = try? await waitForReady(timeoutSecs: 3)
         } catch {
@@ -146,6 +147,16 @@ final class Session {
         guard generation == self.generation else { return }
         sync.startRealtime()
         await sync.syncNotifications(force: true)
+    }
+
+    private func applyRelayFlags() async {
+        struct Flags: Decodable { var read: Bool; var write: Bool }
+        guard let raw = UserDefaults.standard.string(forKey: "relay_flags"), let data = raw.data(using: .utf8),
+              let flags = try? JSONDecoder().decode([String: Flags].self, from: data) else { return }
+        for relay in RelayConfig.mainRelays {
+            guard let f = flags[relay], !(f.read && f.write) else { continue }
+            _ = try? await addRelayWithFlags(url: relay, read: f.read, write: f.write)
+        }
     }
 
     func isCurrent(_ generation: Int) -> Bool { generation == self.generation }

@@ -2,7 +2,7 @@ import Foundation
 
 typealias JSONObject = [String: Any]
 
-enum JSON {
+nonisolated enum JSON {
     static func object(_ string: String?) -> JSONObject? {
         guard let string, let data = string.data(using: .utf8) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? JSONObject
@@ -25,7 +25,7 @@ enum JSON {
     }
 }
 
-extension Dictionary where Key == String, Value == Any {
+nonisolated extension Dictionary where Key == String, Value == Any {
     func str(_ key: String) -> String? {
         if let s = self[key] as? String, !s.isEmpty { return s }
         return nil

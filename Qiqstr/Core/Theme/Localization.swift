@@ -54,9 +54,51 @@ nonisolated final class Localizer: @unchecked Sendable {
 }
 
 nonisolated func L(_ key: String, _ args: [String: CustomStringConvertible] = [:]) -> String {
-    var s = Localizer.shared.string(key)
+    var s = ICUPlural.resolve(Localizer.shared.string(key), args: args)
     for (name, value) in args {
         s = s.replacingOccurrences(of: "{\(name)}", with: value.description)
     }
     return s
+}
+
+nonisolated enum ICUPlural {
+    static func resolve(_ template: String, args: [String: CustomStringConvertible]) -> String {
+        var result = template
+        while let range = result.range(of: #"\{(\w+), plural,"#, options: .regularExpression) {
+            let name = String(result[range].dropFirst().prefix { $0 != "," })
+            guard let end = matchingBrace(in: result, from: range.lowerBound) else { break }
+            let body = String(result[range.upperBound..<end])
+            let count = Int(args[name]?.description ?? "") ?? 0
+            let choices = parseChoices(body)
+            let chosen = choices["=\(count)"] ?? (count == 1 ? choices["one"] : nil) ?? choices["other"] ?? ""
+            result.replaceSubrange(range.lowerBound...end, with: chosen.replacingOccurrences(of: "#", with: "\(count)"))
+        }
+        return result
+    }
+
+    private static func matchingBrace(in s: String, from start: String.Index) -> String.Index? {
+        var depth = 0
+        var i = start
+        while i < s.endIndex {
+            if s[i] == "{" { depth += 1 }
+            if s[i] == "}" { depth -= 1; if depth == 0 { return i } }
+            i = s.index(after: i)
+        }
+        return nil
+    }
+
+    private static func parseChoices(_ body: String) -> [String: String] {
+        var choices: [String: String] = [:]
+        var i = body.startIndex
+        while i < body.endIndex {
+            while i < body.endIndex, body[i].isWhitespace { i = body.index(after: i) }
+            let keyStart = i
+            while i < body.endIndex, body[i] != "{" { i = body.index(after: i) }
+            guard i < body.endIndex, let close = matchingBrace(in: body, from: i) else { break }
+            let key = body[keyStart..<i].trimmingCharacters(in: .whitespaces)
+            choices[key] = String(body[body.index(after: i)..<close])
+            i = body.index(after: close)
+        }
+        return choices
+    }
 }
