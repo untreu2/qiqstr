@@ -48,3 +48,13 @@ The Flutter app's Breez Spark wallet needs a Breez API key and is not included. 
 ## License
 
 MIT
+
+## Screenshots
+
+| Feed | Thread | Profile | Messages |
+|---|---|---|---|
+| ![](docs/screenshots/01-feed.png) | ![](docs/screenshots/02-thread.png) | ![](docs/screenshots/04-profile.png) | ![](docs/screenshots/08-chat.png) |
+| **Wallet** | **Notifications** | **Reads** | **Settings** |
+| ![](docs/screenshots/09-wallet.png) | ![](docs/screenshots/10-notifications.png) | ![](docs/screenshots/11-reads.png) | ![](docs/screenshots/16-settings.png) |
+
+More in [`docs/screenshots`](docs/screenshots).
