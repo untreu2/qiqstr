@@ -13,7 +13,7 @@ struct NoteMediaGridView: View {
         VStack(spacing: 6) {
             if !images.isEmpty { imageGrid }
             ForEach(videos) { item in
-                NoteVideoView(url: item.url, aspectRatio: item.aspectRatio)
+                NoteVideoView(url: item.url, aspectRatio: item.aspectRatio, blurhash: item.blurhash, poster: item.poster, alt: item.alt)
             }
         }
         .fullScreenCover(item: $viewer) { selection in
@@ -65,19 +65,91 @@ struct NoteMediaGridView: View {
     }
 
     private func tile(_ index: Int) -> some View {
-        Color.clear
-            .overlay {
-                RemoteImage(url: images[index].url, maxPixel: 1100) {
-                    Rectangle().fill(AppColors.tile)
-                }
-            }
-            .clipped()
+        let item = images[index]
+        return NoteMediaImage(item: item, maxPixel: 1100)
             .contentShape(Rectangle())
             .onTapGesture { viewer = NotePhotoSelection(index: index) }
             .accessibilityElement()
-            .accessibilityLabel(L("photos"))
-            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(item.alt ?? L("photos"))
+            .accessibilityAddTraits([.isButton, .isImage])
             .accessibilityIdentifier("note-media-image")
+            .overlay(alignment: .bottomLeading) {
+                if let alt = item.alt {
+                    NoteAltBadge(text: alt).padding(8)
+                }
+            }
+    }
+}
+
+struct NoteMediaImage: View {
+    let item: NoteMediaItem
+    var maxPixel: CGFloat = 1100
+    @State private var image: UIImage?
+
+    var body: some View {
+        Color.clear
+            .overlay {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill().transition(.opacity)
+                } else {
+                    NoteMediaPlaceholder(blurhash: item.blurhash)
+                }
+            }
+            .clipped()
+            .task(id: item.url) {
+                image = nil
+                guard let url = URL(string: item.url), url.scheme?.hasPrefix("http") == true else { return }
+                let start = ContinuousClock.now
+                let loaded = await ImagePipeline.shared.image(for: url, maxPixel: maxPixel)
+                if ContinuousClock.now - start < .milliseconds(60) {
+                    image = loaded
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) { image = loaded }
+                }
+            }
+    }
+}
+
+struct NoteMediaPlaceholder: View {
+    let blurhash: String?
+
+    var body: some View {
+        if let blurhash, let image = BlurHash.image(blurhash) {
+            Image(uiImage: image).resizable()
+        } else {
+            Rectangle().fill(AppColors.tile)
+        }
+    }
+}
+
+struct NoteAltBadge: View {
+    let text: String
+    @State private var presented = false
+
+    var body: some View {
+        Button { presented = true } label: {
+            Text(L("feedAltBadge"))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .popover(isPresented: $presented) {
+            ScrollView {
+                Text(text)
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
+            .frame(idealWidth: 320, maxHeight: 320)
+            .fixedSize(horizontal: false, vertical: true)
+            .presentationCompactAdaptation(.popover)
+        }
+        .accessibilityLabel(L("feedAltTextTitle"))
+        .accessibilityHint(text)
+        .accessibilityIdentifier("note-media-alt")
     }
 }
 
@@ -241,8 +313,12 @@ struct NoteZoomableImage: UIViewRepresentable {
 struct NoteVideoView: View {
     let url: String
     var aspectRatio: CGFloat?
+    var blurhash: String?
+    var poster: String?
+    var alt: String?
     @State private var player: AVPlayer?
     @State private var thumbnail: UIImage?
+    @State private var duration: Double?
 
     var body: some View {
         ZStack {
@@ -251,15 +327,14 @@ struct NoteVideoView: View {
                     .onDisappear { player.pause() }
             } else {
                 Rectangle().fill(Color.black)
+                NoteMediaPlaceholder(blurhash: blurhash)
                 if let thumbnail {
-                    Image(uiImage: thumbnail).resizable().scaledToFill()
+                    Color.clear
+                        .overlay { Image(uiImage: thumbnail).resizable().scaledToFill() }
+                        .clipped()
+                        .transition(.opacity)
                 }
-                Button {
-                    guard let u = URL(string: url) else { return }
-                    let p = AVPlayer(url: u)
-                    player = p
-                    p.play()
-                } label: {
+                Button(action: play) {
                     Image(systemName: "play.fill")
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(.white)
@@ -267,7 +342,8 @@ struct NoteVideoView: View {
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel(L("videoTapToPlay"))
+                .accessibilityLabel(alt.map { "\(L("videoTapToPlay")), \($0)" } ?? L("videoTapToPlay"))
+                .accessibilityValue(duration.map(Self.format) ?? "")
                 .accessibilityIdentifier("note-media-video-play")
             }
         }
@@ -275,30 +351,91 @@ struct NoteVideoView: View {
         .frame(maxWidth: .infinity)
         .frame(maxHeight: 460)
         .clipShape(.rect(cornerRadius: 16, style: .continuous))
+        .overlay(alignment: .bottomTrailing) {
+            if player == nil, let duration {
+                Text(Self.format(duration))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.55), in: .capsule)
+                    .padding(10)
+                    .accessibilityHidden(true)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if player == nil, let alt {
+                NoteAltBadge(text: alt).padding(10)
+            }
+        }
         .task(id: url) {
             guard thumbnail == nil, let u = URL(string: url) else { return }
-            thumbnail = await NoteVideoThumbnailCache.shared.thumbnail(for: u)
+            if let poster, let p = URL(string: poster), let image = await ImagePipeline.shared.image(for: p, maxPixel: 900) {
+                withAnimation(.easeOut(duration: 0.2)) { thumbnail = image }
+                duration = await NoteVideoThumbnailCache.shared.duration(for: u)
+                return
+            }
+            let preview = await NoteVideoThumbnailCache.shared.preview(for: u)
+            duration = preview.duration
+            if let image = preview.thumbnail { withAnimation(.easeOut(duration: 0.2)) { thumbnail = image } }
         }
     }
+
+    private func play() {
+        guard let u = URL(string: url) else { return }
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        let p = AVPlayer(url: u)
+        player = p
+        p.play()
+    }
+
+    static func format(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        let hours = total / 3600, minutes = (total % 3600) / 60, secs = total % 60
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
+    }
+}
+
+struct NoteVideoPreview: Sendable {
+    var thumbnail: UIImage?
+    var duration: Double?
 }
 
 actor NoteVideoThumbnailCache {
     static let shared = NoteVideoThumbnailCache()
     private var cache: [URL: UIImage] = [:]
+    private var durations: [URL: Double] = [:]
     private var failed: Set<URL> = []
 
-    func thumbnail(for url: URL) async -> UIImage? {
-        if let hit = cache[url] { return hit }
-        if failed.contains(url) { return nil }
-        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+    func duration(for url: URL) async -> Double? {
+        if let hit = durations[url] { return hit }
+        guard let value = await Self.loadDuration(AVURLAsset(url: url)) else { return nil }
+        durations[url] = value
+        return value
+    }
+
+    func preview(for url: URL) async -> NoteVideoPreview {
+        if let hit = cache[url] { return NoteVideoPreview(thumbnail: hit, duration: durations[url]) }
+        if failed.contains(url) { return NoteVideoPreview(thumbnail: nil, duration: durations[url]) }
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 900, height: 900)
-        guard let cg = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image else {
+        async let loadedDuration = Self.loadDuration(asset)
+        let cg = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
+        if let value = await loadedDuration { durations[url] = value }
+        guard let cg else {
             failed.insert(url)
-            return nil
+            return NoteVideoPreview(thumbnail: nil, duration: durations[url])
         }
         let image = UIImage(cgImage: cg)
         cache[url] = image
-        return image
+        return NoteVideoPreview(thumbnail: image, duration: durations[url])
+    }
+
+    private static func loadDuration(_ asset: AVURLAsset) async -> Double? {
+        guard let time = try? await asset.load(.duration), time.isNumeric else { return nil }
+        let seconds = time.seconds
+        return seconds.isFinite && seconds > 0 ? seconds : nil
     }
 }

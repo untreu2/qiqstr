@@ -41,6 +41,7 @@ struct NoteContentView: View {
                 NoteArticleCard(naddr: naddr)
             }
         }
+        .noteSensitiveCover(note.id, reason: content.contentWarning)
         .environment(\.openURL, OpenURLAction { NoteLink.handle($0) })
         .task(id: content.mentionPubkeys) {
             let missing = content.mentionPubkeys.filter { cache.profile($0) == nil }

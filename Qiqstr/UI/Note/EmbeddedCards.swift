@@ -76,22 +76,24 @@ struct NoteQuoteCard: View {
                 Text("· \(TimeFormat.relative(note.createdAt))").font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
             }
-            if !parsed.isEmptyText {
-                Text(parsed.attributed(parsed.truncatedSegments ?? parsed.segments, font: .subheadline, cache: cache))
-                    .font(.subheadline)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(6)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 8) {
+                if !parsed.isEmptyText {
+                    Text(parsed.attributed(parsed.truncatedSegments ?? parsed.segments, font: .subheadline, cache: cache))
+                        .font(.subheadline)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(6)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let first = parsed.images.first {
+                    NoteMediaImage(item: first, maxPixel: 800)
+                        .frame(height: 150)
+                        .clipShape(.rect(cornerRadius: 12, style: .continuous))
+                } else if parsed.videos.first != nil {
+                    Label(L("videoTapToPlay"), systemImage: "play.rectangle").font(.footnote).foregroundStyle(.secondary)
+                }
             }
-            if let first = parsed.images.first {
-                Color.clear
-                    .frame(height: 150)
-                    .overlay { RemoteImage(url: first.url, maxPixel: 800) { Rectangle().fill(AppColors.tile) } }
-                    .clipShape(.rect(cornerRadius: 12, style: .continuous))
-            } else if parsed.videos.first != nil {
-                Label(L("videoTapToPlay"), systemImage: "play.rectangle").font(.footnote).foregroundStyle(.secondary)
-            }
+            .noteSensitiveCover(note.id, reason: parsed.contentWarning, compact: true)
             if depth == 0, let nested = parsed.quoteIds.first {
                 NoteQuoteCard(noteId: nested, depth: depth + 1)
             }

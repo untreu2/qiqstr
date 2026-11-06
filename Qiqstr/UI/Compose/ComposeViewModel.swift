@@ -17,13 +17,20 @@ final class ComposeAttachment: Identifiable {
     let preview: UIImage?
     let isVideo: Bool
     let dimensions: CGSize?
+    let blurhash: String?
     var status: Status = .uploading
+    var altText = ""
     @ObservationIgnored var payload: (Data, String)?
 
-    init(preview: UIImage?, isVideo: Bool, dimensions: CGSize?) {
+    init(preview: UIImage?, isVideo: Bool, dimensions: CGSize?, blurhash: String? = nil) {
         self.preview = preview
         self.isVideo = isVideo
         self.dimensions = dimensions
+        self.blurhash = blurhash
+    }
+
+    var trimmedAlt: String? {
+        altText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
     var uploaded: UploadedMedia? {
@@ -42,6 +49,8 @@ final class ComposeViewModel {
     var text = "" { didSet { if text != oldValue { updateMentionQuery() } } }
     var selection: TextSelection? { didSet { updateMentionQuery() } }
     var pickerItems: [PhotosPickerItem] = []
+    var contentWarningEnabled = false
+    var contentWarningReason = ""
     private(set) var attachments: [ComposeAttachment] = []
     private(set) var suggestions: [Profile] = []
     private(set) var isPosting = false
@@ -179,7 +188,7 @@ final class ComposeViewModel {
             ToastCenter.shared.show(L("fileTooLarge"), style: .error)
             return
         }
-        let attachment = ComposeAttachment(preview: preview, isVideo: isVideo, dimensions: dimensions)
+        let attachment = ComposeAttachment(preview: preview, isVideo: isVideo, dimensions: dimensions, blurhash: preview.flatMap { BlurHash.encode($0) })
         attachment.payload = (payload, mime)
         attachments.append(attachment)
         await upload(attachment)
@@ -202,6 +211,12 @@ final class ComposeViewModel {
         }
     }
 
+    private var contentWarningTags: [[String]] {
+        guard contentWarningEnabled else { return [] }
+        let reason = contentWarningReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [reason.isEmpty ? ["content-warning"] : ["content-warning", reason]]
+    }
+
     func remove(_ attachment: ComposeAttachment) {
         attachments.removeAll { $0.id == attachment.id }
     }
@@ -221,27 +236,29 @@ final class ComposeViewModel {
         }
         isPosting = true
         defer { isPosting = false }
-        let media = attachments.compactMap { attachment -> (UploadedMedia, CGSize?)? in
-            attachment.uploaded.map { ($0, attachment.dimensions) }
-        }
-        let urls = media.map(\.0.url)
-        let imeta: [[String]] = media.map { item, size in
+        let uploaded = attachments.filter { $0.uploaded != nil }
+        let urls = uploaded.compactMap { $0.uploaded?.url }
+        let imeta: [[String]] = uploaded.compactMap { attachment in
+            guard let item = attachment.uploaded else { return nil }
             var tag = ["imeta", "url \(item.url)", "m \(item.mimeType)"]
             if !item.sha256.isEmpty { tag.append("x \(item.sha256)") }
-            if let size { tag.append("dim \(Int(size.width))x\(Int(size.height))") }
+            if let size = attachment.dimensions { tag.append("dim \(Int(size.width))x\(Int(size.height))") }
+            if let blurhash = attachment.blurhash { tag.append("blurhash \(blurhash)") }
+            if let alt = attachment.trimmedAlt { tag.append("alt \(alt)") }
             return tag
         }
+        let extraTags = imeta + contentWarningTags
         let content = finalContent()
         let service = InteractionService.shared
         do {
             switch context {
             case .newNote:
-                _ = try await service.publishNote(content: content, mediaUrls: urls, extraTags: imeta)
+                _ = try await service.publishNote(content: content, mediaUrls: urls, extraTags: extraTags)
             case .reply(let note):
-                _ = try await service.publishReply(to: note, content: content, mediaUrls: urls, extraTags: imeta)
+                _ = try await service.publishReply(to: note, content: content, mediaUrls: urls, extraTags: extraTags)
                 NoteInteractionStore.shared.markReplied(note.id)
             case .quote(let note):
-                _ = try await service.publishQuote(of: note, content: content, mediaUrls: urls, extraTags: imeta)
+                _ = try await service.publishQuote(of: note, content: content, mediaUrls: urls, extraTags: extraTags)
             }
             didPost += 1
             DataBus.shared.feedChanged()

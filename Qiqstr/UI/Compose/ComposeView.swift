@@ -22,6 +22,10 @@ struct ComposeView: View {
                         ReplyTargetPreview(note: note)
                     }
                     editor
+                    if model.contentWarningEnabled {
+                        ComposeContentWarningField(reason: $model.contentWarningReason)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if !model.attachments.isEmpty {
                         ComposeAttachmentStrip(model: model)
                     }
@@ -115,6 +119,20 @@ struct ComposeView: View {
                 .disabled(model.attachments.count >= ComposeViewModel.maxAttachments)
                 .accessibilityLabel(L("addMediaText"))
                 .accessibilityIdentifier("compose-media")
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { model.contentWarningEnabled.toggle() }
+                } label: {
+                    Image(systemName: model.contentWarningEnabled ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
+                        .foregroundStyle(model.contentWarningEnabled ? AppColors.link : AppColors.textPrimary)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+                .accessibilityLabel(L("feedContentWarning"))
+                .accessibilityValue(model.contentWarningEnabled ? L("feedOn") : L("feedOff"))
+                .accessibilityAddTraits(model.contentWarningEnabled ? .isSelected : [])
+                .accessibilityIdentifier("compose-content-warning")
                 if model.isUploading {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
@@ -153,6 +171,7 @@ struct ReplyTargetPreview: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(5)
+                    .noteSensitiveCover(note.id, reason: content.contentWarning, compact: true)
                 HStack(spacing: 4) {
                     Text(L("replyingTo"))
                     Text("@\(cache.profile(note.pubkey)?.bestName ?? note.authorName ?? Profile.shortNpub(note.pubkey))")
@@ -171,15 +190,95 @@ struct ReplyTargetPreview: View {
 
 struct ComposeAttachmentStrip: View {
     let model: ComposeViewModel
+    @State private var editingAlt: ComposeAttachment?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(model.attachments) { attachment in
-                    ComposeAttachmentTile(attachment: attachment, onRemove: { withAnimation(.snappy) { model.remove(attachment) } }, onRetry: { model.retry(attachment) })
+                    ComposeAttachmentTile(attachment: attachment, onRemove: { withAnimation(.snappy) { model.remove(attachment) } }, onRetry: { model.retry(attachment) }, onEditAlt: { editingAlt = attachment })
                 }
             }
             .padding(.leading, 52)
+        }
+        .sheet(item: $editingAlt) { attachment in
+            ComposeAltTextSheet(attachment: attachment)
+        }
+    }
+}
+
+struct ComposeContentWarningField: View {
+    @Binding var reason: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField(L("feedContentWarningReason"), text: $reason)
+                .font(.body)
+                .submitLabel(.done)
+                .accessibilityLabel(L("feedContentWarning"))
+                .accessibilityIdentifier("compose-content-warning-reason")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(AppColors.inputFill, in: .rect(cornerRadius: 14, style: .continuous))
+        .padding(.leading, 52)
+    }
+}
+
+struct ComposeAltTextSheet: View {
+    @Bindable var attachment: ComposeAttachment
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let preview = attachment.preview {
+                    Section {
+                        Image(uiImage: preview)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: 220)
+                            .clipShape(.rect(cornerRadius: 12, style: .continuous))
+                            .accessibilityHidden(true)
+                    }
+                    .listRowBackground(Color.clear)
+                }
+                Section {
+                    TextField(L("feedAltTextPlaceholder"), text: $draft, axis: .vertical)
+                        .lineLimit(3...10)
+                        .focused($focused)
+                        .accessibilityIdentifier("compose-alt-text-field")
+                } footer: {
+                    Text(L("feedAltTextFooter"))
+                }
+            }
+            .navigationTitle(L("feedAltTextTitle"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("cancel"), systemImage: "xmark") { dismiss() }
+                        .accessibilityIdentifier("compose-alt-cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L("done"), systemImage: "checkmark") {
+                        attachment.altText = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        dismiss()
+                    }
+                    .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
+                    .accessibilityIdentifier("compose-alt-done")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .onAppear {
+            draft = attachment.altText
+            focused = true
         }
     }
 }
@@ -188,6 +287,7 @@ struct ComposeAttachmentTile: View {
     @Bindable var attachment: ComposeAttachment
     let onRemove: () -> Void
     let onRetry: () -> Void
+    let onEditAlt: () -> Void
 
     var body: some View {
         ZStack {
@@ -239,6 +339,27 @@ struct ComposeAttachmentTile: View {
             .padding(6)
             .accessibilityLabel(L("removeThisMediaFile"))
             .accessibilityIdentifier("compose-attachment-remove")
+        }
+        .overlay(alignment: .bottomLeading) {
+            if !attachment.isVideo {
+                Button(action: onEditAlt) {
+                    HStack(spacing: 3) {
+                        if attachment.trimmedAlt != nil {
+                            Image(systemName: "checkmark").font(.caption2.weight(.semibold))
+                        }
+                        Text(L("feedAltButton")).font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 26)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .padding(6)
+                .accessibilityLabel(attachment.trimmedAlt == nil ? L("feedAddAltText") : L("feedAltTextTitle"))
+                .accessibilityValue(attachment.trimmedAlt ?? "")
+                .accessibilityIdentifier("compose-attachment-alt")
+            }
         }
     }
 }

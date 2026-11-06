@@ -63,4 +63,22 @@ struct Note: Identifiable, Hashable, Sendable {
     }
 
     var hashtags: [String] { tags.filter { $0.first == "t" && $0.count > 1 }.map { $0[1] } }
+
+    var contentWarning: String? { Note.contentWarning(content: content, tags: tags) }
+
+    static func contentWarning(content: String, tags: [[String]]) -> String? {
+        for tag in tags where tag.first == "content-warning" {
+            return tag.count > 1 ? tag[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        }
+        let namespaced = tags.contains { $0.count > 1 && $0[0] == "L" && $0[1].lowercased() == "content-warning" }
+        for tag in tags where tag.count > 1 && tag[0] == "l" {
+            if tag[1].lowercased() == "content-warning" { return "" }
+            if tag.count > 2, tag[2].lowercased() == "content-warning" { return tag[1] }
+            if namespaced, tag.count == 2 { return tag[1] }
+        }
+        if namespaced { return "" }
+        let tagged = tags.contains { $0.count > 1 && $0[0] == "t" && $0[1].lowercased() == "nsfw" }
+        if tagged || content.range(of: "(^|\\s)#nsfw(?![\\p{L}\\p{N}_])", options: [.regularExpression, .caseInsensitive]) != nil { return "NSFW" }
+        return nil
+    }
 }

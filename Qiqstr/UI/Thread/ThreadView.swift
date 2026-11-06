@@ -221,6 +221,7 @@ struct FocusedNoteView: View {
                 NoteReplyContextLine(pubkey: target)
             }
             NoteContentView(note: note, font: note.content.count > 280 ? .body : .title3, selectable: true, expandedByDefault: true)
+            NoteTranslateButton(note: note)
             Text(TimeFormat.full(note.createdAt))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
