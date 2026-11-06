@@ -181,19 +181,19 @@ final class NoteContent {
             case .link(let url):
                 var part = AttributedString(Self.displayURL(url))
                 part.link = URL(string: url)
-                part.foregroundColor = AppColors.accent
+                part.foregroundColor = AppColors.link
                 result += part
             case .hashtag(let tag):
                 var part = AttributedString("#\(tag)")
                 part.link = NoteLink.hashtag(tag)
-                part.foregroundColor = AppColors.accent
+                part.foregroundColor = AppColors.link
                 result += part
             case .mention(let bech):
                 let hex = Nip19.pubkeyHex(from: bech)
                 let name = hex.flatMap { cache.profile($0)?.bestName } ?? hex.map(Profile.shortNpub) ?? bech
                 var part = AttributedString("@\(name)")
                 part.link = hex.map(NoteLink.profile)
-                part.foregroundColor = AppColors.accent
+                part.foregroundColor = AppColors.link
                 part.font = font.weight(.medium)
                 result += part
             }

@@ -4,14 +4,22 @@ import UIKit
 struct SettingsIcon: View {
     let systemImage: String
     var tint: Color = AppColors.textPrimary
+    var fill: Color? = nil
     @ScaledMetric(relativeTo: .body) private var size: CGFloat = 29
 
     var body: some View {
-        Image(systemName: systemImage)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(tint)
-            .frame(width: size, height: size)
-            .background(AppColors.tile, in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+        if let fill {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(fill.gradient, in: RoundedRectangle(cornerRadius: size * 0.23, style: .continuous))
+        } else {
+            Image(systemName: systemImage)
+                .font(.body)
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
+        }
     }
 }
 
@@ -20,6 +28,7 @@ struct SettingsRowLabel: View {
     let systemImage: String
     var tint: Color = AppColors.textPrimary
     var value: String? = nil
+    var fill: Color? = nil
 
     var body: some View {
         if let value {
@@ -37,7 +46,7 @@ struct SettingsRowLabel: View {
         Label {
             Text(title).foregroundStyle(tint)
         } icon: {
-            SettingsIcon(systemImage: systemImage, tint: tint)
+            SettingsIcon(systemImage: systemImage, tint: tint, fill: fill)
         }
     }
 }
@@ -62,7 +71,5 @@ extension View {
     func settingsListStyle() -> some View {
         self
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(AppColors.background)
     }
 }

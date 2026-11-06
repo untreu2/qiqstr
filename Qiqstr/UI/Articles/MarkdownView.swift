@@ -90,7 +90,7 @@ struct MarkdownText: View {
             .font(.system(style).weight(weight ?? .regular))
             .lineSpacing(style == .body ? bodyLineSpacing : 2)
             .foregroundStyle(quoted ? .secondary : .primary)
-            .tint(.primary)
+            .tint(AppColors.link)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)

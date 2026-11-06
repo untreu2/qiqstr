@@ -17,10 +17,10 @@ enum MarkdownInline {
             }
             if let link = run.link {
                 if link.scheme == "nostr" {
-                    result[run.range].foregroundColor = AppColors.textPrimary
+                    result[run.range].foregroundColor = AppColors.link
                     result[run.range].inlinePresentationIntent = (run.inlinePresentationIntent ?? []).union(.stronglyEmphasized)
                 } else {
-                    result[run.range].underlineStyle = .single
+                    result[run.range].foregroundColor = AppColors.link
                 }
             }
         }

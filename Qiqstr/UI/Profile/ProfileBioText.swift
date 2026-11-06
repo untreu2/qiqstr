@@ -103,7 +103,7 @@ struct ProfileBioText: View {
         Text(attributed)
             .font(font)
             .foregroundStyle(.primary)
-            .tint(AppColors.textPrimary)
+            .tint(AppColors.link)
             .lineSpacing(2)
             .textSelection(.enabled)
             .environment(\.openURL, OpenURLAction(handler: ProfileLink.handle))
@@ -142,7 +142,7 @@ struct ProfileBioText: View {
         var piece = AttributedString(label)
         piece.link = url
         piece.font = font.weight(weight)
-        piece.foregroundColor = AppColors.textPrimary
+        piece.foregroundColor = AppColors.link
         if underline { piece.underlineStyle = .single }
         return piece
     }

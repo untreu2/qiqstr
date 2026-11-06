@@ -21,7 +21,7 @@ struct NoteContentView: View {
                         } label: {
                             Text(L("feedShowMore"))
                                 .font(font.weight(.semibold))
-                                .foregroundStyle(AppColors.accent)
+                                .foregroundStyle(AppColors.link)
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("note-show-more")

@@ -85,8 +85,6 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(AppColors.background)
             .refreshable { await model.refresh() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

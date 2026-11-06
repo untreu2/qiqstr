@@ -52,13 +52,6 @@ struct NotificationsView: View {
             }
         } else {
             List {
-                if model.summary.total > 0 {
-                    Section {
-                        header
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
-                    }
-                }
                 if groups.isEmpty {
                     EmptyStateView(systemImage: "bell", title: L("noNotificationsYet"), message: L("whenSomeoneInteractsWithYourPosts"))
                         .listRowSeparator(.hidden)
@@ -71,6 +64,7 @@ struct NotificationsView: View {
                         footer
                             .listRowSeparator(.hidden)
                     }
+                    .listSectionSeparator(.hidden)
                 }
             }
             .listStyle(.plain)
@@ -109,39 +103,6 @@ struct NotificationsView: View {
     }
 
     @ViewBuilder
-    private var header: some View {
-        let summary = model.summary
-        VStack(alignment: .leading, spacing: 10) {
-            summaryText(summary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            NotificationActivityBar(summary: summary)
-        }
-    }
-
-    private func summaryText(_ s: NotificationSummary) -> Text {
-        var parts: [String] = []
-        if s.reactions > 0 { parts.append(SettingsICU.format("notificationReactionCount", ["count": s.reactions])) }
-        if s.zaps > 0 {
-            let zaps = SettingsICU.format("notificationZapCount", ["count": s.zaps])
-            parts.append(s.totalSats > 0 ? "\(zaps) (\(SettingsICU.format("notificationZapSatsCount", ["count": s.totalSats])))" : zaps)
-        }
-        if s.reposts > 0 { parts.append(SettingsICU.format("notificationRepostCount", ["count": s.reposts])) }
-        if s.replies > 0 { parts.append(SettingsICU.format("notificationReplyCount", ["count": s.replies])) }
-        if s.mentions > 0 { parts.append(SettingsICU.format("notificationMentionCount", ["count": s.mentions])) }
-        if s.quotes > 0 { parts.append(SettingsICU.format("notificationQuoteCount", ["count": s.quotes])) }
-        var text = AttributedString(L("notificationSummaryPrefix"))
-        for (i, part) in parts.enumerated() {
-            if i > 0 { text.append(AttributedString(i == parts.count - 1 ? L("notificationSummaryAnd") : ", ")) }
-            var run = AttributedString(part)
-            run.font = .subheadline.weight(.semibold)
-            run.foregroundColor = AppColors.textPrimary
-            text.append(run)
-        }
-        return Text(text)
-    }
-
-    @ViewBuilder
     private var footer: some View {
         HStack {
             Spacer()
@@ -174,37 +135,6 @@ struct NotificationsView: View {
         } else if let pubkey = group.authors.first {
             router.push(.profile(pubkey))
         }
-    }
-}
-
-struct NotificationActivityBar: View {
-    let summary: NotificationSummary
-
-    private var segments: [(Int, Color)] {
-        [
-            (summary.reactions, AppColors.reaction),
-            (summary.zaps, AppColors.zap),
-            (summary.reposts, AppColors.repost),
-            (summary.replies, AppColors.reply),
-            (summary.mentions, AppColors.textSecondary.opacity(0.5)),
-            (summary.quotes, AppColors.textSecondary.opacity(0.3)),
-        ].filter { $0.0 > 0 }
-    }
-
-    var body: some View {
-        GeometryReader { proxy in
-            let items = segments
-            let total = max(1, items.reduce(0) { $0 + $1.0 })
-            let spacing: CGFloat = 2
-            let available = proxy.size.width - spacing * CGFloat(max(0, items.count - 1))
-            HStack(spacing: spacing) {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    Capsule().fill(item.1).frame(width: max(3, available * CGFloat(item.0) / CGFloat(total)))
-                }
-            }
-        }
-        .frame(height: 6)
-        .accessibilityHidden(true)
     }
 }
 

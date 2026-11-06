@@ -10,6 +10,7 @@ struct DMConversationsView: View {
             .background(AppColors.background)
             .navigationTitle(L("messages"))
             .navigationBarTitleDisplayMode(.large)
+            .navigationSubtitle(model.title(for: model.filter))
             .searchable(text: $model.query, prompt: L("search"))
             .toolbar { toolbar }
             .sheet(isPresented: $model.showNewMessage) {
@@ -36,19 +37,14 @@ struct DMConversationsView: View {
             LoadingView().accessibilityIdentifier("dm-loading")
         } else {
             List {
-                if !model.isSearching {
-                    Section {
-                        header
-                            .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    }
-                }
                 Section {
                     ForEach(model.visibleConversations) { conversation in
                         row(conversation)
                     }
+                } footer: {
+                    if !model.isSearching, !model.visibleConversations.isEmpty { notice }
                 }
+                .listSectionSeparator(.hidden)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -72,25 +68,18 @@ struct DMConversationsView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label {
-                Text(L("dmEncryptionNotice"))
-            } icon: {
-                Image(systemName: "lock.fill")
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .labelStyle(DMNoticeLabelStyle())
-            Picker(L("messages"), selection: $model.filter) {
-                ForEach(DMConversationFilter.allCases) { filter in
-                    Text(model.title(for: filter)).tag(filter)
-                }
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.large)
-            .accessibilityIdentifier("dm-filter")
+    private var notice: some View {
+        Label {
+            Text(L("dmEncryptionNotice"))
+        } icon: {
+            Image(systemName: "lock.fill")
         }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .labelStyle(DMNoticeLabelStyle())
+        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
+        .padding(.top, 12)
     }
 
     private func row(_ conversation: DMConversation) -> some View {
@@ -153,6 +142,20 @@ struct DMConversationsView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Menu {
+                Picker(L("messages"), selection: $model.filter) {
+                    ForEach(DMConversationFilter.allCases) { filter in
+                        Label(model.title(for: filter), systemImage: filter == .following ? "person.2" : "tray")
+                            .tag(filter)
+                    }
+                }
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease")
+            }
+            .accessibilityLabel(L("messages"))
+            .accessibilityIdentifier("dm-filter")
+        }
         if model.hasUnread {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

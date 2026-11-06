@@ -148,7 +148,7 @@ struct NoteReplyContextLine: View {
                 Text(L("replyingTo"))
                 Text("@\(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))")
                     .fontWeight(.medium)
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.link)
                     .lineLimit(1)
             }
             .font(.footnote)

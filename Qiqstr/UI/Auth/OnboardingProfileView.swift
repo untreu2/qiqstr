@@ -139,7 +139,6 @@ struct OnboardingProfileView: View {
             }
             .disabled(model.isSaving)
         }
-        .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .background(AppColors.background)
         .safeAreaInset(edge: .bottom) {

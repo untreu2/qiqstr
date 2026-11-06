@@ -20,7 +20,12 @@ final class NotificationNoteStore {
             store(note)
             return
         }
-        await SyncService.shared.syncNote(id)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await SyncService.shared.syncNote(id) }
+            group.addTask { try? await Task.sleep(for: .seconds(6)) }
+            await group.next()
+            group.cancelAll()
+        }
         if let note = await fetchLocal(id) { store(note) } else { missing.insert(id) }
     }
 
@@ -73,6 +78,10 @@ struct NotificationNotePreview: View {
     @State private var cache = ProfileCache.shared
 
     var body: some View {
+        if !store.isMissing(noteId) { card }
+    }
+
+    private var card: some View {
         Group {
             if let note = store.note(noteId) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -94,10 +103,6 @@ struct NotificationNotePreview: View {
                             .multilineTextAlignment(.leading)
                     }
                 }
-            } else if store.isMissing(noteId) {
-                Text(L("noteNotFound"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             } else {
                 HStack(spacing: 8) {
                     Circle().fill(AppColors.overlayLight).frame(width: 18, height: 18)

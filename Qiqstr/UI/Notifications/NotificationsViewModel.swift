@@ -47,17 +47,6 @@ struct NotificationGroup: Identifiable, Hashable {
     }
 }
 
-struct NotificationSummary: Equatable {
-    var reactions = 0
-    var reposts = 0
-    var replies = 0
-    var mentions = 0
-    var quotes = 0
-    var zaps = 0
-    var totalSats = 0
-    var total: Int { reactions + reposts + replies + mentions + quotes + zaps }
-}
-
 @MainActor
 @Observable
 final class NotificationsViewModel {
@@ -87,23 +76,6 @@ final class NotificationsViewModel {
 
     var groups: [NotificationGroup] {
         Self.group(all.filter { filter.includes($0.kind) })
-    }
-
-    var summary: NotificationSummary {
-        let cutoff = TimeFormat.now - 86400
-        var s = NotificationSummary()
-        for n in all where n.createdAt >= cutoff {
-            switch n.kind {
-            case .reaction: s.reactions += 1
-            case .repost: s.reposts += 1
-            case .reply: s.replies += 1
-            case .mention: s.mentions += 1
-            case .quote: s.quotes += 1
-            case .zap: s.zaps += 1; s.totalSats += n.zapAmount
-            case .unknown: break
-            }
-        }
-        return s
     }
 
     func isUnread(_ group: NotificationGroup) -> Bool {

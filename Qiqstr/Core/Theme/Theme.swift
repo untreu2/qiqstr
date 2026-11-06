@@ -20,6 +20,7 @@ enum AppColors {
     static let repost = Color(hex: 0x2E9E4F)
     static let zap = Color(hex: 0xECB200)
     static let switchActive = Color(hex: 0x2E9E4F)
+    static let link = Color(uiColor: .link)
     static let tile = Color(light: Color.black.opacity(0.08), dark: Color.white.opacity(0.08))
 }
 

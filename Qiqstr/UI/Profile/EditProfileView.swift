@@ -45,8 +45,6 @@ struct EditProfileView: View {
                 Text(L("profileDetails"))
             }
         }
-        .scrollContentBackground(.hidden)
-        .background(AppColors.background)
         .scrollDismissesKeyboard(.interactively)
         .disabled(model.isLoading)
         .overlay { if model.isLoading { LoadingView() } }

@@ -19,35 +19,35 @@ struct SettingsView: View {
                 Section { accountHeader(pubkey) }
             }
             Section {
-                link(.keys, L("keys"), "key.horizontal")
-                link(.relays, L("relays"), "point.3.connected.trianglepath.dotted")
-                link(.muted, L("muted"), "bell.slash")
+                link(.keys, L("keys"), "key.horizontal.fill", fill: .gray)
+                link(.relays, L("relays"), "point.3.connected.trianglepath.dotted", fill: .blue)
+                link(.muted, L("muted"), "bell.slash.fill", fill: .red)
             }
             Section {
-                link(.display, L("display"), "circle.lefthalf.filled")
-                link(.language, L("language"), "character.bubble", value: currentLanguageName)
-                link(.payments, L("payments"), "bolt")
+                link(.display, L("display"), "circle.lefthalf.filled", fill: .indigo)
+                link(.language, L("language"), "character.bubble", fill: .blue, value: currentLanguageName)
+                link(.payments, L("payments"), "bolt.fill", fill: .orange)
             }
             Section {
-                link(.database, L("databaseCache"), "internaldrive")
-                link(.eventManager, L("yourDataOnRelays"), "antenna.radiowaves.left.and.right")
+                link(.database, L("databaseCache"), "internaldrive.fill", fill: .gray)
+                link(.eventManager, L("yourDataOnRelays"), "antenna.radiowaves.left.and.right", fill: .green)
             }
             Section {
                 Button { router.sheet = .switchAccount } label: {
-                    SettingsRowLabel(title: L("switchAccount"), systemImage: "person.2", value: session.accounts.count > 1 ? "\(session.accounts.count)" : nil)
+                    SettingsRowLabel(title: L("switchAccount"), systemImage: "person.2.fill", value: session.accounts.count > 1 ? "\(session.accounts.count)" : nil, fill: .purple)
                 }
                 .accessibilityIdentifier("settings-switch-account")
             }
             Section {
                 Button { router.sheet = .url(Self.termsURL) } label: {
-                    SettingsRowLabel(title: L("settingsTerms"), systemImage: "doc.text")
+                    SettingsRowLabel(title: L("settingsTerms"), systemImage: "doc.text.fill", fill: .gray)
                 }
                 .accessibilityIdentifier("settings-terms")
                 Button { router.sheet = .url(Self.sourceURL) } label: {
-                    SettingsRowLabel(title: L("settingsSourceCode"), systemImage: "chevron.left.forwardslash.chevron.right")
+                    SettingsRowLabel(title: L("settingsSourceCode"), systemImage: "chevron.left.forwardslash.chevron.right", fill: .gray)
                 }
                 .accessibilityIdentifier("settings-source")
-                SettingsRowLabel(title: L("version"), systemImage: "info.circle", value: Self.versionString)
+                SettingsRowLabel(title: L("version"), systemImage: "info", value: Self.versionString, fill: .gray)
                     .accessibilityIdentifier("settings-version")
             }
             Section {
@@ -115,9 +115,9 @@ struct SettingsView: View {
         .accessibilityIdentifier("settings-account-header")
     }
 
-    private func link(_ page: SettingsRoute, _ title: String, _ icon: String, value: String? = nil) -> some View {
+    private func link(_ page: SettingsRoute, _ title: String, _ icon: String, fill: Color, value: String? = nil) -> some View {
         NavigationLink(value: Route.settingsPage(page)) {
-            SettingsRowLabel(title: title, systemImage: icon, value: value)
+            SettingsRowLabel(title: title, systemImage: icon, value: value, fill: fill)
         }
         .accessibilityIdentifier("settings-row-\(page)")
     }

@@ -29,8 +29,6 @@ struct FollowSetsView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(AppColors.background)
         .accessibilityIdentifier("followsets-list")
         .overlay { overlay }
         .navigationTitle(L("listsTitle"))

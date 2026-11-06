@@ -156,7 +156,7 @@ struct ReplyTargetPreview: View {
                 HStack(spacing: 4) {
                     Text(L("replyingTo"))
                     Text("@\(cache.profile(note.pubkey)?.bestName ?? note.authorName ?? Profile.shortNpub(note.pubkey))")
-                        .foregroundStyle(AppColors.accent)
+                        .foregroundStyle(AppColors.link)
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)

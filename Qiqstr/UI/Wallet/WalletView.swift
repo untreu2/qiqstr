@@ -215,7 +215,6 @@ struct WalletOnboardingView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
         .accessibilityIdentifier("wallet-onboarding")
     }
 
@@ -246,7 +245,6 @@ struct WalletDashboard: View {
             transactions
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
         .refreshable { await model.refresh() }
         .task {
             while !Task.isCancelled {

@@ -153,7 +153,6 @@ struct FollowSetDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
         .accessibilityIdentifier("followset-members")
         .searchable(text: $query, prompt: L("exploreSearchMembers"))
         .overlay {

@@ -72,8 +72,6 @@ struct BookmarksView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(AppColors.background)
         .accessibilityIdentifier("bookmarks-list")
         .overlay { overlay }
         .animation(.snappy, value: model.notes.map(\.id))

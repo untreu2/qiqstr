@@ -106,8 +106,6 @@ struct ReceiveView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .scrollContentBackground(.hidden)
-        .background(AppColors.background)
         .navigationTitle(L("receive"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
