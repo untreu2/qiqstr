@@ -9,16 +9,40 @@ final class ConnectWalletModel {
     private(set) var error: String?
     private(set) var connectedTick = 0
 
-    init(uri: String?) { self.uri = uri ?? "" }
+    private(set) var clipboardChangeCount = UIPasteboard.general.changeCount
+    private var consumedChangeCount = -1
+
+    init(uri: String?) {
+        self.uri = uri ?? ""
+        accepted = UserDefaults.standard.bool(forKey: WalletService.disclaimerAcceptedKey)
+    }
+
+    var clipboardHasContent: Bool {
+        clipboardChangeCount != consumedChangeCount && (UIPasteboard.general.hasStrings || UIPasteboard.general.hasURLs)
+    }
+
+    var highlightsPaste: Bool { clipboardHasContent && !isValid }
+
+    func refreshClipboard() { clipboardChangeCount = UIPasteboard.general.changeCount }
+
+    func pasted(_ values: [String]) {
+        consumedChangeCount = UIPasteboard.general.changeCount
+        refreshClipboard()
+        guard let text = values.first(where: { WalletService.isWalletConnectURI($0) }) ?? values.first else { return }
+        uri = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        error = nil
+    }
+
+    func receive(_ incoming: String?) {
+        guard let incoming else { return }
+        uri = incoming
+        error = nil
+    }
 
     var trimmed: String { uri.trimmingCharacters(in: .whitespacesAndNewlines) }
     var isValid: Bool { !trimmed.isEmpty && WalletService.shared.validate(uri: trimmed) }
     var showsInvalid: Bool { !trimmed.isEmpty && !isValid }
     var canConnect: Bool { isValid && accepted && !isConnecting }
-
-    func paste() {
-        if let text = UIPasteboard.general.string { uri = text.trimmingCharacters(in: .whitespacesAndNewlines) }
-    }
 
     func connect() async -> Bool {
         guard !trimmed.isEmpty else {
@@ -45,7 +69,9 @@ final class ConnectWalletModel {
 
 struct ConnectWalletSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConnectWalletModel
+    @State private var wallet = WalletService.shared
     @State private var showScanner = false
 
     init(initialURI: String?) {
@@ -62,10 +88,8 @@ struct ConnectWalletSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .accessibilityIdentifier("wallet-connect-uri")
-                    Button { model.paste() } label: { Label(L("walletPaste"), systemImage: "doc.on.clipboard") }
-                        .accessibilityIdentifier("wallet-connect-paste")
-                    Button { showScanner = true } label: { Label(L("walletScan"), systemImage: "qrcode.viewfinder") }
-                        .accessibilityIdentifier("wallet-connect-scan-sheet")
+                    inputButtons
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 } header: {
                     Text(L("nwcConnectionString"))
                 } footer: {
@@ -75,8 +99,19 @@ struct ConnectWalletSheet: View {
                     } else if model.isValid {
                         Label(L("walletConnectionLooksGood"), systemImage: "checkmark.circle")
                             .foregroundStyle(AppColors.success)
+                    } else if model.highlightsPaste {
+                        Text(L("walletClipboardReady"))
                     } else {
                         Text(L("walletNwcConnectDescription"))
+                    }
+                }
+                if !model.isValid {
+                    Section {
+                        ForEach(WalletProvider.oneTap) { WalletProviderRow(provider: $0) }
+                    } header: {
+                        Text(L("walletConnectWithApp"))
+                    } footer: {
+                        Text(L("walletConnectWithAppFooter"))
                     }
                 }
                 Section {
@@ -95,6 +130,7 @@ struct ConnectWalletSheet: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .animation(.snappy, value: model.isValid)
             .navigationTitle(L("nwcTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -122,8 +158,43 @@ struct ConnectWalletSheet: View {
         }
         .presentationDetents([.large])
         .sensoryFeedback(.success, trigger: model.connectedTick)
+        .sensoryFeedback(.selection, trigger: model.isValid)
+        .onAppear {
+            model.refreshClipboard()
+            model.receive(wallet.consumeIncomingConnectURI())
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.refreshClipboard() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
+            model.refreshClipboard()
+        }
+        .onChange(of: wallet.incomingConnectURI) { _, uri in
+            if uri != nil { model.receive(wallet.consumeIncomingConnectURI()) }
+        }
         .fullScreenCover(isPresented: $showScanner) {
             QRScannerView { model.uri = $0 }
         }
+    }
+
+    private var inputButtons: some View {
+        HStack(spacing: 10) {
+            PasteButton(payloadType: String.self) { model.pasted($0) }
+                .labelStyle(.titleAndIcon)
+                .buttonBorderShape(.capsule)
+                .tint(model.highlightsPaste ? Color(uiColor: .label) : Color(uiColor: .systemGray))
+                .symbolEffect(.pulse, isActive: model.highlightsPaste)
+                .accessibilityIdentifier("wallet-connect-paste")
+            Button { showScanner = true } label: {
+                Label(L("walletScan"), systemImage: "qrcode.viewfinder")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .accessibilityIdentifier("wallet-connect-scan-sheet")
+        }
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
+        .animation(.snappy, value: model.highlightsPaste)
     }
 }
