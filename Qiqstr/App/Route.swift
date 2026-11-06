@@ -65,7 +65,7 @@ extension View {
 final class Router {
     static let shared = Router()
     var selectedTab: AppTab = .feed
-    var paths: [AppTab: NavigationPath] = [.feed: NavigationPath(), .dm: NavigationPath(), .wallet: NavigationPath(), .notifications: NavigationPath()]
+    var paths: [AppTab: NavigationPath] = [.feed: NavigationPath(), .dm: NavigationPath(), .wallet: NavigationPath(), .notifications: NavigationPath(), .search: NavigationPath()]
     var isComposing = false
     var composeContext: ComposeContext?
     var showSidebar = false
@@ -104,7 +104,7 @@ final class Router {
     }
 }
 
-enum AppTab: Hashable { case feed, dm, wallet, notifications, compose }
+enum AppTab: Hashable { case feed, dm, wallet, notifications, search, compose }
 
 enum AppSheet: Identifiable {
     case zap(Note)
