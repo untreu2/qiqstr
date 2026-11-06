@@ -21,9 +21,6 @@ struct HomeView: View {
                 NavigationStack(path: router.binding(.notifications)) { NotificationsView().withRoutes() }
             }
             .badge(badge.hasUnreadNotifications ? Text("") : nil)
-            Tab(L("newPost"), systemImage: "plus", value: AppTab.compose, role: .search) {
-                Color.clear
-            }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .sheet(isPresented: $router.isComposing) {

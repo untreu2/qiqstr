@@ -21,7 +21,7 @@ struct QiqTextField: View {
             .keyboardType(keyboard)
             .textInputAutocapitalization(autocapitalize ? .sentences : .never)
             .autocorrectionDisabled(!autocapitalize)
-            .font(.system(size: 16))
+            .font(.body)
             if let trailing { trailing }
         }
         .padding(.horizontal, 18)
@@ -34,7 +34,7 @@ struct SectionHeader: View {
     let title: String
     var body: some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.footnote.weight(.semibold))
             .foregroundStyle(AppColors.textSecondary)
             .textCase(nil)
     }

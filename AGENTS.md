@@ -61,3 +61,15 @@ Debug builds accept `-QIQ_LOGIN <nsec|hex|mnemonic>` as a launch argument to sig
 ## Adding strings
 
 Feature strings go in their own table, `Qiqstr/Resources/{en,tr,de}.lproj/<Table>.strings`, where `<Table>` is one of `Auth`, `Feed`, `Profile`, `Explore`, `DM`, `Wallet`, `Settings`. `L(key)` searches every table. Reuse the existing `Localizable.strings` keys (ported from the Flutter ARB files) wherever one fits.
+
+## Native UI rules
+
+The app should be indistinguishable from a first-party iOS 26 app while keeping qiqstr's monochrome identity.
+
+- **Typography:** use Dynamic Type text styles (`.largeTitle`, `.title2`, `.headline`, `.body`, `.subheadline`, `.footnote`, `.caption`), never `.font(.system(size:))`. The exceptions are the Poppins wordmark (`AppFont.brand`), the wallet balance hero number, and sizes derived from a container (avatars, icons inside a fixed tile). Use `.foregroundStyle(.secondary)` / `.tertiary` instead of custom grey colours.
+- **Structure:** settings-like and list screens use `List` or `Form` (`.insetGrouped` where it fits), `Section` with header and footer text, `Label(title, systemImage:)` rows, `NavigationLink`, `Toggle`, `Picker`, `LabeledContent`, and `.swipeActions`. Avoid hand-made cards that imitate grouped lists.
+- **Navigation:** use large titles (`.navigationTitle` with `.large` display mode) for top-level tabs and pages, `.toolbarTitleMenu` to switch modes or feeds, toolbar buttons for primary actions (compose uses `square.and.pencil` in the toolbar, like Mail), `.searchable` instead of custom search fields, and `.confirmationDialog` / `.alert` for confirmations.
+- **Controls:** use system button styles (`.glassProminent`, `.glass`, `.bordered`, `.borderless`) with `.buttonBorderShape`, `.controlSize`; segmented `Picker` for tabs within a screen; `Menu` for overflow actions; `ShareLink`; `PhotosPicker`; and `ContentUnavailableView` (via `EmptyStateView`) for empty and error states.
+- **Feedback:** `.refreshable`, `.sensoryFeedback`, `.contextMenu` with preview where useful, and `.redacted(reason: .placeholder)` skeletons instead of spinners for loading rows where practical.
+- **Identity:** keep the monochrome app tint, AppColors background and interaction colours, the Poppins wordmark in brand places (welcome, splash, feed title), and the accent only for unread dots.
+- Keep existing `accessibilityIdentifier`s working.

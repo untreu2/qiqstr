@@ -14,18 +14,17 @@ struct EmptyStateView: View {
     var action: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 14) {
-            IconTile(systemImage: systemImage, size: 64, tint: AppColors.textSecondary)
-            Text(title).font(.system(size: 18, weight: .semibold)).multilineTextAlignment(.center)
-            if let message {
-                Text(message).font(.system(size: 15)).foregroundStyle(AppColors.textSecondary).multilineTextAlignment(.center)
-            }
+        ContentUnavailableView {
+            Label(title, systemImage: systemImage)
+        } description: {
+            if let message { Text(message) }
+        } actions: {
             if let actionTitle, let action {
-                PillButton(title: actionTitle, action: action).padding(.top, 6)
+                Button(actionTitle, action: action)
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
             }
         }
-        .padding(32)
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -75,7 +74,7 @@ struct ToastOverlay: ViewModifier {
                 HStack(spacing: 10) {
                     Image(systemName: toast.style == .error ? "exclamationmark.circle.fill" : toast.style == .success ? "checkmark.circle.fill" : "info.circle.fill")
                         .foregroundStyle(toast.style == .error ? AppColors.error : toast.style == .success ? AppColors.success : AppColors.textPrimary)
-                    Text(toast.message).font(.system(size: 15, weight: .medium)).lineLimit(3)
+                    Text(toast.message).font(.subheadline.weight(.medium)).lineLimit(3)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)

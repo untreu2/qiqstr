@@ -9,16 +9,16 @@ struct PrimaryButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                Text(title).font(.system(size: 17, weight: .semibold)).opacity(isLoading ? 0 : 1)
-                if isLoading { ProgressView().tint(AppColors.background) }
+                Text(title).opacity(isLoading ? 0 : 1)
+                if isLoading { ProgressView() }
             }
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .foregroundStyle(AppColors.background)
-            .background(AppColors.textPrimary, in: Capsule())
+            .font(.headline)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.capsule)
+        .controlSize(.extraLarge)
         .disabled(!isEnabled || isLoading)
-        .opacity(isEnabled ? 1 : 0.4)
     }
 }
 
@@ -32,13 +32,14 @@ struct SecondaryButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if isLoading { ProgressView() } else if let systemImage { Image(systemName: systemImage) }
-                Text(title).font(.system(size: 16, weight: .semibold))
+                Text(title)
             }
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .foregroundStyle(AppColors.textPrimary)
+            .font(.headline)
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
+        .controlSize(.extraLarge)
         .disabled(isLoading)
     }
 }
@@ -50,20 +51,22 @@ struct PillButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let systemImage { Image(systemName: systemImage).font(.system(size: 14, weight: .semibold)) }
-                Text(title).font(.system(size: 15, weight: .semibold))
-            }
-            .padding(.horizontal, 18)
-            .frame(height: 38)
-            .foregroundStyle(filled ? AppColors.background : AppColors.textPrimary)
-            .background {
-                if filled { Capsule().fill(AppColors.textPrimary) }
-            }
-            .glassEffect(filled ? .identity : .regular.interactive(), in: .capsule)
+        if filled {
+            Button(action: action) { label }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
         }
-        .buttonStyle(PressableStyle())
+    }
+
+    private var label: some View {
+        Group {
+            if let systemImage { Label(title, systemImage: systemImage) } else { Text(title) }
+        }
+        .font(.subheadline.weight(.semibold))
     }
 }
 
@@ -76,12 +79,11 @@ struct GlassIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(AppColors.textPrimary)
+                .font(.body.weight(.semibold))
                 .frame(width: size, height: size)
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
         .accessibilityLabel(accessibilityLabel ?? systemImage)
     }
 }
@@ -101,7 +103,7 @@ struct IconTile: View {
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.system(size: size * 0.38, weight: .regular))
+            .font(.system(size: size * 0.38))
             .foregroundStyle(tint)
             .frame(width: size, height: size)
             .background(AppColors.tile, in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
