@@ -3,51 +3,139 @@ import SwiftUI
 @MainActor
 @Observable
 final class SuggestedFollowsViewModel {
-    enum Phase: Equatable { case loading, loaded, failed(String) }
-
-    private(set) var phase: Phase = .loading
-    private(set) var pubkeys: [String] = []
+    var interests: Set<FollowInterest>
+    private(set) var packs: [FollowPack] = []
     var selected: Set<String> = []
+    var expanded: Set<String> = []
     private(set) var isProcessing = false
     private(set) var followedCount = 0
     private(set) var failureCount = 0
+    private(set) var deadlinePassed = false
+    private var requestedProfiles: Set<String> = []
+    private var didPreselectFallback = false
 
     let minimumSelection: Int
+    let preselectsFallback: Bool
+    private let service = FollowPackService.shared
 
-    init(minimumSelection: Int) { self.minimumSelection = minimumSelection }
+    static let maximumPacks = 12
+    static let deadline: Duration = .seconds(4)
 
-    var canContinue: Bool { selected.count >= minimumSelection && !isProcessing }
-
-    func load() async {
-        let me = Session.shared.pubkey
-        let candidates = SuggestedUsers.pubkeys.filter { $0 != me }
-        guard !candidates.isEmpty else {
-            phase = .failed(L("authNoSuggested"))
-            return
-        }
-        if pubkeys.isEmpty { phase = .loading }
-        async let localProfiles: Void = ProfileCache.shared.load(candidates, fetchMissing: false)
-        async let localFollows: Void = FollowService.shared.refresh()
-        _ = await (localProfiles, localFollows)
-        if candidates.allSatisfy({ ProfileCache.shared.profile($0) != nil }) { present(candidates) }
-        await SyncService.shared.syncProfiles(candidates)
-        for pubkey in candidates { await ProfileCache.shared.refresh(pubkey) }
-        present(candidates)
+    init(interests: Set<FollowInterest>, minimumSelection: Int, preselectsFallback: Bool) {
+        self.interests = interests
+        self.minimumSelection = minimumSelection
+        self.preselectsFallback = preselectsFallback
     }
 
-    private func present(_ candidates: [String]) {
-        if pubkeys.isEmpty {
-            selected = Set(candidates.filter { !FollowService.shared.isFollowing($0) })
-        } else {
-            selected = selected.filter { !FollowService.shared.isFollowing($0) }
+    var showsSkeleton: Bool { packs.isEmpty && !deadlinePassed && !service.hasLoaded }
+    var canContinue: Bool { selected.count >= minimumSelection && !isProcessing }
+    var remaining: Int { max(minimumSelection - selected.count, 0) }
+
+    private var me: String? { Session.shared.pubkey }
+
+    func load() async {
+        service.prefetch()
+        await FollowService.shared.refresh()
+        refreshPacks()
+        async let deadline: Void = waitForDeadline()
+        async let loaded: Void = service.waitUntilLoaded()
+        _ = await (deadline, loaded)
+        refreshPacks()
+    }
+
+    func reload() async {
+        await service.reload()
+        refreshPacks()
+    }
+
+    private func waitForDeadline() async {
+        try? await Task.sleep(for: Self.deadline)
+        deadlinePassed = true
+        refreshPacks()
+    }
+
+    func refreshPacks() {
+        let ranked = Array(service.ranked(for: interests).prefix(Self.maximumPacks))
+        guard !ranked.isEmpty || deadlinePassed || service.hasLoaded else {
+            packs = []
+            return
         }
-        pubkeys = candidates
-        phase = .loaded
+        packs = ranked + [fallbackPack]
+        if ranked.isEmpty { preselectFallback() }
+        selected = selected.filter { !FollowService.shared.isFollowing($0) }
+        loadProfiles(packs.flatMap { $0.members.prefix(5) })
+        expanded.compactMap { id in packs.first { $0.id == id } }.forEach { loadProfiles($0.members) }
+    }
+
+    private var fallbackPack: FollowPack {
+        FollowPack(
+            id: "qiqstr:suggested",
+            kind: 0,
+            author: "",
+            title: L("authPackSuggestedTitle"),
+            summary: L("authPackSuggestedSubtitle"),
+            image: "",
+            members: SuggestedUsers.pubkeys.filter { $0 != me },
+            topics: [],
+            createdAt: 0
+        )
+    }
+
+    private func preselectFallback() {
+        guard preselectsFallback, !didPreselectFallback, selected.isEmpty else { return }
+        didPreselectFallback = true
+        selected = Set(candidates(fallbackPack))
+    }
+
+    private func loadProfiles(_ pubkeys: [String]) {
+        let wanted = Array(Set(pubkeys).subtracting(requestedProfiles).prefix(150))
+        guard !wanted.isEmpty else { return }
+        requestedProfiles.formUnion(wanted)
+        Task {
+            let cache = ProfileCache.shared
+            await cache.load(wanted, fetchMissing: false)
+            let missing = wanted.filter { cache.profile($0) == nil }
+            guard !missing.isEmpty else { return }
+            await SyncService.shared.syncProfiles(missing)
+            await cache.load(missing, fetchMissing: false)
+        }
+    }
+
+    func toggleInterest(_ interest: FollowInterest) {
+        if interests.contains(interest) { interests.remove(interest) } else { interests.insert(interest) }
+        FollowInterest.saved = interests
+        refreshPacks()
+    }
+
+    func candidates(_ pack: FollowPack) -> [String] {
+        pack.members.filter { $0 != me && !FollowService.shared.isFollowing($0) }
+    }
+
+    func isPackSelected(_ pack: FollowPack) -> Bool {
+        let candidates = candidates(pack)
+        return !candidates.isEmpty && selected.isSuperset(of: candidates)
+    }
+
+    func togglePack(_ pack: FollowPack) {
+        guard !isProcessing else { return }
+        let candidates = candidates(pack)
+        if selected.isSuperset(of: candidates) { selected.subtract(candidates) } else { selected.formUnion(candidates) }
     }
 
     func toggle(_ pubkey: String) {
         guard !isProcessing, !FollowService.shared.isFollowing(pubkey) else { return }
         if selected.contains(pubkey) { selected.remove(pubkey) } else { selected.insert(pubkey) }
+    }
+
+    func isExpanded(_ pack: FollowPack) -> Bool { expanded.contains(pack.id) }
+
+    func setExpanded(_ pack: FollowPack, _ value: Bool) {
+        if value {
+            expanded.insert(pack.id)
+            loadProfiles(pack.members)
+        } else {
+            expanded.remove(pack.id)
+        }
     }
 
     func followSelected() async -> Bool {
@@ -73,25 +161,29 @@ struct SuggestedFollowsView: View {
     var onFinish: (() -> Void)?
 
     @State private var model: SuggestedFollowsViewModel
-    @State private var cache = ProfileCache.shared
     @State private var follows = FollowService.shared
+    @State private var packService = FollowPackService.shared
     @Environment(\.dismiss) private var dismiss
 
-    init(onFinish: (() -> Void)?) {
+    init(interests: Set<FollowInterest> = [], onFinish: (() -> Void)?) {
         self.onFinish = onFinish
-        _model = State(initialValue: SuggestedFollowsViewModel(minimumSelection: onFinish == nil ? 1 : 3))
+        let isOnboarding = onFinish != nil
+        _model = State(initialValue: SuggestedFollowsViewModel(
+            interests: interests.isEmpty ? FollowInterest.saved : interests,
+            minimumSelection: isOnboarding ? 3 : 1,
+            preselectsFallback: isOnboarding
+        ))
     }
 
     private var isOnboarding: Bool { onFinish != nil }
 
     var body: some View {
-        content
-            .background(AppColors.background)
+        list
             .navigationTitle(isOnboarding ? "" : L("suggestedFollows"))
             .navigationBarTitleDisplayMode(isOnboarding ? .inline : .large)
             .toolbar {
                 if isOnboarding {
-                    ToolbarItem(placement: .principal) { OnboardingStepIndicator(current: 3) }
+                    ToolbarItem(placement: .principal) { OnboardingStepIndicator(current: 4) }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(L("skip")) { onFinish?() }
                             .disabled(model.isProcessing)
@@ -100,50 +192,39 @@ struct SuggestedFollowsView: View {
                 }
             }
             .task { await model.load() }
+            .onChange(of: packService.packs) { model.refreshPacks() }
+            .onChange(of: follows.following) { model.refreshPacks() }
             .sensoryFeedback(.selection, trigger: model.selected)
+            .sensoryFeedback(.selection, trigger: model.interests)
             .sensoryFeedback(.success, trigger: model.followedCount)
             .sensoryFeedback(.error, trigger: model.failureCount)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch model.phase {
-        case .loading:
-            VStack(spacing: 18) {
-                ProgressView().controlSize(.large)
-                Text(L("authLoadingSuggested"))
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityIdentifier("suggested-loading")
-        case .failed(let message):
-            EmptyStateView(systemImage: "person.2.slash", title: L("failedToLoadSuggestedUsers"), message: message, actionTitle: L("retry")) {
-                Task { await model.load() }
-            }
-            .frame(maxHeight: .infinity)
-        case .loaded:
-            list
-        }
     }
 
     private var list: some View {
         List {
             Section {
                 header
-                .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 8, trailing: 4))
+                interestsRow
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
-            Section {
-                ForEach(model.pubkeys, id: \.self) { pubkey in
-                    row(pubkey)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            if model.showsSkeleton {
+                ForEach(0..<3, id: \.self) { _ in
+                    Section { FollowPackSkeleton() }
+                }
+                .accessibilityIdentifier("suggested-loading")
+            } else {
+                ForEach(model.packs) { pack in
+                    packSection(pack)
                 }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .refreshable { await model.load() }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(16)
+        .animation(.snappy, value: model.packs.map(\.id))
+        .refreshable { await model.reload() }
         .accessibilityIdentifier("suggested-list")
         .safeAreaInset(edge: .bottom) {
             PrimaryButton(title: continueTitle, isLoading: model.isProcessing, isEnabled: model.canContinue) {
@@ -156,14 +237,14 @@ struct SuggestedFollowsView: View {
             .accessibilityIdentifier("suggested-continue")
             .padding(.horizontal, 24)
             .padding(.vertical, 8)
-            .background(AppColors.background)
+            .background(.bar)
         }
     }
 
     @ViewBuilder
     private var header: some View {
         if isOnboarding {
-            AuthHeader(title: L("suggestedFollows"), subtitle: L("authSuggestedSubtitle"))
+            AuthHeader(title: L("authPacksTitle"), subtitle: L("authPacksSubtitle"))
         } else {
             Text(L("authSuggestedBrowseSubtitle"))
                 .font(.subheadline)
@@ -171,67 +252,61 @@ struct SuggestedFollowsView: View {
         }
     }
 
-    private var continueTitle: String {
-        if isOnboarding { return L("continueButton") }
-        return model.selected.isEmpty ? L("follow") : L("authFollowSelected", ["count": model.selected.count])
+    private var interestsRow: some View {
+        ScrollView(.horizontal) {
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    ForEach(orderedInterests) { interest in
+                        InterestChip(interest: interest, isSelected: model.interests.contains(interest), compact: true) {
+                            withAnimation(.snappy) { model.toggleInterest(interest) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 4)
+            }
+        }
+        .scrollIndicators(.hidden)
+        .accessibilityIdentifier("suggested-interests")
     }
 
-    private func row(_ pubkey: String) -> some View {
-        let profile = cache.profile(pubkey)
-        let alreadyFollowing = follows.isFollowing(pubkey)
-        let isSelected = alreadyFollowing || model.selected.contains(pubkey)
-        return Button {
-            model.toggle(pubkey)
-        } label: {
-            HStack(spacing: 12) {
-                ProfileAvatar(pubkey: pubkey, size: 48)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    if let nip05 = profile?.nip05.nilIfEmpty {
-                        Text(nip05)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    if let about = profile?.about.nilIfEmpty {
-                        Text(about)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                Spacer(minLength: 8)
-                if alreadyFollowing {
-                    Text(L("following"))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title)
-                        .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
-                        .contentTransition(.symbolEffect(.replace))
-                }
+    private var orderedInterests: [FollowInterest] {
+        FollowInterest.allCases.filter { model.interests.contains($0) } + FollowInterest.allCases.filter { !model.interests.contains($0) }
+    }
+
+    private func packSection(_ pack: FollowPack) -> some View {
+        Section {
+            FollowPackHeader(pack: pack, isSelected: model.isPackSelected(pack), isDisabled: model.isProcessing || model.candidates(pack).isEmpty) {
+                withAnimation(.snappy) { model.togglePack(pack) }
             }
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(alreadyFollowing || model.isProcessing)
-        .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
-        .contextMenu {
-            if !isOnboarding {
-                Button {
-                    Router.shared.push(.profile(pubkey))
-                } label: {
-                    Label(L("profile"), systemImage: "person")
+            DisclosureGroup(isExpanded: Binding(get: { model.isExpanded(pack) }, set: { value in withAnimation(.snappy) { model.setExpanded(pack, value) } })) {
+                ForEach(pack.members, id: \.self) { pubkey in
+                    FollowPackMemberRow(
+                        pubkey: pubkey,
+                        isSelected: model.selected.contains(pubkey),
+                        alreadyFollowing: follows.isFollowing(pubkey)
+                    ) {
+                        model.toggle(pubkey)
+                    }
+                    .disabled(model.isProcessing)
                 }
+            } label: {
+                Text(L("authPackPeople", ["count": selectedCount(in: pack)]))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            .accessibilityIdentifier("pack-expand")
         }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityIdentifier("suggested-user-\(pubkey.prefix(8))")
+    }
+
+    private func selectedCount(in pack: FollowPack) -> Int {
+        pack.members.filter { model.selected.contains($0) }.count
+    }
+
+    private var continueTitle: String {
+        if isOnboarding {
+            return model.remaining > 0 ? L("authSelectMore", ["count": model.remaining]) : L("authFollowAndContinue", ["count": model.selected.count])
+        }
+        return model.selected.isEmpty ? L("follow") : L("authFollowSelected", ["count": model.selected.count])
     }
 }
