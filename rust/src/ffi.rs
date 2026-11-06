@@ -91,6 +91,12 @@ pub fn aes_gcm_decrypt(encrypted_base64: String, key_hex: String, nonce_hex: Str
 pub fn sha256_hash(data: Vec<u8>) -> String { api::crypto::sha256_hash(data) }
 
 #[uniffi::export]
+pub fn ncryptsec_encrypt(private_key_hex: String, password: String) -> Result<String, QiqError> { api::crypto::ncryptsec_encrypt(private_key_hex, password).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn ncryptsec_decrypt(ncryptsec: String, password: String) -> Result<String, QiqError> { api::crypto::ncryptsec_decrypt(ncryptsec, password).map_err(Into::into) }
+
+#[uniffi::export]
 pub fn set_active_mute_list(muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> () { api::database::set_active_mute_list(muted_pubkeys, muted_words) }
 
 #[uniffi::export]

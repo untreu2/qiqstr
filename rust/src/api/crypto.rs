@@ -217,3 +217,15 @@ mod tests {
         assert!(aes_gcm_decrypt("not base64".into(), "11".repeat(32), "22".repeat(12)).is_err());
     }
 }
+
+pub fn ncryptsec_encrypt(private_key_hex: String, password: String) -> Result<String> {
+    let sk = SecretKey::parse(&private_key_hex)?;
+    let encrypted = EncryptedSecretKey::new(&sk, &password, 16, KeySecurity::Medium)?;
+    Ok(encrypted.to_bech32()?)
+}
+
+pub fn ncryptsec_decrypt(ncryptsec: String, password: String) -> Result<String> {
+    let encrypted = EncryptedSecretKey::from_bech32(ncryptsec.trim())?;
+    let sk = encrypted.decrypt(&password)?;
+    Ok(sk.to_secret_hex())
+}

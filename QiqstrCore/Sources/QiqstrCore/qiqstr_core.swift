@@ -3061,6 +3061,24 @@ public func mnemonicToPrivateKey(mnemonic: String)throws  -> String  {
     )
 })
 }
+public func ncryptsecDecrypt(ncryptsec: String, password: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_ncryptsec_decrypt(
+        FfiConverterString.lower(ncryptsec),
+        FfiConverterString.lower(password),uniffiCallStatus
+    )
+})
+}
+public func ncryptsecEncrypt(privateKeyHex: String, password: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_ncryptsec_encrypt(
+        FfiConverterString.lower(privateKeyHex),
+        FfiConverterString.lower(password),uniffiCallStatus
+    )
+})
+}
 public func nip19Decode(bech32Str: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
@@ -3954,6 +3972,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_mnemonic_to_private_key() != 50148) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_ncryptsec_decrypt() != 5717) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_ncryptsec_encrypt() != 50890) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_nip19_decode() != 24629) {
