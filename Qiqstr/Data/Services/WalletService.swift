@@ -162,6 +162,7 @@ final class WalletService {
     private(set) var isRedeemingCashu = false
     private(set) var isPaying = false
     private(set) var lastPaymentAt: Date?
+    private(set) var incomingConnectURI: String?
     var balanceHidden: Bool = UserDefaults.standard.bool(forKey: "wallet_balance_hidden") {
         didSet { UserDefaults.standard.set(balanceHidden, forKey: "wallet_balance_hidden") }
     }
@@ -190,6 +191,8 @@ final class WalletService {
         isRedeemingCashu = false
         isPaying = false
         lastPaymentAt = nil
+        incomingConnectURI = nil
+        ZapService.shared.reset()
     }
 
     func load() async {
@@ -198,6 +201,40 @@ final class WalletService {
         self.backend = backend
         connectionState = .connected
         await refresh()
+    }
+
+    static let callbackScheme = "qiqstr"
+    static let callbackHost = "nwc"
+    static var callbackURL: String { "\(callbackScheme)://\(callbackHost)" }
+    static let disclaimerAcceptedKey = "nwc_disclaimer_accepted"
+
+    @discardableResult
+    func handleIncoming(url: URL) -> Bool {
+        let raw = url.absoluteString
+        if Self.isWalletConnectURI(raw) {
+            deliverIncoming(raw)
+            return true
+        }
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              comps.scheme?.lowercased() == Self.callbackScheme,
+              comps.host?.lowercased() == Self.callbackHost else { return false }
+        if let value = comps.queryItems?.first(where: { $0.name == "value" })?.value, Self.isWalletConnectURI(value) {
+            deliverIncoming(value)
+        } else {
+            Router.shared.selectedTab = .wallet
+            ToastCenter.shared.show(L("nwcInvalidConnectionString"), style: .error)
+        }
+        return true
+    }
+
+    func consumeIncomingConnectURI() -> String? {
+        defer { incomingConnectURI = nil }
+        return incomingConnectURI
+    }
+
+    private func deliverIncoming(_ uri: String) {
+        incomingConnectURI = uri.trimmingCharacters(in: .whitespacesAndNewlines)
+        Router.shared.selectedTab = .wallet
     }
 
     static func isWalletConnectURI(_ text: String) -> Bool {
@@ -214,6 +251,7 @@ final class WalletService {
         let uri = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let backend = try NWCWalletBackend(uri: uri)
         Keychain.set(uri, for: storageKey(pubkey))
+        UserDefaults.standard.set(true, forKey: Self.disclaimerAcceptedKey)
         generation += 1
         self.backend = backend
         connectionState = .connected
@@ -444,6 +482,68 @@ final class WalletService {
         let amount = sats - buffer
         guard amount > 0 else { throw WalletError.cashuTooSmall }
         return try await makeInvoice(amount: amount, description: L("cashuToken")).invoice
+    }
+}
+
+@MainActor
+@Observable
+final class BitcoinPriceService {
+    static let shared = BitcoinPriceService()
+    static let showFiatKey = "wallet_show_fiat"
+    static let supportedCurrencies: Set<String> = ["USD", "EUR", "GBP", "CAD", "CHF", "AUD", "JPY"]
+    private static let cacheKey = "btc_prices"
+    private static let cacheDateKey = "btc_prices_at"
+    private static let maxAge: TimeInterval = 600
+    private static let endpoint = URL(string: "https://mempool.space/api/v1/prices")!
+
+    private(set) var prices: [String: Double]
+    private var fetchedAt: Date?
+    private var isFetching = false
+
+    private init() {
+        let defaults = UserDefaults.standard
+        prices = (defaults.dictionary(forKey: Self.cacheKey) as? [String: Double]) ?? [:]
+        fetchedAt = defaults.object(forKey: Self.cacheDateKey) as? Date
+    }
+
+    static var isEnabled: Bool { UserDefaults.standard.object(forKey: showFiatKey) as? Bool ?? true }
+
+    var currency: String {
+        let code = Locale.current.currency?.identifier.uppercased() ?? "USD"
+        return Self.supportedCurrencies.contains(code) ? code : "USD"
+    }
+
+    var isStale: Bool { fetchedAt.map { Date().timeIntervalSince($0) > Self.maxAge } ?? true }
+
+    func refreshIfNeeded() async {
+        guard Self.isEnabled, isStale, !isFetching else { return }
+        isFetching = true
+        defer { isFetching = false }
+        var request = URLRequest(url: Self.endpoint)
+        request.timeoutInterval = 10
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+        var parsed: [String: Double] = [:]
+        for (key, value) in json where Self.supportedCurrencies.contains(key) {
+            if let number = value as? NSNumber, number.doubleValue > 0 { parsed[key] = number.doubleValue }
+        }
+        guard !parsed.isEmpty else { return }
+        prices = parsed
+        fetchedAt = Date()
+        UserDefaults.standard.set(parsed, forKey: Self.cacheKey)
+        UserDefaults.standard.set(fetchedAt, forKey: Self.cacheDateKey)
+    }
+
+    func fiatValue(sats: Int) -> Double? {
+        guard let rate = prices[currency] else { return nil }
+        return Double(sats) / 100_000_000 * rate
+    }
+
+    func formatted(sats: Int) -> String? {
+        guard Self.isEnabled, let value = fiatValue(sats: sats) else { return nil }
+        let digits = currency == "JPY" ? 0 : 2
+        return value.formatted(.currency(code: currency).precision(.fractionLength(digits)))
     }
 }
 

@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct PaymentsSettingsView: View {
-    @AppStorage("one_tap_zap") private var oneTapZap = false
-    @AppStorage("default_zap_amount") private var defaultZapAmount = 21
+    @AppStorage(ZapService.oneTapKey) private var oneTapZap = false
+    @AppStorage(ZapService.defaultAmountKey) private var defaultZapAmount = 21
+    @AppStorage(BitcoinPriceService.showFiatKey) private var showFiat = true
     @State private var amountText = ""
     @State private var saved = 0
     @FocusState private var amountFocused: Bool
@@ -46,7 +47,7 @@ struct PaymentsSettingsView: View {
                 Text(L("oneTapZapDescription"))
             }
 
-            Section(L("defaultZapAmount")) {
+            Section {
                 LabeledContent {
                     HStack(spacing: 6) {
                         TextField(L("amountSats"), text: $amountText)
@@ -69,12 +70,30 @@ struct PaymentsSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+            } header: {
+                Text(L("defaultZapAmount"))
+            } footer: {
+                if showFiat, let amount = Int(amountText), amount > 0, let fiat = BitcoinPriceService.shared.formatted(sats: amount) {
+                    Text(L("walletFiatEstimate", ["amount": fiat]))
+                        .monospacedDigit()
+                }
+            }
+
+            Section {
+                Toggle(isOn: $showFiat) {
+                    SettingsRowLabel(title: L("walletShowFiat"), systemImage: "dollarsign.circle")
+                }
+                .tint(AppColors.switchActive)
+                .accessibilityIdentifier("payments-show-fiat")
+            } footer: {
+                Text(L("walletShowFiatDescription"))
             }
         }
         .settingsListStyle()
         .navigationTitle(L("paymentsTitle"))
         .navigationBarTitleDisplayMode(.large)
         .onAppear { amountText = "\(defaultZapAmount)" }
+        .task(id: showFiat) { if showFiat { await BitcoinPriceService.shared.refreshIfNeeded() } }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(L("save")) { save() }
@@ -88,6 +107,7 @@ struct PaymentsSettingsView: View {
         }
         .sensoryFeedback(.success, trigger: saved)
         .sensoryFeedback(.selection, trigger: oneTapZap)
+        .sensoryFeedback(.selection, trigger: showFiat)
     }
 
     private var hasChanges: Bool { Int(amountText) != defaultZapAmount }

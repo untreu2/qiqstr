@@ -32,7 +32,7 @@ final class ZapViewModel {
 
     init(target: ZapTarget) {
         self.target = target
-        let initial = ZapService.defaultAmount
+        let initial = ZapService.lastAmount ?? ZapService.defaultAmount
         if ZapService.presetAmounts.contains(initial) {
             selectedPreset = initial
         } else {
@@ -45,6 +45,10 @@ final class ZapViewModel {
     var amount: Int? {
         if let custom = Int(customAmount.filter(\.isNumber)), custom > 0 { return custom }
         return customAmount.isEmpty ? selectedPreset : nil
+    }
+
+    var fiatEstimate: String? {
+        amount.flatMap { BitcoinPriceService.shared.formatted(sats: $0) }.map { L("walletFiatEstimate", ["amount": $0]) }
     }
 
     var hasPayDestination: Bool { recipient?.lightningAddress != nil || recipient?.lnurl != nil }
@@ -60,8 +64,10 @@ final class ZapViewModel {
     }
 
     func load() async {
+        async let price: Void = BitcoinPriceService.shared.refreshIfNeeded()
         recipient = await ZapService.shared.recipient(target.pubkey)
         isLoadingRecipient = false
+        await price
     }
 
     func zap() async -> Bool {
@@ -71,6 +77,7 @@ final class ZapViewModel {
         do {
             try await ZapService.shared.zap(note: target.note, pubkey: target.pubkey, amountSats: amount, comment: comment)
             zappedTick += 1
+            ZapService.lastAmount = amount
             ToastCenter.shared.show(L("walletZapped", ["sats": Sats.format(amount), "user": recipientName]), style: .success)
             return true
         } catch {
@@ -111,7 +118,7 @@ struct ZapSheet: View {
                             .accessibilityIdentifier("zap-no-address")
                     }
                 } else {
-                    Section(L("amount")) {
+                    Section {
                         amounts
                         LabeledContent(L("walletCustomAmount")) {
                             TextField(L("walletSats"), text: $model.customAmount)
@@ -120,6 +127,15 @@ struct ZapSheet: View {
                                 .monospacedDigit()
                                 .focused($focused)
                                 .accessibilityIdentifier("zap-custom-amount")
+                        }
+                    } header: {
+                        Text(L("amount"))
+                    } footer: {
+                        if let fiat = model.fiatEstimate {
+                            Text(fiat)
+                                .monospacedDigit()
+                                .contentTransition(.numericText())
+                                .animation(.snappy, value: fiat)
                         }
                     }
                     Section {
