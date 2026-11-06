@@ -54,7 +54,7 @@ struct DMMessageBubble: View {
             .contextMenu { menuItems }
         } else {
             Text(DMText.attributed(message.content, mine: mine, cache: cache))
-                .font(.system(size: 16))
+                .font(.body)
                 .foregroundStyle(mine ? AppColors.background : AppColors.textPrimary)
                 .tint(mine ? AppColors.background : AppColors.textPrimary)
                 .textSelection(.disabled)
@@ -108,8 +108,8 @@ struct DMMessageBubble: View {
                 ProgressView().controlSize(.mini)
                 Text(L("dmSending"))
             }
-            .font(.system(size: 11))
-            .foregroundStyle(AppColors.textSecondary)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
         case .failed:
             Button {
@@ -119,7 +119,7 @@ struct DMMessageBubble: View {
                     Image(systemName: "exclamationmark.circle.fill")
                     Text(L("dmFailedTapRetry"))
                 }
-                .font(.system(size: 11, weight: .medium))
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(AppColors.error)
             }
             .buttonStyle(.plain)
@@ -135,8 +135,8 @@ struct DMMessageBubble: View {
                     Text(DMFormat.time(message.date))
                 }
             }
-            .font(.system(size: 11))
-            .foregroundStyle(AppColors.textSecondary)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
             .monospacedDigit()
             .padding(.horizontal, 6)
         }
@@ -186,7 +186,7 @@ enum DMText {
             var link = AttributedString(label ?? ns.substring(with: range))
             link.link = url
             link.underlineStyle = .single
-            if label != nil { link.font = .system(size: 16, weight: .semibold) }
+            if label != nil { link.font = .body.weight(.semibold) }
             result += link
             cursor = range.location + range.length
         }

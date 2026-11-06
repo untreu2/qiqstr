@@ -85,10 +85,10 @@ struct FollowListView: View {
                     ForEach(items, id: \.self) { pk in
                         UserRowView(pubkey: pk, showFollowButton: true)
                             .listRowBackground(AppColors.background)
-                            .listRowSeparatorTint(AppColors.divider)
                     }
                 } header: {
-                    SectionHeader(title: "\(Sats.compact(model.pubkeys.count)) \(mode == .following ? L("followingCount") : L("followers"))")
+                    Text("\(Sats.compact(model.pubkeys.count)) \(mode == .following ? L("followingCount") : L("followers"))")
+                        .textCase(nil)
                 }
             }
         }

@@ -31,9 +31,8 @@ struct SwitchAccountSheet: View {
                         detent = .large
                         path.append(SwitchAccountRoute.addAccount)
                     } label: {
-                        Label(L("addAccount"), systemImage: "plus")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(AppColors.textPrimary)
+                        Label(L("addAccount"), systemImage: "plus.circle")
+                            .foregroundStyle(.primary)
                     }
                     .accessibilityIdentifier("switch-add-account")
                 }
@@ -43,13 +42,12 @@ struct SwitchAccountSheet: View {
                     } label: {
                         HStack {
                             Label(L("logout"), systemImage: "rectangle.portrait.and.arrow.right")
-                                .font(.system(size: 17, weight: .medium))
                             if isLoggingOut {
                                 Spacer()
                                 ProgressView()
                             }
                         }
-                        .foregroundStyle(AppColors.error)
+                        .foregroundStyle(.red)
                     }
                     .disabled(isLoggingOut)
                     .accessibilityIdentifier("switch-logout")
@@ -110,21 +108,21 @@ struct SwitchAccountSheet: View {
                 ProfileAvatar(pubkey: pubkey, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     Text(shortNpub(account.npub))
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer()
                 if switchingTo == account.npub {
                     ProgressView()
                 } else if isActive {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(AppColors.textPrimary)
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.tint)
                         .accessibilityLabel(L("authActive"))
                 }
             }

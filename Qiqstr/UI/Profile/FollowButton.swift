@@ -19,30 +19,22 @@ struct FollowButton: View {
     }
 
     var body: some View {
-        Button {
+        styled(Button {
             if isFollowing { confirmUnfollow = true } else { Task { await toggle(follow: true) } }
         } label: {
             HStack(spacing: 6) {
                 if isWorking {
-                    ProgressView().controlSize(.mini).tint(isFollowing ? AppColors.textPrimary : AppColors.background)
+                    ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: isFollowing ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.plus")
-                        .font(.system(size: compact ? 12 : 14, weight: .semibold))
                 }
                 Text(isFollowing ? L("following") : L("follow"))
-                    .font(.system(size: compact ? 13 : 15, weight: .semibold))
                     .lineLimit(1)
             }
-            .padding(.horizontal, compact ? 12 : 18)
-            .frame(height: compact ? 32 : 40)
-            .foregroundStyle(isFollowing ? AppColors.textPrimary : AppColors.background)
-            .background {
-                if !isFollowing { Capsule().fill(AppColors.textPrimary) }
-            }
-            .glassEffect(isFollowing ? .regular.interactive() : .identity, in: .capsule)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(PressableStyle())
+            .font((compact ? Font.footnote : Font.subheadline).weight(.semibold))
+        })
+        .buttonBorderShape(.capsule)
+        .controlSize(compact ? .small : .regular)
         .disabled(isWorking)
         .animation(.snappy(duration: 0.2), value: isFollowing)
         .sensoryFeedback(.impact(weight: .light), trigger: feedback)
@@ -52,6 +44,15 @@ struct FollowButton: View {
             Button(L("unfollow"), role: .destructive) { Task { await toggle(follow: false) } }
                 .accessibilityIdentifier("confirm-unfollow")
             Button(L("cancel"), role: .cancel) {}
+        }
+    }
+
+    @ViewBuilder
+    private func styled(_ button: some View) -> some View {
+        if isFollowing {
+            button.buttonStyle(.glass)
+        } else {
+            button.buttonStyle(.glassProminent)
         }
     }
 

@@ -59,8 +59,8 @@ struct ProfileHeaderView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(model.displayName)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(AppColors.textPrimary)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(.primary)
                     .lineLimit(2)
                     .accessibilityIdentifier("profile-name")
                 if model.nip05Verified {
@@ -68,32 +68,32 @@ struct ProfileHeaderView: View {
                         let domain = Nip05Verifier.parts(profile.nip05)?.domain ?? profile.nip05
                         ToastCenter.shared.show(L("userVerifiedBy", ["domain": domain]), style: .success)
                     } label: {
-                        Image(systemName: "checkmark.seal.fill").font(.system(size: 19))
+                        Image(systemName: "checkmark.seal.fill").font(.title3)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(AppColors.textPrimary)
+                    .foregroundStyle(.primary)
                     .accessibilityLabel(L("userVerifiedBy", ["domain": Nip05Verifier.parts(profile.nip05)?.domain ?? ""]))
                     .accessibilityIdentifier("profile-verified")
                 }
                 if mutes.isMuted(model.pubkey) {
                     Text(L("mutedButton"))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(AppColors.tile, in: Capsule())
-                        .foregroundStyle(AppColors.textSecondary)
+                        .foregroundStyle(.secondary)
                 }
             }
             if let handle = model.handle {
-                Text(handle).font(.system(size: 15)).foregroundStyle(AppColors.textSecondary).lineLimit(1)
+                Text(handle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
             }
             Button(action: copyNpub) {
                 HStack(spacing: 5) {
                     Text(Profile.shortNpub(model.pubkey))
-                        .font(.system(size: 14, design: .monospaced))
-                    Image(systemName: "doc.on.doc").font(.system(size: 12))
+                        .font(.subheadline.monospaced())
+                    Image(systemName: "doc.on.doc").font(.caption)
                 }
-                .foregroundStyle(AppColors.textSecondary)
+                .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("copiedNpub"))
@@ -151,11 +151,11 @@ struct ProfileHeaderView: View {
             .accessibilityIdentifier("profile-followers-count")
             if model.followsMe && !model.isMe {
                 Text(L("followingYou"))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(AppColors.tile, in: Capsule())
-                    .foregroundStyle(AppColors.textSecondary)
+                    .foregroundStyle(.secondary)
                     .accessibilityIdentifier("profile-follows-you")
             }
         }
@@ -178,17 +178,17 @@ private struct DetailRow: View {
     let systemImage: String
     let text: String
     var emphasized = false
-    var tint: Color = AppColors.textSecondary
+    var tint: Color = .secondary
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .medium))
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(tint)
                 .frame(width: 18)
             Text(text)
-                .font(.system(size: 14, weight: emphasized ? .medium : .regular))
-                .foregroundStyle(emphasized ? AppColors.textPrimary : AppColors.textSecondary)
+                .font(.subheadline.weight(emphasized ? .medium : .regular))
+                .foregroundStyle(emphasized ? .primary : .secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -206,13 +206,13 @@ private struct CountButton: View {
             HStack(spacing: 4) {
                 if let value {
                     Text(Sats.compact(value))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .contentTransition(.numericText())
                 } else {
                     ProgressView().controlSize(.mini)
                 }
-                Text(label).font(.system(size: 15)).foregroundStyle(AppColors.textSecondary)
+                Text(label).font(.subheadline).foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())
         }
@@ -239,8 +239,8 @@ struct FollowedByRow: View {
                 }
             }
             Text(score.count == 1 ? L("profileFollowedByOne") : L("profileFollowedByMany", ["count": Sats.compact(score.count)]))
-                .font(.system(size: 13))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
         .accessibilityElement(children: .combine)

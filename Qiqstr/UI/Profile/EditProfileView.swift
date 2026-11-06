@@ -17,10 +17,16 @@ struct EditProfileView: View {
                     .listRowBackground(Color.clear)
             }
             Section {
+                field(.picture, L("profileImage"), text: $model.draft.picture, prompt: "https://", keyboard: .URL, id: "edit-picture-url")
+                field(.banner, L("banner"), text: $model.draft.banner, prompt: "https://", keyboard: .URL, id: "edit-banner-url")
+            } header: {
+                Text(L("profileImageLinks"))
+            }
+            Section {
                 field(.displayName, L("profileDisplayName"), text: $model.draft.displayName, id: "edit-display-name")
                 field(.name, L("username"), text: $model.draft.name, id: "edit-name")
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L("bio")).font(.system(size: 13, weight: .medium)).foregroundStyle(AppColors.textSecondary)
+                    Text(L("bio")).font(.footnote.weight(.medium)).foregroundStyle(.secondary)
                     TextField(L("profileAboutPlaceholder"), text: $model.draft.about, axis: .vertical)
                         .lineLimit(3...10)
                         .focused($focus, equals: .about)
@@ -28,7 +34,7 @@ struct EditProfileView: View {
                     errorText(.about)
                 }
             } header: {
-                SectionHeader(title: L("profile"))
+                Text(L("profile"))
             }
             Section {
                 field(.nip05, L("nip05"), text: $model.draft.nip05, prompt: "name@example.com", keyboard: .emailAddress, id: "edit-nip05")
@@ -36,13 +42,7 @@ struct EditProfileView: View {
                 field(.website, L("website"), text: $model.draft.website, prompt: "example.com", keyboard: .URL, id: "edit-website")
                 field(.location, L("profileLocation"), text: $model.draft.location, capitalize: true, id: "edit-location")
             } header: {
-                SectionHeader(title: L("profileDetails"))
-            }
-            Section {
-                field(.picture, L("profileImage"), text: $model.draft.picture, prompt: "https://", keyboard: .URL, id: "edit-picture-url")
-                field(.banner, L("banner"), text: $model.draft.banner, prompt: "https://", keyboard: .URL, id: "edit-banner-url")
-            } header: {
-                SectionHeader(title: L("profileImageLinks"))
+                Text(L("profileDetails"))
             }
         }
         .scrollContentBackground(.hidden)
@@ -52,13 +52,14 @@ struct EditProfileView: View {
         .overlay { if model.isLoading { LoadingView() } }
         .navigationTitle(L("editProfile"))
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(model.isDirty)
+        .navigationBarBackButtonHidden()
+        .interactiveDismissDisabled(model.isDirty)
         .toolbar {
-            if model.isDirty {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("cancel")) { confirmDiscard = true }
-                        .accessibilityIdentifier("edit-profile-cancel")
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L("cancel")) {
+                    if model.isDirty { confirmDiscard = true } else { dismiss() }
                 }
+                .accessibilityIdentifier("edit-profile-cancel")
             }
             ToolbarItem(placement: .confirmationAction) {
                 if model.isSaving {
@@ -147,8 +148,8 @@ struct EditProfileView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppColors.textPrimary)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
                             .frame(width: 40, height: 40)
                             .glassEffect(.regular.interactive(), in: .circle)
                     }
@@ -164,7 +165,7 @@ struct EditProfileView: View {
 
     private func field(_ key: ProfileField, _ label: String, text: Binding<String>, prompt: String? = nil, keyboard: UIKeyboardType = .default, capitalize: Bool = false, id: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 13, weight: .medium)).foregroundStyle(AppColors.textSecondary)
+            Text(label).font(.footnote.weight(.medium)).foregroundStyle(.secondary)
             TextField(prompt ?? label, text: text)
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(capitalize ? .words : .never)
@@ -179,7 +180,7 @@ struct EditProfileView: View {
     @ViewBuilder
     private func errorText(_ key: ProfileField) -> some View {
         if let message = model.errors[key] {
-            Text(message).font(.system(size: 12)).foregroundStyle(AppColors.error)
+            Text(message).font(.caption).foregroundStyle(.red)
         }
     }
 
@@ -199,7 +200,7 @@ private struct MediaBadge: View {
             if uploading {
                 ProgressView().tint(.white)
             } else {
-                Image(systemName: "camera.fill").font(.system(size: 16, weight: .semibold)).foregroundStyle(AppColors.textPrimary)
+                Image(systemName: "camera.fill").font(.body.weight(.semibold)).foregroundStyle(.primary)
             }
         }
         .frame(width: 40, height: 40)

@@ -59,16 +59,16 @@ struct DMChatView: View {
                 ProfileAvatar(pubkey: pubkey, size: 32)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     HStack(spacing: 3) {
-                        Image(systemName: "lock.fill").font(.system(size: 8))
+                        Image(systemName: "lock.fill").font(.caption2)
                         Text(profile?.nip05.nilIfEmpty ?? Profile.shortNpub(pubkey))
                             .lineLimit(1)
                     }
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 }
             }
             .padding(.leading, 4)
@@ -90,13 +90,13 @@ struct DMChatView: View {
                 VStack(spacing: 14) {
                     ProfileAvatar(pubkey: pubkey, size: 84)
                     Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.title3.weight(.semibold))
                     Text(L("noMessagesYet"))
-                        .font(.system(size: 15))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     Label(L("dmEncryptionNotice"), systemImage: "lock.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                 }
@@ -131,11 +131,8 @@ struct DMChatView: View {
         switch row.kind {
         case .day(let date):
             Text(DMFormat.daySeparator(date))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AppColors.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .glassEffect(.regular, in: .capsule)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 16)
                 .padding(.bottom, 6)

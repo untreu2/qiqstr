@@ -67,7 +67,7 @@ struct SidebarView: View {
                     row(L("bookmarks"), systemImage: "bookmark", identifier: "sidebar-bookmarks") { open(.bookmarks) }
                 }
                 Section {
-                    row(L("switchAccount"), systemImage: "person.2", identifier: "sidebar-switch-account", trailing: accountsBadge) { openSwitchAccount() }
+                    row(L("switchAccount"), systemImage: "person.2", identifier: "sidebar-switch-account", badge: accountsBadge) { openSwitchAccount() }
                     row(L("settings"), systemImage: "gearshape", identifier: "sidebar-settings") { open(.settings) }
                 }
                 Section {
@@ -77,8 +77,8 @@ struct SidebarView: View {
                 } footer: {
                     if let relays = model.relayCount {
                         Label(L("authConnectedRelays", ["count": relays]), systemImage: relays > 0 ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                             .padding(.top, 4)
                             .accessibilityIdentifier("sidebar-relay-count")
                     }
@@ -113,27 +113,25 @@ struct SidebarView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             Button { open(.profile(me)) } label: {
-                HStack(spacing: 16) {
+                HStack(spacing: 14) {
                     ProfileAvatar(pubkey: me, size: 60)
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(profile?.bestName.nilIfEmpty ?? L("anonymous"))
-                            .font(.system(size: 22, weight: .bold))
-                            .kerning(-0.3)
-                            .foregroundStyle(AppColors.textPrimary)
+                            .font(.title2.bold())
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                         if let nip05 = profile?.nip05.nilIfEmpty {
                             Label(nip05, systemImage: "checkmark.seal")
                                 .labelStyle(.titleAndIcon)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppColors.textSecondary)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         Text(Profile.shortNpub(me))
-                            .font(.system(size: 13))
-                            .kerning(0.3)
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.subheadline.monospaced())
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -152,7 +150,7 @@ struct SidebarView: View {
                     }
                 }
             }
-            HStack(spacing: 18) {
+            HStack(spacing: 16) {
                 countButton(model.followingCount, label: L("followingCount"), identifier: "sidebar-following-count") { open(.followList(me, .following)) }
                 countButton(model.followerCount, label: L(model.followerCount == 1 ? "followerSingular" : "followers"), identifier: "sidebar-followers-count") { open(.followList(me, .followers)) }
                 Spacer(minLength: 0)
@@ -165,42 +163,39 @@ struct SidebarView: View {
             HStack(spacing: 4) {
                 if let value {
                     Text(value.formatted(.number.notation(.compactName)))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
                         .contentTransition(.numericText())
                 } else {
                     ProgressView().controlSize(.mini)
                 }
                 Text(label)
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .foregroundStyle(.secondary)
             }
+            .font(.subheadline)
         }
         .buttonStyle(.plain)
         .animation(.snappy, value: value)
         .accessibilityIdentifier(identifier)
     }
 
-    private var accountsBadge: String? {
-        session.accounts.count > 1 ? "\(session.accounts.count)" : nil
+    private var accountsBadge: Int {
+        session.accounts.count > 1 ? session.accounts.count : 0
     }
 
-    private func row(_ title: String, systemImage: String, identifier: String, trailing: String? = nil, action: @escaping () -> Void) -> some View {
+    private func row(_ title: String, systemImage: String, identifier: String, badge: Int = 0, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                IconTile(systemImage: systemImage, size: 34)
-                Text(title)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(AppColors.textPrimary)
+            HStack {
+                Label(title, systemImage: systemImage)
+                    .foregroundStyle(.primary)
                 Spacer()
-                if let trailing {
-                    Text(trailing)
-                        .font(.system(size: 15))
-                        .foregroundStyle(AppColors.textSecondary)
+                if badge > 0 {
+                    Text(badge, format: .number)
+                        .foregroundStyle(.secondary)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.textSecondary.opacity(0.6))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
         }

@@ -23,19 +23,19 @@ struct UserRowView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppColors.textPrimary)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                         if verified {
                             Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(AppColors.textPrimary)
+                                .font(.footnote)
+                                .foregroundStyle(.primary)
                                 .accessibilityLabel(L("nip05"))
                         }
                     }
                     Text(subtitle)
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)

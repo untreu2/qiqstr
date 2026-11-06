@@ -9,6 +9,8 @@ struct DMConversationsView: View {
         content
             .background(AppColors.background)
             .navigationTitle(L("messages"))
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $model.query, prompt: L("search"))
             .toolbar { toolbar }
             .sheet(isPresented: $model.showNewMessage) {
                 DMNewMessageSheet { pubkey in
@@ -34,11 +36,13 @@ struct DMConversationsView: View {
             LoadingView().accessibilityIdentifier("dm-loading")
         } else {
             List {
-                Section {
-                    header
-                        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                if !model.isSearching {
+                    Section {
+                        header
+                            .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
                 }
                 Section {
                     ForEach(model.visibleConversations) { conversation in
@@ -50,7 +54,9 @@ struct DMConversationsView: View {
             .scrollContentBackground(.hidden)
             .refreshable { await model.refresh() }
             .overlay {
-                if model.visibleConversations.isEmpty {
+                if model.visibleConversations.isEmpty, model.isSearching {
+                    ContentUnavailableView.search(text: model.query)
+                } else if model.visibleConversations.isEmpty {
                     EmptyStateView(
                         systemImage: "bubble.left.and.bubble.right",
                         title: L("noConversationsYet"),
@@ -73,8 +79,8 @@ struct DMConversationsView: View {
             } icon: {
                 Image(systemName: "lock.fill")
             }
-            .font(.system(size: 13))
-            .foregroundStyle(AppColors.textSecondary)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
             .labelStyle(DMNoticeLabelStyle())
             Picker(L("messages"), selection: $model.filter) {
                 ForEach(DMConversationFilter.allCases) { filter in
@@ -91,9 +97,9 @@ struct DMConversationsView: View {
         NavigationLink(value: Route.dmChat(conversation.peer)) {
             DMConversationRow(conversation: conversation)
         }
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 16))
         .listRowBackground(Color.clear)
-        .alignmentGuide(.listRowSeparatorLeading) { _ in 76 }
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 78 }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if conversation.isUnread || model.canMarkUnread(conversation) {
                 Button {
@@ -101,8 +107,22 @@ struct DMConversationsView: View {
                 } label: {
                     Label(conversation.isUnread ? L("dmMarkRead") : L("dmMarkUnread"), systemImage: conversation.isUnread ? "envelope.open" : "envelope.badge")
                 }
-                .tint(conversation.isUnread ? AppColors.textPrimary : AppColors.accent)
+                .tint(conversation.isUnread ? Color.primary : AppColors.accent)
             }
+        }
+        .swipeActions(edge: .trailing) {
+            Button {
+                router.push(.profile(conversation.peer))
+            } label: {
+                Label(L("dmViewProfile"), systemImage: "person.crop.circle")
+            }
+            .tint(.gray)
+            Button {
+                model.copyNpub(conversation.peer)
+            } label: {
+                Label(L("dmCopyNpub"), systemImage: "doc.on.doc")
+            }
+            .tint(.indigo)
         }
         .contextMenu {
             Button {
@@ -162,7 +182,7 @@ struct DMConversationsView: View {
 private struct DMNoticeLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            configuration.icon.font(.system(size: 11))
+            configuration.icon.font(.caption2)
             configuration.title
         }
     }
@@ -176,40 +196,44 @@ struct DMConversationRow: View {
     private var name: String { profile?.bestName ?? Profile.shortNpub(conversation.peer) }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
+            Group {
+                if conversation.isUnread {
+                    Circle()
+                        .fill(AppColors.accent)
+                        .accessibilityIdentifier("dm-unread-dot")
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 10, height: 10)
+            .padding(.top, 21)
             ProfileAvatar(pubkey: conversation.peer, size: 52)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(name)
-                        .font(.system(size: 16, weight: conversation.isUnread ? .bold : .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     Text(DMFormat.listTime(conversation.timestamp))
-                        .font(.system(size: 13, weight: conversation.isUnread ? .semibold : .regular))
-                        .foregroundStyle(conversation.isUnread ? AppColors.textPrimary : AppColors.textSecondary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                HStack(alignment: .center, spacing: 8) {
-                    preview
-                        .font(.system(size: 14, weight: conversation.isUnread ? .medium : .regular))
-                        .foregroundStyle(conversation.isUnread ? AppColors.textPrimary : AppColors.textSecondary)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if conversation.isUnread {
-                        Circle()
-                            .fill(AppColors.accent)
-                            .frame(width: 10, height: 10)
-                            .accessibilityIdentifier("dm-unread-dot")
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
+                preview
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2, reservesSpace: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .animation(.snappy, value: conversation.isUnread)
         .accessibilityElement(children: .combine)
+        .accessibilityValue(conversation.isUnread ? L("dmUnread") : "")
     }
 
     private var preview: Text {
