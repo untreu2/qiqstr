@@ -6,23 +6,33 @@ struct HomeView: View {
 
     var body: some View {
         TabView(selection: tabSelection) {
-            Tab(L("home"), systemImage: "house", value: AppTab.feed) {
+            Tab(value: AppTab.feed) {
                 NavigationStack(path: router.binding(.feed)) { FeedView().withRoutes() }
+            } label: {
+                Image(systemName: "house").accessibilityLabel(L("home"))
             }
             .accessibilityIdentifier("tab-feed")
-            Tab(L("messages"), systemImage: "message", value: AppTab.dm) {
+            Tab(value: AppTab.dm) {
                 NavigationStack(path: router.binding(.dm)) { DMConversationsView().withRoutes() }
+            } label: {
+                Image(systemName: "message").accessibilityLabel(L("messages"))
             }
             .badge(badge.hasUnreadMessages ? Text("") : nil)
-            Tab(L("wallet"), systemImage: "bolt", value: AppTab.wallet) {
+            Tab(value: AppTab.wallet) {
                 NavigationStack(path: router.binding(.wallet)) { WalletView().withRoutes() }
+            } label: {
+                Image(systemName: "bolt").accessibilityLabel(L("wallet"))
             }
-            Tab(L("notifications"), systemImage: "bell", value: AppTab.notifications) {
+            Tab(value: AppTab.notifications) {
                 NavigationStack(path: router.binding(.notifications)) { NotificationsView().withRoutes() }
+            } label: {
+                Image(systemName: "bell").accessibilityLabel(L("notifications"))
             }
             .badge(badge.hasUnreadNotifications ? Text("") : nil)
-            Tab(L("search"), systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
+            Tab(value: AppTab.search, role: .search) {
                 NavigationStack(path: router.binding(.search)) { SearchView().withRoutes() }
+            } label: {
+                Image(systemName: "magnifyingglass").accessibilityLabel(L("search"))
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
