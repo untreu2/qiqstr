@@ -1,0 +1,11 @@
+"widgetQuickActionsTitle" = "Schnellaktionen";
+"widgetQuickActionsDescription" = "Beitrag starten, suchen oder Nachrichten öffnen.";
+"widgetNewPost" = "Neuer Beitrag";
+"widgetSearch" = "Suchen";
+"widgetMessages" = "Nachrichten";
+"widgetNotificationsTitle" = "Benachrichtigungen";
+"widgetNotificationsDescription" = "Sieh, wie viele Benachrichtigungen auf dich warten.";
+"widgetUnread" = "Ungelesen";
+"widgetNoNew" = "Keine neuen Benachrichtigungen";
+"widgetLatestFrom %@" = "Zuletzt von %@";
+"widgetUnreadCount %lld" = "%lld ungelesen";

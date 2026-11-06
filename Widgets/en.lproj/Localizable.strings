@@ -1,0 +1,11 @@
+"widgetQuickActionsTitle" = "Quick actions";
+"widgetQuickActionsDescription" = "Start a post, search or open your messages.";
+"widgetNewPost" = "New post";
+"widgetSearch" = "Search";
+"widgetMessages" = "Messages";
+"widgetNotificationsTitle" = "Notifications";
+"widgetNotificationsDescription" = "See how many notifications are waiting for you.";
+"widgetUnread" = "Unread";
+"widgetNoNew" = "No new notifications";
+"widgetLatestFrom %@" = "Latest from %@";
+"widgetUnreadCount %lld" = "%lld unread";
