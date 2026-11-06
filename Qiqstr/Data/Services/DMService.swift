@@ -117,6 +117,7 @@ final class DMService {
     @ObservationIgnored private var tabSeenAt = 0
     @ObservationIgnored private var verifiedMedia: Set<String> = []
     @ObservationIgnored private var mediaTasks: [String: Task<URL, Error>] = [:]
+    private(set) var deliveryRelays: [String: [String]] = [:]
 
     private var defaults: UserDefaults { .standard }
 
@@ -137,6 +138,7 @@ final class DMService {
         verifiedMedia.removeAll()
         mediaTasks.values.forEach { $0.cancel() }
         mediaTasks.removeAll()
+        deliveryRelays = [:]
         conversations = []
         messagesByPeer = [:]
         following = []
@@ -470,15 +472,18 @@ final class DMService {
         let (recipientTargets, ownTargets) = await (peerRelays, ownRelays)
         async let recipientSent = Self.publish(recipientJSON, relays: recipientTargets)
         async let senderSent = Self.publish(senderJSON, relays: ownTargets)
-        let (recipientOK, _) = await (recipientSent, senderSent)
+        let (recipientAccepted, senderAccepted) = await (recipientSent, senderSent)
         guard generation == self.generation else { return }
-        guard recipientOK else { throw CoreError(L("dmSendFailed")) }
+        guard let recipientAccepted else { throw CoreError(L("dmSendFailed")) }
+        let accepted = Array(Set(recipientAccepted + (senderAccepted ?? []))).sorted()
         _ = try? await dbSaveEvents(eventsJson: "[\(senderJSON)]")
         guard generation == self.generation else { return }
         await ingest(raws: [senderJSON], generation: generation)
         guard generation == self.generation else { return }
         let senderWrapId = (senderWrap["id"] as? String) ?? ""
-        if case .some(.some) = unwrapCache[senderWrapId] {
+        deliveryRelays[pendingId] = accepted
+        if case .some(.some(let delivered)) = unwrapCache[senderWrapId] {
+            deliveryRelays[delivered.id] = accepted
             messagesByPeer[peer]?.removeAll { $0.id == pendingId }
         } else if let index = messagesByPeer[peer]?.firstIndex(where: { $0.id == pendingId }) {
             messagesByPeer[peer]?[index].state = .sent
@@ -487,10 +492,19 @@ final class DMService {
         rebuildConversations()
     }
 
-    private nonisolated static func publish(_ json: String, relays: [String]) async -> Bool {
-        if !relays.isEmpty, (try? await sendEventTo(eventJson: json, relayUrls: relays)) != nil { return true }
-        return (try? await sendEvent(eventJson: json)) != nil
+    private nonisolated static func publish(_ json: String, relays: [String]) async -> [String]? {
+        if !relays.isEmpty, let raw = try? await sendEventTo(eventJson: json, relayUrls: relays) { return acceptedRelays(raw) }
+        guard let raw = try? await sendEvent(eventJson: json) else { return nil }
+        return acceptedRelays(raw)
     }
+
+    private nonisolated static func acceptedRelays(_ raw: String) -> [String] {
+        (parseObject(raw)?["success"] as? [String]) ?? []
+    }
+
+    func knownDMRelays(for pubkey: String) -> [String] { dmRelayCache[pubkey] ?? [] }
+
+    var currentPubkey: String? { me }
 
     func dmRelays(for pubkey: String) async -> [String] {
         if let cached = dmRelayCache[pubkey] {
