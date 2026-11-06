@@ -55,9 +55,15 @@ struct RemoteImage<Placeholder: View>: View {
     @State private var failed = false
 
     var body: some View {
-        ZStack {
+        Group {
             if let image {
-                Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
+                if contentMode == .fill {
+                    Color.clear
+                        .overlay { Image(uiImage: image).resizable().aspectRatio(contentMode: .fill) }
+                        .clipped()
+                } else {
+                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fit)
+                }
             } else {
                 placeholder()
             }
