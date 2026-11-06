@@ -58,6 +58,8 @@ final class PinnedNotesService {
         owner = me
         pinnedIds = updated
         version &+= 1
+        let previousLatest = latestCreatedAt
+        latestCreatedAt = max(latestCreatedAt, TimeFormat.now)
         do {
             let tags = updated.map { ["e", $0] } + extraTags
             let eventJson = try createSignedEvent(kind: UInt16(Self.kind), content: "", tags: tags, privateKeyHex: key)
@@ -66,6 +68,7 @@ final class PinnedNotesService {
             DataBus.shared.listsChanged()
         } catch {
             if owner == me, pinnedIds == updated {
+                latestCreatedAt = previousLatest
                 pinnedIds = previous
                 version &+= 1
             }
