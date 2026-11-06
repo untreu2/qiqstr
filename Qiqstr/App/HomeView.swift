@@ -3,6 +3,9 @@ import SwiftUI
 struct HomeView: View {
     @State private var router = Router.shared
     @State private var badge = NotificationBadge.shared
+    @State private var session = Session.shared
+    @State private var clipboard = ClipboardLinkWatcher.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView(selection: tabSelection) {
@@ -42,9 +45,37 @@ struct HomeView: View {
         .sheet(isPresented: $router.showSidebar) {
             SidebarView()
         }
-        .sheet(item: $router.sheet) { sheet in
+        .sheet(item: sheetSelection) { sheet in
             AppSheetView(sheet: sheet)
         }
+        .onChange(of: router.sheet?.id) {
+            guard let sheet = router.sheet, sheet.requiresSigner, !session.canSign else { return }
+            router.sheet = nil
+            ReadOnlyGate.shared.present()
+        }
+        .overlay(alignment: .top) { ClipboardLinkBanner() }
+        .readOnlyGate()
+        .task {
+            router.openPendingLink()
+            await clipboard.becameActive()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: Task { await clipboard.becameActive() }
+            case .background: clipboard.enteredBackground()
+            default: break
+            }
+        }
+    }
+
+    private var sheetSelection: Binding<AppSheet?> {
+        Binding(
+            get: {
+                guard let sheet = router.sheet, !sheet.requiresSigner || session.canSign else { return nil }
+                return sheet
+            },
+            set: { router.sheet = $0 }
+        )
     }
 
     private var tabSelection: Binding<AppTab> {

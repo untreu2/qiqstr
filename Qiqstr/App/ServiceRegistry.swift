@@ -17,6 +17,7 @@ enum ServiceRegistry {
             FollowSetService.shared.reset()
             WebOfTrustService.shared.reset()
             Router.shared.reset()
+            ReadOnlyGate.shared.reset()
         }
         SessionHooks.onBootstrap { pubkey in
             async let follows: Void = FollowService.shared.load()

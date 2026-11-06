@@ -15,6 +15,9 @@ struct QiqstrApp: App {
                 .id(language ?? "system")
                 .task { await session.launch() }
                 .onOpenURL { Router.shared.open(url: $0) }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL { Router.shared.open(url: url) }
+                }
         }
     }
 }

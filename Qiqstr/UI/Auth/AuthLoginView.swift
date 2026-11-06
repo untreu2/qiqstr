@@ -11,6 +11,7 @@ final class AuthLoginViewModel {
     var failureCount = 0
 
     var canSubmit: Bool { !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isLoading }
+    var isViewOnlyInput: Bool { AccountStore.readOnlyPubkey(input) != nil || Nip05Resolver.looksLikeAddress(input) }
 
     func paste() {
         guard let text = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
@@ -49,7 +50,7 @@ struct AuthLoginView: View {
                 AuthHeader(title: L("login"), subtitle: L("loginSubtitle"))
                 VStack(alignment: .leading, spacing: 20) {
                     QiqTextField(
-                        placeholder: L("enterSeedPhraseOrNsec"),
+                        placeholder: L("authLoginPlaceholder"),
                         text: $model.input,
                         isSecure: model.isObscured,
                         trailing: AnyView(trailingControls)
@@ -61,9 +62,19 @@ struct AuthLoginView: View {
                     if let message = model.errorMessage {
                         AuthErrorText(message: message)
                     }
+                    if model.isViewOnlyInput {
+                        Label(L("readOnlyLoginHint"), systemImage: "eye")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 4)
+                            .transition(.opacity)
+                            .accessibilityIdentifier("login-view-only-hint")
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L("loginExampleSeed"))
                         Text(L("loginExampleNsec"))
+                        Text(L("loginExampleViewOnly"))
                     }
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -103,6 +114,7 @@ struct AuthLoginView: View {
             AuthQRScannerSheet { model.applyScanned($0) }
         }
         .animation(.snappy, value: model.errorMessage)
+        .animation(.snappy, value: model.isViewOnlyInput)
         .sensoryFeedback(.error, trigger: model.failureCount)
         .disabled(model.isLoading)
     }
