@@ -26,14 +26,14 @@ private struct ProfileEmbed: View {
                 ProfileAvatar(pubkey: pubkey, size: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
                     if let nip05 = cache.profile(pubkey)?.nip05.nilIfEmpty {
-                        Text(nip05).font(.system(size: 13)).foregroundStyle(AppColors.textSecondary).lineLimit(1)
+                        Text(nip05).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(AppColors.textSecondary)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
             }
             .padding(12)
             .background(AppColors.inputFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -108,8 +108,8 @@ private struct EmbedPlaceholder: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if loading { ProgressView() } else { Image(systemName: systemImage).foregroundStyle(AppColors.textSecondary) }
-            Text(title).font(.system(size: 15)).foregroundStyle(AppColors.textSecondary)
+            if loading { ProgressView() } else { Image(systemName: systemImage).foregroundStyle(.secondary) }
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
         .padding(14)

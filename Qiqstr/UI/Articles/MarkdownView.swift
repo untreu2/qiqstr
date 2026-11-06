@@ -2,12 +2,11 @@ import SwiftUI
 
 struct MarkdownView: View {
     let blocks: [MarkdownBlock]
-    var baseSize: CGFloat = 17
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                MarkdownBlockView(block: block, baseSize: baseSize)
+                MarkdownBlockView(block: block)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -37,27 +36,26 @@ enum MarkdownLinkHandler {
 
 struct MarkdownBlockView: View {
     let block: MarkdownBlock
-    var baseSize: CGFloat = 17
 
     var body: some View {
         switch block {
         case .heading(let level, let text):
-            MarkdownText(text: text, size: headingSize(level), weight: level <= 2 ? .bold : .semibold)
+            MarkdownText(text: text, style: headingStyle(level), weight: level <= 3 ? .bold : nil)
                 .padding(.top, level <= 2 ? 10 : 4)
                 .accessibilityAddTraits(.isHeader)
         case .paragraph(let text):
-            MarkdownText(text: text, size: baseSize)
+            MarkdownText(text: text)
         case .code(let language, let code):
             MarkdownCodeBlock(language: language, code: code)
         case .quote(let inner):
             HStack(alignment: .top, spacing: 12) {
-                Capsule().fill(AppColors.border).frame(width: 3)
-                MarkdownView(blocks: inner, baseSize: baseSize)
+                Capsule().fill(.tertiary).frame(width: 3)
+                MarkdownView(blocks: inner)
                     .environment(\.markdownQuoted, true)
             }
             .fixedSize(horizontal: false, vertical: true)
         case .list(let ordered, let start, let items):
-            MarkdownListView(ordered: ordered, start: start, items: items, baseSize: baseSize)
+            MarkdownListView(ordered: ordered, start: start, items: items)
         case .image(let url, let alt, let link):
             MarkdownImage(url: url, alt: alt, link: link)
         case .table(let header, let rows):
@@ -65,34 +63,34 @@ struct MarkdownBlockView: View {
         case .nostr(let entity):
             NostrEmbedView(entity: entity)
         case .rule:
-            Rectangle().fill(AppColors.divider).frame(height: 1).padding(.vertical, 8)
+            Divider().padding(.vertical, 8)
         }
     }
 
-    private func headingSize(_ level: Int) -> CGFloat {
+    private func headingStyle(_ level: Int) -> Font.TextStyle {
         switch level {
-        case 1: 28
-        case 2: 24
-        case 3: 21
-        case 4: 19
-        default: 17
+        case 1: .title
+        case 2: .title2
+        case 3: .title3
+        default: .headline
         }
     }
 }
 
 struct MarkdownText: View {
     let text: String
-    var size: CGFloat = 17
-    var weight: Font.Weight = .regular
+    var style: Font.TextStyle = .body
+    var weight: Font.Weight? = nil
     @Environment(\.markdownQuoted) private var quoted
     @State private var cache = ProfileCache.shared
+    @ScaledMetric(relativeTo: .body) private var bodyLineSpacing: CGFloat = 6
 
     var body: some View {
         Text(MarkdownInline.attributed(text) { cache.profile($0)?.bestName })
-            .font(.system(size: size, weight: weight))
-            .lineSpacing(size * 0.3)
-            .foregroundStyle(quoted ? AppColors.textSecondary : AppColors.textPrimary)
-            .tint(AppColors.textPrimary)
+            .font(.system(style).weight(weight ?? .regular))
+            .lineSpacing(style == .body ? bodyLineSpacing : 2)
+            .foregroundStyle(quoted ? .secondary : .primary)
+            .tint(.primary)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
@@ -103,7 +101,6 @@ struct MarkdownListView: View {
     let ordered: Bool
     let start: Int
     let items: [MarkdownListItem]
-    var baseSize: CGFloat = 17
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -113,7 +110,7 @@ struct MarkdownListView: View {
                         .frame(minWidth: 18, alignment: .trailing)
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(item.blocks.enumerated()), id: \.offset) { _, block in
-                            MarkdownBlockView(block: block, baseSize: baseSize)
+                            MarkdownBlockView(block: block)
                         }
                     }
                 }
@@ -126,16 +123,16 @@ struct MarkdownListView: View {
     private func marker(index: Int, item: MarkdownListItem) -> some View {
         if let checked = item.checked {
             Image(systemName: checked ? "checkmark.square.fill" : "square")
-                .font(.system(size: baseSize - 1))
-                .foregroundStyle(checked ? AppColors.textPrimary : AppColors.textSecondary)
+                .font(.body)
+                .foregroundStyle(checked ? .primary : .secondary)
         } else if ordered {
             Text("\(start + index).")
-                .font(.system(size: baseSize, weight: .medium).monospacedDigit())
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.body.weight(.medium).monospacedDigit())
+                .foregroundStyle(.secondary)
         } else {
             Text("•")
-                .font(.system(size: baseSize, weight: .bold))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.body.bold())
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -150,8 +147,8 @@ struct MarkdownCodeBlock: View {
             HStack {
                 if !language.isEmpty {
                     Text(language.lowercased())
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.caption.monospaced().weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button {
@@ -159,17 +156,17 @@ struct MarkdownCodeBlock: View {
                     copied += 1
                     ToastCenter.shared.show(L("copiedToClipboard"), style: .success)
                 } label: {
-                    Image(systemName: "doc.on.doc").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "doc.on.doc").font(.footnote.weight(.semibold))
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(AppColors.textSecondary)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
                 .accessibilityLabel(L("exploreCopyCode"))
                 .accessibilityIdentifier("markdown-copy-code")
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.system(size: 14, design: .monospaced))
-                    .foregroundStyle(AppColors.textPrimary)
+                    .font(.body.monospaced())
+                    .foregroundStyle(.primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: true, vertical: false)
             }
@@ -187,11 +184,24 @@ struct MarkdownImage: View {
     let link: String?
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            image
+            if alt.contains(" ") {
+                Text(alt)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var image: some View {
         RemoteImage(url: url, maxPixel: 1600, contentMode: .fit) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(AppColors.overlayLight)
+                .fill(.quaternary)
                 .frame(height: 180)
-                .overlay { Image(systemName: "photo").foregroundStyle(AppColors.textSecondary) }
+                .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
         }
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -213,14 +223,14 @@ struct MarkdownTable: View {
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                 GridRow {
                     ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
-                        MarkdownText(text: cell, size: 15, weight: .semibold).fixedSize()
+                        MarkdownText(text: cell, style: .subheadline, weight: .semibold).fixedSize()
                     }
                 }
                 Divider()
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GridRow {
                         ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                            MarkdownText(text: cell, size: 15).fixedSize()
+                            MarkdownText(text: cell, style: .subheadline).fixedSize()
                         }
                     }
                 }

@@ -13,7 +13,6 @@ enum MarkdownInline {
         var result = (try? AttributedString(markdown: prepared, options: options)) ?? AttributedString(text)
         for run in result.runs {
             if let intent = run.inlinePresentationIntent, intent.contains(.code) {
-                result[run.range].font = .system(.body, design: .monospaced)
                 result[run.range].backgroundColor = AppColors.inputFill
             }
             if let link = run.link {

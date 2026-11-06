@@ -10,6 +10,8 @@ struct FollowSetDetailView: View {
     @State private var confirmDelete = false
     @State private var feedback = 0
     @State private var removing: Set<String> = []
+    @State private var query = ""
+    @ScaledMetric(relativeTo: .headline) private var ownerAvatarSize: CGFloat = 28
 
     private var set: FollowSet? { service.set(withId: setId) }
 
@@ -53,8 +55,7 @@ struct FollowSetDetailView: View {
             let favorite = service.isFavorite(set.id)
             if own {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { editor = .members(set) } label: { Image(systemName: "person.badge.plus") }
-                        .accessibilityLabel(L("exploreAddMembers"))
+                    Button { editor = .members(set) } label: { Label(L("exploreAddMembers"), systemImage: "person.badge.plus") }
                         .accessibilityIdentifier("followset-add-members")
                 }
             }
@@ -77,9 +78,8 @@ struct FollowSetDetailView: View {
                         Button { Router.shared.push(.profile(set.pubkey)) } label: { Label(L("exploreViewAuthor"), systemImage: "person.crop.circle") }
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Label(L("exploreMoreOptions"), systemImage: "ellipsis")
                 }
-                .accessibilityLabel(L("exploreMoreOptions"))
                 .accessibilityIdentifier("followset-more")
             }
         }
@@ -87,38 +87,33 @@ struct FollowSetDetailView: View {
 
     private func content(_ set: FollowSet) -> some View {
         let own = service.isOwn(set)
+        let members = filteredMembers(set)
         return List {
             Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !set.description.isEmpty {
-                        Text(set.description)
-                            .font(.system(size: 15))
-                            .foregroundStyle(AppColors.textPrimary)
-                    }
-                    HStack(spacing: 8) {
-                        Text(FollowSet.memberCountText(set.pubkeys.count))
-                        if service.isFavorite(set.id) {
-                            Text("·")
-                            Label(L("exploreInFeed"), systemImage: "pin.fill").labelStyle(.titleAndIcon)
-                        }
-                    }
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.textSecondary)
-                    if !own {
-                        Button { Router.shared.push(.profile(set.pubkey)) } label: {
-                            HStack(spacing: 8) {
-                                ProfileAvatar(pubkey: set.pubkey, size: 24)
-                                Text(L("exploreByAuthor", ["name": cache.profile(set.pubkey)?.bestName ?? Profile.shortNpub(set.pubkey)]))
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(AppColors.textPrimary)
-                            }
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityIdentifier("followset-owner")
-                    }
+                if !set.description.isEmpty {
+                    Text(set.description)
+                        .font(.body)
+                        .foregroundStyle(.primary)
                 }
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+                if !own {
+                    Button { Router.shared.push(.profile(set.pubkey)) } label: {
+                        HStack(spacing: 12) {
+                            ProfileAvatar(pubkey: set.pubkey, size: ownerAvatarSize)
+                            Text(L("exploreByAuthor", ["name": cache.profile(set.pubkey)?.bestName ?? Profile.shortNpub(set.pubkey)]))
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .accessibilityIdentifier("followset-owner")
+                }
+                if service.isFavorite(set.id) {
+                    Label(L("exploreInFeed"), systemImage: "pin.fill")
+                        .foregroundStyle(.secondary)
+                }
             }
             if set.pubkeys.isEmpty {
                 Section {
@@ -130,15 +125,13 @@ struct FollowSetDetailView: View {
                         action: own ? { editor = .members(set) } : nil
                     )
                     .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
                 }
             } else {
                 Section {
-                    ForEach(set.pubkeys, id: \.self) { pubkey in
+                    ForEach(members, id: \.self) { pubkey in
                         NavigationLink(value: Route.profile(pubkey)) {
                             ExploreUserRow(profile: cache.profile(pubkey) ?? Profile(pubkey: pubkey))
                         }
-                        .listRowBackground(Color.clear)
                         .opacity(removing.contains(pubkey) ? 0.4 : 1)
                         .contextMenu {
                             ExploreUserMenu(pubkey: pubkey)
@@ -154,13 +147,30 @@ struct FollowSetDetailView: View {
                             }
                         }
                     }
+                } header: {
+                    Text(FollowSet.memberCountText(set.pubkeys.count))
                 }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("followset-members")
+        .searchable(text: $query, prompt: L("exploreSearchMembers"))
+        .overlay {
+            if !query.isEmpty, members.isEmpty, !set.pubkeys.isEmpty {
+                EmptyStateView(systemImage: "magnifyingglass", title: L("noResultsFound"), message: L("trySearchingDifferentTerm"))
+            }
+        }
         .refreshable { await service.refresh() }
+    }
+
+    private func filteredMembers(_ set: FollowSet) -> [String] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return set.pubkeys }
+        return set.pubkeys.filter { pubkey in
+            guard let profile = cache.profile(pubkey) else { return pubkey.localizedCaseInsensitiveContains(q) }
+            return profile.bestName.localizedCaseInsensitiveContains(q) || profile.nip05.localizedCaseInsensitiveContains(q)
+        }
     }
 
     private func remove(_ pubkey: String, from set: FollowSet) {

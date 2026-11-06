@@ -13,12 +13,12 @@ struct ExploreUserRow: View {
             ProfileAvatar(pubkey: profile.pubkey, size: avatarSize, fallbackURL: profile.picture.nilIfEmpty)
             VStack(alignment: .leading, spacing: 2) {
                 Text(resolved.bestName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColors.textPrimary)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(resolved.nip05.nilIfEmpty ?? Profile.shortNpub(profile.pubkey))
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
@@ -26,7 +26,7 @@ struct ExploreUserRow: View {
                 ExploreFollowButton(pubkey: profile.pubkey)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .accessibilityIdentifier("user-row-\(profile.pubkey)")
     }
@@ -40,24 +40,28 @@ struct ExploreFollowButton: View {
 
     var body: some View {
         let following = follows.isFollowing(pubkey)
-        Button {
+        styled(Button {
             Task { await toggle(following) }
         } label: {
-            ZStack {
-                Text(following ? L("following") : L("follow"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .opacity(busy ? 0 : 1)
-                if busy { ProgressView().controlSize(.small) }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .foregroundStyle(following ? AppColors.textPrimary : AppColors.background)
-            .background(following ? AppColors.tile : AppColors.textPrimary, in: Capsule())
-        }
-        .buttonStyle(.borderless)
+            Text(following ? L("following") : L("follow"))
+                .fontWeight(.semibold)
+                .opacity(busy ? 0 : 1)
+                .overlay { if busy { ProgressView().controlSize(.small) } }
+        }, following: following)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
         .disabled(busy)
         .sensoryFeedback(.impact(weight: .light), trigger: feedback)
         .accessibilityIdentifier("user-follow-\(pubkey)")
+    }
+
+    @ViewBuilder
+    private func styled(_ button: some View, following: Bool) -> some View {
+        if following {
+            button.buttonStyle(.bordered)
+        } else {
+            button.buttonStyle(.borderedProminent)
+        }
     }
 
     private func toggle(_ following: Bool) async {

@@ -5,28 +5,26 @@ struct FollowSetsView: View {
     @State private var editor: FollowSetEditorMode?
     @State private var pendingDelete: FollowSet?
     @State private var feedback = 0
+    @State private var query = ""
 
     var body: some View {
         List {
-            Section {
-                Text(L("listsSubtitle"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-            }
-            if !service.sets.isEmpty {
+            let own = filtered(service.sets)
+            let followed = filtered(service.followedSets)
+            if !own.isEmpty {
                 Section {
-                    ForEach(service.sets) { set in ownRow(set) }
+                    ForEach(own) { set in ownRow(set) }
                 } header: {
-                    SectionHeader(title: L("exploreMyLists"))
+                    Text(L("exploreMyLists"))
+                } footer: {
+                    if query.isEmpty { Text(L("listsSubtitle")) }
                 }
             }
-            if !service.followedSets.isEmpty {
+            if !followed.isEmpty {
                 Section {
-                    ForEach(service.followedSets) { set in followedRow(set) }
+                    ForEach(followed) { set in followedRow(set) }
                 } header: {
-                    SectionHeader(title: L("listsFromFollows"))
+                    Text(L("listsFromFollows"))
                 }
             }
         }
@@ -37,10 +35,10 @@ struct FollowSetsView: View {
         .overlay { overlay }
         .navigationTitle(L("listsTitle"))
         .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $query, prompt: L("exploreSearchLists"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { editor = .create } label: { Image(systemName: "plus") }
-                    .accessibilityLabel(L("createList"))
+                Button { editor = .create } label: { Label(L("createList"), systemImage: "plus") }
                     .accessibilityIdentifier("followsets-create")
             }
         }
@@ -68,9 +66,17 @@ struct FollowSetsView: View {
         }
     }
 
+    private func filtered(_ sets: [FollowSet]) -> [FollowSet] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return sets }
+        return sets.filter { $0.displayTitle.localizedCaseInsensitiveContains(q) || $0.description.localizedCaseInsensitiveContains(q) }
+    }
+
     @ViewBuilder
     private var overlay: some View {
-        if service.sets.isEmpty, service.followedSets.isEmpty {
+        if !query.isEmpty, filtered(service.sets).isEmpty, filtered(service.followedSets).isEmpty {
+            EmptyStateView(systemImage: "magnifyingglass", title: L("noResultsFound"), message: L("trySearchingDifferentTerm"))
+        } else if service.sets.isEmpty, service.followedSets.isEmpty {
             if !service.isLoaded || service.isSyncing {
                 LoadingView()
             } else {
@@ -85,7 +91,6 @@ struct FollowSetsView: View {
         NavigationLink(value: Route.followSet(set.id)) {
             FollowSetRow(set: set, isFavorite: service.isFavorite(set.id))
         }
-        .listRowBackground(AppColors.inputFill)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) { pendingDelete = set } label: { Label(L("delete"), systemImage: "trash") }
                 .accessibilityIdentifier("followset-swipe-delete-\(set.dTag)")
@@ -107,7 +112,6 @@ struct FollowSetsView: View {
         NavigationLink(value: Route.followSet(set.id)) {
             FollowSetRow(set: set, showsOwner: true, isFavorite: service.isFavorite(set.id))
         }
-        .listRowBackground(AppColors.inputFill)
         .swipeActions(edge: .leading) { favoriteButton(set) }
         .contextMenu {
             favoriteButton(set)
@@ -124,7 +128,7 @@ struct FollowSetsView: View {
         } label: {
             Label(favorite ? L("removeFromFeed") : L("addToFeed"), systemImage: favorite ? "pin.slash" : "pin")
         }
-        .tint(AppColors.textSecondary)
+        .tint(.gray)
     }
 
     private func delete(_ set: FollowSet) {
