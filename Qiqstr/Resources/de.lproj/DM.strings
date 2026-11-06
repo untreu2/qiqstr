@@ -15,3 +15,4 @@
 "dmVideo" = "Video";
 "dmViewProfile" = "Profil ansehen";
 "dmUnread" = "Ungelesen";
+"dmMessagePlaceholder" = "Nachricht an {name}";

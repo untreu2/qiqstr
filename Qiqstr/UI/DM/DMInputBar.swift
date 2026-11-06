@@ -4,51 +4,46 @@ import SwiftUI
 struct DMInputBar: View {
     @Bindable var model: DMChatViewModel
     var focus: FocusState<Bool>.Binding
+    var placeholder: String = L("typeAMessage")
 
     var body: some View {
         VStack(spacing: 8) {
             if !model.attachments.isEmpty { attachmentStrip }
-            GlassEffectContainer(spacing: 10) {
-                HStack(alignment: .bottom, spacing: 10) {
-                    PhotosPicker(selection: $model.pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current) {
-                        Image(systemName: "plus")
-                            .font(.title3.weight(.medium))
-                            .frame(width: 34, height: 34)
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .tint(.primary)
-                    .accessibilityLabel(L("dmAttach"))
-                    .accessibilityIdentifier("dm-attach")
-
-                    HStack(alignment: .bottom, spacing: 8) {
-                        TextField(L("typeAMessage"), text: $model.draft, axis: .vertical)
-                            .font(.body)
-                            .lineLimit(1...6)
-                            .textInputAutocapitalization(.sentences)
-                            .focused(focus)
-                            .padding(.vertical, 12)
-                            .padding(.leading, 18)
-                            .accessibilityIdentifier("dm-input")
-                        Button(action: model.send) {
-                            Image(systemName: "arrow.up")
-                                .font(.body.weight(.bold))
-                                .frame(width: 22, height: 22)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .foregroundStyle(AppColors.background)
-                        .buttonBorderShape(.circle)
-                        .disabled(!model.canSend)
-                        .opacity(model.canSend ? 1 : 0.35)
-                        .padding(.trailing, 5)
-                        .padding(.bottom, 5)
-                        .accessibilityLabel(L("sendMessage"))
-                        .accessibilityIdentifier("dm-send")
-                    }
-                    .frame(minHeight: 46)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 23, style: .continuous))
+            HStack(alignment: .bottom, spacing: 8) {
+                PhotosPicker(selection: $model.pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current) {
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.regular))
+                        .foregroundStyle(.primary)
+                        .frame(width: 40, height: 40)
+                        .background(AppColors.tile, in: Circle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("dmAttach"))
+                .accessibilityIdentifier("dm-attach")
+
+                TextField(placeholder, text: $model.draft, axis: .vertical)
+                    .font(.body)
+                    .lineLimit(1...6)
+                    .textInputAutocapitalization(.sentences)
+                    .focused(focus)
+                    .padding(.vertical, 9)
+                    .accessibilityIdentifier("dm-input")
+
+                Button(action: model.send) {
+                    Image(systemName: "arrow.up")
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(AppColors.background)
+                        .frame(width: 40, height: 40)
+                        .background(AppColors.textPrimary, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!model.canSend)
+                .opacity(model.canSend ? 1 : 0.3)
+                .accessibilityLabel(L("sendMessage"))
+                .accessibilityIdentifier("dm-send")
             }
+            .padding(8)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 28, style: .continuous))
         }
         .padding(.horizontal, 12)
         .padding(.top, 6)

@@ -77,15 +77,10 @@ struct FeedView: View {
         }
         .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .title) {
-            Image("Logo")
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .frame(height: 22)
-                .foregroundStyle(AppColors.textPrimary)
-                .accessibilityLabel("qiqstr")
-                .accessibilityValue(model.source.title)
-                .accessibilityIdentifier("feed-logo")
+            Text(model.source.title)
+                .font(.headline)
+                .lineLimit(1)
+                .accessibilityIdentifier("feed-title")
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button(L("newPost"), systemImage: "square.and.pencil") { Router.shared.compose() }
@@ -162,13 +157,15 @@ struct FeedNewNotesPill: View {
 
 struct FeedSkeleton: View {
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(0..<6, id: \.self) { index in
-                FeedSkeletonRow(lines: index % 2 == 0 ? 3 : 2)
-                Divider()
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(0..<6, id: \.self) { index in
+                    FeedSkeletonRow(lines: index % 2 == 0 ? 3 : 2)
+                    Divider()
+                }
             }
-            Spacer(minLength: 0)
         }
+        .scrollDisabled(true)
         .redacted(reason: .placeholder)
         .allowsHitTesting(false)
         .background(AppColors.background)

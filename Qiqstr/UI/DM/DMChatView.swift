@@ -20,12 +20,14 @@ struct DMChatView: View {
         messageList
             .background(AppColors.background)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                DMInputBar(model: model, focus: $inputFocused)
+                DMInputBar(model: model, focus: $inputFocused, placeholder: L("dmMessagePlaceholder", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]))
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .tabBar)
             .toolbar {
                 ToolbarItem(placement: .principal) { header }
+                    .sharedBackgroundVisibility(.hidden)
+                ToolbarItem(placement: .topBarTrailing) { moreMenu }
             }
             .task { await model.appeared() }
             .task { await model.poll() }
@@ -56,29 +58,36 @@ struct DMChatView: View {
             router.push(.profile(pubkey))
         } label: {
             HStack(spacing: 8) {
-                ProfileAvatar(pubkey: pubkey, size: 32)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    HStack(spacing: 3) {
-                        Image(systemName: "lock.fill").font(.caption2)
-                        Text(profile?.nip05.nilIfEmpty ?? Profile.shortNpub(pubkey))
-                            .lineLimit(1)
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                }
+                ProfileAvatar(pubkey: pubkey, size: 30)
+                Text(profile?.bestName ?? Profile.shortNpub(pubkey))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
             }
-            .padding(.leading, 4)
-            .padding(.trailing, 12)
-            .frame(maxWidth: 240)
-            .contentShape(Rectangle())
+            .padding(.leading, 5)
+            .padding(.trailing, 16)
+            .padding(.vertical, 5)
+            .frame(maxWidth: 230)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel(L("dmViewProfile"))
         .accessibilityIdentifier("dm-chat-header")
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button(L("dmViewProfile"), systemImage: "person.crop.circle") { router.push(.profile(pubkey)) }
+            Button(L("dmCopyNpub"), systemImage: "doc.on.doc") {
+                UIPasteboard.general.string = Nip19.npub(pubkey)
+                ToastCenter.shared.show(L("copiedToClipboard"), style: .success)
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .accessibilityLabel(L("profileMoreActions"))
+        .accessibilityIdentifier("dm-chat-more")
     }
 
     @ViewBuilder

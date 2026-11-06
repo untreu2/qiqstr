@@ -27,9 +27,9 @@ struct DMMessageBubble: View {
     }
 
     private var bubbleShape: UnevenRoundedRectangle {
-        let large: CGFloat = 20
-        let small: CGFloat = 6
-        let tail: CGFloat = 4
+        let large: CGFloat = 24
+        let small: CGFloat = 10
+        let tail: CGFloat = 24
         if mine {
             return UnevenRoundedRectangle(topLeadingRadius: large, bottomLeadingRadius: large, bottomTrailingRadius: isLastInGroup ? tail : small, topTrailingRadius: isFirstInGroup ? large : small, style: .continuous)
         }
@@ -58,8 +58,8 @@ struct DMMessageBubble: View {
                 .foregroundStyle(mine ? AppColors.background : AppColors.textPrimary)
                 .tint(mine ? AppColors.background : AppColors.textPrimary)
                 .textSelection(.disabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
                 .background(mine ? AppColors.textPrimary : AppColors.tile, in: bubbleShape)
                 .opacity(message.state == .sending ? 0.7 : 1)
                 .contentShape(.contextMenuPreview, bubbleShape)
