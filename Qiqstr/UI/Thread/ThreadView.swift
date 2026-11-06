@@ -207,8 +207,7 @@ struct FocusedNoteView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         NoteAuthorLine(note: note, name: name, nip05: nil, large: true)
                         if let nip05 = cache.profile(note.pubkey)?.nip05.nilIfEmpty ?? note.authorNip05 {
-                            Label(nip05.hasPrefix("_@") ? String(nip05.dropFirst(2)) : nip05, systemImage: "checkmark.seal.fill")
-                                .labelStyle(.titleAndIcon)
+                            Text(nip05.hasPrefix("_@") ? String(nip05.dropFirst(2)) : nip05)
                                 .lineLimit(1)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)

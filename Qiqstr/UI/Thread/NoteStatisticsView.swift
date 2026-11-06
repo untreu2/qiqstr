@@ -182,9 +182,6 @@ struct NoteInteractionUserRow: View {
                             .font(.headline)
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        if let nip05 = cache.profile(detail.pubkey)?.nip05, !nip05.isEmpty {
-                            Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(.secondary)
-                        }
                     }
                     if detail.kind == .zap, !detail.content.isEmpty {
                         Text(detail.content).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)

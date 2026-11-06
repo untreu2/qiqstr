@@ -66,18 +66,6 @@ struct ProfileHeaderView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .accessibilityIdentifier("profile-name")
-                if model.nip05Verified {
-                    Button {
-                        let domain = Nip05Verifier.parts(profile.nip05)?.domain ?? profile.nip05
-                        ToastCenter.shared.show(L("userVerifiedBy", ["domain": domain]), style: .success)
-                    } label: {
-                        Image(systemName: "checkmark.seal.fill").font(.title3)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-                    .accessibilityLabel(L("userVerifiedBy", ["domain": Nip05Verifier.parts(profile.nip05)?.domain ?? ""]))
-                    .accessibilityIdentifier("profile-verified")
-                }
                 if mutes.isMuted(model.pubkey) {
                     Text(L("mutedButton"))
                         .font(.caption.weight(.semibold))
@@ -110,7 +98,7 @@ struct ProfileHeaderView: View {
         if hasDetails {
             VStack(alignment: .leading, spacing: 8) {
                 if !profile.nip05.isEmpty {
-                    DetailRow(systemImage: model.nip05Verified ? "checkmark.seal" : "at", text: Nip05Verifier.display(profile.nip05))
+                    DetailRow(systemImage: "at", text: Nip05Verifier.display(profile.nip05))
                         .accessibilityIdentifier("profile-nip05")
                 }
                 if let url = model.websiteURL {

@@ -121,8 +121,7 @@ struct SidebarView: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         if let nip05 = profile?.nip05.nilIfEmpty {
-                            Label(nip05, systemImage: "checkmark.seal")
-                                .labelStyle(.titleAndIcon)
+                            Text(nip05)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)

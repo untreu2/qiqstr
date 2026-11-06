@@ -5,7 +5,6 @@ struct UserRowView: View {
     var showFollowButton = true
     var onTap: (() -> Void)? = nil
     @State private var cache = ProfileCache.shared
-    @State private var verified = false
 
     init(pubkey: String, showFollowButton: Bool = true, onTap: (() -> Void)? = nil) {
         self.pubkey = pubkey
@@ -26,12 +25,6 @@ struct UserRowView: View {
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        if verified {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.footnote)
-                                .foregroundStyle(.primary)
-                                .accessibilityLabel(L("nip05"))
-                        }
                     }
                     Text(subtitle)
                         .font(.subheadline)
@@ -55,10 +48,6 @@ struct UserRowView: View {
         .accessibilityIdentifier("user-row-\(pubkey.prefix(12))")
         .task(id: pubkey) {
             if profile == nil { await cache.load([pubkey]) }
-        }
-        .task(id: profile?.nip05 ?? "") {
-            guard let nip05 = profile?.nip05, !nip05.isEmpty else { verified = false; return }
-            verified = await Nip05Verifier.shared.verify(nip05: nip05, pubkey: pubkey)
         }
     }
 

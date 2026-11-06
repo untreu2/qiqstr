@@ -91,10 +91,6 @@ struct NoteAuthorLine: View {
                 .lineLimit(1)
                 .layoutPriority(1)
             if let nip05, !nip05.isEmpty {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(large ? .subheadline : .caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(L("nip05"))
                 if large {
                     Text(nip05.hasPrefix("_@") ? String(nip05.dropFirst(2)) : nip05)
                         .font(.subheadline)
