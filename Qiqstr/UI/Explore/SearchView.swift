@@ -27,10 +27,15 @@ struct SearchView: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .onSubmit(of: .search) { model.submit() }
-        .refreshable { await model.refresh() }
+        .refreshable {
+            async let live: Void = LiveNowSectionModel.load(force: true)
+            await model.refresh()
+            await live
+        }
         .sensoryFeedback(.selection, trigger: model.scope)
         .sensoryFeedback(.impact(weight: .light), trigger: model.opened)
         .task { await model.start() }
+        .task { await LiveNowSectionModel.load() }
         .accessibilityIdentifier("search-list")
     }
 

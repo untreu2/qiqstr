@@ -24,6 +24,8 @@ enum Route: Hashable {
     case walletReceive
     case userSearch
     case suggestedFollows
+    case liveStreams
+    case liveStream(String)
 }
 
 struct RouteDestination: View {
@@ -50,6 +52,8 @@ struct RouteDestination: View {
         case .walletReceive: ReceiveView()
         case .userSearch: UserSearchView()
         case .suggestedFollows: SuggestedFollowsView(onFinish: nil)
+        case .liveStreams: LiveListView()
+        case .liveStream(let coordinate): LiveStreamView(coordinate: coordinate)
         }
     }
 }
