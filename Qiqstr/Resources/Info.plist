@@ -33,6 +33,14 @@
 	<array>
 		<string>lightning</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>me.untreu.qiqstrswift.refresh</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>

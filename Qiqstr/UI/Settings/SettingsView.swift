@@ -4,6 +4,7 @@ struct SettingsView: View {
     @State private var session = Session.shared
     @State private var cache = ProfileCache.shared
     @State private var router = Router.shared
+    @State private var notifications = LocalNotificationService.shared
     @State private var showLogout = false
     @State private var isLoggingOut = false
     @State private var copiedNpub = 0
@@ -21,6 +22,12 @@ struct SettingsView: View {
             Section {
                 link(.keys, L("keys"), "key.horizontal.fill", fill: AppColors.settingsTile)
                 link(.relays, L("relays"), "point.3.connected.trianglepath.dotted", fill: AppColors.settingsTile)
+                NavigationLink {
+                    NotificationSettingsView()
+                } label: {
+                    SettingsRowLabel(title: L("notifications"), systemImage: "bell.badge.fill", value: notifications.isDelivering ? L("localNotifyOn") : L("localNotifyOff"), fill: AppColors.settingsTile)
+                }
+                .accessibilityIdentifier("settings-row-notifications")
                 link(.muted, L("muted"), "bell.slash.fill", fill: AppColors.settingsTile)
                 NavigationLink {
                     SafetySettingsView()
