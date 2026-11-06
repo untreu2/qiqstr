@@ -72,9 +72,9 @@ struct DMMediaBubble<Menu: View>: View {
                         VStack(spacing: 8) {
                             ZStack {
                                 Circle().fill(.ultraThinMaterial).frame(width: 56, height: 56)
-                                if isOpeningVideo { ProgressView() } else { Image(systemName: "play.fill").font(.system(size: 22)).foregroundStyle(AppColors.textPrimary) }
+                                if isOpeningVideo { ProgressView() } else { Image(systemName: "play.fill").font(.title2).foregroundStyle(.primary) }
                             }
-                            Text(L("videoTapToPlay")).font(.system(size: 13)).foregroundStyle(secondary)
+                            Text(L("videoTapToPlay")).font(.footnote).foregroundStyle(secondary)
                         }
                     }
                 }
@@ -87,9 +87,9 @@ struct DMMediaBubble<Menu: View>: View {
             case .file(let url):
                 ShareLink(item: url) {
                     HStack(spacing: 10) {
-                        Image(systemName: "doc.fill").font(.system(size: 20))
-                        Text(L("fileType", ["type": url.pathExtension.uppercased()])).font(.system(size: 14, weight: .medium))
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 14))
+                        Image(systemName: "doc.fill").font(.title3)
+                        Text(L("fileType", ["type": url.pathExtension.uppercased()])).font(.subheadline.weight(.medium))
+                        Image(systemName: "square.and.arrow.up").font(.subheadline)
                     }
                     .foregroundStyle(foreground)
                     .padding(.horizontal, 14)
@@ -100,9 +100,9 @@ struct DMMediaBubble<Menu: View>: View {
             case .failed(let reason):
                 placeholder(height: 120) {
                     VStack(spacing: 6) {
-                        Image(systemName: "lock.trianglebadge.exclamationmark").font(.system(size: 22))
-                        Text(L("failedToDecryptMedia")).font(.system(size: 13, weight: .semibold))
-                        Text(reason).font(.system(size: 11)).lineLimit(2).multilineTextAlignment(.center)
+                        Image(systemName: "lock.trianglebadge.exclamationmark").font(.title2)
+                        Text(L("failedToDecryptMedia")).font(.footnote.weight(.semibold))
+                        Text(reason).font(.caption2).lineLimit(2).multilineTextAlignment(.center)
                     }
                     .foregroundStyle(secondary)
                     .padding(.horizontal, 12)
@@ -143,8 +143,8 @@ struct DMMediaBubble<Menu: View>: View {
         } else {
             placeholder(height: 100) {
                 VStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle").font(.system(size: 22))
-                    Text(L("legacyUnencryptedMedia")).font(.system(size: 12))
+                    Image(systemName: "exclamationmark.triangle").font(.title2)
+                    Text(L("legacyUnencryptedMedia")).font(.caption)
                 }
                 .foregroundStyle(secondary)
             }
@@ -237,7 +237,7 @@ struct DMImageViewer: View {
                 Spacer()
                 ShareLink(item: url) {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)

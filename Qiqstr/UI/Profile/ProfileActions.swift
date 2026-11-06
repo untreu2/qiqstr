@@ -25,13 +25,10 @@ struct ProfileActionButtons: View {
                 if model.isMe {
                     Button { Router.shared.push(.editProfile) } label: {
                         Text(L("editProfileButton"))
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppColors.textPrimary)
-                            .padding(.horizontal, 18)
-                            .frame(height: 40)
+                            .font(.subheadline.weight(.semibold))
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
                     .accessibilityIdentifier("profile-edit")
                 } else if Session.shared.pubkey != nil {
                     FollowButton(pubkey: model.pubkey, displayName: model.displayName)

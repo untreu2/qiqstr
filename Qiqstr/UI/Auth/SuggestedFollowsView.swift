@@ -112,8 +112,8 @@ struct SuggestedFollowsView: View {
             VStack(spacing: 18) {
                 ProgressView().controlSize(.large)
                 Text(L("authLoadingSuggested"))
-                    .font(.system(size: 16))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityIdentifier("suggested-loading")
@@ -166,8 +166,8 @@ struct SuggestedFollowsView: View {
             AuthHeader(title: L("suggestedFollows"), subtitle: L("authSuggestedSubtitle"))
         } else {
             Text(L("authSuggestedBrowseSubtitle"))
-                .font(.system(size: 15))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -187,31 +187,31 @@ struct SuggestedFollowsView: View {
                 ProfileAvatar(pubkey: pubkey, size: 48)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     if let nip05 = profile?.nip05.nilIfEmpty {
                         Text(nip05)
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if let about = profile?.about.nilIfEmpty {
                         Text(about)
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
                 }
                 Spacer(minLength: 8)
                 if alreadyFollowing {
                     Text(L("following"))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 } else {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 24))
-                        .foregroundStyle(isSelected ? AppColors.textPrimary : AppColors.border)
+                        .font(.title)
+                        .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                         .contentTransition(.symbolEffect(.replace))
                 }
             }

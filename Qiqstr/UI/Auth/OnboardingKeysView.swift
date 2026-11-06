@@ -69,12 +69,12 @@ struct OnboardingKeysView: View {
                 ForEach(Array(mnemonicWords.enumerated()), id: \.offset) { index, word in
                     HStack(spacing: 6) {
                         Text("\(index + 1)")
-                            .font(.system(size: 12, weight: .medium).monospacedDigit())
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.caption.weight(.medium).monospacedDigit())
+                            .foregroundStyle(.secondary)
                             .frame(minWidth: 16, alignment: .trailing)
                         Text(word)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(AppColors.textPrimary)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                         Spacer(minLength: 0)
@@ -99,13 +99,13 @@ struct OnboardingKeysView: View {
             } label: {
                 HStack(alignment: .top, spacing: 12) {
                     Text(revealNsec ? nsec : String(repeating: "•", count: 32))
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.subheadline.monospaced())
+                        .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentTransition(.opacity)
                     Image(systemName: revealNsec ? "eye.slash" : "eye")
-                        .foregroundStyle(AppColors.textSecondary)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
@@ -115,8 +115,8 @@ struct OnboardingKeysView: View {
             .accessibilityLabel(revealNsec ? L("hideKey") : L("showKey"))
             .accessibilityIdentifier("onboarding-reveal-nsec")
             Text(L("useThisToRecoverAccount"))
-                .font(.system(size: 13))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
         }
     }
@@ -124,15 +124,15 @@ struct OnboardingKeysView: View {
     private var warnings: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(L("important"), systemImage: "exclamationmark.triangle")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.body.weight(.semibold))
                 .foregroundStyle(AppColors.error)
             ForEach([L("writeSeedPhraseInOrder"), L("storeItSafely"), L("neverShareIt"), L("ifYouLoseIt"), L("accessFromSettings")], id: \.self) { warning in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("•")
                     Text(warning).fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(size: 15))
-                .foregroundStyle(AppColors.textPrimary)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
             }
         }
         .padding(18)
@@ -143,12 +143,12 @@ struct OnboardingKeysView: View {
     private func sectionTitle(_ title: String, copyIdentifier: String, onCopy: @escaping () -> Void) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
             Spacer()
             Button(action: onCopy) {
                 Label(L("copy"), systemImage: "doc.on.doc")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
             }
             .buttonStyle(.glass)
             .controlSize(.small)

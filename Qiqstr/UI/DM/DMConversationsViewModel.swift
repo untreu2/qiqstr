@@ -19,8 +19,25 @@ final class DMConversationsViewModel {
     var hasAnyConversation: Bool { !service.conversations.isEmpty }
     var hasUnread: Bool { service.unreadCount > 0 }
 
+    var query = ""
+
+    var isSearching: Bool { !trimmedQuery.isEmpty }
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
     var visibleConversations: [DMConversation] {
-        service.conversations.filter { matches($0, filter) }
+        guard isSearching else { return service.conversations.filter { matches($0, filter) } }
+        return service.conversations.filter(matchesQuery)
+    }
+
+    private func matchesQuery(_ conversation: DMConversation) -> Bool {
+        let q = trimmedQuery
+        if let hex = Nip19.pubkeyHex(from: q) { return conversation.peer == hex }
+        if conversation.lastMessage.content.lowercased().contains(q) { return true }
+        guard let profile = ProfileCache.shared.profile(conversation.peer) else { return conversation.peer.hasPrefix(q) }
+        return profile.name.lowercased().contains(q)
+            || profile.displayName.lowercased().contains(q)
+            || profile.nip05.lowercased().contains(q)
     }
 
     func unreadCount(_ filter: DMConversationFilter) -> Int {

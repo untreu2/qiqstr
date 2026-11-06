@@ -11,19 +11,19 @@ struct DMInputBar: View {
             GlassEffectContainer(spacing: 10) {
                 HStack(alignment: .bottom, spacing: 10) {
                     PhotosPicker(selection: $model.pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current) {
-                        Image(systemName: "photo.on.rectangle")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(AppColors.textPrimary)
-                            .frame(width: 46, height: 46)
+                        Image(systemName: "plus")
+                            .font(.title3.weight(.medium))
+                            .frame(width: 34, height: 34)
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .tint(.primary)
                     .accessibilityLabel(L("dmAttach"))
                     .accessibilityIdentifier("dm-attach")
 
                     HStack(alignment: .bottom, spacing: 8) {
                         TextField(L("typeAMessage"), text: $model.draft, axis: .vertical)
-                            .font(.system(size: 16))
+                            .font(.body)
                             .lineLimit(1...6)
                             .textInputAutocapitalization(.sentences)
                             .focused(focus)
@@ -32,12 +32,11 @@ struct DMInputBar: View {
                             .accessibilityIdentifier("dm-input")
                         Button(action: model.send) {
                             Image(systemName: "arrow.up")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(AppColors.background)
-                                .frame(width: 36, height: 36)
-                                .background(AppColors.textPrimary, in: Circle())
+                                .font(.body.weight(.bold))
+                                .frame(width: 22, height: 22)
                         }
-                        .buttonStyle(PressableStyle())
+                        .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.circle)
                         .disabled(!model.canSend)
                         .opacity(model.canSend ? 1 : 0.35)
                         .padding(.trailing, 5)
@@ -46,7 +45,7 @@ struct DMInputBar: View {
                         .accessibilityIdentifier("dm-send")
                     }
                     .frame(minHeight: 46)
-                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 23, style: .continuous))
                 }
             }
         }
@@ -70,14 +69,14 @@ struct DMInputBar: View {
                         } else {
                             AppColors.tile
                             Image(systemName: attachment.isVideo ? "video.fill" : "photo")
-                                .font(.system(size: 22))
-                                .foregroundStyle(AppColors.textSecondary)
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
                         }
                         if attachment.state == .preparing {
                             Color.black.opacity(0.35)
                             ProgressView().tint(.white)
                         } else if attachment.isVideo {
-                            Image(systemName: "play.circle.fill").font(.system(size: 24)).foregroundStyle(.white).shadow(radius: 3)
+                            Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white).shadow(radius: 3)
                         }
                     }
                     .frame(width: 72, height: 72)
@@ -87,8 +86,8 @@ struct DMInputBar: View {
                             model.removeAttachment(attachment.id)
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(AppColors.textPrimary)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.primary)
                                 .frame(width: 22, height: 22)
                         }
                         .buttonStyle(.plain)

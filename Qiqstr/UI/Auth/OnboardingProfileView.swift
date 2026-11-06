@@ -117,19 +117,29 @@ struct OnboardingProfileView: View {
     @FocusState private var focus: OnboardingProfileViewModel.Field?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+        Form {
+            Section {
                 AuthHeader(title: L("setUpProfile"), subtitle: L("profileSetupSubtitle"))
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                    .padding(.bottom, 20)
-                media
-                fields
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 32)
             }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 8, leading: 4, bottom: 4, trailing: 4))
+            Section {
+                media
+            }
+            .listRowInsets(EdgeInsets())
+            Section(L("profile")) {
+                field(.name, placeholder: L("username"), text: $model.name, identifier: "onboarding-name", autocapitalize: true)
+                field(.about, placeholder: L("bio"), text: $model.about, identifier: "onboarding-about", axis: .vertical, autocapitalize: true)
+            }
+            .disabled(model.isSaving)
+            Section(L("details")) {
+                field(.picture, placeholder: L("authPictureUrlOptional"), text: $model.picture, identifier: "onboarding-picture-url", keyboard: .URL)
+                field(.lud16, placeholder: L("lightningAddressOptional"), text: $model.lud16, identifier: "onboarding-lud16", keyboard: .emailAddress)
+                field(.website, placeholder: L("websiteOptional"), text: $model.website, identifier: "onboarding-website", keyboard: .URL)
+            }
+            .disabled(model.isSaving)
         }
+        .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .background(AppColors.background)
         .safeAreaInset(edge: .bottom) {
@@ -199,7 +209,7 @@ struct OnboardingProfileView: View {
                 }
                 .frame(width: 84, height: 84)
                 .padding(3)
-                .background(AppColors.background, in: Circle())
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
             }
             .buttonStyle(.plain)
             .disabled(model.isUploadingPicture)
@@ -207,40 +217,31 @@ struct OnboardingProfileView: View {
             .accessibilityIdentifier("onboarding-avatar-picker")
             .padding(.leading, 16)
             .offset(y: -28)
-            .padding(.bottom, -28)
+            .padding(.bottom, -16)
         }
     }
 
     private func cameraBadge(size: CGFloat) -> some View {
         Image(systemName: "camera")
             .font(.system(size: size * 0.42, weight: .medium))
-            .foregroundStyle(AppColors.textPrimary)
+            .foregroundStyle(.primary)
             .frame(width: size, height: size)
             .glassEffect(.regular, in: .circle)
     }
 
-    private var fields: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            field(.name, placeholder: L("username"), text: $model.name, identifier: "onboarding-name", autocapitalize: true)
-            field(.about, placeholder: L("bio"), text: $model.about, identifier: "onboarding-about", axis: .vertical, autocapitalize: true)
-            field(.picture, placeholder: L("authPictureUrlOptional"), text: $model.picture, identifier: "onboarding-picture-url", keyboard: .URL)
-            field(.lud16, placeholder: L("lightningAddressOptional"), text: $model.lud16, identifier: "onboarding-lud16", keyboard: .emailAddress)
-            field(.website, placeholder: L("websiteOptional"), text: $model.website, identifier: "onboarding-website", keyboard: .URL)
-        }
-        .disabled(model.isSaving)
-    }
-
     private func field(_ field: OnboardingProfileViewModel.Field, placeholder: String, text: Binding<String>, identifier: String, axis: Axis = .horizontal, keyboard: UIKeyboardType = .default, autocapitalize: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            QiqTextField(placeholder: placeholder, text: text, axis: axis, keyboard: keyboard, autocapitalize: autocapitalize)
+            TextField(placeholder, text: text, axis: axis)
+                .keyboardType(keyboard)
+                .textInputAutocapitalization(autocapitalize ? .sentences : .never)
+                .autocorrectionDisabled(!autocapitalize)
                 .lineLimit(axis == .vertical ? 3...6 : 1...1)
                 .focused($focus, equals: field)
                 .accessibilityIdentifier(identifier)
             if model.showErrors, let message = model.error(for: field) {
                 Text(message)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.error)
-                    .padding(.horizontal, 8)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.red)
                     .transition(.opacity)
             }
         }

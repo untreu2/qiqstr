@@ -47,8 +47,8 @@ struct AuthSignupView: View {
                 VStack(spacing: 18) {
                     ProgressView().controlSize(.large)
                     Text(L("signupCreating"))
-                        .font(.system(size: 16))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AppColors.background)

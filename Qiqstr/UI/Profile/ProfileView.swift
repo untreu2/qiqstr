@@ -60,7 +60,7 @@ struct ProfileView: View {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 8) {
                         AvatarView(url: model.profile.picture.nilIfEmpty, size: 26)
-                        Text(model.displayName).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                        Text(model.displayName).font(.body.weight(.semibold)).lineLimit(1)
                     }
                     .opacity(titleVisible ? 1 : 0)
                     .offset(y: titleVisible ? 0 : 8)
@@ -220,8 +220,8 @@ private struct PinnedNoteRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: "pin.fill").font(.system(size: 11, weight: .semibold))
-                Text(L("pinnedNotes")).font(.system(size: 13, weight: .semibold))
+                Image(systemName: "pin.fill").font(.caption2.weight(.semibold))
+                Text(L("pinnedNotes")).font(.footnote.weight(.semibold))
                 Spacer()
                 if isMine {
                     Menu {
@@ -231,7 +231,7 @@ private struct PinnedNoteRow: View {
                         .accessibilityIdentifier("unpin-note")
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.subheadline.weight(.semibold))
                             .frame(width: 32, height: 24)
                             .contentShape(Rectangle())
                     }
@@ -239,7 +239,7 @@ private struct PinnedNoteRow: View {
                     .accessibilityLabel(L("unpinNote"))
                 }
             }
-            .foregroundStyle(AppColors.textSecondary)
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 16)
             .padding(.top, 10)
             NoteRowView(note: note)

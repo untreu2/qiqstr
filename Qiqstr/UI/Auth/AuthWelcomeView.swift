@@ -51,14 +51,13 @@ struct AuthWelcomeView: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(L("welcomeTitle"))
-                .font(AppFont.brand(52))
+                .font(.custom("Poppins-Bold", size: 52, relativeTo: .largeTitle))
                 .kerning(-1.5)
-                .foregroundStyle(AppColors.textPrimary)
+                .foregroundStyle(.primary)
                 .accessibilityAddTraits(.isHeader)
             Text(subtitle)
-                .font(.system(size: 15))
-                .foregroundStyle(AppColors.textSecondary)
-                .lineSpacing(4)
+                .font(.body)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -68,7 +67,8 @@ struct AuthWelcomeView: View {
         for word in Self.boldWords {
             var searchRange = text.startIndex..<text.endIndex
             while let range = text[searchRange].range(of: word) {
-                text[range].font = .system(size: 15, weight: .bold)
+                text[range].inlinePresentationIntent = .stronglyEmphasized
+                text[range].foregroundColor = .primary
                 searchRange = range.upperBound..<text.endIndex
             }
         }
@@ -88,8 +88,8 @@ struct AuthWelcomeView: View {
             termsRow
             if showTermsError {
                 Text(L("acceptanceOfTermsIsRequired"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.error)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.red)
                     .transition(.opacity)
                     .accessibilityIdentifier("welcome-terms-error")
             }
@@ -101,13 +101,12 @@ struct AuthWelcomeView: View {
                 proceed(onLogin)
             } label: {
                 Text(L("welcomeAlreadyHaveAccount"))
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .padding(.vertical, 6)
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.extraLarge)
             .accessibilityIdentifier("welcome-login")
         }
         .padding(.horizontal, 24)
@@ -117,24 +116,24 @@ struct AuthWelcomeView: View {
     }
 
     private var termsRow: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
             Button {
                 acceptedTerms.toggle()
                 if acceptedTerms { showTermsError = false }
             } label: {
-                Image(systemName: acceptedTerms ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 22))
-                    .foregroundStyle(acceptedTerms ? AppColors.textPrimary : AppColors.textSecondary)
+                Image(systemName: acceptedTerms ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(acceptedTerms ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("termsOfUse"))
             .accessibilityValue(acceptedTerms ? L("yes") : "")
-            .accessibilityAddTraits(acceptedTerms ? .isSelected : [])
+            .accessibilityAddTraits(acceptedTerms ? [.isSelected, .isToggle] : .isToggle)
             .accessibilityIdentifier("welcome-terms-checkbox")
             Text(termsText)
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .environment(\.openURL, OpenURLAction { _ in
                     showTerms = true
                     return .handled
@@ -145,11 +144,11 @@ struct AuthWelcomeView: View {
     }
 
     private var termsText: AttributedString {
-        var prefix = AttributedString(L("iAcceptThe"))
-        prefix.foregroundColor = AppColors.textSecondary
+        let prefix = AttributedString(L("iAcceptThe"))
         var link = AttributedString(L("termsOfUse"))
         link.link = Self.termsURL
-        link.foregroundColor = AppColors.textPrimary
+        link.foregroundColor = .primary
+        link.inlinePresentationIntent = .stronglyEmphasized
         link.underlineStyle = .single
         return prefix + link
     }

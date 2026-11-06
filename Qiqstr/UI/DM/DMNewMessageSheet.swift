@@ -91,7 +91,7 @@ struct DMNewMessageSheet: View {
                         }
                         .accessibilityIdentifier("dm-picker-direct")
                     } header: {
-                        SectionHeader(title: L("dmStartChat"))
+                        Text(L("dmStartChat"))
                     }
                 }
                 if model.trimmedQuery.isEmpty, !model.recentPeers.isEmpty {
@@ -108,7 +108,7 @@ struct DMNewMessageSheet: View {
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                     } header: {
-                        SectionHeader(title: L("dmRecent")).padding(.horizontal, 4)
+                        Text(L("dmRecent")).padding(.horizontal, 4)
                     }
                 }
                 if !model.results.isEmpty {
@@ -120,7 +120,7 @@ struct DMNewMessageSheet: View {
                             .accessibilityIdentifier("dm-picker-user-\(profile.pubkey)")
                         }
                     } header: {
-                        SectionHeader(title: model.trimmedQuery.isEmpty ? L("following") : L("users"))
+                        Text(model.trimmedQuery.isEmpty ? L("following") : L("users"))
                     }
                 }
             }
@@ -182,19 +182,19 @@ private struct DMUserRow: View {
             ProfileAvatar(pubkey: pubkey, size: 42)
             VStack(alignment: .leading, spacing: 2) {
                 Text(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColors.textPrimary)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             if isFollowing {
                 Text(L("following"))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(AppColors.tile, in: Capsule())
@@ -214,8 +214,8 @@ private struct DMRecentChip: View {
             VStack(spacing: 6) {
                 ProfileAvatar(pubkey: pubkey, size: 56)
                 Text(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.textPrimary)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .frame(width: 64)
             }

@@ -94,7 +94,7 @@ enum ProfileLink {
 
 struct ProfileBioText: View {
     let text: String
-    var font: Font = .system(size: 15)
+    var font: Font = .subheadline
     @State private var cache = ProfileCache.shared
 
     private var tokens: [BioToken] { BioParser.tokens(text) }
@@ -102,7 +102,7 @@ struct ProfileBioText: View {
     var body: some View {
         Text(attributed)
             .font(font)
-            .foregroundStyle(AppColors.textPrimary)
+            .foregroundStyle(.primary)
             .tint(AppColors.textPrimary)
             .lineSpacing(2)
             .textSelection(.enabled)

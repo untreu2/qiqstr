@@ -15,19 +15,19 @@ struct AuthLanguageSheet: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(option.displayName)
-                                        .font(.system(size: 17, weight: option == selected ? .semibold : .regular))
-                                        .foregroundStyle(AppColors.textPrimary)
+                                        .font(.body.weight(option == selected ? .semibold : .regular))
+                                        .foregroundStyle(.primary)
                                     if option.localizedName != option.displayName {
                                         Text(option.localizedName)
-                                            .font(.system(size: 13))
-                                            .foregroundStyle(AppColors.textSecondary)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
                                 Spacer()
                                 if option == selected {
                                     Image(systemName: "checkmark")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundStyle(AppColors.textPrimary)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
                                 }
                             }
                             .contentShape(Rectangle())

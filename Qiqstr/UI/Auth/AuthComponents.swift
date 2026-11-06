@@ -10,16 +10,15 @@ struct AuthHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(AppFont.brand(titleSize))
-                .foregroundStyle(AppColors.textPrimary)
+                .font(.custom("Poppins-Bold", size: titleSize, relativeTo: .largeTitle))
+                .foregroundStyle(.primary)
                 .kerning(-titleSize * 0.02)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineSpacing(3)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -35,9 +34,8 @@ struct AuthFeatureRow: View {
         HStack(spacing: 14) {
             IconTile(systemImage: systemImage, size: 40)
             Text(text)
-                .font(.system(size: 16))
-                .foregroundStyle(AppColors.textPrimary)
-                .lineSpacing(3)
+                .font(.body)
+                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -53,8 +51,8 @@ struct AuthErrorText: View {
             Image(systemName: "exclamationmark.circle.fill")
             Text(message).fixedSize(horizontal: false, vertical: true)
         }
-        .font(.system(size: 14, weight: .semibold))
-        .foregroundStyle(AppColors.error)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.red)
         .frame(maxWidth: .infinity, alignment: .leading)
         .transition(.opacity.combined(with: .move(edge: .top)))
         .accessibilityIdentifier("auth-error")

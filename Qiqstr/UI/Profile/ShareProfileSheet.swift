@@ -43,9 +43,15 @@ struct ShareProfileSheet: View {
             .navigationTitle(L("shareProfile"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { dismiss() }
                         .accessibilityIdentifier("share-profile-close")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showScanner = true } label: {
+                        Image(systemName: "qrcode.viewfinder")
+                    }
+                    .accessibilityLabel(L("scanQRCode"))
                 }
             }
         }
@@ -67,13 +73,13 @@ struct ShareProfileSheet: View {
                 ProfileAvatar(pubkey: pubkey, size: 52)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(profile?.bestName ?? L("anonymous"))
-                        .font(AppFont.brandSemibold(20))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     if let nip05 = profile?.nip05.nilIfEmpty {
                         Text(Nip05Verifier.display(nip05))
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                 }
@@ -96,8 +102,8 @@ struct ShareProfileSheet: View {
             .aspectRatio(1, contentMode: .fit)
             .frame(maxWidth: 320)
             Text(L("shareThisToReceiveMessages"))
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding(20)
@@ -110,23 +116,24 @@ struct ShareProfileSheet: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("publicKeyNpub"))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
                     Text(npub)
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .font(.subheadline.monospaced())
+                        .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
                         .lineLimit(3)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "doc.on.doc")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColors.textPrimary)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
             }
-            .padding(16)
-            .background(AppColors.inputFill, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(.glass)
+        .buttonBorderShape(.roundedRectangle(radius: 22))
         .accessibilityLabel(L("copy"))
         .accessibilityIdentifier("share-profile-copy")
     }
@@ -134,16 +141,13 @@ struct ShareProfileSheet: View {
     private var actions: some View {
         VStack(spacing: 12) {
             ShareLink(item: URL(string: link) ?? URL(string: "nostr:")!, subject: Text(profile?.bestName ?? L("profile"))) {
-                HStack(spacing: 8) {
-                    Image(systemName: "square.and.arrow.up")
-                    Text(L("share"))
-                }
-                .font(.system(size: 17, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .foregroundStyle(AppColors.background)
-                .background(AppColors.textPrimary, in: Capsule())
+                Label(L("share"), systemImage: "square.and.arrow.up")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.extraLarge)
             .accessibilityIdentifier("share-profile-sharelink")
             SecondaryButton(title: L("scanQRCode"), systemImage: "qrcode.viewfinder") { showScanner = true }
                 .accessibilityIdentifier("share-profile-scan")
@@ -202,7 +206,7 @@ struct ProfileQRScannerView: View {
             }
             HStack {
                 Text(L("scanQRCode"))
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
                     .frame(height: 44)

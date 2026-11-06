@@ -65,9 +65,8 @@ struct AuthLoginView: View {
                         Text(L("loginExampleSeed"))
                         Text(L("loginExampleNsec"))
                     }
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineSpacing(3)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
                 }
             }
@@ -114,23 +113,22 @@ struct AuthLoginView: View {
                 model.isObscured.toggle()
             } label: {
                 Image(systemName: model.isObscured ? "eye.slash" : "eye")
-                    .font(.system(size: 18))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .frame(width: 28, height: 28)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.symbolEffect(.replace))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .accessibilityLabel(model.isObscured ? L("showKey") : L("hideKey"))
             .accessibilityIdentifier("login-toggle-visibility")
             Button {
                 model.paste()
             } label: {
                 Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColors.background)
-                    .frame(width: 38, height: 38)
-                    .background(AppColors.textPrimary, in: Circle())
+                    .font(.body.weight(.semibold))
             }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .controlSize(.small)
             .accessibilityLabel(L("authPaste"))
             .accessibilityIdentifier("login-paste")
         }

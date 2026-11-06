@@ -56,21 +56,21 @@ struct AuthTermsSheet: View {
         switch block {
         case .heading(let level, let text):
             Text(inline(text))
-                .font(level == 1 ? AppFont.brand(26) : level == 2 ? AppFont.brandSemibold(21) : .system(size: level == 3 ? 17 : 15, weight: .semibold))
-                .foregroundStyle(AppColors.textPrimary)
+                .font(level == 1 ? .title.bold() : level == 2 ? .title2.weight(.semibold) : level == 3 ? .headline : .subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
                 .padding(.top, level <= 2 ? 10 : 6)
         case .bullet(let text):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•")
                 Text(inline(text)).fixedSize(horizontal: false, vertical: true)
             }
-            .font(.system(size: 15))
-            .foregroundStyle(AppColors.textPrimary)
+            .font(.subheadline)
+            .foregroundStyle(.primary)
             .padding(.leading, 4)
         case .paragraph(let text):
             Text(inline(text))
-                .font(.system(size: 15))
-                .foregroundStyle(AppColors.textPrimary)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
         case .divider:
