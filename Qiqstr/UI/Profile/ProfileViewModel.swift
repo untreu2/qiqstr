@@ -4,13 +4,15 @@ import Observation
 enum ProfileTab: String, CaseIterable, Identifiable {
     case notes, replies, photos, likes
     var id: String { rawValue }
-    var title: String { L(rawValue) }
+    var title: String { self == .photos ? L("media") : L(rawValue) }
 }
 
-struct PhotoEntry: Identifiable, Hashable {
-    var url: String
+struct ProfileMediaEntry: Identifiable, Hashable {
+    var item: NoteMediaItem
     var noteId: String
-    var id: String { "\(noteId)|\(url)" }
+    var id: String { "\(noteId)|\(item.url)" }
+    var url: String { item.url }
+    var isVideo: Bool { item.isVideo }
 }
 
 @MainActor
@@ -23,6 +25,9 @@ final class ProfileViewModel {
     private(set) var followerCount: Int?
     private(set) var followsMe = false
     private(set) var followScore: FollowScore?
+    private(set) var mutualFollowers: [String] = []
+    private(set) var badges: [ProfileBadge] = []
+    private(set) var media: [ProfileMediaEntry] = []
 
     private(set) var notes: [Note] = []
     private(set) var replies: [Note] = []
@@ -49,15 +54,18 @@ final class ProfileViewModel {
     private var started = false
     private var likesExhausted = false
 
-    private static let photoRegex = try! NSRegularExpression(pattern: "https?://\\S+?\\.(?:jpg|jpeg|png|webp|gif|avif|heic)(?:\\?\\S*)?(?=\\s|$)", options: [.caseInsensitive])
-
     init(pubkey: String) {
         self.pubkey = pubkey
         self.profile = ProfileCache.shared.profile(pubkey) ?? Profile(pubkey: pubkey)
+        let counts = ProfileCountsStore.shared.counts(for: pubkey)
+        self.followingCount = counts?.following
+        self.followerCount = counts?.followers
+        self.badges = BadgeService.shared.cached(for: pubkey) ?? []
     }
 
     var isMe: Bool { Session.shared.pubkey == pubkey }
     var npub: String { Nip19.npub(pubkey) ?? pubkey }
+    var profileLink: URL { URL(string: "https://njump.me/\(npub)") ?? URL(string: "https://njump.me")! }
     var isValidPubkey: Bool { pubkey.count == 64 && pubkey.allSatisfy(\.isHexDigit) }
 
     var displayName: String {
@@ -78,18 +86,16 @@ final class ProfileViewModel {
         return URL(string: raw.hasPrefix("http://") || raw.hasPrefix("https://") ? raw : "https://\(raw)")
     }
 
-    var photos: [PhotoEntry] {
-        let own = (notes + replies).filter { !$0.isRepost }.sorted { $0.createdAt > $1.createdAt }
+    private func rebuildMedia() {
+        let own = (notes + replies).filter { !$0.isRepost && $0.pubkey == pubkey }.sorted { $0.createdAt > $1.createdAt }
         var seen = Set<String>()
-        var result: [PhotoEntry] = []
+        var result: [ProfileMediaEntry] = []
         for note in own {
-            let ns = note.content as NSString
-            for match in Self.photoRegex.matches(in: note.content, range: NSRange(location: 0, length: ns.length)) {
-                let url = ns.substring(with: match.range)
-                if seen.insert(url).inserted { result.append(PhotoEntry(url: url, noteId: note.id)) }
+            for item in NoteContentCache.content(for: note).media where seen.insert(item.url).inserted {
+                result.append(ProfileMediaEntry(item: item, noteId: note.id))
             }
         }
-        return result
+        if result != media { media = result }
     }
 
     var visibleNotes: [Note] {
@@ -104,7 +110,8 @@ final class ProfileViewModel {
         async let notes: Void = reloadNotes()
         async let pinned: Void = loadPinned(remote: false)
         async let following: Void = loadFollowing(sync: false)
-        _ = await (notes, pinned, following)
+        async let badges: Void = loadBadges(remote: false)
+        _ = await (notes, pinned, following, badges)
         Task { await syncAll(force: false) }
     }
 
@@ -126,7 +133,8 @@ final class ProfileViewModel {
         async let pinnedSync: Void = loadPinned(remote: true)
         async let counts: Void = loadCounts(force: force)
         async let score: Void = loadFollowScore()
-        _ = await (profileSync, notesSync, reactions, pinnedSync, counts, score)
+        async let badgeSync: Void = loadBadges(remote: true)
+        _ = await (profileSync, notesSync, reactions, pinnedSync, counts, score, badgeSync)
     }
 
     private func syncProfile(force: Bool) async {
@@ -167,6 +175,7 @@ final class ProfileViewModel {
         let (newNotes, newReplies) = await (n, r)
         if newNotes != notes { notes = newNotes }
         if newReplies != replies { replies = newReplies }
+        rebuildMedia()
         canLoadMoreNotes = newNotes.count >= notesLimit
         canLoadMoreReplies = newReplies.count >= repliesLimit
         hasLoadedNotes = true
@@ -221,7 +230,10 @@ final class ProfileViewModel {
     func loadFollowing(sync: Bool) async {
         if sync { await SyncService.shared.syncFollowingList(pubkey, force: true) }
         let list = await ProfileDataSource.following(pubkey)
-        if !list.isEmpty || sync { followingCount = list.count }
+        if !list.isEmpty || sync {
+            followingCount = list.count
+            ProfileCountsStore.shared.update(pubkey, following: list.count)
+        }
         if let me = Session.shared.pubkey, me != pubkey { followsMe = list.contains(me) }
     }
 
@@ -229,13 +241,27 @@ final class ProfileViewModel {
         async let followers = ProfileDataSource.followerCount(pubkey)
         async let following: Void = loadFollowing(sync: true)
         let (count, _) = await (followers, following)
-        if let count { followerCount = count }
+        if let count {
+            followerCount = count
+            ProfileCountsStore.shared.update(pubkey, followers: count)
+        }
     }
 
     func loadFollowScore() async {
         guard !isMe else { followScore = nil; return }
         let score = await ProfileDataSource.followScore(target: pubkey)
         if score != followScore { followScore = score }
+        guard let score, score.count > 0 else { mutualFollowers = []; return }
+        let mutuals = await ProfileDataSource.mutualFollowers(target: pubkey)
+        if mutuals != mutualFollowers { mutualFollowers = mutuals }
+        let missing = mutuals.prefix(40).filter { ProfileCache.shared.profile($0) == nil }
+        if !missing.isEmpty { await ProfileCache.shared.load(Array(missing)) }
+    }
+
+    func loadBadges(remote: Bool) async {
+        let loaded = remote ? await BadgeService.shared.refresh(for: pubkey) : await BadgeService.shared.local(for: pubkey)
+        guard remote || !loaded.isEmpty else { return }
+        if loaded != badges { badges = loaded }
     }
 
     func loadMore() async {

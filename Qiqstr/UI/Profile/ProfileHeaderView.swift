@@ -30,10 +30,14 @@ struct ProfileHeaderView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("profile-about")
                 }
+                if !model.badges.isEmpty {
+                    ProfileBadgesRow(badges: model.badges)
+                        .padding(.top, 2)
+                }
                 details
                 counts
                 if let score = model.followScore, !model.isMe {
-                    FollowedByRow(score: score)
+                    FollowedByRow(score: score, mutuals: model.mutualFollowers)
                 }
             }
             .padding(.horizontal, 16)
@@ -75,8 +79,22 @@ struct ProfileHeaderView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if let handle = model.handle {
-                Text(handle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            if model.handle != nil || showsFollowsYou {
+                HStack(spacing: 6) {
+                    if let handle = model.handle {
+                        Text(handle).lineLimit(1)
+                    }
+                    if model.handle != nil && showsFollowsYou {
+                        Text(verbatim: "·").accessibilityHidden(true)
+                    }
+                    if showsFollowsYou {
+                        Text(L("profileFollowsYou"))
+                            .lineLimit(1)
+                            .accessibilityIdentifier("profile-follows-you")
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
             Button(action: copyNpub) {
                 HStack(spacing: 4) {
@@ -140,17 +158,10 @@ struct ProfileHeaderView: View {
                 Router.shared.push(.followList(model.pubkey, .followers))
             }
             .accessibilityIdentifier("profile-followers-count")
-            if model.followsMe && !model.isMe {
-                Text(L("followingYou"))
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(AppColors.tile, in: Capsule())
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("profile-follows-you")
-            }
         }
     }
+
+    private var showsFollowsYou: Bool { model.followsMe && !model.isMe }
 
     private func copyNpub() {
         UIPasteboard.general.string = model.npub
@@ -209,33 +220,6 @@ private struct CountButton: View {
         }
         .buttonStyle(.plain)
         .animation(.snappy, value: value)
-    }
-}
-
-struct FollowedByRow: View {
-    let score: FollowScore
-    private let size: CGFloat = 24
-
-    var body: some View {
-        HStack(spacing: 8) {
-            let avatars = Array(score.avatarUrls.prefix(5))
-            if !avatars.isEmpty {
-                HStack(spacing: -7) {
-                    ForEach(Array(avatars.enumerated()), id: \.offset) { index, url in
-                        AvatarView(url: url, size: size)
-                            .padding(1.5)
-                            .background(AppColors.background, in: Circle())
-                            .zIndex(Double(avatars.count - index))
-                    }
-                }
-            }
-            Text(score.count == 1 ? L("profileFollowedByOne") : L("profileFollowedByMany", ["count": Sats.compact(score.count)]))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("profile-followed-by")
     }
 }
 
