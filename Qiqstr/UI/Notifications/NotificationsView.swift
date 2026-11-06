@@ -5,6 +5,7 @@ struct NotificationsView: View {
     @State private var bus = DataBus.shared
     @State private var session = Session.shared
     @State private var router = Router.shared
+    @AppStorage(WebOfTrustService.filterNotificationsKey) private var onlyTrusted = true
 
     private struct ReloadKey: Equatable {
         var version: Int
@@ -13,8 +14,8 @@ struct NotificationsView: View {
     }
 
     var body: some View {
-        let groups = model.groups
-        content(groups)
+        let visible = model.visible
+        content(visible.groups, hidden: visible.hidden)
             .navigationTitle(L("notifications"))
             .navigationSubtitle(model.filter == .all ? "" : model.filter.title)
             .navigationBarTitleDisplayMode(.large)
@@ -23,6 +24,11 @@ struct NotificationsView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         NotificationFilterPicker(selection: $model.filter)
+                        Divider()
+                        Toggle(isOn: $onlyTrusted) {
+                            Label(L("notificationsOnlyKnown"), systemImage: "person.2")
+                        }
+                        .accessibilityIdentifier("notifications-only-known")
                     } label: {
                         Label(L("notificationFilterAll"), systemImage: model.filter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
                     }
@@ -39,11 +45,13 @@ struct NotificationsView: View {
                 model.markSeen()
                 NotificationBadge.shared.markRead()
             }
+            .onChange(of: onlyTrusted, initial: true) { _, value in model.onlyTrusted = value }
             .sensoryFeedback(.selection, trigger: model.filter)
+            .sensoryFeedback(.selection, trigger: onlyTrusted)
     }
 
     @ViewBuilder
-    private func content(_ groups: [NotificationGroup]) -> some View {
+    private func content(_ groups: [NotificationGroup], hidden: Int) -> some View {
         if !model.isLoaded {
             LoadingView()
         } else if let error = model.errorMessage, model.all.isEmpty {
@@ -52,7 +60,7 @@ struct NotificationsView: View {
             }
         } else {
             List {
-                if groups.isEmpty {
+                if groups.isEmpty && hidden == 0 {
                     EmptyStateView(systemImage: "bell", title: L("noNotificationsYet"), message: L("whenSomeoneInteractsWithYourPosts"))
                         .listRowSeparator(.hidden)
                         .padding(.top, 40)
@@ -61,6 +69,7 @@ struct NotificationsView: View {
                         ForEach(groups) { group in
                             row(group)
                         }
+                        if hidden > 0 { hiddenRow(hidden) }
                         footer
                             .listRowSeparator(.hidden)
                     }
@@ -100,6 +109,34 @@ struct NotificationsView: View {
             }
         }
         .task { await model.loadMoreIfNeeded(group) }
+    }
+
+    private func hiddenRow(_ count: Int) -> some View {
+        Button {
+            withAnimation(.snappy) { model.revealHidden() }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "eye.slash")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("notificationsHiddenCount", ["count": count]))
+                        .font(.subheadline.weight(.semibold))
+                    Text(L("notificationsHiddenFooter"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Text(L("showKey"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(AppColors.background)
+        .accessibilityIdentifier("notifications-hidden-row")
     }
 
     @ViewBuilder

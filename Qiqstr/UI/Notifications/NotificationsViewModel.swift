@@ -58,6 +58,10 @@ final class NotificationsViewModel {
     private(set) var errorMessage: String?
     private(set) var lastSeen = 0
     var filter: NotificationFilter = .all
+    var onlyTrusted = true {
+        didSet { if onlyTrusted != oldValue { revealsHidden = false } }
+    }
+    var revealsHidden = false
 
     private var olderIds: Set<String> = []
     private var didInitialSync = false
@@ -74,8 +78,18 @@ final class NotificationsViewModel {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    var groups: [NotificationGroup] {
-        Self.group(all.filter { filter.includes($0.kind) })
+    var visible: (groups: [NotificationGroup], hidden: Int) {
+        let items = all.filter { filter.includes($0.kind) }
+        guard onlyTrusted, !revealsHidden, WebOfTrustService.shared.isReady else { return (Self.group(items), 0) }
+        let trust = WebOfTrustService.shared
+        let trusted = items.filter { trust.isTrusted($0.fromPubkey) }
+        return (Self.group(trusted), items.count - trusted.count)
+    }
+
+    var groups: [NotificationGroup] { visible.groups }
+
+    func revealHidden() {
+        revealsHidden = true
     }
 
     func isUnread(_ group: NotificationGroup) -> Bool {
