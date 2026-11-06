@@ -50,6 +50,7 @@ final class ToastCenter {
     var current: Toast?
 
     func show(_ message: String, style: Toast.Style = .info) {
+        if style == .error, ReadOnlyGate.intercepts(message) { return }
         let toast = Toast(message: message, style: style)
         current = toast
         Task {
@@ -58,7 +59,10 @@ final class ToastCenter {
         }
     }
 
-    func error(_ error: Error) { show(coreMessage(error), style: .error) }
+    func error(_ error: Error) {
+        if error is ReadOnlyError { ReadOnlyGate.shared.present(); return }
+        show(coreMessage(error), style: .error)
+    }
 }
 
 func coreMessage(_ error: Error) -> String {

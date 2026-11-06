@@ -5,18 +5,24 @@ struct StoredAccount: Codable, Hashable, Identifiable, Sendable {
     var npub: String
     var privateKeyHex: String
     var mnemonic: String?
+    var pubkey: String?
     var id: String { npub }
-    var pubkeyHex: String { (try? getPublicKey(privateKeyHex: privateKeyHex)) ?? "" }
+    var isReadOnly: Bool { privateKeyHex.isEmpty }
+    var signingKey: String? { isReadOnly ? nil : privateKeyHex }
+    var pubkeyHex: String { pubkey ?? signingKey.flatMap { try? getPublicKey(privateKeyHex: $0) } ?? "" }
 }
 
 enum AuthError: LocalizedError {
-    case invalidKey, invalidMnemonic, accountNotFound, keyMismatch
+    case invalidKey, invalidMnemonic, accountNotFound, keyMismatch, differentAccount
+    case nip05NotFound(String)
     var errorDescription: String? {
         switch self {
         case .invalidKey: L("invalidNsecError")
         case .invalidMnemonic: L("invalidMnemonicError")
         case .accountNotFound: "Account not found"
         case .keyMismatch: "Stored account keys do not match"
+        case .differentAccount: L("addKeyMismatch")
+        case .nip05NotFound(let address): L("nip05NotFound", ["address": address])
         }
     }
 }
@@ -47,7 +53,7 @@ final class AccountStore {
         let npub = try nip19EncodePubkey(pubkeyHex: pub)
         var list = accounts
         let existing = list.first { $0.npub == npub }
-        let account = StoredAccount(npub: npub, privateKeyHex: privateKeyHex, mnemonic: mnemonic ?? existing?.mnemonic)
+        let account = StoredAccount(npub: npub, privateKeyHex: privateKeyHex, mnemonic: mnemonic ?? existing?.mnemonic, pubkey: pub)
         list.removeAll { $0.npub == npub }
         list.append(account)
         save(list)
@@ -55,13 +61,41 @@ final class AccountStore {
         return account
     }
 
+    @discardableResult
+    func storeReadOnly(pubkeyHex: String) throws -> StoredAccount {
+        let pub = pubkeyHex.lowercased()
+        let npub = try nip19EncodePubkey(pubkeyHex: pub)
+        var list = accounts
+        if let existing = list.first(where: { $0.npub == npub }) {
+            Keychain.set(npub, for: activeKey)
+            return existing
+        }
+        let account = StoredAccount(npub: npub, privateKeyHex: "", mnemonic: nil, pubkey: pub)
+        list.append(account)
+        save(list)
+        Keychain.set(npub, for: activeKey)
+        return account
+    }
+
     func login(input: String) throws -> StoredAccount {
+        if let pubkey = Self.readOnlyPubkey(input) { return try storeReadOnly(pubkeyHex: pubkey) }
+        let key = try Self.signingKey(from: input)
+        return try store(privateKeyHex: key.hex, mnemonic: key.mnemonic)
+    }
+
+    static func readOnlyPubkey(_ input: String) -> String? {
+        let trimmed = Nip19.stripScheme(input.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard trimmed.hasPrefix("npub1") || trimmed.hasPrefix("nprofile1") else { return nil }
+        return Nip19.pubkeyHex(from: trimmed)
+    }
+
+    static func signingKey(from input: String) throws -> (hex: String, mnemonic: String?) {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let words = trimmed.split(whereSeparator: \.isWhitespace)
         if words.count >= 12 {
             let phrase = words.joined(separator: " ").lowercased()
             guard validateMnemonic(mnemonic: phrase), let key = try? mnemonicToPrivateKey(mnemonic: phrase) else { throw AuthError.invalidMnemonic }
-            return try store(privateKeyHex: key, mnemonic: phrase)
+            return (key, phrase)
         }
         var hex = trimmed
         if trimmed.hasPrefix("nsec1") {
@@ -69,7 +103,14 @@ final class AccountStore {
             hex = decoded
         }
         guard hex.count == 64, hex.allSatisfy(\.isHexDigit), (try? getPublicKey(privateKeyHex: hex)) != nil else { throw AuthError.invalidKey }
-        return try store(privateKeyHex: hex.lowercased())
+        return (hex.lowercased(), nil)
+    }
+
+    func upgrade(npub: String, input: String) throws -> StoredAccount {
+        guard let target = accounts.first(where: { $0.npub == npub }) else { throw AuthError.accountNotFound }
+        let key = try Self.signingKey(from: input)
+        guard (try? getPublicKey(privateKeyHex: key.hex)) == target.pubkeyHex else { throw AuthError.differentAccount }
+        return try store(privateKeyHex: key.hex, mnemonic: key.mnemonic)
     }
 
     func createAccount() throws -> StoredAccount {

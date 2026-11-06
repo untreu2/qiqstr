@@ -70,6 +70,7 @@ final class Router {
     var composeContext: ComposeContext?
     var showSidebar = false
     var sheet: AppSheet?
+    @ObservationIgnored private var pendingLink: NostrLink?
 
     func push(_ route: Route) {
         paths[selectedTab, default: NavigationPath()].append(route)
@@ -82,6 +83,7 @@ final class Router {
     }
 
     func compose(_ context: ComposeContext = .newNote) {
+        guard ReadOnlyGate.check() else { return }
         composeContext = context
         isComposing = true
     }
@@ -95,12 +97,25 @@ final class Router {
     }
 
     func open(url: URL) {
-        let s = url.absoluteString
-        let bech = Nip19.stripScheme(s)
-        if bech.hasPrefix("npub1") || bech.hasPrefix("nprofile1"), let hex = Nip19.pubkeyHex(from: bech) { push(.profile(hex)) }
-        else if bech.hasPrefix("note1") || bech.hasPrefix("nevent1"), let id = Nip19.decode(bech) { push(.thread(id)) }
-        else if bech.hasPrefix("naddr1") { push(.articleAddress(bech)) }
-        else { UIApplication.shared.open(url) }
+        if let link = NostrLink(url: url) ?? NostrLink(entity: url.absoluteString) {
+            open(link)
+        } else if let scheme = url.scheme?.lowercased(), scheme != "nostr" {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    func open(_ link: NostrLink) {
+        guard Session.shared.phase == .ready else {
+            pendingLink = link
+            return
+        }
+        NostrLinkResolver.open(link, router: self)
+    }
+
+    func openPendingLink() {
+        guard let link = pendingLink, Session.shared.phase == .ready else { return }
+        pendingLink = nil
+        NostrLinkResolver.open(link, router: self)
     }
 }
 
@@ -112,6 +127,13 @@ enum AppSheet: Identifiable {
     case switchAccount
     case shareProfile(String)
     case url(URL)
+    var requiresSigner: Bool {
+        switch self {
+        case .zap, .zapProfile: true
+        default: false
+        }
+    }
+
     var id: String {
         switch self {
         case .zap(let n): "zap-\(n.id)"

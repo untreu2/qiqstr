@@ -14,6 +14,7 @@ struct SwitchAccountSheet: View {
     @State private var confirmLogout = false
     @State private var isLoggingOut = false
     @State private var switchCount = 0
+    @State private var isAddingKey = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -25,6 +26,19 @@ struct SwitchAccountSheet: View {
                     }
                 } header: {
                     Text(L("authAccounts"))
+                }
+                if session.isReadOnly {
+                    Section {
+                        Button {
+                            isAddingKey = true
+                        } label: {
+                            Label(L("readOnlyAddKey"), systemImage: "key")
+                                .foregroundStyle(.primary)
+                        }
+                        .accessibilityIdentifier("switch-add-key")
+                    } footer: {
+                        Text(L("readOnlyMessage"))
+                    }
                 }
                 Section {
                     Button {
@@ -94,6 +108,7 @@ struct SwitchAccountSheet: View {
             if count == 0 { detent = .medium }
         }
         .sensoryFeedback(.success, trigger: switchCount)
+        .sheet(isPresented: $isAddingKey) { AddKeySheet() }
         .accessibilityIdentifier("switch-account-sheet")
     }
 
@@ -107,10 +122,19 @@ struct SwitchAccountSheet: View {
             HStack(spacing: 12) {
                 ProfileAvatar(pubkey: pubkey, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(profile?.bestName ?? Profile.shortNpub(pubkey))
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        if account.isReadOnly {
+                            Image(systemName: "eye")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(L("readOnlyBadge"))
+                                .accessibilityIdentifier("switch-read-only-\(account.npub.suffix(6))")
+                        }
+                    }
                     Text(shortNpub(account.npub))
                         .font(.footnote.monospaced())
                         .foregroundStyle(.secondary)
@@ -139,6 +163,13 @@ struct SwitchAccountSheet: View {
             .accessibilityIdentifier("switch-remove-\(account.npub.suffix(6))")
         }
         .contextMenu {
+            if account.isReadOnly, isActive {
+                Button {
+                    isAddingKey = true
+                } label: {
+                    Label(L("readOnlyAddKey"), systemImage: "key")
+                }
+            }
             Button {
                 UIPasteboard.general.string = account.npub
                 ToastCenter.shared.show(L("copiedNpub"), style: .success)

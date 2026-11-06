@@ -24,8 +24,10 @@ final class Session {
     var isNewAccount = false
 
     var pubkey: String? { account?.pubkeyHex }
-    var privateKey: String? { account?.privateKeyHex }
+    var privateKey: String? { account?.signingKey }
     var npub: String? { account?.npub }
+    var isReadOnly: Bool { account?.isReadOnly ?? false }
+    var canSign: Bool { privateKey != nil }
 
     private let store = AccountStore.shared
 
@@ -48,9 +50,37 @@ final class Session {
     func refreshAccounts() { accounts = store.accounts }
 
     func login(_ input: String) async throws {
-        let account = try store.login(input: input)
+        let account: StoredAccount
+        if Nip05Resolver.looksLikeAddress(input) {
+            let identity = try await Nip05Resolver.resolve(input)
+            account = try store.storeReadOnly(pubkeyHex: identity.pubkey)
+        } else {
+            account = try store.login(input: input)
+        }
         isNewAccount = false
         await start(account)
+    }
+
+    func addKey(_ input: String) async throws {
+        guard let current = account, current.isReadOnly else { return }
+        let upgraded = try store.upgrade(npub: current.npub, input: input)
+        guard let key = upgraded.signingKey else { throw AuthError.invalidKey }
+        try await updateSigner(privateKeyHex: key)
+        account = upgraded
+        refreshAccounts()
+        let generation = self.generation
+        await SessionHooks.runBootstrap(upgraded.pubkeyHex)
+        guard generation == self.generation else { return }
+        DataBus.shared.everythingChanged()
+    }
+
+    @discardableResult
+    func requireSigner() throws -> String {
+        guard let key = privateKey else {
+            if account != nil { ReadOnlyGate.shared.present() }
+            throw ReadOnlyError.signerRequired
+        }
+        return key
     }
 
     func createAccount() async throws -> StoredAccount {
@@ -116,7 +146,7 @@ final class Session {
         phase = .starting
         do {
             try FileManager.default.createDirectory(at: RelayConfig.databaseURL, withIntermediateDirectories: true)
-            try await initClient(relayUrls: RelayConfig.mainRelays, privateKeyHex: account.privateKeyHex, dbPath: RelayConfig.databaseURL.path, discoveryRelays: RelayConfig.discoveryRelays)
+            try await initClient(relayUrls: RelayConfig.mainRelays, privateKeyHex: account.signingKey, dbPath: RelayConfig.databaseURL.path, discoveryRelays: RelayConfig.discoveryRelays)
             await applyRelayFlags()
             Task.detached { try? await connectRelays() }
             _ = try? await waitForReady(timeoutSecs: 3)
