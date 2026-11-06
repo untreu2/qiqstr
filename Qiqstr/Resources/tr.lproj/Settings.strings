@@ -41,3 +41,5 @@
 "settingsWipeFooter" = "Bu cihazdaki önbelleğe alınmış tüm etkinlikleri siler. Veriler relay'lerinden yeniden alınır.";
 "userMuted" = "Kullanıcı sessize alındı";
 "userUnmuted" = "Kullanıcının sesi açıldı";
+"settingsAdd" = "Ekle";
+"settingsRelayTraffic" = "Aktarılan veri";

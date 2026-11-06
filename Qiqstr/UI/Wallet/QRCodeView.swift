@@ -14,7 +14,7 @@ struct QRCodeView: View {
                     .resizable()
                     .scaledToFit()
             } else {
-                Image(systemName: "qrcode").font(.system(size: size * 0.4)).foregroundStyle(.black.opacity(0.2))
+                Image(systemName: "qrcode").resizable().scaledToFit().padding(size * 0.3).foregroundStyle(.black.opacity(0.2))
             }
         }
         .frame(width: size, height: size)

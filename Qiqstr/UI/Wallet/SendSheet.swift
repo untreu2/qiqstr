@@ -213,9 +213,24 @@ struct SendSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Image(systemName: "xmark") }
+                    Button(role: .cancel) { dismiss() }
                         .accessibilityLabel(L("cancel"))
                         .accessibilityIdentifier("send-cancel")
+                }
+                if model.phase == .editing || model.phase == .paying {
+                    ToolbarItem(placement: .confirmationAction) {
+                        if model.phase == .paying || model.wallet.isRedeemingCashu {
+                            ProgressView()
+                        } else {
+                            Button(submitShortTitle) {
+                                focusedAmount = false
+                                model.submit()
+                            }
+                            .buttonStyle(.glassProminent)
+                            .disabled(!model.canSubmit)
+                            .accessibilityIdentifier("send-submit")
+                        }
+                    }
                 }
             }
         }
@@ -245,111 +260,100 @@ struct SendSheet: View {
     }
 
     private var form: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                QiqTextField(placeholder: L("walletSendPlaceholder"), text: $model.input, axis: .vertical)
+        Form {
+            Section {
+                TextField(L("walletSendPlaceholder"), text: $model.input, axis: .vertical)
                     .lineLimit(2...5)
+                    .font(.body.monospaced())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                     .accessibilityIdentifier("send-input")
-                GlassEffectContainer(spacing: 10) {
-                    HStack(spacing: 10) {
-                        SecondaryButton(title: L("walletPaste"), systemImage: "doc.on.clipboard") { model.paste() }
-                            .accessibilityIdentifier("send-paste")
-                        SecondaryButton(title: L("walletScan"), systemImage: "qrcode.viewfinder") { showScanner = true }
-                            .accessibilityIdentifier("send-scan")
-                    }
-                }
+                Button { model.paste() } label: { Label(L("walletPaste"), systemImage: "doc.on.clipboard") }
+                    .accessibilityIdentifier("send-paste")
+                Button { showScanner = true } label: { Label(L("walletScan"), systemImage: "qrcode.viewfinder") }
+                    .accessibilityIdentifier("send-scan")
+            } footer: {
                 if model.isResolving {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(L("resolvingAddress")).font(.system(size: 14)).foregroundStyle(AppColors.textSecondary)
-                    }
-                }
-                if let error = model.parseError {
+                    Label(L("resolvingAddress"), systemImage: "ellipsis")
+                        .symbolEffect(.variableColor.iterative)
+                } else if let error = model.parseError {
                     message(error, icon: "exclamationmark.circle", color: AppColors.error)
                 }
-                if model.request != nil { details }
-                if let error = model.payError {
+            }
+            if model.request != nil { details }
+            if let error = model.payError {
+                Section {
                     message(error, icon: "xmark.octagon", color: AppColors.error)
                         .accessibilityIdentifier("send-error")
                 }
             }
-            .padding(20)
         }
         .scrollDismissesKeyboard(.interactively)
-        .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: submitTitle, isLoading: model.phase == .paying || model.wallet.isRedeemingCashu, isEnabled: model.canSubmit) {
-                focusedAmount = false
-                model.submit()
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 8)
-            .accessibilityIdentifier("send-submit")
-        }
     }
 
-    private var submitTitle: String {
+    private var submitShortTitle: String {
         if case .cashu = model.request { return L("cashuRedeem") }
-        guard let amount = model.amountSats else { return L("send") }
-        return L("walletPayAmount", ["amount": Sats.format(amount)])
+        return L("send")
     }
 
+    @ViewBuilder
     private var details: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text(model.typeLabel)
-                    .font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(AppColors.tile, in: Capsule())
-                Spacer()
-                if !model.needsAmountField, let amount = model.amountSats {
-                    Text("\(Sats.format(amount)) \(L("walletSats"))")
-                        .font(AppFont.brandSemibold(20))
+        Section {
+            LabeledContent(model.typeLabel) {
+                Text(model.destination)
+                    .font(.subheadline.monospaced())
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+            if !model.needsAmountField, let amount = model.amountSats {
+                LabeledContent(L("amount")) {
+                    Text(verbatim: "\(Sats.format(amount)) \(L("walletSats"))")
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
                         .accessibilityIdentifier("send-amount-fixed")
                 }
             }
-            Text(model.destination)
-                .font(.system(size: 14, design: .monospaced))
-                .foregroundStyle(AppColors.textSecondary)
-                .lineLimit(2)
-                .textSelection(.enabled)
             if let memo = model.memo, !memo.isEmpty {
-                Text(memo).font(.system(size: 15))
+                LabeledContent(L("description"), value: memo)
             }
             if case .bolt11(_, let invoice) = model.request, invoice.amountMsat != nil, !invoice.isExpired {
-                HStack(spacing: 4) {
-                    Text(L("walletExpiresIn"))
+                LabeledContent(L("walletExpiresIn")) {
                     Text(timerInterval: Date()...invoice.expiresAt, countsDown: true)
                         .monospacedDigit()
                 }
-                .font(.system(size: 13))
-                .foregroundStyle(AppColors.textSecondary)
             }
-            if model.needsAmountField {
-                QiqTextField(placeholder: L("amountInSats"), text: $model.amountText, keyboard: .numberPad)
-                    .focused($focusedAmount)
-                    .accessibilityIdentifier("send-amount")
-                if let params = model.lnurlParams {
-                    Text(L("walletAmountRange", ["min": Sats.format(params.minSats), "max": Sats.format(params.maxSats)]))
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-            }
-            if model.allowsComment {
-                QiqTextField(placeholder: L("commentOptional"), text: $model.comment, autocapitalize: true)
-                    .accessibilityIdentifier("send-comment")
-            }
+        } footer: {
             if let warning = model.validationMessage {
                 message(warning, icon: "exclamationmark.triangle", color: AppColors.warning)
             }
         }
-        .padding(16)
-        .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        if model.needsAmountField || model.allowsComment {
+            Section {
+                if model.needsAmountField {
+                    LabeledContent(L("amountInSats")) {
+                        TextField(L("walletSats"), text: $model.amountText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .monospacedDigit()
+                            .focused($focusedAmount)
+                            .accessibilityIdentifier("send-amount")
+                    }
+                }
+                if model.allowsComment {
+                    TextField(L("commentOptional"), text: $model.comment, axis: .vertical)
+                        .accessibilityIdentifier("send-comment")
+                }
+            } footer: {
+                if model.needsAmountField, let params = model.lnurlParams {
+                    Text(L("walletAmountRange", ["min": Sats.format(params.minSats), "max": Sats.format(params.maxSats)]))
+                }
+            }
+        }
     }
 
     private func message(_ text: String, icon: String, color: Color) -> some View {
         Label(text, systemImage: icon)
-            .font(.system(size: 13, weight: .medium))
+            .font(.footnote)
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -363,21 +367,28 @@ struct PaymentSuccessView: View {
     @State private var appeared = false
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             Spacer()
-            Image(systemName: "checkmark")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 84, height: 84)
-                .background(AppColors.success, in: Circle())
-                .scaleEffect(appeared ? 1 : 0.4)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.largeTitle)
+                .imageScale(.large)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, AppColors.success)
+                .symbolEffect(.bounce, value: appeared)
+                .scaleEffect(appeared ? 1.6 : 0.6)
                 .opacity(appeared ? 1 : 0)
-            Text(title).font(.system(size: 20, weight: .semibold)).multilineTextAlignment(.center)
-            Text("\(Sats.format(amount)) \(L("walletSats"))").font(AppFont.brandSemibold(32))
+                .padding(.bottom, 16)
+            Text(title)
+                .font(.title3.weight(.semibold))
+                .multilineTextAlignment(.center)
+            Text(verbatim: "\(Sats.format(amount)) \(L("walletSats"))")
+                .font(.largeTitle.weight(.bold))
+                .fontDesign(.rounded)
+                .monospacedDigit()
             if let fee, fee > 0 {
-                Text("\(L("fee")): \(Sats.format(fee)) \(L("walletSats"))")
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.textSecondary)
+                Text(verbatim: "\(L("fee")): \(Sats.format(fee)) \(L("walletSats"))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             PrimaryButton(title: L("done"), action: onDone)

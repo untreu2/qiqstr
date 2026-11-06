@@ -11,6 +11,7 @@ final class MutedSettingsModel {
 
     var tab: Tab = .users
     var newWord = ""
+    var showAddWord = false
     private(set) var busy: Set<String> = []
     private(set) var isRefreshing = false
     var feedback = 0
@@ -81,21 +82,22 @@ final class MutedSettingsModel {
 struct MutedSettingsView: View {
     @State private var model = MutedSettingsModel()
     @State private var service = MuteService.shared
-    @FocusState private var wordFocused: Bool
 
     var body: some View {
         List {
-            SettingsPageHeader(subtitle: L("mutedSubtitle"))
             Section {
-                Picker("", selection: $model.tab) {
+                Picker(L("mutedTitle"), selection: $model.tab) {
                     ForEach(MutedSettingsModel.Tab.allCases) { tab in
                         Text("\(tab.title) (\(tab == .users ? service.mutedPubkeys.count : service.mutedWords.count))").tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
                 .accessibilityIdentifier("muted-tab")
+            } footer: {
+                Text(L("mutedSubtitle"))
             }
             switch model.tab {
             case .users: usersSection
@@ -104,6 +106,28 @@ struct MutedSettingsView: View {
         }
         .settingsListStyle()
         .navigationTitle(L("mutedTitle"))
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            if model.tab == .words {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("settingsAddWord"), systemImage: "plus") {
+                        model.newWord = ""
+                        model.showAddWord = true
+                    }
+                    .accessibilityIdentifier("muted-word-add")
+                }
+            }
+        }
+        .alert(L("settingsAddWord"), isPresented: $model.showAddWord) {
+            TextField(L("addWordToMuteHint"), text: $model.newWord)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("muted-word-field")
+            Button(L("cancel"), role: .cancel) { model.newWord = "" }
+            Button(L("settingsAdd")) { Task { await model.addWord() } }
+                .disabled(model.newWord.trimmingCharacters(in: .whitespaces).isEmpty)
+                .accessibilityIdentifier("muted-word-add-confirm")
+        }
         .refreshable { await model.refresh() }
         .task { await model.appear() }
         .sensoryFeedback(.success, trigger: model.feedback)
@@ -115,24 +139,30 @@ struct MutedSettingsView: View {
     private var usersSection: some View {
         Section {
             if !service.isLoaded {
-                HStack { Spacer(); ProgressView(); Spacer() }
-            } else if service.mutedPubkeys.isEmpty {
-                VStack(spacing: 6) {
-                    Text(L("noMutedUsers")).font(.system(size: 16, weight: .semibold))
-                    Text(L("youHaventMutedAnyUsersYet")).font(.system(size: 14)).foregroundStyle(AppColors.textSecondary)
+                ForEach(0..<3, id: \.self) { _ in
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: "Placeholder name").font(.body.weight(.semibold))
+                            Text(verbatim: "npub1placeholder").font(.subheadline)
+                        }
+                    } icon: {
+                        Circle().fill(AppColors.tile).frame(width: 40, height: 40)
+                    }
+                    .redacted(reason: .placeholder)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .accessibilityIdentifier("muted-users-empty")
+            } else if service.mutedPubkeys.isEmpty {
+                ContentUnavailableView(L("noMutedUsers"), systemImage: "person.slash", description: Text(L("youHaventMutedAnyUsersYet")))
+                    .accessibilityIdentifier("muted-users-empty")
             } else {
                 ForEach(service.mutedPubkeys, id: \.self) { pubkey in
-                    MutedUserRow(pubkey: pubkey, isBusy: model.isBusy(pubkey)) {
-                        Task { await model.unmute(pubkey) }
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(L("unmute")) { Task { await model.unmute(pubkey) } }
-                            .tint(AppColors.textPrimary)
-                    }
+                    MutedUserRow(pubkey: pubkey, isBusy: model.isBusy(pubkey))
+                        .swipeActions(edge: .trailing) {
+                            Button(L("unmute"), systemImage: "speaker.wave.2", role: .destructive) { Task { await model.unmute(pubkey) } }
+                                .accessibilityIdentifier("muted-unmute-\(pubkey)")
+                        }
+                        .contextMenu {
+                            Button(L("unmute"), systemImage: "speaker.wave.2") { Task { await model.unmute(pubkey) } }
+                        }
                 }
             }
         }
@@ -142,52 +172,24 @@ struct MutedSettingsView: View {
     @ViewBuilder
     private var wordsSection: some View {
         Section {
-            HStack(spacing: 10) {
-                TextField(L("addWordToMuteHint"), text: $model.newWord)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .focused($wordFocused)
-                    .onSubmit { Task { await model.addWord() } }
-                    .accessibilityIdentifier("muted-word-field")
-                Button {
-                    Task { await model.addWord() }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .bold))
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .tint(AppColors.textPrimary)
-                .disabled(model.newWord.trimmingCharacters(in: .whitespaces).isEmpty)
-                .accessibilityLabel(L("settingsAddWord"))
-                .accessibilityIdentifier("muted-word-add")
-            }
-        }
-        Section {
             if service.mutedWords.isEmpty {
-                Text(L("settingsNoMutedWords"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                ContentUnavailableView(L("settingsNoMutedWords"), systemImage: "text.badge.minus")
                     .accessibilityIdentifier("muted-words-empty")
             } else {
                 ForEach(service.mutedWords, id: \.self) { word in
                     HStack {
-                        Image(systemName: "text.badge.minus").foregroundStyle(AppColors.textSecondary)
-                        Text(word).font(.system(size: 16))
+                        Label(word, systemImage: "text.badge.minus")
                         Spacer()
                         if model.isBusy("word:\(word)") { ProgressView() }
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(L("delete"), role: .destructive) { Task { await model.removeWord(word) } }
                     }
                     .contextMenu {
                         Button(L("delete"), systemImage: "trash", role: .destructive) { Task { await model.removeWord(word) } }
                     }
                     .accessibilityIdentifier("muted-word-\(word)")
+                }
+                .onDelete { offsets in
+                    let targets = offsets.map { service.mutedWords[$0] }
+                    Task { for word in targets { await model.removeWord(word) } }
                 }
             }
         }
@@ -197,39 +199,25 @@ struct MutedSettingsView: View {
 struct MutedUserRow: View {
     let pubkey: String
     let isBusy: Bool
-    let onUnmute: () -> Void
     @State private var cache = ProfileCache.shared
+    @ScaledMetric(relativeTo: .body) private var avatarSize: CGFloat = 40
 
     var body: some View {
-        HStack(spacing: 12) {
-            NavigationLink(value: Route.profile(pubkey)) {
-                HStack(spacing: 12) {
-                    ProfileAvatar(pubkey: pubkey, size: 42)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))
-                            .font(.system(size: 16, weight: .semibold))
-                            .lineLimit(1)
-                        Text(cache.profile(pubkey)?.nip05.nilIfEmpty ?? Profile.shortNpub(pubkey))
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.textSecondary)
-                            .lineLimit(1)
-                    }
+        NavigationLink(value: Route.profile(pubkey)) {
+            HStack(spacing: 12) {
+                ProfileAvatar(pubkey: pubkey, size: avatarSize)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cache.profile(pubkey)?.bestName ?? Profile.shortNpub(pubkey))
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                    Text(cache.profile(pubkey)?.nip05.nilIfEmpty ?? Profile.shortNpub(pubkey))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+                Spacer(minLength: 8)
+                if isBusy { ProgressView() }
             }
-            .buttonStyle(.plain)
-            Spacer(minLength: 8)
-            Button(action: onUnmute) {
-                ZStack {
-                    Text(L("unmute")).opacity(isBusy ? 0 : 1)
-                    if isBusy { ProgressView().controlSize(.small) }
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 6)
-            }
-            .buttonStyle(.glass)
-            .disabled(isBusy)
-            .accessibilityIdentifier("muted-unmute-\(pubkey)")
         }
-        .padding(.vertical, 2)
     }
 }

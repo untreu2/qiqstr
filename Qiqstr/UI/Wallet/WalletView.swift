@@ -90,7 +90,7 @@ struct WalletView: View {
         }
         .background(AppColors.background)
         .navigationTitle(L("wallet"))
-        .toolbarTitleDisplayMode(.inlineLarge)
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             if wallet.isConnected {
                 ToolbarItem(placement: .topBarTrailing) { menu }
@@ -150,61 +150,79 @@ struct WalletOnboardingView: View {
     @Bindable var model: WalletViewModel
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 14) {
-                    IconTile(systemImage: "bolt.fill", size: 64, tint: AppColors.zap)
+        List {
+            Section {
+                VStack(spacing: 12) {
+                    Image(systemName: "bolt.fill")
+                        .font(.largeTitle)
+                        .imageScale(.large)
+                        .foregroundStyle(AppColors.zap)
+                        .symbolRenderingMode(.hierarchical)
                     Text(L("nwcTitle"))
-                        .font(AppFont.brand(28))
-                        .kerning(-0.5)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
                     Text(L("walletNwcIntro"))
-                        .font(.system(size: 16))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                VStack(alignment: .leading, spacing: 20) {
-                    feature("bolt", L("onboardingCoinosFeatureSend"))
-                    feature("arrow.down.left", L("walletFeatureReceive"))
-                    feature("heart", L("onboardingCoinosFeatureZap"))
-                    feature("banknote", L("walletFeatureCashu"))
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(L("walletNwcHowToTitle"), systemImage: "questionmark.circle")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(L("walletNwcHowTo"))
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                VStack(spacing: 10) {
-                    PrimaryButton(title: L("walletConnectWallet")) { model.sheet = .connect(nil) }
-                        .accessibilityIdentifier("wallet-connect")
-                    SecondaryButton(title: L("scanQRCode"), systemImage: "qrcode.viewfinder") { model.showScanner = true }
-                        .accessibilityIdentifier("wallet-connect-scan")
-                }
-                Text(L("nwcDisclaimer"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .listRowBackground(Color.clear)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            Section {
+                feature("bolt", L("onboardingCoinosFeatureSend"))
+                feature("arrow.down.left", L("walletFeatureReceive"))
+                feature("heart", L("onboardingCoinosFeatureZap"))
+                feature("banknote", L("walletFeatureCashu"))
+            }
+            Section {
+                Text(L("walletNwcHowTo"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text(L("walletNwcHowToTitle"))
+            }
+            Section {
+                VStack(spacing: 10) {
+                    Button { model.sheet = .connect(nil) } label: {
+                        Text(L("walletConnectWallet"))
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("wallet-connect")
+                    Button { model.showScanner = true } label: {
+                        Label(L("scanQRCode"), systemImage: "qrcode.viewfinder")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("wallet-connect-scan")
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } footer: {
+                Text(L("nwcDisclaimer"))
+                    .padding(.top, 8)
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .accessibilityIdentifier("wallet-onboarding")
     }
 
     private func feature(_ icon: String, _ text: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 40, height: 40)
-                .background(AppColors.overlayLight, in: Circle())
-            Text(text).font(.system(size: 16)).fixedSize(horizontal: false, vertical: true)
+        Label {
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: icon).foregroundStyle(.secondary)
         }
     }
 }
@@ -214,17 +232,20 @@ struct WalletDashboard: View {
     @State private var wallet = WalletService.shared
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                WalletBalanceCard()
-                if wallet.cashuBalanceSats > 0 { cashuRow }
-                actions
-                transactions
+        List {
+            Section {
+                VStack(spacing: 20) {
+                    WalletBalanceCard()
+                    actions
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
-            .padding(.bottom, 32)
+            if wallet.cashuBalanceSats > 0 { cashuSection }
+            transactions
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .refreshable { await model.refresh() }
         .task {
             while !Task.isCancelled {
@@ -237,24 +258,24 @@ struct WalletDashboard: View {
         .accessibilityIdentifier("wallet-dashboard")
     }
 
-    private var cashuRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "banknote").font(.system(size: 16, weight: .semibold))
-                .frame(width: 36, height: 36)
-                .background(AppColors.overlayLight, in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("cashu")).font(.system(size: 15, weight: .semibold))
-                Text("\(Sats.format(wallet.cashuBalanceSats)) \(L("walletSats"))").font(.system(size: 13)).foregroundStyle(AppColors.textSecondary)
+    private var cashuSection: some View {
+        Section {
+            LabeledContent {
+                Button(L("walletMelt")) { model.showMeltConfirm = true }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .disabled(wallet.isRedeemingCashu)
+                    .accessibilityIdentifier("wallet-cashu-melt")
+            } label: {
+                Label {
+                    Text(L("cashu"))
+                    Text(verbatim: "\(Sats.format(wallet.cashuBalanceSats)) \(L("walletSats"))")
+                        .monospacedDigit()
+                } icon: {
+                    Image(systemName: "banknote")
+                }
             }
-            Spacer()
-            Button(L("walletMelt")) { model.showMeltConfirm = true }
-                .buttonStyle(.glass)
-                .disabled(wallet.isRedeemingCashu)
-                .accessibilityIdentifier("wallet-cashu-melt")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private var actions: some View {
@@ -270,73 +291,61 @@ struct WalletDashboard: View {
     private func action(_ title: String, _ icon: String, id: String, perform: @escaping () -> Void) -> some View {
         Button(action: perform) {
             VStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 20, weight: .semibold))
-                Text(title).font(.system(size: 14, weight: .semibold))
+                Image(systemName: icon).font(.title3.weight(.semibold))
+                Text(title).font(.subheadline.weight(.semibold))
             }
-            .foregroundStyle(AppColors.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 64)
+            .frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.glass)
-        .buttonBorderShape(.roundedRectangle(radius: 24))
+        .buttonBorderShape(.roundedRectangle(radius: 22))
         .accessibilityIdentifier(id)
     }
 
-    @ViewBuilder private var transactions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(L("recentTransactions"))
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColors.textSecondary)
-                Spacer()
-                if wallet.isLoadingTransactions && wallet.hasLoadedTransactions { ProgressView().controlSize(.small) }
-            }
-            .padding(.horizontal, 4)
+    private var transactions: some View {
+        Section {
             if !wallet.hasLoadedTransactions {
-                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 32)
+                ForEach(0..<4, id: \.self) { index in
+                    TransactionRow(transaction: .placeholder(index)) {}
+                        .redacted(reason: .placeholder)
+                        .disabled(true)
+                }
             } else if wallet.transactions.isEmpty {
                 emptyTransactions
             } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(model.visibleTransactions) { tx in
-                        TransactionRow(transaction: tx) { model.sheet = .payment(tx) }
-                    }
+                ForEach(model.visibleTransactions) { tx in
+                    TransactionRow(transaction: tx) { model.sheet = .payment(tx) }
                 }
-                .accessibilityIdentifier("wallet-transactions")
                 if model.hasHiddenTransactions { expandButton }
                 if model.showAllTransactions && wallet.canLoadMoreTransactions { loadMoreButton }
             }
+        } header: {
+            HStack {
+                Text(L("recentTransactions"))
+                Spacer()
+                if wallet.isLoadingTransactions && wallet.hasLoadedTransactions { ProgressView().controlSize(.small) }
+            }
         }
+        .accessibilityIdentifier("wallet-transactions")
     }
 
-    @ViewBuilder private var emptyTransactions: some View {
-        VStack(spacing: 10) {
-            Text(wallet.transactionsError == nil ? L("noTransactionsYet") : L("walletTransactionsUnavailable"))
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.textSecondary)
+    private var emptyTransactions: some View {
+        ContentUnavailableView {
+            Label(wallet.transactionsError == nil ? L("noTransactionsYet") : L("walletTransactionsUnavailable"), systemImage: wallet.transactionsError == nil ? "list.bullet.rectangle" : "exclamationmark.triangle")
+        } actions: {
             if wallet.transactionsError != nil {
                 Button(L("retry")) { Task { await wallet.loadTransactions() } }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                     .accessibilityIdentifier("wallet-transactions-retry")
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
     }
 
     private var expandButton: some View {
         Button {
             withAnimation(.snappy) { model.showAllTransactions.toggle() }
         } label: {
-            HStack(spacing: 4) {
-                Text(model.showAllTransactions ? L("showLess") : L("showAllTransactions", ["count": wallet.transactions.count]))
-                Image(systemName: model.showAllTransactions ? "chevron.up" : "chevron.down")
-            }
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(AppColors.textSecondary)
-            .frame(maxWidth: .infinity, minHeight: 44)
+            Text(model.showAllTransactions ? L("showLess") : L("showAllTransactions", ["count": wallet.transactions.count]))
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.capsule)
         .accessibilityIdentifier("wallet-transactions-toggle")
     }
 
@@ -344,12 +353,12 @@ struct WalletDashboard: View {
         Button {
             Task { await wallet.loadMoreTransactions() }
         } label: {
-            Text(L("walletLoadMore"))
-                .font(.system(size: 14, weight: .medium))
-                .frame(maxWidth: .infinity, minHeight: 44)
+            HStack {
+                Text(L("walletLoadMore"))
+                Spacer()
+                if wallet.isLoadingTransactions { ProgressView() }
+            }
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.capsule)
         .disabled(wallet.isLoadingTransactions)
         .accessibilityIdentifier("wallet-transactions-more")
     }
@@ -357,50 +366,45 @@ struct WalletDashboard: View {
 
 struct WalletBalanceCard: View {
     @State private var wallet = WalletService.shared
+    @ScaledMetric(relativeTo: .largeTitle) private var balanceSize: CGFloat = 56
 
     var body: some View {
         Button {
             withAnimation(.snappy) { wallet.balanceHidden.toggle() }
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(L("walletBalance"))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppColors.textSecondary)
-                    Spacer()
-                    Image(systemName: wallet.balanceHidden ? "eye.slash" : "eye")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(spacing: 6) {
+                Label(L("walletBalance"), systemImage: wallet.balanceHidden ? "eye.slash" : "eye")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.symbolEffect(.replace))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(balanceText)
-                        .font(AppFont.brandSemibold(fontSize))
+                        .font(.system(size: balanceSize, weight: .bold, design: .rounded))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.5)
+                        .minimumScaleFactor(0.4)
                         .contentTransition(.numericText(value: Double(wallet.balanceSats ?? 0)))
                         .redacted(reason: wallet.balanceSats == nil && !wallet.balanceHidden ? .placeholder : [])
                     Text(L("walletSats"))
-                        .font(.system(size: 18))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(AppColors.textPrimary)
+                .foregroundStyle(.primary)
                 if wallet.balanceError != nil {
                     Label(L("balanceUnavailable"), systemImage: "exclamationmark.triangle")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.footnote)
                         .foregroundStyle(AppColors.error)
                 } else if let name = wallet.walletName {
                     Label(name, systemImage: "link")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
-            .padding(22)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: wallet.balanceHidden)
         .accessibilityLabel(wallet.balanceHidden ? L("walletBalanceHidden") : "\(balanceText) \(L("walletSats"))")
         .accessibilityHint(wallet.balanceHidden ? L("walletTapToShow") : L("walletTapToHide"))
@@ -411,8 +415,6 @@ struct WalletBalanceCard: View {
         if wallet.balanceHidden { return "••••••" }
         return Sats.format(wallet.balanceSats ?? 0)
     }
-
-    private var fontSize: CGFloat { (wallet.balanceSats ?? 0) > 9_999_999 ? 38 : 48 }
 }
 
 struct TransactionRow: View {
@@ -422,28 +424,23 @@ struct TransactionRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                TransactionIcon(isIncoming: transaction.isIncoming, size: 38)
+                TransactionIcon(isIncoming: transaction.isIncoming)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     Text(WalletFormat.timestamp(transaction.createdAt))
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                Text("\(WalletFormat.signed(transaction.amountSats, incoming: transaction.isIncoming)) \(L("walletSats"))")
-                    .font(.system(size: 15, weight: .semibold))
+                Text(verbatim: "\(WalletFormat.signed(transaction.amountSats, incoming: transaction.isIncoming)) \(L("walletSats"))")
+                    .font(.body.weight(.semibold))
                     .monospacedDigit()
-                    .foregroundStyle(transaction.isIncoming ? AppColors.success : AppColors.textPrimary)
+                    .foregroundStyle(transaction.isIncoming ? AppColors.success : .primary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PressableStyle())
         .contextMenu {
             if let invoice = transaction.invoice {
                 Button { copy(invoice) } label: { Label(L("walletCopyInvoice"), systemImage: "doc.on.doc") }
@@ -468,14 +465,35 @@ struct TransactionRow: View {
 
 struct TransactionIcon: View {
     let isIncoming: Bool
-    var size: CGFloat = 38
+    var textStyle: Font.TextStyle = .body
+    @ScaledMetric(relativeTo: .body) private var baseSize: CGFloat = 34
 
     var body: some View {
-        let color = isIncoming ? AppColors.success : AppColors.error
+        let color = isIncoming ? AppColors.success : AppColors.textPrimary
         Image(systemName: isIncoming ? "arrow.down.left" : "arrow.up.right")
-            .font(.system(size: size * 0.42, weight: .bold))
+            .font(.system(textStyle).weight(.bold))
             .foregroundStyle(color)
-            .frame(width: size, height: size)
+            .frame(width: baseSize * scale, height: baseSize * scale)
             .background(color.opacity(0.12), in: Circle())
+    }
+
+    private var scale: CGFloat {
+        switch textStyle {
+        case .largeTitle: 1.8
+        case .title, .title2: 1.4
+        default: 1
+        }
+    }
+}
+
+extension WalletTransaction {
+    static func placeholder(_ index: Int) -> WalletTransaction {
+        WalletTransaction(json: [
+            "type": index.isMultiple(of: 2) ? "incoming" : "outgoing",
+            "amount": 21_000,
+            "description": "Lightning payment",
+            "created_at": Int(Date().timeIntervalSince1970) - index * 3600,
+            "invoice": "placeholder-\(index)",
+        ])
     }
 }

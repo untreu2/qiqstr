@@ -41,3 +41,5 @@
 "settingsWipeFooter" = "Löscht alle zwischengespeicherten Events auf diesem Gerät. Die Daten werden erneut von deinen Relays geladen.";
 "userMuted" = "Nutzer stummgeschaltet";
 "userUnmuted" = "Stummschaltung aufgehoben";
+"settingsAdd" = "Hinzufügen";
+"settingsRelayTraffic" = "Übertragene Daten";

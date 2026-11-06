@@ -90,17 +90,13 @@ struct KeysSettingsView: View {
 
     var body: some View {
         List {
-            SettingsPageHeader(subtitle: L("keysSubtitle"))
             Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(model.npub.isEmpty ? L("loading") : model.npub)
-                        .font(.system(size: 15).monospaced())
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("keys-npub")
-                    copyButton(copied: model.isCopied("npub"), identifier: "keys-copy-npub") { model.copyNpub() }
-                }
-                .padding(.vertical, 4)
+                Text(model.npub.isEmpty ? L("loading") : model.npub)
+                    .font(.body.monospaced())
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("keys-npub")
+                copyButton(copied: model.isCopied("npub"), identifier: "keys-copy-npub") { model.copyNpub() }
             } header: {
                 Text(L("publicKeyNpub"))
             } footer: {
@@ -109,9 +105,11 @@ struct KeysSettingsView: View {
 
             Section {
                 if let mnemonic = model.mnemonic {
-                    secretBody(.mnemonic) { SettingsSeedPhraseGrid(phrase: mnemonic) }
+                    secretRows(.mnemonic) {
+                        SettingsSeedPhraseGrid(phrase: mnemonic, masked: !model.isRevealed(.mnemonic))
+                    }
                 } else {
-                    Text(L("notAvailable")).foregroundStyle(AppColors.textSecondary)
+                    Text(L("notAvailable")).foregroundStyle(.secondary)
                 }
             } header: {
                 Text(L("seedPhrase"))
@@ -119,45 +117,40 @@ struct KeysSettingsView: View {
                 Text(L("useThisToRecoverAccount"))
             }
 
-            if model.showAdvanced {
-                Section {
+            Section {
+                Button {
+                    withAnimation(.snappy) { model.showAdvanced.toggle() }
+                } label: {
+                    LabeledContent {
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .rotationEffect(.degrees(model.showAdvanced ? 90 : 0))
+                    } label: {
+                        SettingsRowLabel(title: L("advanced"), systemImage: "gearshape.2")
+                    }
+                }
+                .accessibilityIdentifier("keys-advanced")
+                if model.showAdvanced {
                     if let nsec = model.nsec {
-                        secretBody(.nsec) {
-                            Text(nsec)
-                                .font(.system(size: 15).monospaced())
+                        secretRows(.nsec) {
+                            Text(model.isRevealed(.nsec) ? nsec : String(repeating: "\u{2022}", count: nsec.count))
+                                .font(.body.monospaced())
+                                .foregroundStyle(model.isRevealed(.nsec) ? .primary : .secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     } else {
                         Text(L("errorEncodingNsec")).foregroundStyle(AppColors.error)
                     }
-                } header: {
-                    Text(L("privateKeyNsec"))
-                } footer: {
-                    Text(L("keepThisSecret"))
                 }
-            }
-
-            Section {
-                Button {
-                    withAnimation(.snappy) { model.showAdvanced.toggle() }
-                } label: {
-                    HStack {
-                        Spacer()
-                        Text(L("advanced"))
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(AppColors.textSecondary)
-                        Image(systemName: model.showAdvanced ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppColors.textSecondary)
-                        Spacer()
-                    }
-                }
-                .listRowBackground(Color.clear)
-                .accessibilityIdentifier("keys-advanced")
+            } header: {
+                if model.showAdvanced { Text(L("privateKeyNsec")) }
+            } footer: {
+                if model.showAdvanced { Text(L("keepThisSecret")) }
             }
         }
         .settingsListStyle()
         .navigationTitle(L("keysTitle"))
+        .navigationBarTitleDisplayMode(.large)
         .onAppear { model.load() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.hideAll() }
@@ -173,92 +166,57 @@ struct KeysSettingsView: View {
     }
 
     @ViewBuilder
-    private func secretBody<Content: View>(_ kind: SettingsSecretKind, @ViewBuilder content: () -> Content) -> some View {
+    private func secretRows<Content: View>(_ kind: SettingsSecretKind, @ViewBuilder content: () -> Content) -> some View {
         let revealed = model.isRevealed(kind)
-        VStack(alignment: .leading, spacing: 12) {
-            ZStack {
-                if revealed {
-                    content()
-                } else {
-                    content()
-                        .hidden()
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(AppColors.tile)
-                                .overlay {
-                                    Text(String(repeating: "•••• ", count: 18))
-                                        .font(.system(size: 15, design: .monospaced))
-                                        .foregroundStyle(AppColors.textSecondary)
-                                        .blur(radius: 6)
-                                        .padding(16)
-                                }
-                                .accessibilityHidden(true)
-                        }
-                }
-                if !revealed {
-                    Label(L("keysTapToReveal"), systemImage: "faceid")
-                        .font(.system(size: 14, weight: .semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                }
-            }
-            .frame(maxWidth: .infinity)
+        content()
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
             .onTapGesture { if !revealed { Task { await model.toggleReveal(kind) } } }
-            HStack(spacing: 10) {
-                Button {
-                    Task { await model.toggleReveal(kind) }
-                } label: {
-                    Label(revealed ? L("hideKey") : L("showKey"), systemImage: revealed ? "eye.slash" : "eye")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("keys-reveal-\(kind.rawValue)")
-                copyButton(copied: model.isCopied(kind.rawValue), identifier: "keys-copy-\(kind.rawValue)") {
-                    Task { await model.requestCopy(kind) }
-                }
-            }
+            .accessibilityLabel(revealed ? kind.title : L("keysTapToReveal"))
+            .animation(.snappy, value: revealed)
+        Button {
+            Task { await model.toggleReveal(kind) }
+        } label: {
+            Label(revealed ? L("hideKey") : L("showKey"), systemImage: revealed ? "eye.slash" : "eye")
+                .contentTransition(.symbolEffect(.replace))
         }
-        .padding(.vertical, 4)
+        .accessibilityIdentifier("keys-reveal-\(kind.rawValue)")
+        copyButton(copied: model.isCopied(kind.rawValue), identifier: "keys-copy-\(kind.rawValue)") {
+            Task { await model.requestCopy(kind) }
+        }
     }
 
     private func copyButton(copied: Bool, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(copied ? L("copied") : L("copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
-                .font(.system(size: 14, weight: .semibold))
-                .frame(maxWidth: .infinity)
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.glass)
         .accessibilityIdentifier(identifier)
     }
 }
 
 struct SettingsSeedPhraseGrid: View {
     let phrase: String
+    var masked = false
 
     var body: some View {
         let words = phrase.split(separator: " ").map(String.init)
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .leading), count: 3), alignment: .leading, spacing: 10) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Text("\(index + 1)")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(AppColors.textSecondary)
-                    Text(word)
-                        .font(.system(size: 14, weight: .medium).monospaced())
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 18, alignment: .trailing)
+                    Text(masked ? String(repeating: "\u{2022}", count: 5) : word)
+                        .font(.body.monospaced())
+                        .foregroundStyle(masked ? .secondary : .primary)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Spacer(minLength: 0)
+                        .minimumScaleFactor(0.6)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(AppColors.tile, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: masked ? .ignore : .combine)
         .accessibilityIdentifier("keys-seed-grid")
     }
 }

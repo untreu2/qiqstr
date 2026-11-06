@@ -91,6 +91,7 @@ struct ZapSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: ZapViewModel
     @FocusState private var focused: Bool
+    @ScaledMetric(relativeTo: .headline) private var avatarSize: CGFloat = 44
 
     init(target: ZapTarget) {
         self.target = target
@@ -99,35 +100,54 @@ struct ZapSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header
-                    if !model.canZap {
-                        connectCTA
-                    } else if !model.isLoadingRecipient && !model.hasPayDestination {
+            Form {
+                Section { header }
+                if !model.canZap {
+                    connectCTA
+                } else if !model.isLoadingRecipient && !model.hasPayDestination {
+                    Section {
                         Label(L("userNoLightningAddress"), systemImage: "bolt.slash")
-                            .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(AppColors.error)
                             .accessibilityIdentifier("zap-no-address")
-                    } else {
+                    }
+                } else {
+                    Section(L("amount")) {
                         amounts
-                        QiqTextField(placeholder: L("walletCustomAmount"), text: $model.customAmount, keyboard: .numberPad)
-                            .focused($focused)
-                            .accessibilityIdentifier("zap-custom-amount")
-                        QiqTextField(placeholder: L("commentOptional"), text: $model.comment, autocapitalize: true)
+                        LabeledContent(L("walletCustomAmount")) {
+                            TextField(L("walletSats"), text: $model.customAmount)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .monospacedDigit()
+                                .focused($focused)
+                                .accessibilityIdentifier("zap-custom-amount")
+                        }
+                    }
+                    Section {
+                        TextField(L("commentOptional"), text: $model.comment, axis: .vertical)
+                            .lineLimit(1...4)
                             .focused($focused)
                             .accessibilityIdentifier("zap-comment")
                     }
                 }
-                .padding(20)
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) {
                 if model.canZap && model.hasPayDestination {
-                    PrimaryButton(title: submitTitle, isLoading: model.isZapping, isEnabled: model.canSubmit) {
+                    Button {
                         focused = false
                         Task { if await model.zap() { dismiss() } }
+                    } label: {
+                        ZStack {
+                            Label(submitTitle, systemImage: "bolt.fill").opacity(model.isZapping ? 0 : 1)
+                            if model.isZapping { ProgressView() }
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.extraLarge)
+                    .disabled(!model.canSubmit)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
                     .accessibilityIdentifier("zap-submit")
@@ -137,7 +157,7 @@ struct ZapSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Image(systemName: "xmark") }
+                    Button(role: .cancel) { dismiss() }
                         .accessibilityLabel(L("cancel"))
                         .accessibilityIdentifier("zap-cancel")
                 }
@@ -158,24 +178,27 @@ struct ZapSheet: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            ProfileAvatar(pubkey: target.pubkey, size: 44)
+        HStack(alignment: .top, spacing: 12) {
+            ProfileAvatar(pubkey: target.pubkey, size: avatarSize)
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.recipientName).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                Text(model.recipientName)
+                    .font(.headline)
+                    .lineLimit(1)
                 Group {
                     if model.isLoadingRecipient {
                         Text(L("loading"))
                     } else if let address = model.recipient?.lightningAddress {
                         Label(address, systemImage: "bolt.fill")
+                            .labelStyle(SettingsCompactLabelStyle())
                     }
                 }
-                .font(.system(size: 13))
-                .foregroundStyle(AppColors.textSecondary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 if let note = target.note, !note.content.isEmpty {
                     Text(note.content)
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .padding(.top, 2)
                 }
@@ -185,53 +208,68 @@ struct ZapSheet: View {
     }
 
     private var amounts: some View {
-        GlassEffectContainer(spacing: 10) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                ForEach(ZapService.presetAmounts, id: \.self) { preset in
-                    chip(preset)
-                }
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+            ForEach(ZapService.presetAmounts, id: \.self) { preset in
+                chip(preset)
             }
         }
+        .padding(.vertical, 4)
         .sensoryFeedback(.selection, trigger: model.selectedPreset)
     }
 
+    @ViewBuilder
     private func chip(_ preset: Int) -> some View {
         let selected = model.customAmount.isEmpty && model.selectedPreset == preset
-        return Button {
-            focused = false
-            model.select(preset)
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "bolt.fill").font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(selected ? AppColors.background : AppColors.zap)
-                Text(Sats.compact(preset)).font(.system(size: 16, weight: .semibold))
+        let label = Label(Sats.compact(preset), systemImage: "bolt.fill")
+            .font(.subheadline.weight(.semibold))
+            .monospacedDigit()
+            .frame(maxWidth: .infinity)
+        Group {
+            if selected {
+                Button { select(preset) } label: { label }
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Button { select(preset) } label: { label }
+                    .buttonStyle(.bordered)
             }
-            .foregroundStyle(selected ? AppColors.background : AppColors.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 46)
-            .background {
-                if selected { Capsule().fill(AppColors.textPrimary) }
-            }
-            .glassEffect(selected ? .identity : .regular.interactive(), in: .capsule)
         }
-        .buttonStyle(PressableStyle())
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
         .accessibilityLabel("\(Sats.format(preset)) \(L("walletSats"))")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("zap-amount-\(preset)")
     }
 
+    private func select(_ preset: Int) {
+        focused = false
+        model.select(preset)
+    }
+
     private var connectCTA: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(L("walletZapConnectTitle"), systemImage: "bolt.slash")
-                .font(.system(size: 16, weight: .semibold))
-            Text(L("walletZapConnectMessage"))
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            PillButton(title: L("walletConnectWallet"), systemImage: "wallet.bifold") { model.openWallet() }
+        Section {
+            VStack(spacing: 12) {
+                Image(systemName: "bolt.slash")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text(L("walletZapConnectTitle"))
+                    .font(.headline)
+                Text(L("walletZapConnectMessage"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { model.openWallet() } label: {
+                    Label(L("walletConnectWallet"), systemImage: "wallet.bifold")
+                        .font(.headline)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .padding(.top, 4)
                 .accessibilityIdentifier("zap-connect-wallet")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }

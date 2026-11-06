@@ -78,67 +78,63 @@ struct CashuRedeemForm: View {
     @State private var showScanner = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(L("walletCashuRedeemDescription"))
-                .font(.system(size: 15))
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            QiqTextField(placeholder: L("cashuTokenHint"), text: $model.token, axis: .vertical)
+        Section {
+            TextField(L("cashuTokenHint"), text: $model.token, axis: .vertical)
                 .lineLimit(3...6)
+                .font(.body.monospaced())
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
                 .accessibilityIdentifier("cashu-token")
-            GlassEffectContainer(spacing: 10) {
-                HStack(spacing: 10) {
-                    SecondaryButton(title: L("walletPaste"), systemImage: "doc.on.clipboard") { model.paste() }
-                        .accessibilityIdentifier("cashu-paste")
-                    SecondaryButton(title: L("walletScan"), systemImage: "qrcode.viewfinder") { showScanner = true }
-                        .accessibilityIdentifier("cashu-scan")
-                }
-            }
+            Button { model.paste() } label: { Label(L("walletPaste"), systemImage: "doc.on.clipboard") }
+                .accessibilityIdentifier("cashu-paste")
+            Button { showScanner = true } label: { Label(L("walletScan"), systemImage: "qrcode.viewfinder") }
+                .accessibilityIdentifier("cashu-scan")
             if let decoded = model.decoded {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(L("amount")).foregroundStyle(AppColors.textSecondary)
-                        Spacer()
-                        Text("\(Sats.format(decoded.amountSats)) \(L("walletSats"))").font(AppFont.brandSemibold(18))
+                Group {
+                    LabeledContent(L("amount")) {
+                        Text(verbatim: "\(Sats.format(decoded.amountSats)) \(L("walletSats"))")
+                            .monospacedDigit()
+                            .foregroundStyle(.primary)
                     }
-                    HStack(alignment: .top) {
-                        Text(L("cashuMintUrl")).foregroundStyle(AppColors.textSecondary)
-                        Spacer()
-                        Text(decoded.mintUrl).font(.system(size: 13, design: .monospaced)).multilineTextAlignment(.trailing).lineLimit(2)
+                    LabeledContent(L("cashuMintUrl")) {
+                        Text(decoded.mintUrl)
+                            .font(.footnote.monospaced())
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(2)
                     }
                 }
-                .font(.system(size: 14))
-                .padding(16)
-                .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .accessibilityIdentifier("cashu-decoded")
-            } else if model.isInvalid {
-                Label(L("cashuInvalidToken"), systemImage: "exclamationmark.circle")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.error)
             }
             if !model.hasToken && model.wallet.cashuBalanceSats > 0 {
                 Label(L("walletCashuPending", ["amount": Sats.format(model.wallet.cashuBalanceSats)]), systemImage: "banknote")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.textSecondary)
+                    .foregroundStyle(.secondary)
             }
-            if !model.wallet.isConnected {
-                Label(L("cashuNoWallet"), systemImage: "bolt.slash")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.error)
+            Button { model.submit() } label: {
+                HStack {
+                    Label(model.wallet.isRedeemingCashu ? L("cashuRedeeming") : (model.hasToken || model.wallet.cashuBalanceSats == 0 ? L("cashuRedeem") : L("cashuMeltAll")), systemImage: "arrow.down.circle")
+                    Spacer()
+                    if model.wallet.isRedeemingCashu { ProgressView() }
+                }
             }
-            if let error = model.error {
-                Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.error)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("cashu-error")
-            }
-            PrimaryButton(
-                title: model.wallet.isRedeemingCashu ? L("cashuRedeeming") : (model.hasToken || model.wallet.cashuBalanceSats == 0 ? L("cashuRedeem") : L("cashuMeltAll")),
-                isLoading: model.wallet.isRedeemingCashu,
-                isEnabled: model.canRedeem
-            ) { model.submit() }
+            .disabled(!model.canRedeem)
             .accessibilityIdentifier("cashu-redeem")
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                if model.decoded == nil && model.isInvalid {
+                    Label(L("cashuInvalidToken"), systemImage: "exclamationmark.circle")
+                        .foregroundStyle(AppColors.error)
+                }
+                if !model.wallet.isConnected {
+                    Label(L("cashuNoWallet"), systemImage: "bolt.slash")
+                        .foregroundStyle(AppColors.error)
+                }
+                if let error = model.error {
+                    Text(error)
+                        .foregroundStyle(AppColors.error)
+                        .accessibilityIdentifier("cashu-error")
+                }
+                Text(L("walletCashuRedeemDescription"))
+            }
         }
         .onChange(of: model.token) { model.decode() }
         .onChange(of: model.redeemedAmount) { _, amount in
@@ -173,16 +169,15 @@ struct CashuRedeemSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            Form {
                 CashuRedeemForm(model: model) { dismiss() }
-                    .padding(20)
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(L("cashuToken"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Image(systemName: "xmark") }
+                    Button(role: .cancel) { dismiss() }
                         .accessibilityLabel(L("cancel"))
                         .accessibilityIdentifier("cashu-cancel")
                 }

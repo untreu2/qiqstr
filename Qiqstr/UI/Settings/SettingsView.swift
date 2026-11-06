@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var isLoggingOut = false
     @State private var copiedNpub = 0
     @AppStorage("app_language") private var language: String?
+    @ScaledMetric(relativeTo: .title3) private var avatarSize: CGFloat = 58
 
     static let termsURL = URL(string: "https://github.com/untreu2/qiqstr/blob/master/TERMS.md")!
     static let sourceURL = URL(string: "https://github.com/untreu2/qiqstr")!
@@ -51,9 +52,11 @@ struct SettingsView: View {
             }
             Section {
                 Button(role: .destructive) { showLogout = true } label: {
-                    HStack {
-                        SettingsRowLabel(title: L("logout"), systemImage: "rectangle.portrait.and.arrow.right", tint: AppColors.error)
+                    HStack(spacing: 8) {
+                        Spacer()
+                        Text(L("logout"))
                         if isLoggingOut { ProgressView() }
+                        Spacer()
                     }
                 }
                 .disabled(isLoggingOut)
@@ -64,18 +67,7 @@ struct SettingsView: View {
         }
         .settingsListStyle()
         .navigationTitle(L("settings"))
-        .toolbarTitleDisplayMode(.inlineLarge)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    SettingsLanguagePicker()
-                } label: {
-                    Image(systemName: "translate")
-                }
-                .accessibilityLabel(L("language"))
-                .accessibilityIdentifier("settings-language-menu")
-            }
-        }
+        .navigationBarTitleDisplayMode(.large)
         .confirmationDialog(L("areYouSureLogout"), isPresented: $showLogout, titleVisibility: .visible) {
             Button(L("logout"), role: .destructive) { logout() }
                 .accessibilityIdentifier("settings-logout-confirm")
@@ -92,20 +84,20 @@ struct SettingsView: View {
         let npub = session.npub ?? ""
         return NavigationLink(value: Route.profile(pubkey)) {
             HStack(spacing: 14) {
-                ProfileAvatar(pubkey: pubkey, size: 56)
-                VStack(alignment: .leading, spacing: 3) {
+                ProfileAvatar(pubkey: pubkey, size: avatarSize)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                        .font(AppFont.brandSemibold(19))
+                        .font(.title3.weight(.semibold))
                         .lineLimit(1)
                     if let nip05 = profile?.nip05.nilIfEmpty {
                         Text(nip05)
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     Text(Profile.shortNpub(pubkey))
-                        .font(.system(size: 13).monospaced())
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
@@ -148,23 +140,5 @@ struct SettingsView: View {
         let version = info?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = info?["CFBundleVersion"] as? String ?? "1"
         return "\(version) (\(build))"
-    }
-}
-
-struct SettingsLanguagePicker: View {
-    @AppStorage("app_language") private var language: String?
-
-    var body: some View {
-        Picker(L("language"), selection: Binding(get: { language ?? "" }, set: { apply($0.isEmpty ? nil : $0) })) {
-            Text(L("settingsSystemDefault")).tag("")
-            ForEach(AppLanguage.allCases) { lang in
-                Text(lang.displayName).tag(lang.rawValue)
-            }
-        }
-    }
-
-    private func apply(_ code: String?) {
-        Localizer.shared.apply(code)
-        language = code
     }
 }

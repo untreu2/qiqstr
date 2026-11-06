@@ -54,52 +54,45 @@ struct ConnectWalletSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(L("walletNwcConnectDescription"))
-                        .font(.system(size: 15))
-                        .foregroundStyle(AppColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    QiqTextField(placeholder: L("nwcConnectionString"), text: $model.uri, axis: .vertical)
+            Form {
+                Section {
+                    TextField(L("nwcConnectionString"), text: $model.uri, axis: .vertical)
                         .lineLimit(3...6)
+                        .font(.body.monospaced())
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                         .accessibilityIdentifier("wallet-connect-uri")
+                    Button { model.paste() } label: { Label(L("walletPaste"), systemImage: "doc.on.clipboard") }
+                        .accessibilityIdentifier("wallet-connect-paste")
+                    Button { showScanner = true } label: { Label(L("walletScan"), systemImage: "qrcode.viewfinder") }
+                        .accessibilityIdentifier("wallet-connect-scan-sheet")
+                } header: {
+                    Text(L("nwcConnectionString"))
+                } footer: {
                     if model.showsInvalid {
                         Label(L("nwcInvalidConnectionString"), systemImage: "exclamationmark.circle")
-                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(AppColors.error)
                     } else if model.isValid {
                         Label(L("walletConnectionLooksGood"), systemImage: "checkmark.circle")
-                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(AppColors.success)
-                    }
-                    GlassEffectContainer(spacing: 10) {
-                        HStack(spacing: 10) {
-                            SecondaryButton(title: L("walletPaste"), systemImage: "doc.on.clipboard") { model.paste() }
-                                .accessibilityIdentifier("wallet-connect-paste")
-                            SecondaryButton(title: L("walletScan"), systemImage: "qrcode.viewfinder") { showScanner = true }
-                                .accessibilityIdentifier("wallet-connect-scan-sheet")
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(L("nwcDisclaimer"))
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Toggle(L("nwcAccept"), isOn: $model.accepted)
-                            .font(.system(size: 15, weight: .medium))
-                            .tint(AppColors.switchActive)
-                            .accessibilityIdentifier("wallet-connect-accept")
-                    }
-                    .padding(16)
-                    .background(AppColors.overlayLight, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    if let error = model.error {
-                        Text(error)
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.error)
-                            .accessibilityIdentifier("wallet-connect-error")
+                    } else {
+                        Text(L("walletNwcConnectDescription"))
                     }
                 }
-                .padding(20)
+                Section {
+                    Toggle(L("nwcAccept"), isOn: $model.accepted)
+                        .tint(AppColors.switchActive)
+                        .accessibilityIdentifier("wallet-connect-accept")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("nwcDisclaimer"))
+                        if let error = model.error {
+                            Text(error)
+                                .foregroundStyle(AppColors.error)
+                                .accessibilityIdentifier("wallet-connect-error")
+                        }
+                    }
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) {
@@ -114,13 +107,13 @@ struct ConnectWalletSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Image(systemName: "xmark") }
+                    Button(role: .cancel) { dismiss() }
                         .accessibilityLabel(L("cancel"))
                         .accessibilityIdentifier("wallet-connect-cancel")
                 }
             }
         }
-        .presentationDetents([.large])
+        .presentationDetents([.medium, .large])
         .sensoryFeedback(.success, trigger: model.connectedTick)
         .fullScreenCover(isPresented: $showScanner) {
             QRScannerView { model.uri = $0 }

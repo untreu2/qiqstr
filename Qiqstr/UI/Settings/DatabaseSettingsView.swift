@@ -43,8 +43,6 @@ final class DatabaseSettingsModel {
         }
     }
 
-    var maxCount: Int { max(1, stats.map(\.count).max() ?? 1) }
-
     func smartCleanup() async {
         guard let me = Session.shared.pubkey, !isCleaning else { return }
         isCleaning = true
@@ -92,47 +90,23 @@ struct DatabaseSettingsView: View {
 
     var body: some View {
         List {
-            SettingsPageHeader(subtitle: L("databaseCacheSubtitle"))
             Section {
-                HStack(spacing: 0) {
-                    metric(title: L("databaseSize"), value: "\(model.sizeMB) MB", identifier: "database-size")
-                    Divider().frame(height: 44)
-                    metric(title: L("totalEvents"), value: Sats.compact(model.totalEvents), identifier: "database-total")
-                }
-                .padding(.vertical, 6)
-                .redacted(reason: model.hasLoaded ? [] : .placeholder)
+                stat(title: L("databaseSize"), systemImage: "internaldrive", value: "\(model.sizeMB) MB", identifier: "database-size")
+                stat(title: L("totalEvents"), systemImage: "square.stack.3d.up", value: Sats.compact(model.totalEvents), identifier: "database-total")
+            } footer: {
+                Text(L("databaseCacheSubtitle"))
             }
+            .redacted(reason: model.hasLoaded ? [] : .placeholder)
             Section {
-                ForEach(model.stats) { stat in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: stat.systemImage)
-                                .frame(width: 22)
-                                .foregroundStyle(AppColors.textSecondary)
-                            Text(stat.title).font(.system(size: 16))
-                            Spacer()
-                            Text(Sats.compact(stat.count))
-                                .font(.system(size: 15, weight: .semibold).monospacedDigit())
-                                .contentTransition(.numericText())
-                        }
-                        GeometryReader { proxy in
-                            Capsule().fill(AppColors.tile)
-                                .overlay(alignment: .leading) {
-                                    Capsule().fill(AppColors.textPrimary)
-                                        .frame(width: max(4, proxy.size.width * CGFloat(stat.count) / CGFloat(model.maxCount)))
-                                }
-                        }
-                        .frame(height: 4)
-                    }
-                    .padding(.vertical, 4)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("database-stat-\(stat.id)")
+                ForEach(model.stats) { item in
+                    stat(title: item.title, systemImage: item.systemImage, value: Sats.compact(item.count), identifier: "database-stat-\(item.id)")
                 }
             }
             Section {
                 Button { model.showCleanupConfirm = true } label: {
                     HStack {
                         SettingsRowLabel(title: L("settingsSmartCleanup"), systemImage: "sparkles")
+                        Spacer()
                         if model.isCleaning { ProgressView() }
                     }
                 }
@@ -143,9 +117,11 @@ struct DatabaseSettingsView: View {
             }
             Section {
                 Button(role: .destructive) { model.showWipeConfirm = true } label: {
-                    HStack {
-                        SettingsRowLabel(title: L("cleanupDatabase"), systemImage: "trash", tint: AppColors.error)
+                    HStack(spacing: 8) {
+                        Spacer()
+                        Text(L("cleanupDatabase"))
                         if model.isWiping { ProgressView() }
+                        Spacer()
                     }
                 }
                 .disabled(model.isCleaning || model.isWiping)
@@ -156,6 +132,7 @@ struct DatabaseSettingsView: View {
         }
         .settingsListStyle()
         .navigationTitle(L("databaseCache"))
+        .navigationBarTitleDisplayMode(.large)
         .refreshable { await model.load() }
         .task { await model.load() }
         .confirmationDialog(L("settingsSmartCleanup"), isPresented: $model.showCleanupConfirm, titleVisibility: .visible) {
@@ -175,16 +152,14 @@ struct DatabaseSettingsView: View {
         .sensoryFeedback(.success, trigger: model.feedback)
     }
 
-    private func metric(title: String, value: String, identifier: String) -> some View {
-        VStack(spacing: 4) {
+    private func stat(title: String, systemImage: String, value: String, identifier: String) -> some View {
+        LabeledContent {
             Text(value)
-                .font(AppFont.brand(24))
+                .monospacedDigit()
                 .contentTransition(.numericText())
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.textSecondary)
+        } label: {
+            SettingsRowLabel(title: title, systemImage: systemImage)
         }
-        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier)
     }

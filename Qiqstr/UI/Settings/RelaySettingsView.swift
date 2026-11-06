@@ -20,68 +20,78 @@ struct RelaySettingsView: View {
 
     var body: some View {
         List {
-            SettingsPageHeader(subtitle: L("manageYourRelayConnections"))
             Section {
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(model.connectedCount > 0 ? AppColors.success : AppColors.warning)
-                        .frame(width: 10, height: 10)
-                    Text("\(model.connectedCount)/\(model.totalCount) \(L("connected").lowercased())")
-                        .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                LabeledContent {
+                    Text(verbatim: "\(model.connectedCount)/\(model.totalCount)")
+                        .monospacedDigit()
                         .contentTransition(.numericText())
-                    Spacer()
-                    Text(SettingsByteFormat.string(model.totalBytes))
-                        .font(.system(size: 13).monospacedDigit())
-                        .foregroundStyle(AppColors.textSecondary)
+                } label: {
+                    Label {
+                        Text(L("connected"))
+                    } icon: {
+                        SettingsIcon(systemImage: "antenna.radiowaves.left.and.right", tint: model.connectedCount > 0 ? AppColors.success : AppColors.warning)
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("relays-summary")
+                LabeledContent {
+                    Text(SettingsByteFormat.string(model.totalBytes)).monospacedDigit()
+                } label: {
+                    SettingsRowLabel(title: L("settingsRelayTraffic"), systemImage: "arrow.up.arrow.down")
+                }
                 if let progress = model.broadcastProgress {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView(value: progress.total > 0 ? Double(progress.sent) / Double(progress.total) : 0)
                             .tint(AppColors.textPrimary)
                         Text(progress.total > 0 ? L("broadcastProgress", ["sent": progress.sent, "total": progress.total]) : L("fetchingYourEvents"))
-                            .font(.system(size: 13).monospacedDigit())
-                            .foregroundStyle(AppColors.textSecondary)
+                            .font(.footnote.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
                     .accessibilityIdentifier("relays-broadcast-progress")
                 }
+            } footer: {
+                Text(L("manageYourRelayConnections"))
             }
 
             Section {
-                actionButtons
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
+                Button { Task { await model.fetchFromProfile() } } label: {
+                    HStack {
+                        SettingsRowLabel(title: model.isFetching ? L("fetching") : L("fetch"), systemImage: "arrow.down.circle")
+                        Spacer()
+                        if model.isFetching { ProgressView() }
+                    }
+                }
+                .disabled(model.isFetching)
+                .accessibilityIdentifier("relays-fetch")
+                Button { Task { await model.publish() } } label: {
+                    HStack {
+                        SettingsRowLabel(title: model.isPublishing ? L("publishing") : L("publish"), systemImage: "arrow.up.circle")
+                        Spacer()
+                        if model.isPublishing { ProgressView() }
+                    }
+                }
+                .disabled(model.isPublishing || model.relays.isEmpty)
+                .accessibilityIdentifier("relays-publish")
             }
 
             Section {
                 if model.relays.isEmpty {
                     Text(L("noRelaysInCategory"))
-                        .foregroundStyle(AppColors.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .foregroundStyle(.secondary)
                 } else {
                     ForEach(model.relays, id: \.self) { relay in
                         SettingsRelayRow(url: relay, status: model.status(for: relay), flags: model.flags(for: relay))
-                            .swipeActions(edge: .trailing) {
-                                Button(L("delete"), role: .destructive) { Task { await model.remove(relay) } }
-                            }
                             .contextMenu { relayMenu(relay) }
                             .accessibilityIdentifier("relay-row-\(RelaySettingsModel.host(relay))")
+                    }
+                    .onDelete { offsets in
+                        let targets = offsets.map { model.relays[$0] }
+                        Task { for relay in targets { await model.remove(relay) } }
                     }
                     .onMove { model.move(from: $0, to: $1) }
                 }
             } header: {
-                HStack {
-                    Text(L("relays"))
-                    Spacer()
-                    Button { model.showAdd = true } label: {
-                        Label(L("addRelay"), systemImage: "plus")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .textCase(nil)
-                    .accessibilityIdentifier("relays-add")
-                }
+                Text(L("relays"))
             }
 
             Section {
@@ -89,7 +99,7 @@ struct RelaySettingsView: View {
                     ForEach(GossipMode.allCases) { mode in
                         VStack(alignment: .leading) {
                             Text(mode.title)
-                            Text(mode.detail).font(.caption).foregroundStyle(AppColors.textSecondary)
+                            Text(mode.detail).font(.caption).foregroundStyle(.secondary)
                         }
                         .tag(mode)
                     }
@@ -103,16 +113,21 @@ struct RelaySettingsView: View {
             }
 
             Section {
-                Button(role: .destructive) { model.showResetConfirm = true } label: {
-                    SettingsRowLabel(title: L("resetToDefaults"), systemImage: "arrow.counterclockwise", tint: AppColors.error)
-                }
-                .accessibilityIdentifier("relays-reset")
+                Button(L("resetToDefaults"), role: .destructive) { model.showResetConfirm = true }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("relays-reset")
             }
         }
         .settingsListStyle()
         .navigationTitle(L("relays"))
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { EditButton().accessibilityIdentifier("relays-edit") }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(L("addRelay"), systemImage: "plus") { model.showAdd = true }
+                    .accessibilityIdentifier("relays-add")
+            }
         }
         .onAppear {
             model.load()
@@ -135,31 +150,6 @@ struct RelaySettingsView: View {
             Text(model.pendingBroadcast.count == 1 ? L("settingsBroadcastOne") : L("settingsBroadcastMany", ["count": model.pendingBroadcast.count]))
         }
         .sensoryFeedback(.success, trigger: model.feedback)
-    }
-
-    private var actionButtons: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                Button { Task { await model.fetchFromProfile() } } label: {
-                    Label(model.isFetching ? L("fetching") : L("fetch"), systemImage: "arrow.down.circle")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(maxWidth: .infinity, minHeight: 36)
-                }
-                .buttonStyle(.glass)
-                .disabled(model.isFetching)
-                .accessibilityIdentifier("relays-fetch")
-                Button { Task { await model.publish() } } label: {
-                    Label(model.isPublishing ? L("publishing") : L("publish"), systemImage: "arrow.up.circle")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(maxWidth: .infinity, minHeight: 36)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(AppColors.textPrimary)
-                .foregroundStyle(AppColors.background)
-                .disabled(model.isPublishing || model.relays.isEmpty)
-                .accessibilityIdentifier("relays-publish")
-            }
-        }
     }
 
     @ViewBuilder
@@ -185,31 +175,39 @@ struct RelaySettingsView: View {
         }
     }
 
+    private var isNewRelayValid: Bool {
+        RelaySettingsModel.isValid(RelaySettingsModel.canonicalInput(model.newRelayURL))
+    }
+
     private var addSheet: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                QiqTextField(placeholder: L("relayUrlHint"), text: $model.newRelayURL, keyboard: .URL)
-                    .focused($urlFocused)
-                    .submitLabel(.done)
-                    .onSubmit { Task { await model.add() } }
-                    .accessibilityIdentifier("relays-add-field")
-                if !model.newRelayURL.isEmpty && !RelaySettingsModel.isValid(RelaySettingsModel.canonicalInput(model.newRelayURL)) {
-                    Text(L("invalidRelayUrl"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppColors.error)
+            Form {
+                Section {
+                    TextField(L("relayUrlHint"), text: $model.newRelayURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.body.monospaced())
+                        .focused($urlFocused)
+                        .submitLabel(.done)
+                        .onSubmit { Task { await model.add() } }
+                        .accessibilityIdentifier("relays-add-field")
+                } footer: {
+                    if !model.newRelayURL.isEmpty && !isNewRelayValid {
+                        Text(L("invalidRelayUrl")).foregroundStyle(AppColors.error)
+                    }
                 }
-                PrimaryButton(title: L("addRelay"), isEnabled: RelaySettingsModel.isValid(RelaySettingsModel.canonicalInput(model.newRelayURL))) {
-                    Task { await model.add() }
-                }
-                .accessibilityIdentifier("relays-add-confirm")
-                Spacer()
             }
-            .padding(20)
             .navigationTitle(L("addRelay"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) { model.showAdd = false }
+                    Button(role: .cancel) { model.showAdd = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(role: .confirm) { Task { await model.add() } }
+                        .disabled(!isNewRelayValid)
+                        .accessibilityIdentifier("relays-add-confirm")
                 }
             }
             .onAppear {
@@ -217,7 +215,7 @@ struct RelaySettingsView: View {
                 urlFocused = true
             }
         }
-        .presentationDetents([.height(260)])
+        .presentationDetents([.medium])
     }
 }
 
@@ -227,18 +225,9 @@ struct SettingsRelayRow: View {
     let flags: SettingsRelayFlags
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                IconTile(systemImage: "server.rack", size: 36)
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(AppColors.surface, lineWidth: 2))
-                    .offset(x: 14, y: 14)
-            }
-            VStack(alignment: .leading, spacing: 3) {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(RelaySettingsModel.host(url))
-                    .font(.system(size: 16, weight: .semibold))
                     .lineLimit(1)
                 HStack(spacing: 8) {
                     Text(statusText)
@@ -249,22 +238,27 @@ struct SettingsRelayRow: View {
                     }
                     if let status, status.bytesReceived > 0 {
                         Label(SettingsByteFormat.string(status.bytesReceived), systemImage: "arrow.down")
-                            .foregroundStyle(AppColors.textSecondary)
+                            .foregroundStyle(.secondary)
                     }
                     if !(flags.read && flags.write) {
                         Text(flags.read ? L("settingsRelayReadOnly") : L("settingsRelayWriteOnly"))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(AppColors.tile, in: Capsule())
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .font(.footnote.monospacedDigit())
                 .labelStyle(SettingsCompactLabelStyle())
                 .lineLimit(1)
             }
-            Spacer(minLength: 0)
+        } icon: {
+            SettingsIcon(systemImage: "server.rack")
+                .overlay(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(AppColors.surface, lineWidth: 2))
+                        .offset(x: 3, y: 3)
+                }
         }
-        .padding(.vertical, 2)
         .animation(.smooth, value: status)
     }
 

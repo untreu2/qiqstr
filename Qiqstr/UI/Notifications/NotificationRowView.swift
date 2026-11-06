@@ -40,6 +40,9 @@ struct NotificationRowView: View {
     let group: NotificationGroup
     let isUnread: Bool
     @State private var cache = ProfileCache.shared
+    @ScaledMetric(relativeTo: .subheadline) private var avatarSize: CGFloat = 42
+    @ScaledMetric(relativeTo: .subheadline) private var stackedAvatarSize: CGFloat = 34
+    @ScaledMetric(relativeTo: .caption2) private var badgeSize: CGFloat = 20
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -49,8 +52,8 @@ struct NotificationRowView: View {
                     headline
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(timestamp)
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppColors.textSecondary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     if isUnread {
                         Circle().fill(AppColors.accent).frame(width: 8, height: 8)
                             .accessibilityLabel(L("notificationUnread"))
@@ -60,8 +63,8 @@ struct NotificationRowView: View {
                     let text = NotificationText.readable(group.lead.content)
                     if !text.isEmpty {
                         Text(text)
-                            .font(.system(size: 15))
-                            .foregroundStyle(AppColors.textPrimary)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
                             .lineLimit(6)
                             .multilineTextAlignment(.leading)
                     }
@@ -71,7 +74,7 @@ struct NotificationRowView: View {
                 }
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
@@ -90,14 +93,14 @@ struct NotificationRowView: View {
         ZStack(alignment: .bottomTrailing) {
             if shown.count <= 1 {
                 Button { open(shown.first) } label: {
-                    ProfileAvatar(pubkey: group.lead.fromPubkey, size: 44, fallbackURL: group.lead.fromImage)
+                    ProfileAvatar(pubkey: group.lead.fromPubkey, size: avatarSize, fallbackURL: group.lead.fromImage)
                 }
                 .buttonStyle(.plain)
             } else {
                 Button { open(shown.first) } label: {
                     HStack(spacing: -14) {
                         ForEach(Array(shown.enumerated()), id: \.element) { index, pubkey in
-                            ProfileAvatar(pubkey: pubkey, size: 36, fallbackURL: group.items.first { $0.fromPubkey == pubkey }?.fromImage)
+                            ProfileAvatar(pubkey: pubkey, size: stackedAvatarSize, fallbackURL: group.items.first { $0.fromPubkey == pubkey }?.fromImage)
                                 .overlay(Circle().stroke(AppColors.background, lineWidth: 2))
                                 .zIndex(Double(shown.count - index))
                         }
@@ -112,12 +115,13 @@ struct NotificationRowView: View {
 
     private var kindBadge: some View {
         ZStack {
-            Circle().fill(AppColors.background).frame(width: 22, height: 22)
+            Circle().fill(AppColors.background).frame(width: badgeSize, height: badgeSize)
             if group.kind == .reaction, !group.isGrouped, let emoji = reactionEmoji {
-                Text(emoji).font(.system(size: 12))
+                Text(emoji).font(.caption2)
             } else {
                 Image(systemName: group.kind.symbol)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption2.weight(.bold))
+                    .imageScale(.small)
                     .foregroundStyle(group.kind.tint)
             }
         }
@@ -149,12 +153,12 @@ struct NotificationRowView: View {
             amount.foregroundColor = AppColors.zap
             text.append(amount)
         }
-        return Text(text).font(.system(size: 15))
+        return Text(text).font(.subheadline)
     }
 
     private func bold(_ string: String) -> AttributedString {
         var run = AttributedString(string)
-        run.font = .system(size: 15, weight: .semibold)
+        run.font = .subheadline.weight(.semibold)
         return run
     }
 
