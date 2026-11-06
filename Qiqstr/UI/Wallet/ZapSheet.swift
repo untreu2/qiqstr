@@ -164,7 +164,7 @@ struct ZapSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(model.isZapping)
         .task { await model.load() }

@@ -95,14 +95,6 @@ struct ConnectWalletSheet: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) {
-                PrimaryButton(title: L("nwcConnect"), isLoading: model.isConnecting, isEnabled: model.canConnect) {
-                    Task { if await model.connect() { dismiss() } }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("wallet-connect-submit")
-            }
             .navigationTitle(L("nwcTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -111,9 +103,24 @@ struct ConnectWalletSheet: View {
                         .accessibilityLabel(L("cancel"))
                         .accessibilityIdentifier("wallet-connect-cancel")
                 }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        Task { if await model.connect() { dismiss() } }
+                    } label: {
+                        if model.isConnecting {
+                            ProgressView()
+                        } else {
+                            Text(L("nwcConnect")).fontWeight(.semibold)
+                        }
+                    }
+                    .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
+                    .disabled(!model.canConnect || model.isConnecting)
+                    .accessibilityIdentifier("wallet-connect-submit")
+                }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .sensoryFeedback(.success, trigger: model.connectedTick)
         .fullScreenCover(isPresented: $showScanner) {
             QRScannerView { model.uri = $0 }
