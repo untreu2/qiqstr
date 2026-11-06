@@ -24,7 +24,8 @@ extension View {
 
 enum OnboardingStep: Hashable {
     case profile
-    case follows
+    case interests
+    case follows(Set<FollowInterest>)
 }
 
 struct OnboardingFlowView: View {
@@ -37,13 +38,16 @@ struct OnboardingFlowView: View {
                 .navigationDestination(for: OnboardingStep.self) { step in
                     switch step {
                     case .profile:
-                        OnboardingProfileView { path.append(.follows) }
-                    case .follows:
-                        SuggestedFollowsView(onFinish: onFinish)
+                        OnboardingProfileView { path.append(.interests) }
+                    case .interests:
+                        OnboardingInterestsView(onSkip: onFinish) { path.append(.follows($0)) }
                             .navigationBarBackButtonHidden()
+                    case .follows(let interests):
+                        SuggestedFollowsView(interests: interests, onFinish: onFinish)
                     }
                 }
         }
+        .task { FollowPackService.shared.prefetch() }
         .tint(AppColors.textPrimary)
         .interactiveDismissDisabled()
     }
@@ -51,7 +55,7 @@ struct OnboardingFlowView: View {
 
 struct OnboardingStepIndicator: View {
     let current: Int
-    var total = 3
+    var total = 4
 
     var body: some View {
         HStack(spacing: 6) {
