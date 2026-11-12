@@ -226,10 +226,11 @@ struct DMChatView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(model.rows) { row in
                         rowView(row)
+                            .padding(.horizontal, 12)
                     }
                 }
+                .frame(maxWidth: .infinity)
                 .scrollTargetLayout()
-                .padding(.horizontal, 12)
                 .padding(.top, 8)
                 .padding(.bottom, 6)
                 .animation(.smooth(duration: 0.3), value: model.messages.count)
@@ -242,8 +243,8 @@ struct DMChatView: View {
                 withAnimation(.snappy(duration: 0.25)) { awayFromBottom = away }
                 if !away { unseenCount = 0 }
             }
-            .defaultScrollAnchor(.bottomLeading)
-            .defaultScrollAnchor(.bottomLeading, for: .sizeChanges)
+            .defaultScrollAnchor(.bottom)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .scrollDismissesKeyboard(.interactively)
             .accessibilityIdentifier("dm-chat-messages")
