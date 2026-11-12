@@ -185,11 +185,10 @@ struct MutedSettingsView: View {
                     .contextMenu {
                         Button(L("delete"), systemImage: "trash", role: .destructive) { Task { await model.removeWord(word) } }
                     }
+                    .swipeActions {
+                        Button(L("delete"), systemImage: "trash", role: .destructive) { Task { await model.removeWord(word) } }
+                    }
                     .accessibilityIdentifier("muted-word-\(word)")
-                }
-                .onDelete { offsets in
-                    let targets = offsets.map { service.mutedWords[$0] }
-                    Task { for word in targets { await model.removeWord(word) } }
                 }
             }
         }

@@ -42,7 +42,7 @@ struct DisplaySettingsView: View {
             }
             Section {
                 Toggle(isOn: $expandedNotes) {
-                    SettingsRowLabel(title: expandedNotes ? L("expandedNotes") : L("normalNotes"), systemImage: expandedNotes ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                    SettingsRowLabel(title: L("expandedNotes"), systemImage: "rectangle.expand.vertical")
                 }
                 .tint(AppColors.switchActive)
                 .accessibilityIdentifier("display-expanded-notes")

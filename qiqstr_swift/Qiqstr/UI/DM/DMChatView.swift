@@ -38,6 +38,10 @@ struct DMChatView: View {
                 withAnimation(.smooth(duration: 0.3)) { position.scrollTo(id: id, anchor: .center) }
             }
             .onChange(of: model.focusRequest) { inputFocused = true }
+            .onChange(of: model.attachments.count) { old, new in
+                guard new > old, !awayFromBottom else { return }
+                withAnimation(.smooth(duration: 0.25)) { position.scrollTo(edge: .bottom) }
+            }
             .sheet(item: $model.infoMessage) { message in
                 DMMessageInfoSheet(message: message, deliveryRelays: model.deliveryRelays(for: message), chatRelays: model.chatRelays())
                     .presentationDetents([.medium, .large])
@@ -237,8 +241,7 @@ struct DMChatView: View {
             }
             .scrollPosition($position)
             .onScrollGeometryChange(for: Bool.self) { geometry in
-                let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height - geometry.contentInsets.bottom
-                return geometry.contentSize.height - visibleBottom > 360
+                geometry.contentSize.height - (geometry.contentOffset.y + geometry.containerSize.height) > 360
             } action: { _, away in
                 withAnimation(.snappy(duration: 0.25)) { awayFromBottom = away }
                 if !away { unseenCount = 0 }

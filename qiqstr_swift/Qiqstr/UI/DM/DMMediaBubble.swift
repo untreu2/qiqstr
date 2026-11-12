@@ -240,8 +240,8 @@ struct DMImageViewer: View {
                         .font(.body.weight(.semibold))
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 16)

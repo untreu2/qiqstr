@@ -192,6 +192,9 @@ final class EventManagerModel {
         case 9735: L("kindZap")
         case 10000: L("kindMuteList")
         case 10002: L("kindRelayList")
+        case 10050: L("kindDMRelays")
+        case 10051: L("kindKeyPackageRelays")
+        case 443, 30443: L("kindKeyPackage")
         case 10001...10010: L("kindList", ["kind": kind])
         default: L("kindUnknown", ["kind": kind])
         }
@@ -209,6 +212,8 @@ final class EventManagerModel {
         case 9735: "bolt"
         case 10000: "bell.slash"
         case 10002: "point.3.connected.trianglepath.dotted"
+        case 10050, 10051: "tray"
+        case 443, 30443: "key"
         default: "doc"
         }
     }

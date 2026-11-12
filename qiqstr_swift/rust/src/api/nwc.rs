@@ -8,7 +8,7 @@ use nostr::prelude::*;
 use nostr_sdk::prelude::*;
 
 pub fn validate_nwc_uri(uri: String) -> bool {
-    NostrWalletConnectURI::parse(&uri).is_ok()
+    NostrWalletConnectURI::parse(&uri).is_ok_and(|parsed| parsed.public_key.xonly().is_ok())
 }
 
 pub fn parse_nwc_uri(uri: String) -> Result<String> {
@@ -179,6 +179,15 @@ mod tests {
     use futures::{SinkExt, StreamExt};
     use tokio::net::TcpListener;
     use tokio_tungstenite::{accept_async, tungstenite::Message};
+
+    #[test]
+    fn rejects_wallet_keys_that_are_not_curve_points() {
+        let secret = Keys::generate().secret_key().to_secret_hex();
+        let valid = format!("nostr+walletconnect://{}?relay=wss%3A%2F%2Frelay.example.com&secret={secret}", Keys::generate().public_key().to_hex());
+        let invalid = format!("nostr+walletconnect://{}?relay=wss%3A%2F%2Frelay.example.com&secret={secret}", "ff".repeat(32));
+        assert!(validate_nwc_uri(valid));
+        assert!(!validate_nwc_uri(invalid));
+    }
 
     #[tokio::test]
     async fn timeout_closes_the_wallet_connection_even_without_publish_acknowledgement() {

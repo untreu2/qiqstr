@@ -36,6 +36,7 @@ struct FeedView: View {
         .onChange(of: session.mutedPubkeys) { model.refilter() }
         .onChange(of: session.mutedWords) { model.refilter() }
         .onChange(of: store.deletedIds) { model.refilter() }
+        .onChange(of: model.notes.isEmpty) { _, empty in if empty { Router.shared.expandTabBar() } }
         .onChange(of: hashtags.tags) { model.topicsChanged() }
         .onChange(of: explore.pinned) { model.pinnedFeedsChanged(explore.pinned) }
         .sheet(isPresented: $isManagingTopics) {
@@ -48,6 +49,12 @@ struct FeedView: View {
     private func scrollToTop(_ proxy: ScrollViewProxy) {
         guard let first = model.notes.first?.listId else { return }
         withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(first, anchor: .top) }
+    }
+
+    private func sourceToggle(_ source: FeedSource, title: String, systemImage: String) -> some View {
+        Toggle(isOn: Binding(get: { model.source == source }, set: { if $0 { model.select(source) } })) {
+            Label(title, systemImage: systemImage)
+        }
     }
 
     @ViewBuilder
@@ -63,28 +70,20 @@ struct FeedView: View {
         Button(L("feedAddFeed"), systemImage: "plus") { Router.shared.push(.followSets) }
             .accessibilityIdentifier("feed-add-list")
         Section(L("exploreFeeds")) {
-            if !explore.pinnedFeeds.isEmpty {
-                Picker(L("exploreFeeds"), selection: Binding(get: { model.source }, set: { model.select($0) })) {
-                    ForEach(explore.pinnedFeeds) { feed in
-                        Label(feed.name, systemImage: "sparkles.rectangle.stack").tag(FeedSource.discover(feed))
-                    }
-                }
-                .accessibilityIdentifier("feed-pinned-feeds")
+            ForEach(explore.pinnedFeeds) { feed in
+                sourceToggle(.discover(feed), title: feed.name, systemImage: "sparkles.rectangle.stack")
             }
             Button(L("exploreDiscoverFeeds"), systemImage: "square.grid.2x2") { Router.shared.push(.discoverFeeds) }
                 .accessibilityIdentifier("feed-discover-feeds")
         }
         Section(L("feedTopics")) {
             if !hashtags.tags.isEmpty {
-                Picker(L("feedTopics"), selection: Binding(get: { model.source }, set: { model.select($0) })) {
-                    if hashtags.tags.count > 1 {
-                        Label(L("feedAllTopics"), systemImage: "square.stack").tag(FeedSource.topics)
-                    }
-                    ForEach(hashtags.tags, id: \.self) { tag in
-                        Label("#\(tag)", systemImage: "number").tag(FeedSource.topic(tag))
-                    }
+                if hashtags.tags.count > 1 {
+                    sourceToggle(.topics, title: L("feedAllTopics"), systemImage: "square.stack")
                 }
-                .accessibilityIdentifier("feed-topics")
+                ForEach(hashtags.tags, id: \.self) { tag in
+                    sourceToggle(.topic(tag), title: "#\(tag)", systemImage: "number")
+                }
                 Toggle(L("feedFollowingPlusTopics"), systemImage: "rectangle.stack.badge.plus", isOn: $model.includeTopics)
                     .accessibilityIdentifier("feed-include-topics")
             }

@@ -14,10 +14,7 @@ struct PaymentsSettingsView: View {
         Form {
             Section {
                 Button(action: openWallet) {
-                    LabeledContent {
-                        Image(systemName: "arrow.up.forward")
-                            .font(.footnote.weight(.semibold))
-                    } label: {
+                    HStack(spacing: 12) {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(L("wallet")).foregroundStyle(AppColors.textPrimary)
@@ -28,6 +25,10 @@ struct PaymentsSettingsView: View {
                         } icon: {
                             SettingsIcon(systemImage: "wallet.bifold")
                         }
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.forward")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .accessibilityIdentifier("payments-open-wallet")

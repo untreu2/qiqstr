@@ -1,3 +1,4 @@
+import QiqstrCore
 import SwiftUI
 
 struct LoadingView: View {
@@ -66,8 +67,8 @@ final class ToastCenter {
 }
 
 func coreMessage(_ error: Error) -> String {
-    let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-    return message
+    if error is QiqError || error is CoreError { return coreErrorMessage(error) }
+    return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
 }
 
 struct ToastOverlay: ViewModifier {
@@ -79,11 +80,11 @@ struct ToastOverlay: ViewModifier {
                 HStack(spacing: 10) {
                     Image(systemName: toast.style == .error ? "exclamationmark.circle.fill" : toast.style == .success ? "checkmark.circle.fill" : "info.circle.fill")
                         .foregroundStyle(toast.style == .error ? AppColors.error : toast.style == .success ? AppColors.success : AppColors.textPrimary)
-                    Text(toast.message).font(.subheadline.weight(.medium)).lineLimit(3)
+                    Text(toast.message).font(.subheadline.weight(.medium)).lineLimit(4)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
-                .glassEffect(.regular, in: .capsule)
+                .glassEffect(.regular, in: .rect(cornerRadius: 22, style: .continuous))
                 .padding(.top, 8)
                 .padding(.horizontal, 20)
                 .transition(.move(edge: .top).combined(with: .opacity))

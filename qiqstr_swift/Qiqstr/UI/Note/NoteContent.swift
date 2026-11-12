@@ -173,7 +173,8 @@ final class NoteContent {
                 if let space = cut.lastIndex(where: { $0 == " " || $0 == "\n" }), cut.distance(from: space, to: cut.endIndex) < 24 {
                     cut = String(cut[..<space])
                 }
-                result.append(.text(cut.trimmingCharacters(in: .whitespacesAndNewlines) + "…"))
+                while cut.last?.isWhitespace == true { cut.removeLast() }
+                result.append(.text(cut + "…"))
             } else {
                 result.append(.text("…"))
             }

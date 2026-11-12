@@ -99,7 +99,7 @@ struct NoteAuthorLine: View {
                 }
             }
             if !large {
-                Text("· \(TimeFormat.relative(note.createdAt))")
+                RelativeTimeText(timestamp: note.createdAt, prefix: "· ")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -168,7 +168,7 @@ struct NoteContextPreview: View {
                 ProfileAvatar(pubkey: note.pubkey, size: 36, fallbackURL: note.authorImage)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(authorName).font(.headline).lineLimit(1)
-                    Text(TimeFormat.relative(note.createdAt)).font(.footnote).foregroundStyle(.secondary)
+                    RelativeTimeText(timestamp: note.createdAt).font(.footnote).foregroundStyle(.secondary)
                 }
             }
             let content = NoteContentCache.content(for: note)

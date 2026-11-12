@@ -198,8 +198,12 @@ struct OnboardingProfileView: View {
 
             PhotosPicker(selection: $pictureItem, matching: .images) {
                 ZStack {
-                    AvatarView(url: pictureURL, size: 84)
-                    Circle().fill(Color.black.opacity(0.3))
+                    if pictureURL == nil {
+                        Circle().fill(AppColors.avatarPlaceholder)
+                    } else {
+                        AvatarView(url: pictureURL, size: 84)
+                        Circle().fill(Color.black.opacity(0.3))
+                    }
                     if uploadingPicture {
                         ProgressView().tint(.white)
                     } else {

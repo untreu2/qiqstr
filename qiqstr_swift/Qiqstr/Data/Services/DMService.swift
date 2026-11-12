@@ -305,7 +305,7 @@ final class DMService {
         for id in targets {
             guard let group = active[id], let peer = group.peer(for: me),
                   let raw = try? await engine.messages(groupId: id, limit: Self.historyLimit) else { continue }
-            loaded += JSON.array(raw).flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
+            loaded += JSON.array(raw).reversed().flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
         }
         guard generation == self.generation else { return }
         apply(loaded)
@@ -648,10 +648,16 @@ final class DMService {
             hide(messages.map(\.id))
             throw CoreError(L("dmSendFailed"))
         }
-        if messages.isEmpty, let index = messagesByPeer[peer]?.firstIndex(where: { $0.id == pendingId }) {
-            messagesByPeer[peer]?[index].state = .sent
-        } else {
-            messagesByPeer[peer]?.removeAll { $0.id == pendingId }
+        let visible = messages.filter { !hiddenIds.contains($0.id) }
+        if var list = messagesByPeer[peer], let index = list.firstIndex(where: { $0.id == pendingId }) {
+            if visible.isEmpty {
+                list[index].state = .sent
+            } else {
+                list.removeAll { message in visible.contains { $0.id == message.id } }
+                let slot = list.firstIndex(where: { $0.id == pendingId }) ?? index
+                list.replaceSubrange(slot...slot, with: visible)
+            }
+            messagesByPeer[peer] = list
         }
         for message in messages { deliveryRelays[message.id] = accepted.sorted() }
         if let index = groups.index(forKey: groupId) { groups.values[index].lastMessageAt = TimeFormat.now }

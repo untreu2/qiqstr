@@ -72,3 +72,7 @@
 "authTermsAgree" = "Zustimmen und fortfahren";
 "authTermsRead" = "Bedingungen lesen";
 "authTermsAgreeShort" = "Zustimmen";
+"invalidNsecError" = "Dieser Schlüssel ist ungültig. Gib einen nsec, einen privaten Hex-Schlüssel oder deine Wiederherstellungswörter ein.";
+"invalidMnemonicError" = "Diese Wiederherstellungswörter sind ungültig. Prüfe Schreibweise und Reihenfolge.";
+"authAccountNotFound" = "Konto nicht gefunden.";
+"authKeyMismatch" = "Die gespeicherten Schlüssel dieses Kontos stimmen nicht überein. Melde dich erneut an.";

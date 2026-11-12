@@ -435,7 +435,7 @@ final class ComposeViewModel {
                 _ = try await service.publishNote(content: content, mediaUrls: urls, extraTags: extraTags)
             case .reply(let note):
                 _ = try await service.publishReply(to: note, content: content, mediaUrls: urls, extraTags: extraTags)
-                NoteInteractionStore.shared.markReplied(note.id)
+                await NoteInteractionStore.shared.markReplied(note.id)
             case .quote(let note):
                 _ = try await service.publishQuote(of: note, content: content, mediaUrls: urls, extraTags: extraTags)
             }

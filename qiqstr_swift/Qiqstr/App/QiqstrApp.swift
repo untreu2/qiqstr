@@ -17,6 +17,7 @@ struct QiqstrApp: App {
                 .preferredColorScheme(ThemePreference(rawValue: theme)?.colorScheme)
                 .tint(AppColors.textPrimary)
                 .toastOverlay()
+                .environment(\.locale, AppLanguage.locale)
                 .id(language ?? "system")
                 .task { await BackgroundRefresh.launchSession() }
                 .onOpenURL { url in

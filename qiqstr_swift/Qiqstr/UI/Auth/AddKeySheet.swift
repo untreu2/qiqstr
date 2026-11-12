@@ -156,8 +156,8 @@ struct AddKeySheet: View {
             .animation(.snappy, value: model.errorMessage)
             .animation(.snappy, value: model.passwordError)
             .animation(.snappy, value: model.isEncryptedInput)
-            .onChange(of: model.isEncryptedInput) { _, encrypted in
-                if encrypted { passwordFocused = true }
+            .onChange(of: model.input) { old, new in
+                if model.isEncryptedInput, new.count - old.count > 1 { passwordFocused = true }
             }
             .onChange(of: model.password) { _, _ in model.passwordError = nil }
             .sensoryFeedback(.error, trigger: model.failureCount)

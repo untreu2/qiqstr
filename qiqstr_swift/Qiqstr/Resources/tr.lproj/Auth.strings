@@ -72,3 +72,7 @@
 "authTermsAgree" = "Kabul et ve devam et";
 "authTermsRead" = "Koşulları oku";
 "authTermsAgreeShort" = "Kabul et";
+"invalidNsecError" = "Bu anahtar geçerli değil. Bir nsec, hex özel anahtar veya kurtarma kelimelerini gir.";
+"invalidMnemonicError" = "Bu kurtarma kelimeleri geçerli değil. Yazımı ve kelime sırasını kontrol et.";
+"authAccountNotFound" = "Hesap bulunamadı.";
+"authKeyMismatch" = "Bu hesabın kayıtlı anahtarları eşleşmiyor. Tekrar giriş yap.";

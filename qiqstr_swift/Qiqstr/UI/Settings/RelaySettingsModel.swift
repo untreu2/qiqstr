@@ -20,8 +20,8 @@ final class RelaySettingsModel {
     private(set) var relays: [String] = []
     private(set) var flags: [String: SettingsRelayFlags] = [:]
     private(set) var statuses: [String: SettingsRelayStatus] = [:]
-    private(set) var connectedCount = 0
-    private(set) var totalCount = 0
+    var connectedCount: Int { relays.filter { status(for: $0)?.status == "connected" }.count }
+    var totalCount: Int { relays.count }
     private(set) var isPublishing = false
     private(set) var isFetching = false
     private(set) var broadcastProgress: (sent: Int, total: Int)?
@@ -75,7 +75,6 @@ final class RelaySettingsModel {
 
     private func apply(_ raw: String) {
         guard let json = JSON.object(raw) else { return }
-        let summary = (json["summary"] as? JSONObject) ?? [:]
         var next: [String: SettingsRelayStatus] = [:]
         for relay in (json["relays"] as? [JSONObject]) ?? [] {
             guard let url = relay.str("url") else { continue }
@@ -87,8 +86,6 @@ final class RelaySettingsModel {
             )
         }
         if next != statuses { statuses = next }
-        connectedCount = summary.int("connectedRelays")
-        totalCount = summary.int("totalRelays")
     }
 
     func status(for relay: String) -> SettingsRelayStatus? { statuses[Self.normalize(relay)] }

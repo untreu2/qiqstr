@@ -38,7 +38,7 @@ struct HomeView: View {
                 Image(systemName: "magnifyingglass").accessibilityLabel(L("search"))
             }
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabBarMinimizeBehavior(router.isTabBarMinimizable ? .onScrollDown : .never)
         .sheet(isPresented: $router.isComposing) {
             ComposeView(context: router.composeContext ?? .newNote)
         }

@@ -79,13 +79,13 @@ final class NoteActionHandler {
     }
 
     func confirmDelete(_ note: Note) {
-        NoteInteractionStore.shared.markDeleted(note.id)
+        NoteInteractionStore.shared.markDeleted(note.id, parent: note.parentId)
         Task {
             do {
                 try await InteractionService.shared.delete(note)
                 ToastCenter.shared.show(L("feedNoteDeleted"), style: .success)
             } catch {
-                NoteInteractionStore.shared.unmarkDeleted(note.id)
+                NoteInteractionStore.shared.unmarkDeleted(note.id, parent: note.parentId)
                 ToastCenter.shared.error(error)
             }
         }

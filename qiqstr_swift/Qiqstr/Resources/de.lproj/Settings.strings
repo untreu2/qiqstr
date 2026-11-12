@@ -105,3 +105,7 @@
 "localNotifyZapNoAmount" = "Zap von {name}";
 "localNotifyNewMessage" = "Neue Nachricht";
 "localNotifyNewMessages" = "{count} neue Nachrichten";
+"edit" = "Bearbeiten";
+"kindDMRelays" = "Nachrichten-Relays";
+"kindKeyPackageRelays" = "Schlüsselpaket-Relays";
+"kindKeyPackage" = "Nachrichten-Schlüsselpaket";

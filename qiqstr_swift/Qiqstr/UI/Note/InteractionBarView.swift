@@ -372,7 +372,7 @@ struct ZapBarLabel: View {
             popTick: zapTick,
             burstTick: zapTick,
             isPulsing: state.isPending,
-            floatingText: "+\(Sats.compact(delta))",
+            floatingText: delta > 0 ? "+\(Sats.compact(delta))" : nil,
             floatingTick: zapTick
         )
         .opacity(state.isPending ? 0.85 : 1)

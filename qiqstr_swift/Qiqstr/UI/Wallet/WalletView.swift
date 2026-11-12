@@ -134,6 +134,7 @@ struct WalletView: View {
             if uri != nil { model.consumeIncoming() }
         }
         .task { await BitcoinPriceService.shared.refreshIfNeeded() }
+        .onChange(of: wallet.isConnected) { Router.shared.expandTabBar() }
     }
 
     private var menu: some View {

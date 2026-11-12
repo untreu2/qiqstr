@@ -19,8 +19,8 @@ enum AuthError: LocalizedError {
         switch self {
         case .invalidKey: L("invalidNsecError")
         case .invalidMnemonic: L("invalidMnemonicError")
-        case .accountNotFound: "Account not found"
-        case .keyMismatch: "Stored account keys do not match"
+        case .accountNotFound: L("authAccountNotFound")
+        case .keyMismatch: L("authKeyMismatch")
         case .differentAccount: L("addKeyMismatch")
         case .wrongPassword: L("authNcryptsecWrongPassword")
         case .passwordRequired: L("authNcryptsecPasswordRequired")

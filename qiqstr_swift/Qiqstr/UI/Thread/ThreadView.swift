@@ -6,6 +6,7 @@ struct ThreadView: View {
     @State private var bus = DataBus.shared
     @State private var store = NoteInteractionStore.shared
     @State private var wot = WebOfTrustService.shared
+    @Environment(\.dismiss) private var dismiss
 
     init(noteId: String) {
         self.noteId = noteId
@@ -45,7 +46,9 @@ struct ThreadView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.start() }
         .task(id: bus.feedVersion) { await model.reloadLocal() }
-        .onChange(of: store.deletedIds) { model.rebuild() }
+        .onChange(of: store.deletedIds) {
+            if store.isDeleted(noteId) { dismiss() } else { model.rebuild() }
+        }
         .onChange(of: wot.trustedCount) { model.rebuild() }
         .onDisappear { model.stop() }
     }

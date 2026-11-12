@@ -148,8 +148,8 @@ struct AuthLoginView: View {
         .animation(.snappy, value: model.isViewOnlyInput)
         .animation(.snappy, value: model.isEncryptedInput)
         .animation(.snappy, value: model.passwordError)
-        .onChange(of: model.isEncryptedInput) { _, encrypted in
-            if encrypted { passwordFocused = true }
+        .onChange(of: model.input) { old, new in
+            if model.isEncryptedInput, new.count - old.count > 1 { passwordFocused = true }
         }
         .onChange(of: model.password) { _, _ in model.passwordError = nil }
         .sensoryFeedback(.error, trigger: model.failureCount)

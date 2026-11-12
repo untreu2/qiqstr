@@ -105,3 +105,7 @@
 "localNotifyZapNoAmount" = "Zap from {name}";
 "localNotifyNewMessage" = "New message";
 "localNotifyNewMessages" = "{count} new messages";
+"edit" = "Edit";
+"kindDMRelays" = "Message relays";
+"kindKeyPackageRelays" = "Key package relays";
+"kindKeyPackage" = "Messaging key package";

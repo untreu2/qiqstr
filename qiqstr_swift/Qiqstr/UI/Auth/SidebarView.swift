@@ -113,7 +113,7 @@ struct SidebarView: View {
                 HStack(spacing: 14) {
                     ProfileAvatar(pubkey: me, size: 60)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(profile?.bestName.nilIfEmpty ?? L("anonymous"))
+                        Text(profile.flatMap { $0.displayName.nilIfEmpty ?? $0.name.nilIfEmpty } ?? L("anonymous"))
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)

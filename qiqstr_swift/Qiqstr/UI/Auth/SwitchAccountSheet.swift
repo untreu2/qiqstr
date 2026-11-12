@@ -123,7 +123,7 @@ struct SwitchAccountSheet: View {
                 ProfileAvatar(pubkey: pubkey, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(profile?.bestName ?? Profile.shortNpub(pubkey))
+                        Text(profile.flatMap { $0.displayName.nilIfEmpty ?? $0.name.nilIfEmpty } ?? L("anonymous"))
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)

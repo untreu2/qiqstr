@@ -11,6 +11,11 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable {
         case .de: "Deutsch"
         }
     }
+
+    static var locale: Locale {
+        if let code = UserDefaults.standard.string(forKey: "app_language") { return Locale(identifier: code) }
+        return .current
+    }
 }
 
 nonisolated final class Localizer: @unchecked Sendable {

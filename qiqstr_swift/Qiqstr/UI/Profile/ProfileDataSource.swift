@@ -112,9 +112,8 @@ enum ProfileDataSource {
     }
 
     static func followerCount(_ pubkey: String) async -> Int? {
-        guard let raw = try? await fetchFollowerCounts(pubkeyHexes: [pubkey]),
-              let map = JSON.object(raw), let value = map[pubkey] as? NSNumber else { return nil }
-        return value.intValue
+        guard let raw = try? await fetchFollowerCounts(pubkeyHexes: [pubkey]), let map = JSON.object(raw) else { return nil }
+        return (map[pubkey] as? NSNumber)?.intValue ?? 0
     }
 
     static func followScore(target: String) async -> FollowScore? {

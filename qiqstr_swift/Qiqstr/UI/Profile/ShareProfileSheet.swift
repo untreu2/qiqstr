@@ -47,12 +47,6 @@ struct ShareProfileSheet: View {
                     Button(role: .close) { dismiss() }
                         .accessibilityIdentifier("share-profile-close")
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showScanner = true } label: {
-                        Image(systemName: "qrcode.viewfinder")
-                    }
-                    .accessibilityLabel(L("scanQRCode"))
-                }
             }
         }
         .presentationDetents([.large])

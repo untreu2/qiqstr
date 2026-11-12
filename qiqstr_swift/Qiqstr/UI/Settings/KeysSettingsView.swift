@@ -96,12 +96,15 @@ struct KeysSettingsView: View {
     @State private var model = KeysSettingsModel()
     @Environment(\.scenePhase) private var scenePhase
 
+    static func unhyphenated(_ key: String) -> String {
+        key.map(String.init).joined(separator: "\u{200B}")
+    }
+
     var body: some View {
         List {
             Section {
-                Text(model.npub.isEmpty ? L("loading") : model.npub)
+                Text(model.npub.isEmpty ? L("loading") : Self.unhyphenated(model.npub))
                     .font(.body.monospaced())
-                    .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("keys-npub")
                 copyButton(copied: model.isCopied("npub"), identifier: "keys-copy-npub") { model.copyNpub() }
@@ -156,7 +159,7 @@ struct KeysSettingsView: View {
                 if model.showAdvanced {
                     if let nsec = model.nsec {
                         secretRows(.nsec) {
-                            Text(model.isRevealed(.nsec) ? nsec : String(repeating: "\u{2022}", count: nsec.count))
+                            Text(model.isRevealed(.nsec) ? Self.unhyphenated(nsec) : String(repeating: "\u{2022}", count: nsec.count))
                                 .font(.body.monospaced())
                                 .foregroundStyle(model.isRevealed(.nsec) ? .primary : .secondary)
                                 .fixedSize(horizontal: false, vertical: true)

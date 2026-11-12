@@ -80,7 +80,19 @@ final class Router {
     var composeContext: ComposeContext?
     var showSidebar = false
     var sheet: AppSheet?
+    private(set) var isTabBarMinimizable = true
     @ObservationIgnored private var pendingLink: NostrLink?
+    @ObservationIgnored private var tabBarTask: Task<Void, Never>?
+
+    func expandTabBar() {
+        tabBarTask?.cancel()
+        isTabBarMinimizable = false
+        tabBarTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            self?.isTabBarMinimizable = true
+        }
+    }
 
     func push(_ route: Route) {
         paths[selectedTab, default: NavigationPath()].append(route)

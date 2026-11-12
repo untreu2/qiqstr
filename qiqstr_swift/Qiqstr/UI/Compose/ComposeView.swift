@@ -133,7 +133,7 @@ struct ComposeEditor: View {
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .scrollDisabled(true)
-                    .frame(minHeight: 140)
+                    .frame(minHeight: model.attachments.isEmpty ? 140 : 72)
                     .focused($focused)
                     .accessibilityLabel(L("composeYourNote"))
                     .accessibilityIdentifier("compose-text")
@@ -526,10 +526,12 @@ struct ComposeDraftsSheet: View {
                     Button { onSelect(draft) } label: { ComposeDraftRow(draft: draft) }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("compose-draft-row")
-                }
-                .onDelete { offsets in
-                    for index in offsets { onDelete(drafts[index]) }
-                    drafts.remove(atOffsets: offsets)
+                        .swipeActions {
+                            Button(L("delete"), systemImage: "trash", role: .destructive) {
+                                onDelete(draft)
+                                drafts.removeAll { $0.id == draft.id }
+                            }
+                        }
                 }
             }
             .listStyle(.insetGrouped)

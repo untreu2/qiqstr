@@ -195,15 +195,28 @@ final class NoteInteractionStore {
         }
     }
 
-    func markReplied(_ noteId: String) {
+    func markReplied(_ noteId: String) async {
         guard let model = models[noteId] else { return }
+        let local = await service.localCounts([noteId])[noteId]?.replies ?? 0
         model.lastUserAction = Date()
-        model.counts.replies += 1
+        model.counts.replies = max(local, model.counts.replies, 1)
     }
 
-    func markDeleted(_ noteId: String) { deletedIds.insert(noteId) }
+    func markDeleted(_ noteId: String, parent: String? = nil) {
+        deletedIds.insert(noteId)
+        adjustReplies(of: parent, by: -1)
+    }
 
-    func unmarkDeleted(_ noteId: String) { deletedIds.remove(noteId) }
+    func unmarkDeleted(_ noteId: String, parent: String? = nil) {
+        deletedIds.remove(noteId)
+        adjustReplies(of: parent, by: 1)
+    }
+
+    private func adjustReplies(of parent: String?, by delta: Int) {
+        guard let parent, let model = models[parent] else { return }
+        model.lastUserAction = Date()
+        model.counts.replies = max(0, model.counts.replies + delta)
+    }
 
     func isDeleted(_ noteId: String) -> Bool { deletedIds.contains(noteId) }
 

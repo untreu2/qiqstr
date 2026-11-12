@@ -72,3 +72,7 @@
 "authTermsAgree" = "Agree and continue";
 "authTermsRead" = "Read terms";
 "authTermsAgreeShort" = "Agree";
+"invalidNsecError" = "That key isn’t valid. Enter an nsec, a hex private key, or your recovery words.";
+"invalidMnemonicError" = "Those recovery words aren’t valid. Check the spelling and word order.";
+"authAccountNotFound" = "Account not found.";
+"authKeyMismatch" = "The stored keys for this account don’t match. Sign in again.";

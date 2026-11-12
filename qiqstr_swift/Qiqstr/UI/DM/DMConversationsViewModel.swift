@@ -33,6 +33,7 @@ final class DMConversationsViewModel {
     private func matchesQuery(_ conversation: DMConversation) -> Bool {
         let q = trimmedQuery
         if let hex = Nip19.pubkeyHex(from: q) { return conversation.peer == hex }
+        if q.hasPrefix("npub1"), Nip19.npub(conversation.peer)?.hasPrefix(q) == true { return true }
         if conversation.lastMessage.content.lowercased().contains(q) { return true }
         guard let profile = ProfileCache.shared.profile(conversation.peer) else { return conversation.peer.hasPrefix(q) }
         return profile.name.lowercased().contains(q)

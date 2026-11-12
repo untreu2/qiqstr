@@ -17,6 +17,7 @@ extension GossipMode {
 struct RelaySettingsView: View {
     @State private var model = RelaySettingsModel()
     @FocusState private var urlFocused: Bool
+    @State private var editMode: EditMode = .inactive
 
     var body: some View {
         List {
@@ -82,11 +83,10 @@ struct RelaySettingsView: View {
                     ForEach(model.relays, id: \.self) { relay in
                         SettingsRelayRow(url: relay, status: model.status(for: relay), flags: model.flags(for: relay))
                             .contextMenu { relayMenu(relay) }
+                            .swipeActions {
+                                Button(L("delete"), systemImage: "trash", role: .destructive) { Task { await model.remove(relay) } }
+                            }
                             .accessibilityIdentifier("relay-row-\(RelaySettingsModel.host(relay))")
-                    }
-                    .onDelete { offsets in
-                        let targets = offsets.map { model.relays[$0] }
-                        Task { for relay in targets { await model.remove(relay) } }
                     }
                     .onMove { model.move(from: $0, to: $1) }
                 }
@@ -119,10 +119,16 @@ struct RelaySettingsView: View {
             }
         }
         .settingsListStyle()
+        .environment(\.editMode, $editMode)
         .navigationTitle(L("relays"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { EditButton().accessibilityIdentifier("relays-edit") }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(editMode.isEditing ? L("done") : L("edit")) {
+                    withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                }
+                .accessibilityIdentifier("relays-edit")
+            }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 Button(L("addRelay"), systemImage: "plus") { model.showAdd = true }
@@ -193,7 +199,7 @@ struct RelaySettingsView: View {
                         .onSubmit { Task { await model.add() } }
                         .accessibilityIdentifier("relays-add-field")
                 } footer: {
-                    if !model.newRelayURL.isEmpty && !isNewRelayValid {
+                    if !["", "wss://", "ws://"].contains(model.newRelayURL) && !isNewRelayValid {
                         Text(L("invalidRelayUrl")).foregroundStyle(AppColors.error)
                     }
                 }
