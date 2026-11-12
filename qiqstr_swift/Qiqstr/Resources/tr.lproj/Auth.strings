@@ -59,9 +59,6 @@
 "addKeyMismatch" = "Bu anahtar başka bir hesaba ait.";
 "addKeySuccess" = "Anahtar eklendi. Artık paylaşabilir, tepki verebilir ve mesaj gönderebilirsin.";
 "nip05NotFound" = "{address} bulunamadı.";
-"clipboardOpenLink" = "Kopyalanan bağlantıyı aç";
-"clipboardNoLink" = "Panoda nostr bağlantısı yok.";
-"clipboardDismiss" = "Kapat";
 "authNcryptsecDetected" = "Bu şifreli bir anahtar. Devam etmek için parolasını gir.";
 "authNcryptsecPassword" = "Yedek parolası";
 "authNcryptsecPasswordHeader" = "Parola";

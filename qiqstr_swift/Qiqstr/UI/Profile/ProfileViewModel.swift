@@ -21,6 +21,8 @@ final class ProfileViewModel {
     let pubkey: String
     private(set) var profile: Profile
     private(set) var nip05Verified = false
+    @ObservationIgnored private var checkedNip05: String?
+    @ObservationIgnored private var nip05Task: Task<Void, Never>?
     private(set) var followingCount: Int?
     private(set) var followerCount: Int?
     private(set) var followsMe = false
@@ -159,7 +161,15 @@ final class ProfileViewModel {
             if fresh != profile { profile = fresh }
             if ProfileCache.shared.profile(pubkey) != fresh { ProfileCache.shared.set(fresh) }
         }
-        await verifyNip05()
+        scheduleNip05Check()
+    }
+
+    private func scheduleNip05Check() {
+        let nip05 = profile.nip05
+        guard nip05 != checkedNip05 else { return }
+        checkedNip05 = nip05
+        nip05Task?.cancel()
+        nip05Task = Task { await verifyNip05() }
     }
 
     private func verifyNip05() async {
@@ -238,13 +248,20 @@ final class ProfileViewModel {
     }
 
     private func loadCounts(force: Bool) async {
-        async let followers = ProfileDataSource.followerCount(pubkey)
-        async let following: Void = loadFollowing(sync: true)
-        let (count, _) = await (followers, following)
-        if let count {
-            followerCount = count
-            ProfileCountsStore.shared.update(pubkey, followers: count)
-        }
+        async let followers: Void = loadFollowerCount()
+        async let following: Void = loadFollowingThenSync()
+        _ = await (followers, following)
+    }
+
+    private func loadFollowerCount() async {
+        guard let count = await ProfileDataSource.followerCount(pubkey) else { return }
+        followerCount = count
+        ProfileCountsStore.shared.update(pubkey, followers: count)
+    }
+
+    private func loadFollowingThenSync() async {
+        await loadFollowing(sync: false)
+        await loadFollowing(sync: true)
     }
 
     func loadFollowScore() async {

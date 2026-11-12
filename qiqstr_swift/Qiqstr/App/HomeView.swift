@@ -4,7 +4,6 @@ struct HomeView: View {
     @State private var router = Router.shared
     @State private var badge = NotificationBadge.shared
     @State private var session = Session.shared
-    @State private var clipboard = ClipboardLinkWatcher.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -53,21 +52,16 @@ struct HomeView: View {
             router.sheet = nil
             ReadOnlyGate.shared.present()
         }
-        .overlay(alignment: .top) { ClipboardLinkBanner() }
         .readOnlyGate()
         .zapRetryToast()
         .task {
             router.openPendingLink()
             SharedInbox.shared.check()
-            await clipboard.becameActive()
         }
         .onOpenURL(perform: openDeepLink)
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active:
-                SharedInbox.shared.check()
-                Task { await clipboard.becameActive() }
-            case .background: clipboard.enteredBackground()
+            case .active: SharedInbox.shared.check()
             default: break
             }
         }

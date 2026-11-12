@@ -173,7 +173,7 @@ final class SyncService {
         if let event = events.max(by: { $0.int("created_at") < $1.int("created_at") }) {
             try? await dbSaveFollowingListFromEvent(eventJson: JSON.string(event), selfPubkeyHex: session.pubkey ?? pubkey)
         }
-        bus.feedChanged()
+        if pubkey == session.pubkey { bus.feedChanged() }
         mark(key)
     }
 

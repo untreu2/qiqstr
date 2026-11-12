@@ -20,6 +20,9 @@ final class TrendingService {
     private var hashtagsLoadedAt: Date?
     private var inflightNotes: Task<[String], Never>?
     private var inflightHashtags: Task<[String], Never>?
+    private var poolIds: [String] = []
+    private var poolLoadedAt: Date?
+    private var inflightPool: Task<[String], Never>?
 
     func cachedNoteIds() -> [String] { noteIds }
     func cachedHashtags() -> [String] { hashtags }
@@ -36,6 +39,33 @@ final class TrendingService {
             notesLoadedAt = Date()
         }
         return noteIds
+    }
+
+    func explorePool(force: Bool = false) async -> [String] {
+        if !force, let loaded = poolLoadedAt, Date().timeIntervalSince(loaded) < Self.ttl, !poolIds.isEmpty { return poolIds }
+        if let inflightPool { return await inflightPool.value }
+        let task = Task.detached { await Self.fetchExplorePool() }
+        inflightPool = task
+        let ids = await task.value
+        inflightPool = nil
+        if !ids.isEmpty {
+            poolIds = ids
+            poolLoadedAt = Date()
+            extendPool()
+        }
+        return poolIds
+    }
+
+    private func extendPool() {
+        Task { [weak self] in
+            let extra = await Task.detached { await Self.fetchExtendedPool() }.value
+            guard let self, !extra.isEmpty else { return }
+            var seen = Set(self.poolIds)
+            let added = extra.filter { seen.insert($0).inserted }
+            guard !added.isEmpty else { return }
+            self.poolIds += added
+            DataBus.shared.feedChanged()
+        }
     }
 
     func trendingHashtags(force: Bool = false) async -> [String] {
@@ -58,8 +88,35 @@ final class TrendingService {
 
     nonisolated private static func fetchTrendingNotes() async -> [String] {
         let primal = await primalCache("explore_global_trending_24h", args: ["limit": noteLimit], timeout: 10)
-        if let ids = await storeTrending(primal), !ids.isEmpty { return ids }
+        if let ids = await storeTrending(primal), !ids.isEmpty { return Array(ids.prefix(noteLimit)) }
         return await nostrWineTrending()
+    }
+
+    nonisolated private static func fetchExplorePool() async -> [String] {
+        async let trending = primalPool("explore_global_trending_24h")
+        async let zapped = primalPool("explore_global_mostzapped_4h")
+        let primary = merged(await [trending, zapped])
+        return primary.isEmpty ? await nostrWineTrending() : primary
+    }
+
+    nonisolated private static func fetchExtendedPool() async -> [String] {
+        async let reactions = nostrWineTrending(order: "reactions", limit: 100)
+        async let reposts = nostrWineTrending(order: "reposts", limit: 100)
+        async let replies = nostrWineTrending(order: "replies", limit: 100)
+        return merged(await [reactions, reposts, replies])
+    }
+
+    nonisolated private static func merged(_ sources: [[String]]) -> [String] {
+        var seen = Set<String>()
+        var pool: [String] = []
+        for source in sources {
+            for id in source where seen.insert(id).inserted { pool.append(id) }
+        }
+        return pool
+    }
+
+    nonisolated private static func primalPool(_ name: String) async -> [String] {
+        await storeTrending(primalCache(name, args: ["limit": 100], timeout: 10)) ?? []
     }
 
     nonisolated private static func storeTrending(_ events: [JSONObject]) async -> [String]? {
@@ -75,11 +132,11 @@ final class TrendingService {
         var seen = Set(ids)
         ids += notes.compactMap { $0.str("id") }.filter { seen.insert($0).inserted }
         await fetchProfiles(for: notes)
-        return Array(ids.prefix(noteLimit))
+        return ids
     }
 
-    nonisolated private static func nostrWineTrending() async -> [String] {
-        guard let url = URL(string: "https://api.nostr.wine/trending?order=reactions&hours=24&limit=\(noteLimit)") else { return [] }
+    nonisolated private static func nostrWineTrending(order: String = "reactions", limit: Int = noteLimit) async -> [String] {
+        guard let url = URL(string: "https://api.nostr.wine/trending?order=\(order)&hours=24&limit=\(limit)") else { return [] }
         var request = URLRequest(url: url)
         request.timeoutInterval = 10
         guard let (data, response) = try? await URLSession.shared.data(for: request),

@@ -59,9 +59,6 @@
 "addKeyMismatch" = "Dieser Schlüssel gehört zu einem anderen Konto.";
 "addKeySuccess" = "Schlüssel hinzugefügt. Du kannst jetzt posten, reagieren und Nachrichten senden.";
 "nip05NotFound" = "{address} wurde nicht gefunden.";
-"clipboardOpenLink" = "Kopierten Link öffnen";
-"clipboardNoLink" = "In der Zwischenablage ist kein Nostr-Link.";
-"clipboardDismiss" = "Schließen";
 "authNcryptsecDetected" = "Dies ist ein verschlüsselter Schlüssel. Gib sein Passwort ein, um fortzufahren.";
 "authNcryptsecPassword" = "Passwort der Sicherung";
 "authNcryptsecPasswordHeader" = "Passwort";

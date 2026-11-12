@@ -112,7 +112,7 @@ final class FeedViewModel {
     }
 
     private func query(limit: Int) async -> [Note] {
-        if source.isExplore { return await Self.exploreNotes(force: false) }
+        if source.isExplore { return await exploreNotes(force: false) }
         if case .discover(let feed) = source { return await discoverNotes(feed, force: false) }
         let topics = activeTopics
         if source.isTopicFeed { return await Self.topicNotes(topics, limit: limit, includeReplies: true) }
@@ -122,13 +122,21 @@ final class FeedViewModel {
         return Self.interleave(home, extra, limit: limit, sort: sort)
     }
 
-    private static func exploreNotes(force: Bool) async -> [Note] {
-        let ids = await TrendingService.shared.trendingNoteIds(force: force)
+    private func exploreNotes(force: Bool) async -> [Note] {
+        if exploreHidden == nil { exploreHidden = ExploreSeenStore.shared.snapshot() }
+        let hidden = exploreHidden ?? [:]
+        let pool = await TrendingService.shared.explorePool(force: force)
+        var ids = pool.filter { hidden[$0] == nil }
+        if ids.count < Self.exploreMinimumFresh {
+            ids += pool.filter { hidden[$0] != nil }.sorted { (hidden[$0] ?? 0) < (hidden[$1] ?? 0) }
+        }
         let byId = Dictionary(await NoteRepository.notes(ids).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return ids.compactMap { byId[$0] }
     }
 
     @ObservationIgnored private var discoverCache: [String: [Note]] = [:]
+    @ObservationIgnored private var exploreHidden: [String: Double]?
+    private static let exploreMinimumFresh = 15
 
     private func discoverNotes(_ feed: DiscoverFeed, force: Bool) async -> [Note] {
         if !force, let cached = discoverCache[feed.id] { return cached }
@@ -326,7 +334,9 @@ final class FeedViewModel {
     func refresh() async {
         acceptNext = true
         switch source {
-        case .explore: _ = await TrendingService.shared.trendingNoteIds(force: true)
+        case .explore:
+            exploreHidden = ExploreSeenStore.shared.snapshot()
+            _ = await TrendingService.shared.explorePool(force: true)
         case .discover(let feed): _ = await discoverNotes(feed, force: true)
         case .following:
             async let feed: Void = SyncService.shared.syncFeed(force: true)
@@ -341,6 +351,7 @@ final class FeedViewModel {
     }
 
     func loadMoreIfNeeded(_ note: Note) {
+        ExploreSeenStore.shared.mark(note.id)
         guard canLoadMore, !isLoadingMore, let index = notes.firstIndex(where: { $0.listId == note.listId }), index >= notes.count - 6 else { return }
         Task { await loadMore() }
     }

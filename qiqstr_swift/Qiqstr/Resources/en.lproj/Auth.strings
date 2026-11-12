@@ -59,9 +59,6 @@
 "addKeyMismatch" = "This key belongs to a different account.";
 "addKeySuccess" = "Key added. You can now post, react and message.";
 "nip05NotFound" = "Could not find {address}.";
-"clipboardOpenLink" = "Open copied link";
-"clipboardNoLink" = "There is no nostr link in the clipboard.";
-"clipboardDismiss" = "Dismiss";
 "authNcryptsecDetected" = "This is an encrypted key. Enter its password to continue.";
 "authNcryptsecPassword" = "Backup password";
 "authNcryptsecPasswordHeader" = "Password";

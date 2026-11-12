@@ -240,7 +240,10 @@ private struct CountButton: View {
                         .foregroundStyle(.primary)
                         .contentTransition(.numericText())
                 } else {
-                    ProgressView().controlSize(.mini)
+                    Text(verbatim: "000")
+                        .font(.subheadline.weight(.semibold))
+                        .redacted(reason: .placeholder)
+                        .accessibilityHidden(true)
                 }
                 Text(label).font(.subheadline).foregroundStyle(.secondary)
             }

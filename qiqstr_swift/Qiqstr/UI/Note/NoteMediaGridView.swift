@@ -29,9 +29,8 @@ struct NoteMediaGridView: View {
             let ratio = min(max(images[0].aspectRatio ?? 4 / 3, 0.66), 1.9)
             tile(0)
                 .aspectRatio(ratio, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .frame(maxHeight: maxHeight)
                 .clipShape(.rect(cornerRadius: 16, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .leading)
         case 2:
             HStack(spacing: spacing) { tile(0); tile(1) }
                 .frame(height: 220)
@@ -319,12 +318,20 @@ struct NoteVideoView: View {
     @State private var player: AVPlayer?
     @State private var thumbnail: UIImage?
     @State private var duration: Double?
+    @State private var isPlaying = false
+    @State private var isMuted = true
 
     var body: some View {
         ZStack {
             if let player {
-                VideoPlayer(player: player)
-                    .onDisappear { player.pause() }
+                NotePlayerLayerView(player: player)
+                    .contentShape(Rectangle())
+                    .onTapGesture { togglePlayback() }
+                    .accessibilityElement()
+                    .accessibilityLabel(isPlaying ? L("videoPause") : L("videoTapToPlay"))
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityIdentifier("note-media-video-surface")
+                if !isPlaying { playButton }
             } else {
                 Rectangle().fill(Color.black)
                 NoteMediaPlaceholder(blurhash: blurhash)
@@ -334,25 +341,15 @@ struct NoteVideoView: View {
                         .clipped()
                         .transition(.opacity)
                 }
-                Button(action: play) {
-                    Image(systemName: "play.fill")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 64, height: 64)
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel(alt.map { "\(L("videoTapToPlay")), \($0)" } ?? L("videoTapToPlay"))
-                .accessibilityValue(duration.map(Self.format) ?? "")
-                .accessibilityIdentifier("note-media-video-play")
+                playButton
             }
         }
         .aspectRatio(min(max(aspectRatio ?? 16 / 9, 0.56), 1.9), contentMode: .fit)
-        .frame(maxWidth: .infinity)
-        .frame(maxHeight: 460)
         .clipShape(.rect(cornerRadius: 16, style: .continuous))
         .overlay(alignment: .bottomTrailing) {
-            if player == nil, let duration {
+            if player != nil {
+                fullScreenButton
+            } else if let duration {
                 Text(Self.format(duration))
                     .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.white)
@@ -364,9 +361,22 @@ struct NoteVideoView: View {
             }
         }
         .overlay(alignment: .bottomLeading) {
-            if player == nil, let alt {
+            if player != nil {
+                muteButton
+            } else if let alt {
                 NoteAltBadge(text: alt).padding(10)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: 460, alignment: .leading)
+        .onDisappear {
+            guard player?.isExternallyPresented != true else { return }
+            player?.pause()
+            isPlaying = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            guard let item = note.object as? AVPlayerItem, item === player?.currentItem else { return }
+            player?.seek(to: .zero)
+            isPlaying = false
         }
         .task(id: url) {
             guard thumbnail == nil, let u = URL(string: url) else { return }
@@ -381,12 +391,75 @@ struct NoteVideoView: View {
         }
     }
 
+    private var playButton: some View {
+        Button(action: play) {
+            Image(systemName: "play.fill")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 64, height: 64)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(alt.map { "\(L("videoTapToPlay")), \($0)" } ?? L("videoTapToPlay"))
+        .accessibilityValue(duration.map(Self.format) ?? "")
+        .accessibilityIdentifier("note-media-video-play")
+    }
+
+    private var muteButton: some View {
+        controlButton(isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: isMuted ? L("unmute") : L("mute"), identifier: "note-media-video-mute") {
+            isMuted.toggle()
+            player?.isMuted = isMuted
+        }
+        .padding(10)
+    }
+
+    private var fullScreenButton: some View {
+        controlButton("arrow.up.left.and.arrow.down.right", label: L("videoFullScreen"), identifier: "note-media-video-fullscreen") {
+            guard let player else { return }
+            NoteFullScreenVideo.present(player) { syncFromPlayer() }
+        }
+        .padding(10)
+    }
+
+    private func controlButton(_ symbol: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 36, height: 36)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.tint(.black.opacity(0.35)).interactive(), in: .circle)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
+    }
+
     private func play() {
+        if let player {
+            player.play()
+            isPlaying = true
+            return
+        }
         guard let u = URL(string: url) else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         let p = AVPlayer(url: u)
+        p.isMuted = isMuted
         player = p
         p.play()
+        isPlaying = true
+    }
+
+    private func togglePlayback() {
+        guard let player else { return }
+        if isPlaying { player.pause() } else { player.play() }
+        isPlaying.toggle()
+    }
+
+    private func syncFromPlayer() {
+        guard let player else { return }
+        isPlaying = player.timeControlStatus != .paused
+        isMuted = player.isMuted
     }
 
     static func format(_ seconds: Double) -> String {
@@ -437,5 +510,77 @@ actor NoteVideoThumbnailCache {
         guard let time = try? await asset.load(.duration), time.isNumeric else { return nil }
         let seconds = time.seconds
         return seconds.isFinite && seconds > 0 ? seconds : nil
+    }
+}
+
+struct NotePlayerLayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> PlayerLayerView {
+        let view = PlayerLayerView()
+        view.playerLayer.videoGravity = .resizeAspect
+        view.backgroundColor = .black
+        view.playerLayer.player = player
+        return view
+    }
+
+    func updateUIView(_ view: PlayerLayerView, context: Context) {
+        if view.playerLayer.player !== player { view.playerLayer.player = player }
+    }
+
+    final class PlayerLayerView: UIView {
+        override static var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    }
+}
+
+enum NoteFullScreenVideo {
+    static func present(_ player: AVPlayer, onDismiss: @escaping () -> Void) {
+        guard let presenter = topViewController() else { return }
+        let controller = NoteFullScreenPlayerController()
+        controller.player = player
+        controller.videoGravity = .resizeAspect
+        controller.modalPresentationStyle = .fullScreen
+        controller.onDismiss = {
+            player.isExternallyPresented = false
+            onDismiss()
+        }
+        player.isExternallyPresented = true
+        presenter.present(controller, animated: true) { player.play() }
+    }
+
+    private static func topViewController() -> UIViewController? {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        var top = scene?.windows.first { $0.isKeyWindow }?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
+    }
+}
+
+final class NoteFullScreenPlayerController: AVPlayerViewController {
+    var onDismiss: (() -> Void)?
+    private var wasPlaying = false
+
+    override func viewWillDisappear(_ animated: Bool) {
+        wasPlaying = player?.timeControlStatus != .paused
+        super.viewWillDisappear(animated)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        guard isBeingDismissed else { return }
+        if wasPlaying { player?.play() }
+        onDismiss?()
+    }
+}
+
+extension AVPlayer {
+    private static var presentedKey: UInt8 = 0
+
+    var isExternallyPresented: Bool {
+        get { (objc_getAssociatedObject(self, &Self.presentedKey) as? Bool) ?? false }
+        set { objc_setAssociatedObject(self, &Self.presentedKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
 }
