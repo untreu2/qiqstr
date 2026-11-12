@@ -13,6 +13,7 @@ enum RelayConfig {
     static let primalCacheUrl = "wss://cache2.primal.net/v1"
     static let vertexRelayUrl = "wss://relay.vertexlab.io"
     static let blossomServer = "https://blossom.primal.net"
+    static let encryptedMediaServers = [blossomServer, "https://nostr.download"]
 
     static var mainRelays: [String] {
         get { UserDefaults.standard.stringArray(forKey: "custom_main_relays") ?? defaultMainRelays }

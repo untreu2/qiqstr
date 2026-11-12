@@ -35,9 +35,14 @@
 "dmInfoStatusReceived" = "Empfangen";
 "dmInfoType" = "Typ";
 "dmInfoText" = "Text";
-"dmInfoEncrypted" = "Ende-zu-Ende-verschlüsselt (NIP-17)";
+"dmInfoEncrypted" = "Ende-zu-Ende-verschlüsselt (Marmot, MLS)";
 "dmInfoDeliveredTo" = "Zugestellt an";
 "dmInfoDeliveredFooter" = "Relays, die diese Nachricht in dieser Sitzung angenommen haben.";
-"dmInfoInboxRelays" = "Deine Posteingangs-Relays";
-"dmInfoInboxFooter" = "Nachrichten an dich werden an diese Relays zugestellt.";
+"dmInfoChatRelays" = "Chat-Relays";
+"dmInfoChatFooter" = "Nachrichten in diesem Chat werden über diese Relays ausgetauscht.";
+"dmPeerNotOnMarmot" = "{name} kann noch keine Nachrichten empfangen. Dafür wird eine App mit Unterstützung für das Marmot-Protokoll benötigt, etwa White Noise oder qiqstr.";
 "dmInfoRelaysUnknown" = "Für diese Nachricht sind keine Relay-Details verfügbar.";
+"dmTabPrimary" = "Primär";
+"dmTabRequests" = "Anfragen";
+"dmRequestsEmptyTitle" = "Keine Nachrichtenanfragen";
+"dmRequestsEmptyMessage" = "Nachrichten von Personen, denen du nicht folgst und denen du nicht geantwortet hast, erscheinen hier.";

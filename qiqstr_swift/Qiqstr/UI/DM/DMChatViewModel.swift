@@ -51,6 +51,7 @@ final class DMChatViewModel {
     var messages: [DMMessage] { service.messages(with: peer) }
     var isLoading: Bool { !service.hasLoaded && messages.isEmpty }
     var isPreparingAttachment: Bool { attachments.contains { $0.state == .preparing } }
+    var isPeerUnavailable: Bool { messages.isEmpty && service.status(for: peer) == .unavailable }
 
     var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -125,10 +126,7 @@ final class DMChatViewModel {
 
     func deliveryRelays(for message: DMMessage) -> [String] { service.deliveryRelays[message.id] ?? [] }
 
-    func inboxRelays() -> [String] {
-        guard let me = service.currentPubkey else { return [] }
-        return service.knownDMRelays(for: me)
-    }
+    func chatRelays() -> [String] { service.chatRelays(for: peer) }
 
     private func grouped(_ a: DMMessage, _ b: DMMessage, _ calendar: Calendar) -> Bool {
         a.isMine == b.isMine && b.createdAt - a.createdAt < groupWindow && calendar.isDate(a.date, inSameDayAs: b.date) && a.state == b.state
@@ -136,10 +134,9 @@ final class DMChatViewModel {
 
     func appeared() async {
         service.activePeer = peer
-        let peer = peer
-        Task { _ = await self.service.dmRelays(for: peer) }
         await service.start()
         service.markRead(peer)
+        await service.checkPeer(peer)
     }
 
     func disappeared() {
@@ -217,7 +214,7 @@ final class DMChatViewModel {
             guard data.count <= DMService.maxFileSize else { throw DMChatError.tooLarge }
             draftItem.thumbnail = thumbnail
             update(id) { $0.thumbnail = thumbnail }
-            let prepared = try await service.prepareFile(data, mimeType: mime)
+            let prepared = try await service.prepareFile(data, mimeType: mime, for: peer)
             update(id) { $0.state = .ready(prepared) }
         } catch {
             attachments.removeAll { $0.id == id }

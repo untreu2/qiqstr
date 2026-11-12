@@ -35,9 +35,14 @@
 "dmInfoStatusReceived" = "Alındı";
 "dmInfoType" = "Tür";
 "dmInfoText" = "Metin";
-"dmInfoEncrypted" = "Uçtan uca şifreli (NIP-17)";
+"dmInfoEncrypted" = "Uçtan uca şifreli (Marmot, MLS)";
 "dmInfoDeliveredTo" = "İletildiği röleler";
 "dmInfoDeliveredFooter" = "Bu oturumda bu mesajı kabul eden röleler.";
-"dmInfoInboxRelays" = "Gelen kutusu rölelerin";
-"dmInfoInboxFooter" = "Sana gelen mesajlar bu rölelere iletilir.";
+"dmInfoChatRelays" = "Sohbet röleleri";
+"dmInfoChatFooter" = "Bu sohbetteki mesajlar bu röleler üzerinden iletilir.";
+"dmPeerNotOnMarmot" = "{name} henüz mesaj alamıyor. White Noise veya qiqstr gibi Marmot protokolünü destekleyen bir uygulama kullanması gerekiyor.";
 "dmInfoRelaysUnknown" = "Bu mesaj için röle bilgisi yok.";
+"dmTabPrimary" = "Birincil";
+"dmTabRequests" = "İstekler";
+"dmRequestsEmptyTitle" = "Mesaj isteği yok";
+"dmRequestsEmptyMessage" = "Takip etmediğin ve yanıt vermediğin kişilerden gelen mesajlar burada görünür.";

@@ -1,6 +1,6 @@
 # qiqstr for iOS (Swift)
 
-Native SwiftUI port of [qiqstr](https://github.com/untreu2/qiqstr). The Rust core from the Flutter app (nostr-sdk, LMDB, NIP-17, NWC, Cashu) is shared and exposed to Swift with **UniFFI**.
+Native SwiftUI port of [qiqstr](https://github.com/untreu2/qiqstr). The Rust core from the Flutter app (nostr-sdk, LMDB, NWC, Cashu) is exposed to Swift with **UniFFI**. Direct messages use the Marmot protocol through MDK (`rust/src/api/marmot.rs`, `Data/Services/MarmotEngine.swift`); NIP-17 is not used.
 
 ## Build
 
@@ -20,6 +20,7 @@ xcodebuild -project Qiqstr.xcodeproj -scheme Qiqstr -destination 'generic/platfo
 - Streams use the `EventSink` callback interface (`rust/src/sink.rs`). On the Swift side, wrap them with `EventStream.make { sink in try await someStreamingFn(..., sink: sink) }` to get an `AsyncThrowingStream<String, Error>`.
 - Generated Swift bindings live in `QiqstrCore` (a local Swift package). `import QiqstrCore` exposes the functions in camelCase, for example `dbGetHydratedFeedNotes(...)`, `createNoteEvent(...)`, `sendEvent(...)`. The full list is in `QiqstrCore/Sources/QiqstrCore/qiqstr_core.swift`.
 - Use `coreErrorMessage(error)` to show Rust errors.
+- `rust/vendor/mdk-sqlite-storage` is `mdk-sqlite-storage` 0.8.0 patched to `rusqlite` 0.31 so it shares one SQLCipher build with `cdk-sqlite`. Only one `libsqlite3-sys` can be linked, so keep both crates on the same `rusqlite`.
 
 ## App layering
 

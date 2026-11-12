@@ -113,7 +113,6 @@ final class LocalNotificationService: NSObject {
     private static let messagesThread = "messages"
     private static let seenLimit = 1500
     private static let overlap = 120
-    private static let giftWrapWindow = 172_800
 
     var isEnabled: Bool = UserDefaults.standard.bool(forKey: LocalNotificationService.enabledKey) {
         didSet {
@@ -213,14 +212,14 @@ final class LocalNotificationService: NSObject {
         }
         let wantsActivity = LocalNotificationType.allCases.contains { $0 != .messages && $0.isEnabled }
         async let activity = wantsActivity ? fetchActivity(me: me, since: last - Self.overlap) : []
-        async let wraps = fetchGiftWraps(me: me, since: last - Self.giftWrapWindow)
+        async let messages = fetchMessages(me: me, since: last)
         async let mutes: Void = ensureMutesLoaded()
         async let trust: Void = WebOfTrustService.shared.load(for: me)
-        let (events, giftWraps, _, _) = await (activity, wraps, mutes, trust)
+        let (events, incoming, _, _) = await (activity, messages, mutes, trust)
         guard Session.shared.pubkey == me else { return }
         setLastCheck(me, now)
         await deliver(events: events, me: me, since: last - Self.overlap)
-        await deliverMessages(giftWraps, me: me, since: last)
+        await deliverMessages(incoming, me: me, since: last)
         persistSeen(me)
     }
 
@@ -233,9 +232,9 @@ final class LocalNotificationService: NSObject {
         return events
     }
 
-    private func fetchGiftWraps(me: String, since: Int) async -> [JSONObject] {
-        guard LocalNotificationType.messages.isEnabled, Session.shared.canSign else { return [] }
-        return await SyncService.shared.fetchEvents(["kinds": [1059], "#p": [me], "since": since, "limit": 100], timeout: 8)
+    private func fetchMessages(me: String, since: Int) async -> [DMMessage] {
+        guard LocalNotificationType.messages.isEnabled, Session.shared.canSign, Session.shared.pubkey == me else { return [] }
+        return await DMService.shared.incomingMessages(since: since)
     }
 
     private func ensureMutesLoaded() async {
@@ -306,19 +305,8 @@ final class LocalNotificationService: NSObject {
         NotificationBadge.shared.markUnread()
     }
 
-    private func deliverMessages(_ wraps: [JSONObject], me: String, since: Int) async {
-        guard !wraps.isEmpty, let key = Session.shared.privateKey else { return }
-        let fresh = wraps.filter { ($0.str("id")).map { !(seen[me]?.contains($0) ?? false) } ?? false }
-        guard !fresh.isEmpty else { return }
-        let raws = fresh.map { JSON.string($0) }
-        let messages = await Task.detached(priority: .utility) {
-            raws.compactMap { raw -> DMMessage? in
-                (try? unwrapGiftWrapDm(receiverPrivateKeyHex: key, giftWrapJson: raw, currentUserPubkeyHex: me))
-                    .flatMap(JSON.object)
-                    .flatMap(DMMessage.init(json:))
-            }
-        }.value
-        fresh.compactMap { $0.str("id") }.forEach { _ = insertSeen($0, me: me) }
+    private func deliverMessages(_ messages: [DMMessage], me: String, since: Int) async {
+        guard !messages.isEmpty else { return }
         let muted = mutedPubkeys
         let incoming = messages.filter { !$0.isMine && $0.createdAt > since && accepts($0.sender, muted: muted) && insertSeen("dm-\($0.id)", me: me) }
         guard !incoming.isEmpty, Session.shared.pubkey == me else { return }

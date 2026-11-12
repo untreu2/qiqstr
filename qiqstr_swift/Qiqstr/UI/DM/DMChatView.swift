@@ -39,7 +39,7 @@ struct DMChatView: View {
             }
             .onChange(of: model.focusRequest) { inputFocused = true }
             .sheet(item: $model.infoMessage) { message in
-                DMMessageInfoSheet(message: message, deliveryRelays: model.deliveryRelays(for: message), inboxRelays: model.inboxRelays())
+                DMMessageInfoSheet(message: message, deliveryRelays: model.deliveryRelays(for: message), chatRelays: model.chatRelays())
                     .presentationDetents([.medium, .large])
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -197,9 +197,18 @@ struct DMChatView: View {
                     ProfileAvatar(pubkey: pubkey, size: 84)
                     Text(profile?.bestName ?? Profile.shortNpub(pubkey))
                         .font(.title3.weight(.semibold))
-                    Text(L("noMessagesYet"))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if model.isPeerUnavailable {
+                        Label(L("dmPeerNotOnMarmot", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]), systemImage: "exclamationmark.lock")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                            .accessibilityIdentifier("dm-chat-peer-unavailable")
+                    } else {
+                        Text(L("noMessagesYet"))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                     Label(L("dmEncryptionNotice"), systemImage: "lock.fill")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -233,8 +242,9 @@ struct DMChatView: View {
                 withAnimation(.snappy(duration: 0.25)) { awayFromBottom = away }
                 if !away { unseenCount = 0 }
             }
-            .defaultScrollAnchor(.bottom)
-            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .defaultScrollAnchor(.bottomLeading)
+            .defaultScrollAnchor(.bottomLeading, for: .sizeChanges)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .scrollDismissesKeyboard(.interactively)
             .accessibilityIdentifier("dm-chat-messages")
         }

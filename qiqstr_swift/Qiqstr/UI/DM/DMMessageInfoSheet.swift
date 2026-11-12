@@ -3,7 +3,7 @@ import SwiftUI
 struct DMMessageInfoSheet: View {
     let message: DMMessage
     let deliveryRelays: [String]
-    let inboxRelays: [String]
+    let chatRelays: [String]
     @Environment(\.dismiss) private var dismiss
     @State private var cache = ProfileCache.shared
 
@@ -30,7 +30,7 @@ struct DMMessageInfoSheet: View {
                 if message.isMine {
                     relaySection(title: L("dmInfoDeliveredTo"), relays: deliveryRelays, footer: deliveryRelays.isEmpty ? L("dmInfoRelaysUnknown") : L("dmInfoDeliveredFooter"))
                 } else {
-                    relaySection(title: L("dmInfoInboxRelays"), relays: inboxRelays, footer: inboxRelays.isEmpty ? L("dmInfoRelaysUnknown") : L("dmInfoInboxFooter"))
+                    relaySection(title: L("dmInfoChatRelays"), relays: chatRelays, footer: chatRelays.isEmpty ? L("dmInfoRelaysUnknown") : L("dmInfoChatFooter"))
                 }
             }
             .navigationTitle(L("dmInfo"))

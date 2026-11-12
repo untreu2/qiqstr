@@ -1457,84 +1457,6 @@ public func createFollowEvent(followingPubkeys: [String], privateKeyHex: String)
     )
 })
 }
-public func createGiftWrapDm(senderPrivateKeyHex: String, receiverPubkeyHex: String, message: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_create_gift_wrap_dm(
-        FfiConverterString.lower(senderPrivateKeyHex),
-        FfiConverterString.lower(receiverPubkeyHex),
-        FfiConverterString.lower(message),uniffiCallStatus
-    )
-})
-}
-public func createGiftWrapDmForSender(senderPrivateKeyHex: String, receiverPubkeyHex: String, message: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_create_gift_wrap_dm_for_sender(
-        FfiConverterString.lower(senderPrivateKeyHex),
-        FfiConverterString.lower(receiverPubkeyHex),
-        FfiConverterString.lower(message),uniffiCallStatus
-    )
-})
-}
-public func createGiftWrapDmPair(senderPrivateKeyHex: String, receiverPubkeyHex: String, message: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_create_gift_wrap_dm_pair(
-        FfiConverterString.lower(senderPrivateKeyHex),
-        FfiConverterString.lower(receiverPubkeyHex),
-        FfiConverterString.lower(message),uniffiCallStatus
-    )
-})
-}
-public func createGiftWrapFileMessage(senderPrivateKeyHex: String, receiverPubkeyHex: String, fileUrl: String, mimeType: String, encryptionKeyHex: String, encryptionNonceHex: String, encryptedHash: String, originalHash: String, fileSize: UInt64?)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_create_gift_wrap_file_message(
-        FfiConverterString.lower(senderPrivateKeyHex),
-        FfiConverterString.lower(receiverPubkeyHex),
-        FfiConverterString.lower(fileUrl),
-        FfiConverterString.lower(mimeType),
-        FfiConverterString.lower(encryptionKeyHex),
-        FfiConverterString.lower(encryptionNonceHex),
-        FfiConverterString.lower(encryptedHash),
-        FfiConverterString.lower(originalHash),
-        FfiConverterOptionUInt64.lower(fileSize),uniffiCallStatus
-    )
-})
-}
-public func createGiftWrapFileMessageForSender(senderPrivateKeyHex: String, receiverPubkeyHex: String, fileUrl: String, mimeType: String, encryptionKeyHex: String, encryptionNonceHex: String, encryptedHash: String, originalHash: String, fileSize: UInt64?)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_create_gift_wrap_file_message_for_sender(
-        FfiConverterString.lower(senderPrivateKeyHex),
-        FfiConverterString.lower(receiverPubkeyHex),
-        FfiConverterString.lower(fileUrl),
-        FfiConverterString.lower(mimeType),
-        FfiConverterString.lower(encryptionKeyHex),
-        FfiConverterString.lower(encryptionNonceHex),
-        FfiConverterString.lower(encryptedHash),
-        FfiConverterString.lower(originalHash),
-        FfiConverterOptionUInt64.lower(fileSize),uniffiCallStatus
-    )
-})
-}
-public func createGiftWrapFileMessagePair(senderPrivateKeyHex: String, receiverPubkeyHex: String, fileUrl: String, mimeType: String, encryptionKeyHex: String, encryptionNonceHex: String, encryptedHash: String, originalHash: String, fileSize: UInt64?)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_create_gift_wrap_file_message_pair(
-        FfiConverterString.lower(senderPrivateKeyHex),
-        FfiConverterString.lower(receiverPubkeyHex),
-        FfiConverterString.lower(fileUrl),
-        FfiConverterString.lower(mimeType),
-        FfiConverterString.lower(encryptionKeyHex),
-        FfiConverterString.lower(encryptionNonceHex),
-        FfiConverterString.lower(encryptedHash),
-        FfiConverterString.lower(originalHash),
-        FfiConverterOptionUInt64.lower(fileSize),uniffiCallStatus
-    )
-})
-}
 public func createMuteEvent(mutedPubkeys: [String], privateKeyHex: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
@@ -3031,11 +2953,139 @@ public func isEventNewAndTrack(eventId: String) -> Bool  {
     )
 })
 }
-public func isGiftWrap(eventJson: String) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
+public func marmotClearPendingCommit(groupIdHex: String)throws   {try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_is_gift_wrap(
+    uniffi_qiqstr_core_fn_func_marmot_clear_pending_commit(
+        FfiConverterString.lower(groupIdHex),uniffiCallStatus
+    )
+}
+}
+public func marmotClose()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_close(uniffiCallStatus
+    )
+}
+}
+public func marmotCreateChat(peerKeyPackageJson: String, relays: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_create_chat(
+        FfiConverterString.lower(peerKeyPackageJson),
+        FfiConverterSequenceString.lower(relays),uniffiCallStatus
+    )
+})
+}
+public func marmotDecryptMedia(groupIdHex: String, imeta: [String], data: Data)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_decrypt_media(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterSequenceString.lower(imeta),
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+public func marmotEncryptMedia(groupIdHex: String, data: Data, mimeType: String, filename: String, outputPath: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_encrypt_media(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterData.lower(data),
+        FfiConverterString.lower(mimeType),
+        FfiConverterString.lower(filename),
+        FfiConverterString.lower(outputPath),uniffiCallStatus
+    )
+})
+}
+public func marmotGroups()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_groups(uniffiCallStatus
+    )
+})
+}
+public func marmotGroupsNeedingSelfUpdate(thresholdSecs: UInt64)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_groups_needing_self_update(
+        FfiConverterUInt64.lower(thresholdSecs),uniffiCallStatus
+    )
+})
+}
+public func marmotKeyPackageEvent(relays: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_key_package_event(
+        FfiConverterSequenceString.lower(relays),uniffiCallStatus
+    )
+})
+}
+public func marmotKeyPackageRelaysEvent(relays: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_key_package_relays_event(
+        FfiConverterSequenceString.lower(relays),uniffiCallStatus
+    )
+})
+}
+public func marmotMergePendingCommit(groupIdHex: String)throws   {try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_merge_pending_commit(
+        FfiConverterString.lower(groupIdHex),uniffiCallStatus
+    )
+}
+}
+public func marmotMessages(groupIdHex: String, limit: UInt32)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_messages(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterUInt32.lower(limit),uniffiCallStatus
+    )
+})
+}
+public func marmotOpen(dataDir: String, privateKeyHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_open(
+        FfiConverterString.lower(dataDir),
+        FfiConverterString.lower(privateKeyHex),uniffiCallStatus
+    )
+})
+}
+public func marmotPickKeyPackage(eventsJson: String, pubkeyHex: String)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_pick_key_package(
+        FfiConverterString.lower(eventsJson),
+        FfiConverterString.lower(pubkeyHex),uniffiCallStatus
+    )
+})
+}
+public func marmotProcessEvent(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_process_event(
         FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+public func marmotSelfUpdate(groupIdHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_self_update(
+        FfiConverterString.lower(groupIdHex),uniffiCallStatus
+    )
+})
+}
+public func marmotSendMessage(groupIdHex: String, kind: UInt16, content: String, tagsJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_send_message(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterUInt16.lower(kind),
+        FfiConverterString.lower(content),
+        FfiConverterString.lower(tagsJson),uniffiCallStatus
     )
 })
 }
@@ -3445,25 +3495,6 @@ public func syncRepliesRecursive(noteId: String, maxDepth: UInt32)async throws  
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
-public func unwrapGiftWrap(receiverPrivateKeyHex: String, giftWrapJson: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_unwrap_gift_wrap(
-        FfiConverterString.lower(receiverPrivateKeyHex),
-        FfiConverterString.lower(giftWrapJson),uniffiCallStatus
-    )
-})
-}
-public func unwrapGiftWrapDm(receiverPrivateKeyHex: String, giftWrapJson: String, currentUserPubkeyHex: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
-        uniffiCallStatus in
-    uniffi_qiqstr_core_fn_func_unwrap_gift_wrap_dm(
-        FfiConverterString.lower(receiverPrivateKeyHex),
-        FfiConverterString.lower(giftWrapJson),
-        FfiConverterString.lower(currentUserPubkeyHex),uniffiCallStatus
-    )
-})
-}
 public func updateSigner(privateKeyHex: String)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -3600,24 +3631,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_create_follow_event() != 7808) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_create_gift_wrap_dm() != 58237) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_create_gift_wrap_dm_for_sender() != 15181) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_create_gift_wrap_dm_pair() != 38369) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_create_gift_wrap_file_message() != 57244) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_create_gift_wrap_file_message_for_sender() != 10763) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_create_gift_wrap_file_message_pair() != 9119) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_create_mute_event() != 46098) {
@@ -3965,7 +3978,52 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_is_event_new_and_track() != 37807) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_qiqstr_core_checksum_func_is_gift_wrap() != 54905) {
+    if (uniffi_qiqstr_core_checksum_func_marmot_clear_pending_commit() != 55021) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_close() != 47367) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_create_chat() != 15064) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_decrypt_media() != 7309) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_encrypt_media() != 53480) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_groups() != 44250) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_groups_needing_self_update() != 48355) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_key_package_event() != 50263) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_key_package_relays_event() != 39096) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_merge_pending_commit() != 13465) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_messages() != 40748) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_open() != 61561) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_pick_key_package() != 47065) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_process_event() != 59435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_self_update() != 13696) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_send_message() != 30704) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_merge_and_sort_notes() != 39284) {
@@ -4074,12 +4132,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_sync_replies_recursive() != 4185) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_unwrap_gift_wrap() != 21217) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_qiqstr_core_checksum_func_unwrap_gift_wrap_dm() != 25258) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_update_signer() != 29055) {

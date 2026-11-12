@@ -36,9 +36,15 @@ regex = "1"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 cdk = { version = "0.16", default-features = false, features = ["wallet"] }
 cdk-sqlite = { version = "0.16", default-features = false, features = ["wallet"] }
+mdk-core = { version = "0.8.0", features = ["mip04"] }
+mdk-sqlite-storage = "0.8.0"
+mdk-storage-traits = "0.8.0"
 
 [profile.release]
 opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
+
+[patch.crates-io]
+mdk-sqlite-storage = { path = "vendor/mdk-sqlite-storage" }

@@ -35,9 +35,14 @@
 "dmInfoStatusReceived" = "Received";
 "dmInfoType" = "Type";
 "dmInfoText" = "Text";
-"dmInfoEncrypted" = "End-to-end encrypted (NIP-17)";
+"dmInfoEncrypted" = "End-to-end encrypted (Marmot, MLS)";
 "dmInfoDeliveredTo" = "Delivered to";
 "dmInfoDeliveredFooter" = "Relays that accepted this message during this session.";
-"dmInfoInboxRelays" = "Your inbox relays";
-"dmInfoInboxFooter" = "Messages to you are delivered to these relays.";
+"dmInfoChatRelays" = "Chat relays";
+"dmInfoChatFooter" = "Messages in this chat are exchanged through these relays.";
+"dmPeerNotOnMarmot" = "{name} can’t receive messages yet. They need an app that supports the Marmot protocol, such as White Noise or qiqstr.";
 "dmInfoRelaysUnknown" = "Relay details aren't available for this message.";
+"dmTabPrimary" = "Primary";
+"dmTabRequests" = "Requests";
+"dmRequestsEmptyTitle" = "No message requests";
+"dmRequestsEmptyMessage" = "Messages from people you don't follow and haven't replied to appear here.";

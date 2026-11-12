@@ -367,37 +367,52 @@ pub fn create_relay_list_event(relay_urls: Vec<String>, private_key_hex: String)
 pub fn create_relay_list_event_with_markers(relay_configs: Vec<String>, private_key_hex: String) -> Result<String, QiqError> { api::events::create_relay_list_event_with_markers(relay_configs, private_key_hex).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn create_gift_wrap_dm(sender_private_key_hex: String, receiver_pubkey_hex: String, message: String) -> Result<String, QiqError> { api::nip17::create_gift_wrap_dm(sender_private_key_hex, receiver_pubkey_hex, message).map_err(Into::into) }
+pub fn marmot_open(data_dir: String, private_key_hex: String) -> Result<String, QiqError> { api::marmot::marmot_open(data_dir, private_key_hex).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn create_gift_wrap_dm_for_sender(sender_private_key_hex: String, receiver_pubkey_hex: String, message: String) -> Result<String, QiqError> { api::nip17::create_gift_wrap_dm_for_sender(sender_private_key_hex, receiver_pubkey_hex, message).map_err(Into::into) }
+pub fn marmot_close() -> () { api::marmot::marmot_close() }
 
 #[uniffi::export]
-pub fn create_gift_wrap_file_message(sender_private_key_hex: String, receiver_pubkey_hex: String, file_url: String, mime_type: String, encryption_key_hex: String, encryption_nonce_hex: String, encrypted_hash: String, original_hash: String, file_size: Option<u64>) -> Result<String, QiqError> { api::nip17::create_gift_wrap_file_message(sender_private_key_hex, receiver_pubkey_hex, file_url, mime_type, encryption_key_hex, encryption_nonce_hex, encrypted_hash, original_hash, file_size).map_err(Into::into) }
+pub fn marmot_key_package_event(relays: Vec<String>) -> Result<String, QiqError> { api::marmot::marmot_key_package_event(relays).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn create_gift_wrap_file_message_for_sender(sender_private_key_hex: String, receiver_pubkey_hex: String, file_url: String, mime_type: String, encryption_key_hex: String, encryption_nonce_hex: String, encrypted_hash: String, original_hash: String, file_size: Option<u64>) -> Result<String, QiqError> { api::nip17::create_gift_wrap_file_message_for_sender(sender_private_key_hex, receiver_pubkey_hex, file_url, mime_type, encryption_key_hex, encryption_nonce_hex, encrypted_hash, original_hash, file_size).map_err(Into::into) }
+pub fn marmot_key_package_relays_event(relays: Vec<String>) -> Result<String, QiqError> { api::marmot::marmot_key_package_relays_event(relays).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn create_gift_wrap_dm_pair(sender_private_key_hex: String, receiver_pubkey_hex: String, message: String) -> Result<String, QiqError> { api::nip17::create_gift_wrap_dm_pair(sender_private_key_hex, receiver_pubkey_hex, message).map_err(Into::into) }
+pub fn marmot_pick_key_package(events_json: String, pubkey_hex: String) -> Result<Option<String>, QiqError> { api::marmot::marmot_pick_key_package(events_json, pubkey_hex).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn create_gift_wrap_file_message_pair(sender_private_key_hex: String, receiver_pubkey_hex: String, file_url: String, mime_type: String, encryption_key_hex: String, encryption_nonce_hex: String, encrypted_hash: String, original_hash: String, file_size: Option<u64>) -> Result<String, QiqError> { api::nip17::create_gift_wrap_file_message_pair(sender_private_key_hex, receiver_pubkey_hex, file_url, mime_type, encryption_key_hex, encryption_nonce_hex, encrypted_hash, original_hash, file_size).map_err(Into::into) }
+pub fn marmot_create_chat(peer_key_package_json: String, relays: Vec<String>) -> Result<String, QiqError> { api::marmot::marmot_create_chat(peer_key_package_json, relays).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn unwrap_gift_wrap(receiver_private_key_hex: String, gift_wrap_json: String) -> Result<String, QiqError> { api::nip17::unwrap_gift_wrap(receiver_private_key_hex, gift_wrap_json).map_err(Into::into) }
+pub fn marmot_send_message(group_id_hex: String, kind: u16, content: String, tags_json: String) -> Result<String, QiqError> { api::marmot::marmot_send_message(group_id_hex, kind, content, tags_json).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn unwrap_gift_wrap_dm(receiver_private_key_hex: String, gift_wrap_json: String, current_user_pubkey_hex: String) -> Result<String, QiqError> { api::nip17::unwrap_gift_wrap_dm(receiver_private_key_hex, gift_wrap_json, current_user_pubkey_hex).map_err(Into::into) }
+pub fn marmot_process_event(event_json: String) -> Result<String, QiqError> { api::marmot::marmot_process_event(event_json).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn is_gift_wrap(event_json: String) -> bool { api::nip17::is_gift_wrap(event_json) }
+pub fn marmot_groups() -> Result<String, QiqError> { api::marmot::marmot_groups().map_err(Into::into) }
 
 #[uniffi::export]
-pub fn nip44_encrypt(content: String, sender_sk_hex: String, receiver_pk_hex: String) -> Result<String, QiqError> { api::nip17::nip44_encrypt(content, sender_sk_hex, receiver_pk_hex).map_err(Into::into) }
+pub fn marmot_messages(group_id_hex: String, limit: u32) -> Result<String, QiqError> { api::marmot::marmot_messages(group_id_hex, limit).map_err(Into::into) }
 
 #[uniffi::export]
-pub fn nip44_decrypt(payload: String, receiver_sk_hex: String, sender_pk_hex: String) -> Result<String, QiqError> { api::nip17::nip44_decrypt(payload, receiver_sk_hex, sender_pk_hex).map_err(Into::into) }
+pub fn marmot_groups_needing_self_update(threshold_secs: u64) -> Result<Vec<String>, QiqError> { api::marmot::marmot_groups_needing_self_update(threshold_secs).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_self_update(group_id_hex: String) -> Result<String, QiqError> { api::marmot::marmot_self_update(group_id_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_merge_pending_commit(group_id_hex: String) -> Result<(), QiqError> { api::marmot::marmot_merge_pending_commit(group_id_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_clear_pending_commit(group_id_hex: String) -> Result<(), QiqError> { api::marmot::marmot_clear_pending_commit(group_id_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_encrypt_media(group_id_hex: String, data: Vec<u8>, mime_type: String, filename: String, output_path: String) -> Result<String, QiqError> { api::marmot::marmot_encrypt_media(group_id_hex, data, mime_type, filename, output_path).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_decrypt_media(group_id_hex: String, imeta: Vec<String>, data: Vec<u8>) -> Result<Vec<u8>, QiqError> { api::marmot::marmot_decrypt_media(group_id_hex, imeta, data).map_err(Into::into) }
 
 #[uniffi::export]
 pub fn nip19_decode(bech32_str: String) -> Result<String, QiqError> { api::nip19::nip19_decode(bech32_str).map_err(Into::into) }
@@ -425,6 +440,12 @@ pub fn nip19_encode_nevent(event_id_hex: String, author_hex: Option<String>) -> 
 
 #[uniffi::export]
 pub fn nip19_encode_nprofile(pubkey_hex: String) -> Result<String, QiqError> { api::nip19::nip19_encode_nprofile(pubkey_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn nip44_encrypt(content: String, sender_sk_hex: String, receiver_pk_hex: String) -> Result<String, QiqError> { api::nip44::nip44_encrypt(content, sender_sk_hex, receiver_pk_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn nip44_decrypt(payload: String, receiver_sk_hex: String, sender_pk_hex: String) -> Result<String, QiqError> { api::nip44::nip44_decrypt(payload, receiver_sk_hex, sender_pk_hex).map_err(Into::into) }
 
 #[uniffi::export]
 pub fn validate_nwc_uri(uri: String) -> bool { api::nwc::validate_nwc_uri(uri) }
