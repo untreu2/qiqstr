@@ -1,0 +1,30 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.05490,0.05490,0.06275,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "bubble.svg",
+          "name": "bubble",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.35
+      },
+      "specular": true
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "iOS"
+    ]
+  }
+}
