@@ -3,7 +3,6 @@
 - `qiqstr_flutter/` contains the Flutter client. Read `qiqstr_flutter/AGENTS.md` before changing it.
 - `qiqstr_swift/` contains the native SwiftUI client. Read `qiqstr_swift/AGENTS.md` before changing it.
 - Run build, generation, and test commands from the relevant application directory. Each app owns its Rust bridge and generated artifacts.
-- GitHub Actions workflows belong in the root `.github/workflows/`; use the appropriate app working directory.
 
 ## Browser
 
