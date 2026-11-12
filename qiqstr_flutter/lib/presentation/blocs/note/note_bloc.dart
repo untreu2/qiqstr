@@ -13,21 +13,16 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
   final ProfileRepository _profileRepository;
   final SyncService _syncService;
   final AuthService _authService;
+  int _draftGeneration = 0;
 
   NoteBloc({
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _profileRepository = profileRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const NoteComposeState(content: '')) {
+    required this._profileRepository,
+    required this._syncService,
+    required this._authService,
+  }) : super(const NoteComposeState(content: '')) {
     on<NoteComposed>(_onNoteComposed, transformer: droppable());
     on<NoteContentChanged>(_onNoteContentChanged);
-    on<NoteMediaUploaded>(
-      _onNoteMediaUploaded,
-      transformer: sequential(),
-    );
+    on<NoteMediaUploaded>(_onNoteMediaUploaded, transformer: sequential());
     on<NoteMediaRemoved>(_onNoteMediaRemoved);
     on<NoteMediaReordered>(_onNoteMediaReordered);
     on<NoteMentionAdded>(_onNoteMentionAdded);
@@ -63,13 +58,19 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
       return;
     }
 
+    final generation = _draftGeneration;
     emit(currentState.copyWith(isPublishing: true));
     try {
       final published = await _publish(event, currentState);
+      if (emit.isDone || generation != _draftGeneration) return;
       emit(NoteComposedSuccess(published));
     } catch (_) {
+      if (emit.isDone || generation != _draftGeneration) return;
+      final latestState = state is NoteComposeState
+          ? state as NoteComposeState
+          : currentState;
       emit(const NoteError(NoteFailure.publishFailed));
-      emit(currentState.copyWith(isPublishing: false));
+      emit(latestState.copyWith(isPublishing: false));
     }
   }
 
@@ -94,10 +95,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         tags: event.tags,
       );
     } else {
-      return _syncService.publishNote(
-        content: event.content,
-        tags: event.tags,
-      );
+      return _syncService.publishNote(content: event.content, tags: event.tags);
     }
   }
 
@@ -113,10 +111,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     final canPost =
         trimmedContent.isNotEmpty || hasMedia || currentState.isQuote;
 
-    emit(currentState.copyWith(
-      content: event.content,
-      canPost: canPost,
-    ));
+    emit(currentState.copyWith(content: event.content, canPost: canPost));
   }
 
   Future<void> _onNoteMediaUploaded(
@@ -143,13 +138,11 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
         ...currentState.mediaUrls,
         ...directUrls,
       }.toList();
-      emit(currentState.copyWith(
-        mediaUrls: updatedMediaUrls,
-        canPost: true,
-      ));
+      emit(currentState.copyWith(mediaUrls: updatedMediaUrls, canPost: true));
       return;
     }
 
+    final generation = _draftGeneration;
     emit(currentState.copyWith(isUploadingMedia: true));
 
     try {
@@ -162,7 +155,9 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
           dim = await _getImageDimensions(filePath);
         }
 
+        if (emit.isDone || generation != _draftGeneration) return;
         final url = await _syncService.uploadMedia(filePath);
+        if (emit.isDone || generation != _draftGeneration) return;
         if (url != null) {
           uploadedUrls.add(url);
           if (dim != null) {
@@ -183,18 +178,21 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
           ...latestState.mediaDimensions,
           ...newDimensions,
         };
-        emit(latestState.copyWith(
-          mediaUrls: updatedMediaUrls,
-          mediaDimensions: updatedDimensions,
-          isUploadingMedia: false,
-          canPost: true,
-        ));
+        emit(
+          latestState.copyWith(
+            mediaUrls: updatedMediaUrls,
+            mediaDimensions: updatedDimensions,
+            isUploadingMedia: false,
+            canPost: true,
+          ),
+        );
         return;
       }
 
       emit(const NoteError(NoteFailure.mediaUploadFailed));
       emit(latestState.copyWith(isUploadingMedia: false));
     } catch (_) {
+      if (emit.isDone || generation != _draftGeneration) return;
       final latestState = state is NoteComposeState
           ? (state as NoteComposeState)
           : currentState;
@@ -203,27 +201,28 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     }
   }
 
-  void _onNoteMediaRemoved(
-    NoteMediaRemoved event,
-    Emitter<NoteState> emit,
-  ) {
+  void _onNoteMediaRemoved(NoteMediaRemoved event, Emitter<NoteState> emit) {
     final currentState = state is NoteComposeState
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
-    final updatedMediaUrls =
-        currentState.mediaUrls.where((url) => url != event.url).toList();
-    final updatedDimensions =
-        Map<String, String>.from(currentState.mediaDimensions)
-          ..remove(event.url);
+    final updatedMediaUrls = currentState.mediaUrls
+        .where((url) => url != event.url)
+        .toList();
+    final updatedDimensions = Map<String, String>.from(
+      currentState.mediaDimensions,
+    )..remove(event.url);
     final trimmedContent = currentState.content.trim();
-    final canPost = trimmedContent.isNotEmpty ||
+    final canPost =
+        trimmedContent.isNotEmpty ||
         updatedMediaUrls.isNotEmpty ||
         currentState.isQuote;
-    emit(currentState.copyWith(
-      mediaUrls: updatedMediaUrls,
-      mediaDimensions: updatedDimensions,
-      canPost: canPost,
-    ));
+    emit(
+      currentState.copyWith(
+        mediaUrls: updatedMediaUrls,
+        mediaDimensions: updatedDimensions,
+        canPost: canPost,
+      ),
+    );
   }
 
   void _onNoteMediaReordered(
@@ -245,10 +244,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     emit(currentState.copyWith(mediaUrls: reordered));
   }
 
-  void _onNoteMentionAdded(
-    NoteMentionAdded event,
-    Emitter<NoteState> emit,
-  ) {
+  void _onNoteMentionAdded(NoteMentionAdded event, Emitter<NoteState> emit) {
     final currentState = state is NoteComposeState
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
@@ -257,8 +253,9 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
       final cursorPos = event.params.startIndex;
       if (cursorPos == -1 || cursorPos > currentState.content.length) return;
 
-      final atIndex =
-          currentState.content.substring(0, cursorPos).lastIndexOf('@');
+      final atIndex = currentState.content
+          .substring(0, cursorPos)
+          .lastIndexOf('@');
       if (atIndex == -1) return;
 
       final mention = '@${event.params.name} ';
@@ -266,20 +263,24 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
       final newContent =
           '${currentState.content.substring(0, atIndex)}$mention$textAfterCursor';
 
-      emit(currentState.copyWith(
-        content: newContent,
-        isSearchingUsers: false,
-        userSuggestions: const [],
-        canPost: newContent.trim().isNotEmpty,
-      ));
+      emit(
+        currentState.copyWith(
+          content: newContent,
+          isSearchingUsers: false,
+          userSuggestions: const [],
+          canPost: newContent.trim().isNotEmpty,
+        ),
+      );
     } catch (e) {
       final newContent = '${currentState.content}@${event.params.name} ';
-      emit(currentState.copyWith(
-        content: newContent,
-        isSearchingUsers: false,
-        userSuggestions: const [],
-        canPost: newContent.trim().isNotEmpty,
-      ));
+      emit(
+        currentState.copyWith(
+          content: newContent,
+          isSearchingUsers: false,
+          userSuggestions: const [],
+          canPost: newContent.trim().isNotEmpty,
+        ),
+      );
     }
   }
 
@@ -287,6 +288,7 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     NoteContentCleared event,
     Emitter<NoteState> emit,
   ) {
+    _draftGeneration++;
     emit(const NoteComposeState(content: ''));
   }
 
@@ -294,69 +296,81 @@ class NoteBloc extends Bloc<NoteEvent, NoteState> {
     NoteUserSearchRequested event,
     Emitter<NoteState> emit,
   ) async {
+    final generation = _draftGeneration;
     final currentState = state is NoteComposeState
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
 
     if (event.query.isEmpty) {
-      emit(currentState
-          .copyWith(isSearchingUsers: false, userSuggestions: const []));
+      emit(
+        currentState.copyWith(
+          isSearchingUsers: false,
+          userSuggestions: const [],
+        ),
+      );
       return;
     }
 
     emit(currentState.copyWith(isSearchingUsers: true));
 
     try {
-      final profiles =
-          await _profileRepository.searchProfiles(event.query, limit: 10);
-      if (emit.isDone) return;
+      final profiles = await _profileRepository.searchProfiles(
+        event.query,
+        limit: 10,
+      );
+      if (emit.isDone || generation != _draftGeneration) return;
       final users = profiles.map((p) => p.toMap()).toList();
       final latestState = state is NoteComposeState
           ? (state as NoteComposeState)
           : currentState;
-      emit(latestState.copyWith(
-        isSearchingUsers: users.isNotEmpty,
-        userSuggestions: users,
-      ));
+      emit(
+        latestState.copyWith(
+          isSearchingUsers: users.isNotEmpty,
+          userSuggestions: users,
+        ),
+      );
     } catch (e) {
-      if (emit.isDone) return;
+      if (emit.isDone || generation != _draftGeneration) return;
       final latestState = state is NoteComposeState
           ? (state as NoteComposeState)
           : currentState;
-      emit(latestState
-          .copyWith(isSearchingUsers: false, userSuggestions: const []));
+      emit(
+        latestState.copyWith(
+          isSearchingUsers: false,
+          userSuggestions: const [],
+        ),
+      );
     }
   }
 
-  void _onNoteReplySetup(
-    NoteReplySetup event,
-    Emitter<NoteState> emit,
-  ) {
+  void _onNoteReplySetup(NoteReplySetup event, Emitter<NoteState> emit) {
     final currentState = state is NoteComposeState
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
-    emit(currentState.copyWith(
-      isReply: true,
-      isQuote: false,
-      rootId: event.rootId,
-      replyId: event.replyId,
-      parentAuthor: event.parentAuthor,
-    ));
+    emit(
+      currentState.copyWith(
+        isReply: true,
+        isQuote: false,
+        rootId: event.rootId,
+        replyId: event.replyId,
+        clearReplyId: event.replyId == null,
+        parentAuthor: event.parentAuthor,
+      ),
+    );
   }
 
-  void _onNoteQuoteSetup(
-    NoteQuoteSetup event,
-    Emitter<NoteState> emit,
-  ) {
+  void _onNoteQuoteSetup(NoteQuoteSetup event, Emitter<NoteState> emit) {
     final currentState = state is NoteComposeState
         ? (state as NoteComposeState)
         : const NoteComposeState(content: '');
-    emit(currentState.copyWith(
-      isReply: false,
-      isQuote: true,
-      quoteEventId: event.quoteEventId,
-      canPost: true,
-    ));
+    emit(
+      currentState.copyWith(
+        isReply: false,
+        isQuote: true,
+        quoteEventId: event.quoteEventId,
+        canPost: true,
+      ),
+    );
   }
 
   String _buildQuoteContent(String content, String quoteEventId) {

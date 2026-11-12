@@ -125,29 +125,6 @@ final class TrendingService {
     }
 
     nonisolated private static func primalCache(_ name: String, args: JSONObject, timeout: Int) async -> [JSONObject] {
-        guard let url = URL(string: RelayConfig.primalCacheUrl) else { return [] }
-        let socket = URLSession.shared.webSocketTask(with: url)
-        socket.maximumMessageSize = 4 * 1024 * 1024
-        socket.resume()
-        let watchdog = Task {
-            try? await Task.sleep(for: .seconds(timeout))
-            socket.cancel(with: .goingAway, reason: nil)
-        }
-        defer {
-            watchdog.cancel()
-            socket.cancel(with: .normalClosure, reason: nil)
-        }
-        let subscription = "qt_\(Int(Date().timeIntervalSince1970 * 1000))"
-        let request: [Any] = ["REQ", subscription, ["cache": [name, args]]]
-        do { try await socket.send(.string(JSON.string(request))) } catch { return [] }
-        var events: [JSONObject] = []
-        while !Task.isCancelled {
-            guard let message = try? await socket.receive() else { break }
-            guard case .string(let raw) = message, let frame = JSON.any(raw) as? [Any], let type = frame.first as? String else { continue }
-            if type == "EOSE" || type == "CLOSED" || type == "NOTICE" { break }
-            if type == "EVENT", frame.count >= 3, let event = frame[2] as? JSONObject { events.append(event) }
-        }
-        try? await socket.send(.string(JSON.string(["CLOSE", subscription])))
-        return events
+        await PrimalCache.request(name, args: args, timeout: timeout)
     }
 }

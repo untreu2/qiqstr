@@ -304,11 +304,11 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
             PageRouteBuilder(
               transitionDuration: const Duration(milliseconds: 300),
               reverseTransitionDuration: const Duration(milliseconds: 200),
-              pageBuilder: (_, __, ___) => PhotoViewerWidget(
+              pageBuilder: (_, _, _) => PhotoViewerWidget(
                 imageUrls: allUrls,
                 initialIndex: index,
               ),
-              transitionsBuilder: (_, animation, __, child) {
+              transitionsBuilder: (_, animation, _, child) {
                 final curved = CurvedAnimation(
                   parent: animation,
                   curve: Curves.easeOutCubic,

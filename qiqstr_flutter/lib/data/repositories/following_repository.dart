@@ -11,7 +11,7 @@ import '../services/rust_database_service.dart';
 class FollowingRepository {
   final RustDatabaseService _events;
 
-  FollowingRepository({required RustDatabaseService events}) : _events = events;
+  FollowingRepository({required this._events});
 
   Future<List<String>?> getFollowing(String userPubkey) async {
     try {
@@ -42,7 +42,9 @@ class FollowingRepository {
 
   Future<void> saveFollowing(String userPubkey, List<String> following) async {
     try {
-      final set = following.toSet()..add(userPubkey);
+      final set = following
+          .where((pubkey) => pubkey.toLowerCase() != userPubkey.toLowerCase())
+          .toSet();
       await rust_db.dbSaveFollowingList(
           pubkeyHex: userPubkey, followsHex: set.toList());
       _events.notifyFeedChange();

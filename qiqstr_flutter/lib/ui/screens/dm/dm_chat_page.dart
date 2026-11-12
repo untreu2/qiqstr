@@ -687,7 +687,7 @@ class _DmChatPageState extends State<DmChatPage> {
                             fit: BoxFit.cover,
                             width: double.infinity,
                             memCacheWidth: 600,
-                            placeholder: (_, __) => Container(
+                            placeholder: (_, _) => Container(
                               height: 200,
                               color: colors.overlayLight,
                               child: const Center(
@@ -695,7 +695,7 @@ class _DmChatPageState extends State<DmChatPage> {
                                     CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
-                            errorWidget: (_, __, ___) => Container(
+                            errorWidget: (_, _, _) => Container(
                               height: 100,
                               color: colors.overlayLight,
                               child: PhosphorIcon(PhosphorIcons.image(),
@@ -878,7 +878,7 @@ class _DmChatPageState extends State<DmChatPage> {
           fit: BoxFit.cover,
           width: double.infinity,
           cacheWidth: maxBubbleWidth * 2,
-          errorBuilder: (_, __, ___) => Container(
+          errorBuilder: (_, _, _) => Container(
             height: 100,
             color: colors.overlayLight,
             child: PhosphorIcon(PhosphorIcons.image(), color: colors.textSecondary),

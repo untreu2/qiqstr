@@ -35,17 +35,12 @@ class DmBloc extends Bloc<DmEvent, DmState> {
   List<Map<String, dynamic>>? get cachedConversations => _cachedConversations;
 
   DmBloc({
-    required DmService dmService,
-    required ProfileRepository profileRepository,
-    required FollowingRepository followingRepository,
-    required AuthService authService,
-    required SyncService syncService,
-  })  : _dmService = dmService,
-        _profileRepository = profileRepository,
-        _followingRepository = followingRepository,
-        _authService = authService,
-        _syncService = syncService,
-        super(const DmInitial()) {
+    required this._dmService,
+    required this._profileRepository,
+    required this._followingRepository,
+    required this._authService,
+    required this._syncService,
+  })  : super(const DmInitial()) {
     on<DmConversationsLoadRequested>(
       _onDmConversationsLoadRequested,
       transformer: restartable(),

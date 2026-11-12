@@ -25,23 +25,20 @@ class TitleWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    final EdgeInsets effectivePadding = padding ??
+    final EdgeInsets effectivePadding =
+        padding ??
         (useTopPadding
             ? EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8)
             : const EdgeInsets.fromLTRB(16, 60, 16, 8));
 
-    final Widget titleRow = Row(
-      children: [
-        Text(
-          title,
-          style: GoogleFonts.poppins(
-            fontSize: fontSize ?? 28,
-            fontWeight: FontWeight.w700,
-            color: context.colors.textPrimary,
-            letterSpacing: -0.5,
-          ),
-        ),
-      ],
+    final Widget titleRow = Text(
+      title,
+      style: GoogleFonts.poppins(
+        fontSize: fontSize ?? 28,
+        fontWeight: FontWeight.w700,
+        color: context.colors.textPrimary,
+        letterSpacing: -0.5,
+      ),
     );
 
     if (subtitle != null) {
@@ -82,33 +79,30 @@ class TitleWidget extends StatelessWidget {
                     ],
                   )
                 : subtitleOnTap != null
-                    ? GestureDetector(
-                        onTap: subtitleOnTap,
-                        child: Text(
-                          subtitle!,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: context.colors.textSecondary,
-                            height: 1.4,
-                          ),
-                        ),
-                      )
-                    : Text(
-                        subtitle!,
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: context.colors.textSecondary,
-                          height: 1.4,
-                        ),
+                ? GestureDetector(
+                    onTap: subtitleOnTap,
+                    child: Text(
+                      subtitle!,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: context.colors.textSecondary,
+                        height: 1.4,
                       ),
+                    ),
+                  )
+                : Text(
+                    subtitle!,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: context.colors.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
           ],
         ),
       );
     }
 
-    return Padding(
-      padding: effectivePadding,
-      child: titleRow,
-    );
+    return Padding(padding: effectivePadding, child: titleRow);
   }
 }

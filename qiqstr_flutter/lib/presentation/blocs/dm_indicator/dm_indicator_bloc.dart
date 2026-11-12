@@ -21,11 +21,9 @@ class DmIndicatorBloc extends Bloc<DmIndicatorEvent, DmIndicatorState> {
   int _generation = 0;
 
   DmIndicatorBloc({
-    required DmBloc dmBloc,
-    required AuthService authService,
-  })  : _dmBloc = dmBloc,
-        _authService = authService,
-        super(const DmIndicatorInitial()) {
+    required this._dmBloc,
+    required this._authService,
+  })  : super(const DmIndicatorInitial()) {
     on<DmIndicatorInitialized>(_onInitialized, transformer: restartable());
     on<DmIndicatorChecked>(_onChecked);
     on<_DmConversationsDataUpdated>(_onConversationsDataUpdated);

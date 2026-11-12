@@ -5,13 +5,17 @@ struct AuthWelcomeView: View {
     let onLogin: () -> Void
     let onSignup: () -> Void
 
-    @State private var acceptedTerms = false
-    @State private var showTermsError = false
+    @AppStorage("acceptedTerms") private var acceptedTerms = false
+    @State private var pendingDestination: Destination?
+    @State private var showTermsPrompt = false
     @State private var showTerms = false
     @State private var showLanguage = false
-    @State private var termsErrorTrigger = 0
 
-    private static let termsURL = URL(string: "qiqstr-auth://terms")!
+    private enum Destination {
+        case signup
+        case login
+    }
+
     private static let boldWords = ["decentralized", "Nostr", "open source", "açık kaynaklı", "merkeziyetsiz", "dezentrales"]
 
     var body: some View {
@@ -41,11 +45,26 @@ struct AuthWelcomeView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showTerms) { AuthTermsSheet() }
+        .alert(L("authTermsTitle"), isPresented: $showTermsPrompt) {
+            Button(L("authTermsAgree")) { acceptTerms() }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("welcome-terms-agree")
+            Button(L("authTermsRead")) { showTerms = true }
+                .accessibilityIdentifier("welcome-terms-read")
+            Button(L("cancel"), role: .cancel) { pendingDestination = nil }
+        } message: {
+            Text(L("authTermsPromptMessage"))
+        }
+        .sheet(isPresented: $showTerms, onDismiss: {
+            if acceptedTerms { acceptTerms() } else { pendingDestination = nil }
+        }) {
+            AuthTermsSheet(onAccept: pendingDestination == nil ? nil : {
+                acceptedTerms = true
+                showTerms = false
+            })
+        }
         .sheet(isPresented: $showLanguage) { AuthLanguageSheet() }
-        .sensoryFeedback(.selection, trigger: acceptedTerms)
-        .sensoryFeedback(.error, trigger: termsErrorTrigger)
-        .animation(.snappy, value: showTermsError)
+        .sensoryFeedback(.success, trigger: acceptedTerms)
     }
 
     private var title: some View {
@@ -85,20 +104,12 @@ struct AuthWelcomeView: View {
 
     private var bottomBar: some View {
         VStack(spacing: 14) {
-            termsRow
-            if showTermsError {
-                Text(L("acceptanceOfTermsIsRequired"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.red)
-                    .transition(.opacity)
-                    .accessibilityIdentifier("welcome-terms-error")
-            }
             PrimaryButton(title: L("createNewAccount")) {
-                proceed(onSignup)
+                proceed(to: .signup)
             }
             .accessibilityIdentifier("welcome-create-account")
             Button {
-                proceed(onLogin)
+                proceed(to: .login)
             } label: {
                 Text(L("welcomeAlreadyHaveAccount"))
                     .font(.headline)
@@ -115,50 +126,26 @@ struct AuthWelcomeView: View {
         .background(AppColors.background)
     }
 
-    private var termsRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Button {
-                acceptedTerms.toggle()
-                if acceptedTerms { showTermsError = false }
-            } label: {
-                Image(systemName: acceptedTerms ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(acceptedTerms ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L("termsOfUse"))
-            .accessibilityValue(acceptedTerms ? L("yes") : "")
-            .accessibilityAddTraits(acceptedTerms ? [.isSelected, .isToggle] : .isToggle)
-            .accessibilityIdentifier("welcome-terms-checkbox")
-            Text(termsText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .environment(\.openURL, OpenURLAction { _ in
-                    showTerms = true
-                    return .handled
-                })
-                .accessibilityIdentifier("welcome-terms-link")
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var termsText: AttributedString {
-        let prefix = AttributedString(L("iAcceptThe"))
-        var link = AttributedString(L("termsOfUse"))
-        link.link = Self.termsURL
-        link.foregroundColor = .primary
-        link.inlinePresentationIntent = .stronglyEmphasized
-        link.underlineStyle = .single
-        return prefix + link
-    }
-
-    private func proceed(_ action: () -> Void) {
+    private func proceed(to destination: Destination) {
         guard acceptedTerms else {
-            showTermsError = true
-            termsErrorTrigger += 1
+            pendingDestination = destination
+            showTermsPrompt = true
             return
         }
-        action()
+        open(destination)
+    }
+
+    private func acceptTerms() {
+        acceptedTerms = true
+        guard let destination = pendingDestination else { return }
+        pendingDestination = nil
+        open(destination)
+    }
+
+    private func open(_ destination: Destination) {
+        switch destination {
+        case .signup: onSignup()
+        case .login: onLogin()
+        }
     }
 }

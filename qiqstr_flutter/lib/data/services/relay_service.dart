@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:qiqstr/constants/relays.dart';
+import '../../constants/relays.dart';
 import '../../src/rust/api/relay.dart' as rust_relay;
 
 class RustRelayService {

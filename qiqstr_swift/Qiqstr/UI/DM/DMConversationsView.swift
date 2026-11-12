@@ -10,7 +10,6 @@ struct DMConversationsView: View {
             .background(AppColors.background)
             .navigationTitle(L("messages"))
             .navigationBarTitleDisplayMode(.large)
-            .navigationSubtitle(model.title(for: model.filter))
             .searchable(text: $model.query, prompt: L("search"))
             .toolbar { toolbar }
             .sheet(isPresented: $model.showNewMessage) {
@@ -52,6 +51,14 @@ struct DMConversationsView: View {
             .overlay {
                 if model.visibleConversations.isEmpty, model.isSearching {
                     ContentUnavailableView.search(text: model.query)
+                } else if model.visibleConversations.isEmpty, model.filter == .requests {
+                    EmptyStateView(
+                        systemImage: "tray",
+                        title: L("dmRequestsEmptyTitle"),
+                        message: L("dmRequestsEmptyMessage")
+                    )
+                    .padding(.top, 120)
+                    .accessibilityIdentifier("dm-requests-empty")
                 } else if model.visibleConversations.isEmpty {
                     EmptyStateView(
                         systemImage: "bubble.left.and.bubble.right",
@@ -65,7 +72,24 @@ struct DMConversationsView: View {
             }
             .animation(.smooth(duration: 0.25), value: model.visibleConversations.map(\.id))
             .accessibilityIdentifier("dm-conversations-list")
+            .safeAreaBar(edge: .top) {
+                if !model.isSearching { filterPicker }
+            }
         }
+    }
+
+    private var filterPicker: some View {
+        Picker(L("messages"), selection: $model.filter) {
+            ForEach(DMConversationFilter.allCases) { filter in
+                Text(model.title(for: filter)).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.large)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .sensoryFeedback(.selection, trigger: model.filter)
+        .accessibilityIdentifier("dm-filter")
     }
 
     private var notice: some View {
@@ -142,20 +166,6 @@ struct DMConversationsView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Menu {
-                Picker(L("messages"), selection: $model.filter) {
-                    ForEach(DMConversationFilter.allCases) { filter in
-                        Label(model.title(for: filter), systemImage: filter == .following ? "person.2" : "tray")
-                            .tag(filter)
-                    }
-                }
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease")
-            }
-            .accessibilityLabel(L("messages"))
-            .accessibilityIdentifier("dm-filter")
-        }
         if model.hasUnread {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

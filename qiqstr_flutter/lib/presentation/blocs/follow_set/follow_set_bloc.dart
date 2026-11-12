@@ -1,3 +1,4 @@
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -7,7 +8,6 @@ import '../../../data/sync/sync_service.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/follow_set_service.dart';
 import '../../../domain/entities/follow_set.dart';
-import '../../../src/rust/api/relay.dart' as rust_relay;
 import 'follow_set_event.dart';
 import 'follow_set_state.dart';
 
@@ -18,22 +18,49 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
   final AuthService _authService;
 
   FollowSetBloc({
-    required ProfileRepository profileRepository,
-    required FollowingRepository followingRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _profileRepository = profileRepository,
-        _followingRepository = followingRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const FollowSetInitial()) {
-    on<FollowSetLoadRequested>(_onLoadRequested);
-    on<FollowSetCreated>(_onCreated);
-    on<FollowSetDeleted>(_onDeleted);
-    on<FollowSetUserAdded>(_onUserAdded);
-    on<FollowSetUserRemoved>(_onUserRemoved);
-    on<FollowSetRefreshed>(_onRefreshed);
-    on<FollowSetFavoriteToggled>(_onFavoriteToggled);
+    required this._profileRepository,
+    required this._followingRepository,
+    required this._syncService,
+    required this._authService,
+  }) : super(const FollowSetInitial()) {
+    on<FollowSetEvent>(_onEvent, transformer: sequential());
+  }
+
+  bool _isCurrentSession(int generation, String? userHex) =>
+      generation == FollowSetService.instance.sessionGeneration &&
+      userHex == _authService.currentUserPubkeyHex;
+
+  Future<void> _onEvent(
+    FollowSetEvent event,
+    Emitter<FollowSetState> emit,
+  ) async {
+    final sessionGeneration = FollowSetService.instance.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
+    try {
+      switch (event) {
+        case FollowSetLoadRequested():
+          await _onLoadRequested(event, emit);
+        case FollowSetCreated():
+          await _onCreated(event, emit);
+        case FollowSetDeleted():
+          await _onDeleted(event, emit);
+        case FollowSetUserAdded():
+          await _onUserAdded(event, emit);
+        case FollowSetUserRemoved():
+          await _onUserRemoved(event, emit);
+        case FollowSetRefreshed():
+          await _onRefreshed(event, emit);
+        case FollowSetFavoriteToggled():
+          await _onFavoriteToggled(event, emit);
+      }
+    } catch (error) {
+      if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+      final currentState = state;
+      emit(FollowSetError(error.toString()));
+      if (currentState is FollowSetLoaded) {
+        emit(currentState);
+      }
+    }
   }
 
   static const _favoritesKey = 'favorite_follow_set_ids';
@@ -88,25 +115,29 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
 
     if (service.followSets.isNotEmpty || service.followedUsersSets.isNotEmpty) {
       final resolved = await _resolveProfiles(service.allSets);
-      emit(FollowSetLoaded(
-        followSets: service.followSets,
-        followedUsersSets: service.followedUsersSets,
-        resolvedProfiles: resolved.profiles,
-        resolvedAuthors: resolved.authors,
-        favoriteIds: favoriteIds,
-      ));
-      _syncInBackground(currentUserHex, emit);
+      emit(
+        FollowSetLoaded(
+          followSets: service.followSets,
+          followedUsersSets: service.followedUsersSets,
+          resolvedProfiles: resolved.profiles,
+          resolvedAuthors: resolved.authors,
+          favoriteIds: favoriteIds,
+        ),
+      );
+      await _sync(currentUserHex, emit);
     } else {
       emit(FollowSetLoaded(followSets: const [], favoriteIds: favoriteIds));
-      _syncInBackground(currentUserHex, emit);
+      await _sync(currentUserHex, emit);
     }
   }
 
   Future<
-      ({
-        Map<String, List<Map<String, dynamic>>> profiles,
-        Map<String, Map<String, String>> authors
-      })> _resolveProfiles(List<FollowSet> sets) async {
+    ({
+      Map<String, List<Map<String, dynamic>>> profiles,
+      Map<String, Map<String, String>> authors,
+    })
+  >
+  _resolveProfiles(List<FollowSet> sets) async {
     final allPubkeys = <String>{};
     for (final set in sets) {
       allPubkeys.addAll(set.pubkeys);
@@ -115,12 +146,13 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     if (allPubkeys.isEmpty) {
       return (
         profiles: <String, List<Map<String, dynamic>>>{},
-        authors: <String, Map<String, String>>{}
+        authors: <String, Map<String, String>>{},
       );
     }
 
-    final profilesMap =
-        await _profileRepository.getProfiles(allPubkeys.toList());
+    final profilesMap = await _profileRepository.getProfiles(
+      allPubkeys.toList(),
+    );
 
     final result = <String, List<Map<String, dynamic>>>{};
     final authors = <String, Map<String, String>>{};
@@ -173,37 +205,43 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
     return (profiles: result, authors: authors);
   }
 
-  void _syncInBackground(String currentUserHex, Emitter<FollowSetState> emit) {
-    _syncService.syncFollowSets(currentUserHex).then((_) async {
-      final service = FollowSetService.instance;
+  Future<void> _sync(
+    String currentUserHex,
+    Emitter<FollowSetState> emit,
+  ) async {
+    await _syncService.syncFollowSets(currentUserHex);
+    final service = FollowSetService.instance;
 
-      final allPubkeys = <String>{};
-      for (final set in service.allSets) {
-        allPubkeys.addAll(set.pubkeys);
-        allPubkeys.add(set.pubkey);
-      }
-      if (allPubkeys.isNotEmpty) {
-        await _syncService.syncProfiles(allPubkeys.toList());
-      }
+    final allPubkeys = <String>{};
+    for (final set in service.allSets) {
+      allPubkeys.addAll(set.pubkeys);
+      allPubkeys.add(set.pubkey);
+    }
+    if (allPubkeys.isNotEmpty) {
+      await _syncService.syncProfiles(allPubkeys.toList());
+    }
 
-      final resolved = await _resolveProfiles(service.allSets);
-      if (state is FollowSetLoaded) {
-        final current = state as FollowSetLoaded;
-        emit(FollowSetLoaded(
+    final resolved = await _resolveProfiles(service.allSets);
+    if (!emit.isDone && state is FollowSetLoaded) {
+      final current = state as FollowSetLoaded;
+      emit(
+        FollowSetLoaded(
           followSets: service.followSets,
           followedUsersSets: service.followedUsersSets,
           resolvedProfiles: resolved.profiles,
           resolvedAuthors: resolved.authors,
           favoriteIds: current.favoriteIds,
-        ));
-      }
-    });
+        ),
+      );
+    }
   }
 
   Future<void> _onCreated(
     FollowSetCreated event,
     Emitter<FollowSetState> emit,
   ) async {
+    final sessionGeneration = FollowSetService.instance.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
     final dTag = const Uuid().v4().replaceAll('-', '').substring(0, 8);
 
     try {
@@ -215,57 +253,76 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
         pubkeys: event.pubkeys,
       );
 
+      if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
       final service = FollowSetService.instance;
       final resolved = await _resolveProfiles(service.allSets);
       final favoriteIds = state is FollowSetLoaded
           ? (state as FollowSetLoaded).favoriteIds
           : await _loadFavoriteIds();
-      emit(FollowSetLoaded(
-        followSets: service.followSets,
-        followedUsersSets: service.followedUsersSets,
-        resolvedProfiles: resolved.profiles,
-        resolvedAuthors: resolved.authors,
-        favoriteIds: favoriteIds,
-      ));
-    } catch (_) {}
+      if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+      emit(
+        FollowSetLoaded(
+          followSets: service.followSets,
+          followedUsersSets: service.followedUsersSets,
+          resolvedProfiles: resolved.profiles,
+          resolvedAuthors: resolved.authors,
+          favoriteIds: favoriteIds,
+        ),
+      );
+    } catch (_) {
+      if (!_isCurrentSession(sessionGeneration, userHex)) return;
+      FollowSetService.instance.removeSet(dTag);
+      rethrow;
+    }
   }
 
   Future<void> _onDeleted(
     FollowSetDeleted event,
     Emitter<FollowSetState> emit,
   ) async {
+    final sessionGeneration = FollowSetService.instance.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
     final service = FollowSetService.instance;
     final set = service.getByDTag(event.dTag);
 
     if (set != null && set.id.isNotEmpty) {
-      try {
-        await rust_relay.deleteEvents(
-          eventIds: [set.id],
-          reason: 'User deleted list',
-        );
-      } catch (_) {}
+      await _syncService.publishDeletion(
+        eventIds: [set.id],
+        reason: 'User deleted list',
+      );
     }
 
+    if (!_isCurrentSession(sessionGeneration, userHex)) return;
     service.removeSet(event.dTag);
 
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
     final resolved = await _resolveProfiles(service.allSets);
     final favoriteIds = state is FollowSetLoaded
         ? (state as FollowSetLoaded).favoriteIds
         : await _loadFavoriteIds();
-    emit(FollowSetLoaded(
-      followSets: service.followSets,
-      followedUsersSets: service.followedUsersSets,
-      resolvedProfiles: resolved.profiles,
-      resolvedAuthors: resolved.authors,
-      favoriteIds: favoriteIds,
-    ));
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+    emit(
+      FollowSetLoaded(
+        followSets: service.followSets,
+        followedUsersSets: service.followedUsersSets,
+        resolvedProfiles: resolved.profiles,
+        resolvedAuthors: resolved.authors,
+        favoriteIds: favoriteIds,
+      ),
+    );
   }
 
   Future<void> _onUserAdded(
     FollowSetUserAdded event,
     Emitter<FollowSetState> emit,
   ) async {
+    final sessionGeneration = FollowSetService.instance.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
     final service = FollowSetService.instance;
+    final previousSet = service.getByDTag(event.dTag);
+    if (previousSet == null || previousSet.pubkeys.contains(event.pubkeyHex)) {
+      return;
+    }
     service.addPubkeyToSet(event.dTag, event.pubkeyHex);
 
     final set = service.getByDTag(event.dTag);
@@ -279,26 +336,40 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
         image: set.image,
         pubkeys: set.pubkeys,
       );
-    } catch (_) {}
+    } catch (_) {
+      if (!_isCurrentSession(sessionGeneration, userHex)) return;
+      service.addSet(previousSet);
+      rethrow;
+    }
 
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
     final resolved = await _resolveProfiles(service.allSets);
     final favoriteIds = state is FollowSetLoaded
         ? (state as FollowSetLoaded).favoriteIds
         : await _loadFavoriteIds();
-    emit(FollowSetLoaded(
-      followSets: service.followSets,
-      followedUsersSets: service.followedUsersSets,
-      resolvedProfiles: resolved.profiles,
-      resolvedAuthors: resolved.authors,
-      favoriteIds: favoriteIds,
-    ));
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+    emit(
+      FollowSetLoaded(
+        followSets: service.followSets,
+        followedUsersSets: service.followedUsersSets,
+        resolvedProfiles: resolved.profiles,
+        resolvedAuthors: resolved.authors,
+        favoriteIds: favoriteIds,
+      ),
+    );
   }
 
   Future<void> _onUserRemoved(
     FollowSetUserRemoved event,
     Emitter<FollowSetState> emit,
   ) async {
+    final sessionGeneration = FollowSetService.instance.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
     final service = FollowSetService.instance;
+    final previousSet = service.getByDTag(event.dTag);
+    if (previousSet == null || !previousSet.pubkeys.contains(event.pubkeyHex)) {
+      return;
+    }
     service.removePubkeyFromSet(event.dTag, event.pubkeyHex);
 
     final set = service.getByDTag(event.dTag);
@@ -312,19 +383,27 @@ class FollowSetBloc extends Bloc<FollowSetEvent, FollowSetState> {
         image: set.image,
         pubkeys: set.pubkeys,
       );
-    } catch (_) {}
+    } catch (_) {
+      if (!_isCurrentSession(sessionGeneration, userHex)) return;
+      service.addSet(previousSet);
+      rethrow;
+    }
 
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
     final resolved = await _resolveProfiles(service.allSets);
     final favoriteIds = state is FollowSetLoaded
         ? (state as FollowSetLoaded).favoriteIds
         : await _loadFavoriteIds();
-    emit(FollowSetLoaded(
-      followSets: service.followSets,
-      followedUsersSets: service.followedUsersSets,
-      resolvedProfiles: resolved.profiles,
-      resolvedAuthors: resolved.authors,
-      favoriteIds: favoriteIds,
-    ));
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+    emit(
+      FollowSetLoaded(
+        followSets: service.followSets,
+        followedUsersSets: service.followedUsersSets,
+        resolvedProfiles: resolved.profiles,
+        resolvedAuthors: resolved.authors,
+        favoriteIds: favoriteIds,
+      ),
+    );
   }
 
   Future<void> _onRefreshed(

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qiqstr/presentation/blocs/feed/feed_state.dart';
+import '../../../../lib/presentation/blocs/feed/feed_state.dart';
 
 void main() {
   final userHex = List.filled(64, 'a').join();

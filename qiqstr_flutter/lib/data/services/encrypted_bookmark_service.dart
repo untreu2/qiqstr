@@ -13,12 +13,15 @@ class EncryptedBookmarkService {
 
   List<String> _bookmarkedEventIds = [];
   bool _initialized = false;
+  int _loadGeneration = 0;
+  int _sessionGeneration = 0;
 
   final _changesController = StreamController<void>.broadcast();
   Stream<void> get changes => _changesController.stream;
 
   List<String> get bookmarkedEventIds => List.unmodifiable(_bookmarkedEventIds);
   bool get isInitialized => _initialized;
+  int get sessionGeneration => _sessionGeneration;
 
   bool isBookmarked(String eventId) => _bookmarkedEventIds.contains(eventId);
 
@@ -26,14 +29,18 @@ class EncryptedBookmarkService {
     required String userPubkeyHex,
     required String privateKeyHex,
   }) async {
+    final generation = ++_loadGeneration;
     try {
       final filterJson = jsonEncode({
         'kinds': [30001],
         'authors': [userPubkeyHex],
         '#d': ['bookmark'],
       });
-      final eventsJson =
-          await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
+      final eventsJson = await rust_db.dbQueryEvents(
+        filterJson: filterJson,
+        limit: 1,
+      );
+      if (generation != _loadGeneration) return;
       final events = jsonDecode(eventsJson) as List<dynamic>;
 
       if (events.isEmpty) {
@@ -63,6 +70,7 @@ class EncryptedBookmarkService {
       }
       _initialized = true;
     } catch (_) {
+      if (generation != _loadGeneration) return;
       _initialized = true;
     }
   }
@@ -70,8 +78,10 @@ class EncryptedBookmarkService {
   List<String> _extractEventIdsFromTags(Map<String, dynamic> event) {
     final tags = event['tags'] as List<dynamic>? ?? [];
     return tags
-        .where((tag) =>
-            tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1)
+        .where(
+          (tag) =>
+              tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1,
+        )
         .map((tag) => (tag as List)[1] as String)
         .toList();
   }
@@ -79,8 +89,10 @@ class EncryptedBookmarkService {
   List<String> _extractEventIdsFromJson(String decryptedJson) {
     final privateTags = jsonDecode(decryptedJson) as List<dynamic>;
     return privateTags
-        .where((tag) =>
-            tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1)
+        .where(
+          (tag) =>
+              tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1,
+        )
         .map((tag) => (tag as List)[1] as String)
         .toList();
   }
@@ -125,8 +137,9 @@ class EncryptedBookmarkService {
   }
 
   void removeBookmark(String eventId) {
-    _bookmarkedEventIds =
-        _bookmarkedEventIds.where((id) => id != eventId).toList();
+    _bookmarkedEventIds = _bookmarkedEventIds
+        .where((id) => id != eventId)
+        .toList();
     _changesController.add(null);
   }
 
@@ -137,6 +150,8 @@ class EncryptedBookmarkService {
   }
 
   void clear() {
+    _sessionGeneration++;
+    _loadGeneration++;
     _bookmarkedEventIds = [];
     _initialized = false;
     _changesController.add(null);

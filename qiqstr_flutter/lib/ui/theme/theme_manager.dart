@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../presentation/blocs/theme/theme_bloc.dart';
-import '../../../presentation/blocs/theme/theme_state.dart';
+import '../../presentation/blocs/theme/theme_bloc.dart';
+import '../../presentation/blocs/theme/theme_state.dart';
 import 'colors.dart';
 
 class AppThemeColors {
@@ -153,4 +153,9 @@ extension ThemeExtension on BuildContext {
       return null;
     }
   }
+}
+
+extension ThemeStateColors on ThemeState {
+  AppThemeColors get colors =>
+      isDarkMode ? AppThemeColors.dark() : AppThemeColors.light();
 }

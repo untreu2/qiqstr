@@ -313,7 +313,7 @@ class _QuoteContent extends StatelessWidget {
                     fit: BoxFit.cover,
                     fadeInDuration: Duration.zero,
                     fadeOutDuration: Duration.zero,
-                    placeholder: (_, __) => CircleAvatar(
+                    placeholder: (_, _) => CircleAvatar(
                       radius: 14,
                       backgroundColor: context.colors.surfaceTransparent,
                       child: PhosphorIcon(
@@ -322,7 +322,7 @@ class _QuoteContent extends StatelessWidget {
                         color: context.colors.textSecondary,
                       ),
                     ),
-                    errorWidget: (_, __, ___) => CircleAvatar(
+                    errorWidget: (_, _, _) => CircleAvatar(
                       radius: 14,
                       backgroundColor: context.colors.surfaceTransparent,
                       child: PhosphorIcon(

@@ -12,7 +12,7 @@ import '../services/rust_database_service.dart';
 class ArticleRepository {
   final RustDatabaseService _events;
 
-  ArticleRepository({required RustDatabaseService events}) : _events = events;
+  ArticleRepository({required this._events});
 
   List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
   List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;

@@ -14,6 +14,8 @@ class FollowSetService {
   List<FollowSet> _ownSets = [];
   List<FollowSet> _followedUsersSets = [];
   bool _initialized = false;
+  int _loadGeneration = 0;
+  int _sessionGeneration = 0;
 
   List<FollowSet> get followSets => List.unmodifiable(_ownSets);
   List<FollowSet> get followedUsersSets =>
@@ -21,6 +23,7 @@ class FollowSetService {
   List<FollowSet> get allSets =>
       List.unmodifiable([..._ownSets, ..._followedUsersSets]);
   bool get isInitialized => _initialized;
+  int get sessionGeneration => _sessionGeneration;
 
   FollowSet? getByDTag(String dTag) {
     try {
@@ -36,9 +39,7 @@ class FollowSetService {
     final pubkey = parts[0];
     final dTag = parts.sublist(1).join(':');
     try {
-      return allSets.firstWhere(
-        (s) => s.pubkey == pubkey && s.dTag == dTag,
-      );
+      return allSets.firstWhere((s) => s.pubkey == pubkey && s.dTag == dTag);
     } catch (_) {
       return null;
     }
@@ -49,24 +50,37 @@ class FollowSetService {
   }
 
   Future<void> loadFromDatabase({required String userPubkeyHex}) async {
+    final generation = _loadGeneration;
     try {
-      _ownSets = await _fetchFollowSets([userPubkeyHex], 100);
+      final sets = await _fetchFollowSets([userPubkeyHex], 100);
+      if (generation != _loadGeneration) return;
+      _ownSets = sets;
       _initialized = true;
     } catch (_) {
+      if (generation != _loadGeneration) return;
       _initialized = true;
     }
   }
 
-  Future<void> loadFollowedUsersSets(
-      {required List<String> followedPubkeys}) async {
-    if (followedPubkeys.isEmpty) return;
+  Future<void> loadFollowedUsersSets({
+    required List<String> followedPubkeys,
+  }) async {
+    if (followedPubkeys.isEmpty) {
+      _followedUsersSets = [];
+      return;
+    }
+    final generation = _loadGeneration;
     try {
-      _followedUsersSets = await _fetchFollowSets(followedPubkeys, 500);
+      final sets = await _fetchFollowSets(followedPubkeys, 500);
+      if (generation != _loadGeneration) return;
+      _followedUsersSets = sets;
     } catch (_) {}
   }
 
   Future<List<FollowSet>> _fetchFollowSets(
-      List<String> authors, int limit) async {
+    List<String> authors,
+    int limit,
+  ) async {
     final json = await rust_db.dbGetFollowSets(
       authorsHex: authors,
       limit: limit,
@@ -104,20 +118,14 @@ class FollowSetService {
     final event = jsonDecode(eventJson) as Map<String, dynamic>;
     final followSet = FollowSet.fromEvent(event);
 
-    _ownSets = [
-      followSet,
-      ..._ownSets.where((s) => s.dTag != dTag),
-    ];
+    _ownSets = [followSet, ..._ownSets.where((s) => s.dTag != dTag)];
     _initialized = true;
 
     return event;
   }
 
   void addSet(FollowSet followSet) {
-    _ownSets = [
-      followSet,
-      ..._ownSets.where((s) => s.dTag != followSet.dTag),
-    ];
+    _ownSets = [followSet, ..._ownSets.where((s) => s.dTag != followSet.dTag)];
   }
 
   void removeSet(String dTag) {
@@ -131,9 +139,7 @@ class FollowSetService {
     final set = _ownSets[index];
     if (set.pubkeys.contains(pubkey)) return;
 
-    _ownSets[index] = set.copyWith(
-      pubkeys: [...set.pubkeys, pubkey],
-    );
+    _ownSets[index] = set.copyWith(pubkeys: [...set.pubkeys, pubkey]);
   }
 
   void removePubkeyFromSet(String dTag, String pubkey) {
@@ -147,6 +153,8 @@ class FollowSetService {
   }
 
   void clear() {
+    _sessionGeneration++;
+    _loadGeneration++;
     _ownSets = [];
     _followedUsersSets = [];
     _initialized = false;

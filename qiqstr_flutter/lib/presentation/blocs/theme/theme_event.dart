@@ -65,3 +65,11 @@ class DefaultZapAmountSet extends ThemeEvent {
   List<Object?> get props => [amount];
 }
 
+class ThemeSystemBrightnessChanged extends ThemeEvent {
+  final bool isDark;
+
+  const ThemeSystemBrightnessChanged(this.isDark);
+
+  @override
+  List<Object?> get props => [isDark];
+}

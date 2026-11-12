@@ -928,7 +928,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       width: _mediaItemSize,
       height: _mediaItemSize,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
+      errorBuilder: (_, _, _) => Container(
         width: _mediaItemSize,
         height: _mediaItemSize,
         color: context.colors.surface,

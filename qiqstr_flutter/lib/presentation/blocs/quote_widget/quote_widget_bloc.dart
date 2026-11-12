@@ -30,14 +30,11 @@ class QuoteWidgetBloc extends Bloc<QuoteWidgetEvent, QuoteWidgetState> {
   int _generation = 0;
 
   QuoteWidgetBloc({
-    required FeedRepository feedRepository,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
+    required this._feedRepository,
+    required this._profileRepository,
+    required this._syncService,
     required this.bech32,
-  })  : _feedRepository = feedRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        super(const QuoteWidgetInitial()) {
+  })  : super(const QuoteWidgetInitial()) {
     on<QuoteWidgetLoadRequested>(
       _onQuoteWidgetLoadRequested,
       transformer: restartable(),

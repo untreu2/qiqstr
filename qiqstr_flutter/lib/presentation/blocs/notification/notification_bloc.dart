@@ -22,18 +22,16 @@ class NotificationBloc
   String? _currentUserHex;
   StreamSubscription<List<NotificationItem>>? _notificationSubscription;
   int _watchGeneration = 0;
+  Timer? _watchRetry;
 
   static const int _liveWatchLimit = 200;
   static const int _loadMorePageSize = 100;
 
   NotificationBloc({
-    required NotificationRepository notificationRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _notificationRepository = notificationRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const NotificationInitial()) {
+    required this._notificationRepository,
+    required this._syncService,
+    required this._authService,
+  })  : super(const NotificationInitial()) {
     on<notification_event.NotificationsLoadRequested>(
       _onNotificationsLoadRequested,
       transformer: restartable(),
@@ -71,6 +69,7 @@ class NotificationBloc
   ) async {
     final currentUserHex = _authService.currentUserPubkeyHex;
     final generation = ++_watchGeneration;
+    _watchRetry?.cancel();
     _currentUserHex = currentUserHex;
     _olderNotifications.clear();
     _olderIds.clear();
@@ -108,6 +107,20 @@ class NotificationBloc
         return;
       }
       add(_NotificationsUpdated(notifications, userHex, generation));
+    }, onError: (_) {
+      _scheduleWatchRetry(userHex, generation);
+    }, onDone: () {
+      _scheduleWatchRetry(userHex, generation);
+    }, cancelOnError: true);
+  }
+
+  void _scheduleWatchRetry(String userHex, int generation) {
+    if (isClosed || generation != _watchGeneration) return;
+    _watchRetry?.cancel();
+    _watchRetry = Timer(const Duration(seconds: 2), () {
+      if (!isClosed && generation == _watchGeneration) {
+        _watchNotifications(userHex, generation);
+      }
     });
   }
 
@@ -216,87 +229,96 @@ class NotificationBloc
 
     emit(currentState.copyWith(isLoadingMore: true));
 
-    final remoteCount = await _syncService.syncOlderNotifications(
-      userHex,
-      beforeTimestamp: oldestVisible,
-      limit: _loadMorePageSize,
-    );
+    try {
+      final remoteCount = await _syncService.syncOlderNotifications(
+        userHex,
+        beforeTimestamp: oldestVisible,
+        limit: _loadMorePageSize,
+      );
 
-    if (isClosed ||
-        generation != _watchGeneration ||
-        _currentUserHex != userHex) {
-      return;
-    }
+      if (isClosed ||
+          generation != _watchGeneration ||
+          _currentUserHex != userHex) {
+        return;
+      }
 
-    final localOlder = await _notificationRepository.getNotificationsBefore(
-      userHex,
-      beforeTimestamp: oldestVisible,
-      limit: _loadMorePageSize,
-    );
+      final localOlder = await _notificationRepository.getNotificationsBefore(
+        userHex,
+        beforeTimestamp: oldestVisible,
+        limit: _loadMorePageSize,
+      );
 
-    if (isClosed ||
-        generation != _watchGeneration ||
-        _currentUserHex != userHex) {
-      return;
-    }
+      if (isClosed ||
+          generation != _watchGeneration ||
+          _currentUserHex != userHex) {
+        return;
+      }
 
-    var addedNew = false;
-    for (final item in localOlder) {
-      if (item.id.isEmpty) continue;
-      if (_olderIds.add(item.id)) {
-        _olderNotifications.add(item);
-        addedNew = true;
+      var addedNew = false;
+      for (final item in localOlder) {
+        if (item.id.isEmpty) continue;
+        if (_olderIds.add(item.id)) {
+          _olderNotifications.add(item);
+          addedNew = true;
+        }
+      }
+
+      if (state is! NotificationsLoaded) return;
+      final latestState = state as NotificationsLoaded;
+
+      if (!addedNew && remoteCount == 0) {
+        emit(latestState.copyWith(
+          isLoadingMore: false,
+          hasReachedEnd: true,
+        ));
+        return;
+      }
+      if (!addedNew && remoteCount < 0) {
+        emit(latestState.copyWith(isLoadingMore: false));
+        return;
+      }
+
+      final latestNotifications = latestState.notifications;
+      final liveIds =
+          latestNotifications.map((n) => n['id'] as String? ?? '').toSet();
+      final liveAsItems = latestNotifications
+          .map((n) {
+            return NotificationItem(
+              id: n['id'] as String? ?? '',
+              type: _parseType(n['type'] as String? ?? ''),
+              fromPubkey: n['fromPubkey'] as String? ?? '',
+              targetNoteId: n['targetEventId'] as String?,
+              content: n['content'] as String?,
+              createdAt: n['createdAt'] as int? ?? 0,
+              fromName: n['fromName'] as String?,
+              fromImage: n['fromImage'] as String?,
+              zapAmount: n['zapAmount'] as int?,
+            );
+          })
+          .where((i) => liveIds.contains(i.id))
+          .toList();
+
+      final merged = _mergeWithOlder(liveAsItems);
+      final processed = _processNotifications(merged);
+      final unreadCount = processed.where((n) {
+        final isRead = n['isRead'] as bool? ?? false;
+        return !isRead;
+      }).length;
+
+      emit(latestState.copyWith(
+        notifications: processed,
+        unreadCount: unreadCount,
+        isLoadingMore: false,
+        hasReachedEnd: localOlder.isEmpty,
+      ));
+    } catch (_) {
+      if (!isClosed &&
+          !emit.isDone &&
+          generation == _watchGeneration &&
+          state is NotificationsLoaded) {
+        emit((state as NotificationsLoaded).copyWith(isLoadingMore: false));
       }
     }
-
-    if (state is! NotificationsLoaded) return;
-    final latestState = state as NotificationsLoaded;
-
-    if (!addedNew && remoteCount == 0) {
-      emit(latestState.copyWith(
-        isLoadingMore: false,
-        hasReachedEnd: true,
-      ));
-      return;
-    }
-    if (!addedNew && remoteCount < 0) {
-      emit(latestState.copyWith(isLoadingMore: false));
-      return;
-    }
-
-    final latestNotifications = latestState.notifications;
-    final liveIds =
-        latestNotifications.map((n) => n['id'] as String? ?? '').toSet();
-    final liveAsItems = latestNotifications
-        .map((n) {
-          return NotificationItem(
-            id: n['id'] as String? ?? '',
-            type: _parseType(n['type'] as String? ?? ''),
-            fromPubkey: n['fromPubkey'] as String? ?? '',
-            targetNoteId: n['targetEventId'] as String?,
-            content: n['content'] as String?,
-            createdAt: n['createdAt'] as int? ?? 0,
-            fromName: n['fromName'] as String?,
-            fromImage: n['fromImage'] as String?,
-            zapAmount: n['zapAmount'] as int?,
-          );
-        })
-        .where((i) => liveIds.contains(i.id))
-        .toList();
-
-    final merged = _mergeWithOlder(liveAsItems);
-    final processed = _processNotifications(merged);
-    final unreadCount = processed.where((n) {
-      final isRead = n['isRead'] as bool? ?? false;
-      return !isRead;
-    }).length;
-
-    emit(latestState.copyWith(
-      notifications: processed,
-      unreadCount: unreadCount,
-      isLoadingMore: false,
-      hasReachedEnd: localOlder.isEmpty,
-    ));
   }
 
   NotificationType _parseType(String type) {
@@ -398,6 +420,7 @@ class NotificationBloc
   @override
   Future<void> close() {
     _watchGeneration++;
+    _watchRetry?.cancel();
     _notificationSubscription?.cancel();
     return super.close();
   }

@@ -68,3 +68,7 @@
 "authNcryptsecWrongPassword" = "Falsches Passwort oder die Sicherung ist beschädigt.";
 "authNcryptsecPasswordRequired" = "Gib das Passwort für diesen verschlüsselten Schlüssel ein.";
 "authDecrypting" = "Wird entschlüsselt…";
+"authTermsPromptMessage" = "Um fortzufahren, musst du den Nutzungsbedingungen und der Datenschutzerklärung von qiqstr zustimmen.";
+"authTermsAgree" = "Zustimmen und fortfahren";
+"authTermsRead" = "Bedingungen lesen";
+"authTermsAgreeShort" = "Zustimmen";

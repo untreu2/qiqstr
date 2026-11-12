@@ -671,3 +671,4 @@
 "cashuMeltAllConfirm" = "{amount} satı Lightning adresinize göndermek istiyor musunuz?";
 "mediaUploadFailed" = "Medya yüklenemedi. Lütfen tekrar deneyin.";
 "cashuMeltAllSuccess" = "{amount} sat Lightning'e gönderildi";
+"close" = "Kapat";

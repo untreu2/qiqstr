@@ -61,16 +61,12 @@ class ProfileInfoBloc extends Bloc<ProfileInfoEvent, ProfileInfoState> {
   int _muteMutationGeneration = 0;
 
   ProfileInfoBloc({
-    required FollowingRepository followingRepository,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required AuthService authService,
+    required this._followingRepository,
+    required this._profileRepository,
+    required this._syncService,
+    required this._authService,
     required this.userPubkeyHex,
-  })  : _followingRepository = followingRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const ProfileInfoInitial()) {
+  })  : super(const ProfileInfoInitial()) {
     on<ProfileInfoInitialized>(
       _onProfileInfoInitialized,
       transformer: restartable(),

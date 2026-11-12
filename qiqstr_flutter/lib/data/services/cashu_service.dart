@@ -31,10 +31,12 @@ class CashuService {
     try {
       final jsonStr = rust_cashu.cashuDecodeToken(token: token.trim());
       final map = jsonDecode(jsonStr) as Map<String, dynamic>;
-      return Result.success(CashuTokenInfo(
-        mintUrl: map['mint_url'] as String,
-        amountSats: (map['amount_sats'] as num).toInt(),
-      ));
+      return Result.success(
+        CashuTokenInfo(
+          mintUrl: map['mint_url'] as String,
+          amountSats: (map['amount_sats'] as num).toInt(),
+        ),
+      );
     } catch (e) {
       return Result.error(e.toString());
     }
@@ -44,6 +46,10 @@ class CashuService {
     required String token,
     required String lightningTarget,
   }) async {
+    if (token.trim().isEmpty) return Result.error('Token cannot be empty');
+    if (lightningTarget.trim().isEmpty) {
+      return Result.error('Lightning destination cannot be empty');
+    }
     try {
       final jsonStr = await rust_cashu.cashuReceiveAndMelt(
         token: token.trim(),
@@ -58,6 +64,9 @@ class CashuService {
   }
 
   Future<Result<int>> meltAll({required String lightningTarget}) async {
+    if (lightningTarget.trim().isEmpty) {
+      return Result.error('Lightning destination cannot be empty');
+    }
     try {
       final jsonStr = await rust_cashu.cashuMeltAll(
         lightningTarget: lightningTarget.trim(),
@@ -77,10 +86,12 @@ class CashuService {
       final totalSats = (map['total_sats'] as num).toInt();
       final mintsRaw = (map['mints'] as List<dynamic>);
       final mints = mintsRaw
-          .map((m) => CashuMintBalance(
-                mintUrl: m['mint_url'] as String,
-                sats: (m['sats'] as num).toInt(),
-              ))
+          .map(
+            (m) => CashuMintBalance(
+              mintUrl: m['mint_url'] as String,
+              sats: (m['sats'] as num).toInt(),
+            ),
+          )
           .toList();
       return Result.success(CashuBalance(totalSats: totalSats, mints: mints));
     } catch (e) {

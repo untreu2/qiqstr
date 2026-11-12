@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -9,10 +10,33 @@ import '../../src/rust/api/nwc.dart' as rust_nwc;
 class NwcService {
   static const String _baseNwcUriKey = 'nwc_connection_uri';
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage;
+
+  NwcService({FlutterSecureStorage? secureStorage})
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   String? _activeAccountId;
   String? _cachedNwcUri;
+  int _connectionGeneration = 0;
+  final Map<String, Future<void>> _connectionMutations = {};
+
+  Future<T> _withConnectionLock<T>(
+    String key,
+    Future<T> Function() operation,
+  ) async {
+    final previous = _connectionMutations[key];
+    final completed = Completer<void>();
+    _connectionMutations[key] = completed.future;
+    try {
+      if (previous != null) await previous;
+      return await operation();
+    } finally {
+      completed.complete();
+      if (identical(_connectionMutations[key], completed.future)) {
+        _connectionMutations.remove(key);
+      }
+    }
+  }
 
   String get _nwcUriKey => _prefixedKey(_baseNwcUriKey);
 
@@ -27,6 +51,7 @@ class NwcService {
 
   void setActiveAccount(String npub) {
     if (_activeAccountId == npub) return;
+    _connectionGeneration++;
     _activeAccountId = npub;
     _cachedNwcUri = null;
   }
@@ -36,6 +61,7 @@ class NwcService {
   }
 
   void clearActiveAccount() {
+    _connectionGeneration++;
     _activeAccountId = null;
     _cachedNwcUri = null;
   }
@@ -46,10 +72,24 @@ class NwcService {
 
   Future<Result<void>> saveConnectionUri(String uri) async {
     try {
+      if (_activeAccountId == null || _activeAccountId!.isEmpty) {
+        return Result.error('No active account set');
+      }
+      uri = uri.trim();
       if (!validateUri(uri)) {
         return Result.error('Invalid NWC connection string');
       }
-      await _secureStorage.write(key: _nwcUriKey, value: uri);
+      final generation = ++_connectionGeneration;
+      final key = _nwcUriKey;
+      _cachedNwcUri = null;
+      await _withConnectionLock(key, () async {
+        if (generation == _connectionGeneration) {
+          await _secureStorage.write(key: key, value: uri);
+        }
+      });
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed during save');
+      }
       _cachedNwcUri = uri;
       return Result.success(null);
     } catch (e) {
@@ -59,10 +99,23 @@ class NwcService {
 
   Future<Result<String?>> getConnectionUri() async {
     try {
+      if (_activeAccountId == null || _activeAccountId!.isEmpty) {
+        return Result.error('No active account set');
+      }
+      final generation = _connectionGeneration;
+      final key = _nwcUriKey;
+      final mutation = _connectionMutations[key];
+      if (mutation != null) await mutation;
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed during read');
+      }
       if (_cachedNwcUri != null) {
         return Result.success(_cachedNwcUri);
       }
-      final uri = await _secureStorage.read(key: _nwcUriKey);
+      final uri = await _secureStorage.read(key: key);
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed during read');
+      }
       _cachedNwcUri = uri;
       return Result.success(uri);
     } catch (e) {
@@ -77,7 +130,20 @@ class NwcService {
 
   Future<Result<void>> clearConnection() async {
     try {
-      await _secureStorage.delete(key: _nwcUriKey);
+      if (_activeAccountId == null || _activeAccountId!.isEmpty) {
+        return Result.error('No active account set');
+      }
+      final generation = ++_connectionGeneration;
+      final key = _nwcUriKey;
+      _cachedNwcUri = null;
+      await _withConnectionLock(key, () async {
+        if (generation == _connectionGeneration) {
+          await _secureStorage.delete(key: key);
+        }
+      });
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed during removal');
+      }
       _cachedNwcUri = null;
       return Result.success(null);
     } catch (e) {
@@ -86,8 +152,13 @@ class NwcService {
   }
 
   Future<Result<Map<String, dynamic>>> payInvoice(String invoice) async {
+    if (invoice.trim().isEmpty) return Result.error('Invoice cannot be empty');
+    final generation = _connectionGeneration;
     try {
       final uriResult = await getConnectionUri();
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed');
+      }
       if (uriResult.isError || uriResult.data == null) {
         return Result.error('No NWC connection configured');
       }
@@ -95,7 +166,7 @@ class NwcService {
       debugPrint('[NwcService] Paying invoice via NWC...');
       final responseJson = await rust_nwc.nwcPayInvoice(
         nwcUri: uriResult.data!,
-        invoice: invoice,
+        invoice: invoice.trim(),
       );
 
       final response = jsonDecode(responseJson) as Map<String, dynamic>;
@@ -108,8 +179,12 @@ class NwcService {
   }
 
   Future<Result<int>> getBalance() async {
+    final generation = _connectionGeneration;
     try {
       final uriResult = await getConnectionUri();
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed');
+      }
       if (uriResult.isError || uriResult.data == null) {
         return Result.error('No NWC connection configured');
       }
@@ -118,6 +193,9 @@ class NwcService {
       final responseJson = await rust_nwc.nwcGetBalance(
         nwcUri: uriResult.data!,
       );
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed');
+      }
 
       final response = jsonDecode(responseJson) as Map<String, dynamic>;
       final balanceMsat = response['balance'] as int? ?? 0;
@@ -133,19 +211,29 @@ class NwcService {
     required int amountSats,
     String? description,
   }) async {
+    if (amountSats <= 0) return Result.error('Amount must be positive');
+    final generation = _connectionGeneration;
     try {
       final uriResult = await getConnectionUri();
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed');
+      }
       if (uriResult.isError || uriResult.data == null) {
         return Result.error('No NWC connection configured');
       }
 
       final amountMsats = BigInt.from(amountSats) * BigInt.from(1000);
-      debugPrint('[NwcService] Creating invoice via NWC for $amountSats sats...');
+      debugPrint(
+        '[NwcService] Creating invoice via NWC for $amountSats sats...',
+      );
       final responseJson = await rust_nwc.nwcMakeInvoice(
         nwcUri: uriResult.data!,
         amountMsats: amountMsats,
         description: description,
       );
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed');
+      }
 
       final response = jsonDecode(responseJson) as Map<String, dynamic>;
       final invoice = response['invoice'] as String?;
@@ -164,8 +252,15 @@ class NwcService {
     int? limit,
     int? offset,
   }) async {
+    if (limit != null && limit <= 0 || offset != null && offset < 0) {
+      return Result.error('Invalid transaction pagination');
+    }
+    final generation = _connectionGeneration;
     try {
       final uriResult = await getConnectionUri();
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed');
+      }
       if (uriResult.isError || uriResult.data == null) {
         return Result.error('No NWC connection configured');
       }
@@ -176,13 +271,18 @@ class NwcService {
         limit: limit != null ? BigInt.from(limit) : null,
         offset: offset != null ? BigInt.from(offset) : null,
       );
+      if (generation != _connectionGeneration) {
+        return Result.error('Wallet connection changed');
+      }
 
       final response = jsonDecode(responseJson) as Map<String, dynamic>;
       final rawTxs = response['transactions'] as List<dynamic>? ?? [];
       final transactions = rawTxs
           .map((tx) => tx as Map<String, dynamic>)
           .toList();
-      debugPrint('[NwcService] NWC transactions fetched: ${transactions.length}');
+      debugPrint(
+        '[NwcService] NWC transactions fetched: ${transactions.length}',
+      );
       return Result.success(transactions);
     } catch (e) {
       debugPrint('[NwcService] NWC list transactions error: $e');

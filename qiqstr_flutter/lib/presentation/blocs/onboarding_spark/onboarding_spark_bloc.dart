@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/services/auth_service.dart';
@@ -12,14 +13,19 @@ class OnboardingSparkBloc
   final AuthService _authService;
 
   OnboardingSparkBloc({
-    required SparkService sparkService,
-    required AuthService authService,
-  })  : _sparkService = sparkService,
-        _authService = authService,
-        super(const OnboardingSparkInitial()) {
-    on<OnboardingSparkWalletSetupRequested>(_onWalletSetupRequested);
-    on<OnboardingSparkSkipped>(_onSkipped);
-    on<OnboardingSparkRestoreRequested>(_onRestoreRequested);
+    required this._sparkService,
+    required this._authService,
+  })  : super(const OnboardingSparkInitial()) {
+    on<OnboardingSparkEvent>((event, emit) async {
+      switch (event) {
+        case OnboardingSparkWalletSetupRequested():
+          await _onWalletSetupRequested(event, emit);
+        case OnboardingSparkRestoreRequested():
+          await _onRestoreRequested(event, emit);
+        case OnboardingSparkSkipped():
+          _onSkipped(event, emit);
+      }
+    }, transformer: droppable());
   }
 
   Future<void> _onWalletSetupRequested(
@@ -30,11 +36,14 @@ class OnboardingSparkBloc
 
     try {
       final npub = _authService.currentUserNpub;
-      if (npub != null && npub.isNotEmpty) {
-        _sparkService.setActiveAccount(npub);
+      if (npub == null || npub.isEmpty) {
+        emit(const OnboardingSparkError('Not authenticated'));
+        return;
       }
+      _sparkService.setActiveAccount(npub);
 
       final mnemonicResult = await _sparkService.getOrCreateMnemonic();
+      if (emit.isDone) return;
 
       if (mnemonicResult.isError) {
         emit(OnboardingSparkError(
@@ -64,11 +73,14 @@ class OnboardingSparkBloc
 
     try {
       final npub = _authService.currentUserNpub;
-      if (npub != null && npub.isNotEmpty) {
-        _sparkService.setActiveAccount(npub);
+      if (npub == null || npub.isEmpty) {
+        emit(const OnboardingSparkError('Not authenticated'));
+        return;
       }
+      _sparkService.setActiveAccount(npub);
 
       final result = await _sparkService.restoreWallet(event.entropyHex);
+      if (emit.isDone) return;
 
       if (result.isError) {
         emit(OnboardingSparkError(result.error ?? 'Failed to restore wallet'));

@@ -1,16 +1,16 @@
+use aes::Aes256;
+use aes_gcm::{
+    aead::{generic_array::GenericArray, Aead, KeyInit, OsRng},
+    Aes256Gcm, AesGcm, Nonce,
+};
 use anyhow::Result;
+use base64::{engine::general_purpose, Engine as _};
 use flutter_rust_bridge::frb;
 use nostr::nips::nip06::FromMnemonic;
 use nostr::prelude::*;
 use nostr::secp256k1::Message;
-use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng, generic_array::GenericArray},
-    Aes256Gcm, AesGcm, Nonce,
-};
-use aes::Aes256;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
-use base64::{Engine as _, engine::general_purpose};
 use typenum::U16;
 
 #[frb(sync)]
@@ -103,10 +103,9 @@ pub fn generate_aes_nonce() -> String {
 
 #[frb(sync)]
 pub fn aes_gcm_encrypt(data: Vec<u8>, key_hex: String, nonce_hex: String) -> Result<String> {
-    let key_bytes = hex::decode(&key_hex)
-        .map_err(|e| anyhow::anyhow!("Invalid key hex: {}", e))?;
-    let nonce_bytes = hex::decode(&nonce_hex)
-        .map_err(|e| anyhow::anyhow!("Invalid nonce hex: {}", e))?;
+    let key_bytes = hex::decode(&key_hex).map_err(|e| anyhow::anyhow!("Invalid key hex: {}", e))?;
+    let nonce_bytes =
+        hex::decode(&nonce_hex).map_err(|e| anyhow::anyhow!("Invalid nonce hex: {}", e))?;
 
     if key_bytes.len() != 32 {
         return Err(anyhow::anyhow!("Key must be 32 bytes (256 bits)"));
@@ -117,9 +116,9 @@ pub fn aes_gcm_encrypt(data: Vec<u8>, key_hex: String, nonce_hex: String) -> Res
 
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
-    
+
     let nonce = Nonce::from_slice(&nonce_bytes);
-    
+
     let ciphertext = cipher
         .encrypt(nonce, data.as_ref())
         .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
@@ -128,18 +127,22 @@ pub fn aes_gcm_encrypt(data: Vec<u8>, key_hex: String, nonce_hex: String) -> Res
 }
 
 #[frb(sync)]
-pub fn aes_gcm_decrypt(encrypted_base64: String, key_hex: String, nonce_hex: String) -> Result<Vec<u8>> {
-    let key_bytes = hex::decode(&key_hex)
-        .map_err(|e| anyhow::anyhow!("Invalid key hex: {}", e))?;
-    let nonce_bytes = hex::decode(&nonce_hex)
-        .map_err(|e| anyhow::anyhow!("Invalid nonce hex: {}", e))?;
-    let ciphertext = general_purpose::STANDARD.decode(&encrypted_base64)
+pub fn aes_gcm_decrypt(
+    encrypted_base64: String,
+    key_hex: String,
+    nonce_hex: String,
+) -> Result<Vec<u8>> {
+    let key_bytes = hex::decode(&key_hex).map_err(|e| anyhow::anyhow!("Invalid key hex: {}", e))?;
+    let nonce_bytes =
+        hex::decode(&nonce_hex).map_err(|e| anyhow::anyhow!("Invalid nonce hex: {}", e))?;
+    let ciphertext = general_purpose::STANDARD
+        .decode(&encrypted_base64)
         .map_err(|e| anyhow::anyhow!("Invalid base64: {}", e))?;
 
     if key_bytes.len() != 32 {
         return Err(anyhow::anyhow!("Key must be 32 bytes (256 bits)"));
     }
-    
+
     let plaintext = match nonce_bytes.len() {
         12 => {
             let cipher = Aes256Gcm::new_from_slice(&key_bytes)
@@ -148,7 +151,7 @@ pub fn aes_gcm_decrypt(encrypted_base64: String, key_hex: String, nonce_hex: Str
             cipher
                 .decrypt(nonce, ciphertext.as_ref())
                 .map_err(|e| anyhow::anyhow!("Decryption failed (12-byte nonce): {}", e))?
-        },
+        }
         16 => {
             type Aes256Gcm16 = AesGcm<Aes256, U16>;
             let cipher = Aes256Gcm16::new_from_slice(&key_bytes)
@@ -157,7 +160,7 @@ pub fn aes_gcm_decrypt(encrypted_base64: String, key_hex: String, nonce_hex: Str
             cipher
                 .decrypt(nonce, ciphertext.as_ref())
                 .map_err(|e| anyhow::anyhow!("Decryption failed (16-byte nonce): {}", e))?
-        },
+        }
         _ => {
             return Err(anyhow::anyhow!(
                 "Nonce must be either 12 bytes (standard) or 16 bytes (Android/Amethyst). Got {} bytes",
@@ -175,4 +178,55 @@ pub fn sha256_hash(data: Vec<u8>) -> String {
     hasher.update(data);
     let result = hasher.finalize();
     hex::encode(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypted_files_round_trip_and_reject_tampering() {
+        let key = generate_aes_key();
+        let nonce = generate_aes_nonce();
+        let plaintext = b"private file contents".to_vec();
+        let encrypted = aes_gcm_encrypt(plaintext.clone(), key.clone(), nonce.clone()).unwrap();
+        assert_eq!(
+            aes_gcm_decrypt(encrypted.clone(), key.clone(), nonce.clone()).unwrap(),
+            plaintext
+        );
+        let mut bytes = general_purpose::STANDARD.decode(encrypted).unwrap();
+        bytes[0] ^= 1;
+        assert!(aes_gcm_decrypt(general_purpose::STANDARD.encode(bytes), key, nonce).is_err());
+    }
+
+    #[test]
+    fn amethyst_sixteen_byte_nonce_is_supported() {
+        let key = [7u8; 32];
+        let nonce = [8u8; 16];
+        let cipher = AesGcm::<Aes256, U16>::new_from_slice(&key).unwrap();
+        let encrypted = cipher
+            .encrypt(
+                GenericArray::from_slice(&nonce),
+                b"compatible file".as_ref(),
+            )
+            .unwrap();
+        assert_eq!(
+            aes_gcm_decrypt(
+                general_purpose::STANDARD.encode(encrypted),
+                hex::encode(key),
+                hex::encode(nonce)
+            )
+            .unwrap(),
+            b"compatible file"
+        );
+    }
+
+    #[test]
+    fn malformed_file_keys_and_nonces_return_errors() {
+        for length in [0, 1, 8, 13, 17, 64] {
+            assert!(aes_gcm_decrypt("AA==".into(), "11".repeat(32), "22".repeat(length)).is_err());
+        }
+        assert!(aes_gcm_encrypt(vec![], "11".repeat(31), "22".repeat(12)).is_err());
+        assert!(aes_gcm_decrypt("not base64".into(), "11".repeat(32), "22".repeat(12)).is_err());
+    }
 }

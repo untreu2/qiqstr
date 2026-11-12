@@ -46,14 +46,7 @@ class ValidationService {
         return Result.error('Invalid NPUB format');
       }
     } else if (npub.length == 64) {
-      try {
-        int.parse(npub, radix: 16);
-        return Result.success(null);
-      } catch (e) {
-        return Result.error('Invalid hex public key format');
-      }
-    } else if (npub.length >= 8) {
-      return Result.success(null);
+      return validatePublicKeyHex(npub);
     } else {
       return Result.error(
           'NPUB must be in npub1 bech32 format or valid hex format');
@@ -69,12 +62,19 @@ class ValidationService {
       return Result.error('Private key must be 64 characters long');
     }
 
-    try {
-      int.parse(privateKey, radix: 16);
-      return Result.success(null);
-    } catch (e) {
+    if (!RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(privateKey)) {
       return Result.error('Private key must be valid hexadecimal');
     }
+
+    final value = BigInt.parse(privateKey, radix: 16);
+    final curveOrder = BigInt.parse(
+      'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141',
+      radix: 16,
+    );
+    if (value <= BigInt.zero || value >= curveOrder) {
+      return Result.error('Private key is outside the valid range');
+    }
+    return Result.success(null);
   }
 
   Result<void> validatePublicKeyHex(String publicKey) {
@@ -86,12 +86,10 @@ class ValidationService {
       return Result.error('Public key must be 64 characters long');
     }
 
-    try {
-      int.parse(publicKey, radix: 16);
-      return Result.success(null);
-    } catch (e) {
+    if (!RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(publicKey)) {
       return Result.error('Public key must be valid hexadecimal');
     }
+    return Result.success(null);
   }
 
   Result<void> validateNoteContent(String content) {
@@ -100,8 +98,7 @@ class ValidationService {
     }
 
     if (content.length > 2000) {
-      return Result.error(
-          'Note content is too long (max 2000 characters)');
+      return Result.error('Note content is too long (max 2000 characters)');
     }
 
     return Result.success(null);
@@ -121,8 +118,7 @@ class ValidationService {
 
   Result<void> validateProfileAbout(String about) {
     if (about.length > 500) {
-      return Result.error(
-          'About section is too long (max 500 characters)');
+      return Result.error('About section is too long (max 500 characters)');
     }
 
     return Result.success(null);
@@ -136,11 +132,13 @@ class ValidationService {
     try {
       final uri = Uri.parse(url);
       if (!uri.hasScheme) {
-        return Result.error(
-            'URL must include protocol (http:// or https://)');
+        return Result.error('URL must include protocol (http:// or https://)');
       }
       if (!['http', 'https'].contains(uri.scheme.toLowerCase())) {
         return Result.error('URL must use HTTP or HTTPS protocol');
+      }
+      if (uri.host.isEmpty) {
+        return Result.error('URL must include a host');
       }
       return Result.success(null);
     } catch (e) {
@@ -154,22 +152,19 @@ class ValidationService {
     }
 
     if (!nip05.contains('@')) {
-      return Result.error(
-          'NIP-05 must be in format: username@domain.com');
+      return Result.error('NIP-05 must be in format: username@domain.com');
     }
 
     final parts = nip05.split('@');
     if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
-      return Result.error(
-          'NIP-05 must be in format: username@domain.com');
+      return Result.error('NIP-05 must be in format: username@domain.com');
     }
 
     final username = parts[0];
     final domain = parts[1];
 
     if (username.length > 64) {
-      return Result.error(
-          'NIP-05 username is too long (max 64 characters)');
+      return Result.error('NIP-05 username is too long (max 64 characters)');
     }
 
     if (!domain.contains('.')) {

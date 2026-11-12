@@ -394,7 +394,7 @@ class _DmConversationsPageState extends State<DmConversationsPage>
                 fit: BoxFit.cover,
                 memCacheWidth: 144,
                 memCacheHeight: 144,
-                errorWidget: (_, __, ___) => _avatarPlaceholder(context),
+                errorWidget: (_, _, _) => _avatarPlaceholder(context),
               )
             : _avatarPlaceholder(context),
       ),

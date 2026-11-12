@@ -33,6 +33,8 @@ class SyncOperationStatus {
 class SyncService {
   final RustDatabaseService _db;
   final EventPublisher _publisher;
+  final AuthService _authService;
+  bool _disposed = false;
 
   Timer? _periodicTimer;
   Timer? _lastSyncCleanupTimer;
@@ -62,8 +64,7 @@ class SyncService {
 
   Stream<SyncOperationStatus> get syncStatus => _syncStatusController.stream;
 
-  Stream<bool> get connectivityStream => Connectivity()
-      .onConnectivityChanged
+  Stream<bool> get connectivityStream => Connectivity().onConnectivityChanged
       .map((results) => results.any((r) => r != ConnectivityResult.none));
 
   Future<bool> get isOnline async {
@@ -72,10 +73,15 @@ class SyncService {
   }
 
   SyncService({
-    required RustDatabaseService db,
-    required EventPublisher publisher,
-  })  : _db = db,
-        _publisher = publisher;
+    required this._db,
+    required this._publisher,
+    AuthService? authService,
+  }) : _authService = authService ?? AuthService.instance;
+
+  bool _isCurrentSession(int generation, String? userPubkey) =>
+      !_disposed &&
+      generation == FollowSetService.instance.sessionGeneration &&
+      userPubkey == _authService.currentUserPubkeyHex;
 
   bool _shouldSync(String key) {
     final lastSync = _lastSyncTime[key];
@@ -103,10 +109,11 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('feed', () async {
-      final follows = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
-      if (follows.isEmpty) return;
+      final following = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
+      final follows = {...following, userPubkey}.toList();
 
-      final since = _getSincestamp(key) ??
+      final since =
+          _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final notesFilter = <String, dynamic>{
         'authors': follows,
@@ -144,7 +151,8 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('list_feed', () async {
-      final since = _getSincestamp(key) ??
+      final since =
+          _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final notesFilter = <String, dynamic>{
         'authors': pubkeys,
@@ -173,7 +181,7 @@ class SyncService {
       final filter = <String, dynamic>{
         'kinds': [0],
         'authors': [pubkey],
-        'limit': 1
+        'limit': 1,
       };
       await _queryRelays(filter);
       _notifyProfileChanged();
@@ -181,8 +189,11 @@ class SyncService {
     });
   }
 
-  Future<void> syncProfileNotes(String pubkey,
-      {int limit = 50, bool force = false}) async {
+  Future<void> syncProfileNotes(
+    String pubkey, {
+    int limit = 50,
+    bool force = false,
+  }) async {
     final key = 'profile_notes_$pubkey';
     if (!force && !_shouldSync(key)) return;
 
@@ -191,13 +202,13 @@ class SyncService {
       final profileFilter = <String, dynamic>{
         'kinds': [0],
         'authors': [pubkey],
-        'limit': 1
+        'limit': 1,
       };
       final notesFilter = <String, dynamic>{
         'authors': [pubkey],
         'kinds': [1, 5, 6],
         'limit': limit,
-        if (since != null) 'since': since,
+        'since': ?since,
       };
 
       final results = await Future.wait([
@@ -216,13 +227,19 @@ class SyncService {
     });
   }
 
-  Stream<int> streamProfileNotesProgress(String pubkey,
-      {bool force = false}) async* {
+  Stream<int> streamProfileNotesProgress(
+    String pubkey, {
+    bool force = false,
+  }) async* {
     final key = 'profile_notes_$pubkey';
     if (!force && !_shouldSync(key)) return;
 
-    _syncStatusController.add(const SyncOperationStatus(
-        operation: 'profile_notes_stream', state: SyncOperationState.syncing));
+    _emitSyncStatus(
+      const SyncOperationStatus(
+        operation: 'profile_notes_stream',
+        state: SyncOperationState.syncing,
+      ),
+    );
 
     int count = 0;
     final pubkeys = <String>{};
@@ -232,8 +249,11 @@ class SyncService {
       final sinceRaw = _getSincestamp(key);
       final since = sinceRaw ?? -1;
 
-      await for (final event in _relayService
-          .fetchProfileEvents(pubkey, '1,5,6', sinceTimestamp: since)) {
+      await for (final event in _relayService.fetchProfileEvents(
+        pubkey,
+        '1,5,6',
+        sinceTimestamp: since,
+      )) {
         final eventPubkey = event['pubkey'] as String?;
         if (eventPubkey != null && eventPubkey.isNotEmpty) {
           pubkeys.add(eventPubkey);
@@ -279,22 +299,31 @@ class SyncService {
       }
       _markSynced(key);
 
-      _syncStatusController.add(const SyncOperationStatus(
+      _emitSyncStatus(
+        const SyncOperationStatus(
           operation: 'profile_notes_stream',
-          state: SyncOperationState.completed));
+          state: SyncOperationState.completed,
+        ),
+      );
     } catch (e) {
       _notifyFeedChanged();
-      _syncStatusController.add(SyncOperationStatus(
+      _emitSyncStatus(
+        SyncOperationStatus(
           operation: 'profile_notes_stream',
           state: SyncOperationState.error,
-          error: e.toString()));
+          error: e.toString(),
+        ),
+      );
     }
 
     yield count;
   }
 
-  Future<void> syncProfileReactions(String pubkey,
-      {int limit = 50, bool force = false}) async {
+  Future<void> syncProfileReactions(
+    String pubkey, {
+    int limit = 50,
+    bool force = false,
+  }) async {
     final key = 'profile_reactions_$pubkey';
     if (!force && !_shouldSync(key)) return;
 
@@ -304,7 +333,7 @@ class SyncService {
         'authors': [pubkey],
         'kinds': [7],
         'limit': limit,
-        if (since != null) 'since': since,
+        'since': ?since,
       };
       await _queryRelays(filter);
       _notifyInteractionChanged();
@@ -318,15 +347,17 @@ class SyncService {
       final filter = <String, dynamic>{
         'kinds': [0],
         'authors': pubkeys,
-        'limit': pubkeys.length
+        'limit': pubkeys.length,
       };
       await _queryRelays(filter);
       _notifyProfileChanged();
     });
   }
 
-  Future<void> syncNotifications(String userPubkey,
-      {bool force = false}) async {
+  Future<void> syncNotifications(
+    String userPubkey, {
+    bool force = false,
+  }) async {
     final key = 'notifications_$userPubkey';
     if (!force && !_shouldSync(key)) return;
 
@@ -406,7 +437,7 @@ class SyncService {
       final filter = <String, dynamic>{
         'kinds': [3],
         'authors': [userPubkey],
-        'limit': 1
+        'limit': 1,
       };
       final events = await _queryRelays(filter);
 
@@ -416,14 +447,6 @@ class SyncService {
           eventJson: jsonEncode(event),
           selfPubkeyHex: userPubkey,
         );
-      } else {
-        final existing =
-            await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
-        if (!existing.contains(userPubkey)) {
-          final listWithUser = existing.toSet()..add(userPubkey);
-          await rust_db.dbSaveFollowingList(
-              pubkeyHex: userPubkey, followsHex: listWithUser.toList());
-        }
       }
 
       _notifyFeedChanged();
@@ -444,8 +467,10 @@ class SyncService {
 
       const batchSize = 30;
       const maxBatches = 5;
-      final totalToSync =
-          (maxBatches * batchSize).clamp(0, pubkeysToSync.length);
+      final totalToSync = (maxBatches * batchSize).clamp(
+        0,
+        pubkeysToSync.length,
+      );
 
       for (var i = 0; i < totalToSync; i += batchSize) {
         final end = (i + batchSize).clamp(0, totalToSync);
@@ -453,7 +478,7 @@ class SyncService {
         final filter = <String, dynamic>{
           'kinds': [3],
           'authors': batch,
-          'limit': batch.length
+          'limit': batch.length,
         };
         await _queryRelays(filter);
       }
@@ -468,13 +493,20 @@ class SyncService {
     required Future<void> Function({
       required String userPubkeyHex,
       required String privateKeyHex,
-    }) loadFromDatabase,
+    })
+    loadFromDatabase,
   }) async {
+    final generation = FollowSetService.instance.sessionGeneration;
+    final userPubkey = _authService.currentUserPubkeyHex;
     await _sync(syncKey, () async {
       await _queryRelays(filter);
-      final authService = AuthService.instance;
-      final pkResult = await authService.getCurrentUserPrivateKey();
-      final pubResult = await authService.getCurrentUserPublicKeyHex();
+      if (!_isCurrentSession(generation, userPubkey)) return;
+      final pkResult = await _authService.getCurrentUserPrivateKey();
+      final pubResult = await _authService.getCurrentUserPublicKeyHex();
+      if (!_isCurrentSession(generation, userPubkey) ||
+          pubResult.data != userPubkey) {
+        return;
+      }
       if (!pkResult.isError &&
           pkResult.data != null &&
           !pubResult.isError &&
@@ -488,46 +520,49 @@ class SyncService {
   }
 
   Future<void> syncMuteList(String userPubkey) => _syncEncryptedList(
-        syncKey: 'mute',
-        filter: <String, dynamic>{
-          'kinds': [10000],
-          'authors': [userPubkey],
-          'limit': 1
-        },
-        loadFromDatabase: EncryptedMuteService.instance.loadFromDatabase,
-      );
+    syncKey: 'mute',
+    filter: <String, dynamic>{
+      'kinds': [10000],
+      'authors': [userPubkey],
+      'limit': 1,
+    },
+    loadFromDatabase: EncryptedMuteService.instance.loadFromDatabase,
+  );
 
   Future<void> syncBookmarkList(String userPubkey) => _syncEncryptedList(
-        syncKey: 'bookmark',
-        filter: <String, dynamic>{
-          'kinds': [30001],
-          '#d': ['bookmark'],
-          'authors': [userPubkey],
-          'limit': 1
-        },
-        loadFromDatabase: EncryptedBookmarkService.instance.loadFromDatabase,
-      );
+    syncKey: 'bookmark',
+    filter: <String, dynamic>{
+      'kinds': [30001],
+      '#d': ['bookmark'],
+      'authors': [userPubkey],
+      'limit': 1,
+    },
+    loadFromDatabase: EncryptedBookmarkService.instance.loadFromDatabase,
+  );
 
   Future<Map<String, dynamic>> publishBookmark({
     required List<String> bookmarkedEventIds,
   }) async {
-    final event = await _publish(() => _publisher.createBookmark(
-          bookmarkedEventIds: bookmarkedEventIds,
-        ));
+    final event = await _publish(
+      () => _publisher.createBookmark(bookmarkedEventIds: bookmarkedEventIds),
+    );
     return event;
   }
 
   Future<void> syncPinnedNotes(String userPubkey) async {
+    final generation = FollowSetService.instance.sessionGeneration;
+    if (!_isCurrentSession(generation, userPubkey)) return;
     await _sync('pinned_notes', () async {
       final filter = <String, dynamic>{
         'kinds': [10001],
         'authors': [userPubkey],
-        'limit': 1
+        'limit': 1,
       };
       await _queryRelays(filter);
 
-      final authService = AuthService.instance;
-      final pubResult = await authService.getCurrentUserPublicKeyHex();
+      if (!_isCurrentSession(generation, userPubkey)) return;
+      final pubResult = await _authService.getCurrentUserPublicKeyHex();
+      if (!_isCurrentSession(generation, userPubkey)) return;
       if (!pubResult.isError &&
           pubResult.data != null &&
           pubResult.data == userPubkey) {
@@ -541,31 +576,36 @@ class SyncService {
   Future<Map<String, dynamic>> publishPinnedNotes({
     required List<String> pinnedNoteIds,
   }) async {
-    final event = await _publish(() => _publisher.createPinnedNotes(
-          pinnedNoteIds: pinnedNoteIds,
-        ));
+    final event = await _publish(
+      () => _publisher.createPinnedNotes(pinnedNoteIds: pinnedNoteIds),
+    );
     return event;
   }
 
   Future<void> syncFollowSets(String userPubkey) async {
+    final generation = FollowSetService.instance.sessionGeneration;
+    if (!_isCurrentSession(generation, userPubkey)) return;
     await _sync('follow_sets', () async {
       final follows = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
+      if (!_isCurrentSession(generation, userPubkey)) return;
       final allAuthors = [userPubkey, ...follows];
 
       final filter = <String, dynamic>{
         'kinds': [30000],
         'authors': allAuthors,
-        'limit': 500
+        'limit': 500,
       };
       await _queryRelays(filter);
+      if (!_isCurrentSession(generation, userPubkey)) return;
 
-      await FollowSetService.instance
-          .loadFromDatabase(userPubkeyHex: userPubkey);
+      await FollowSetService.instance.loadFromDatabase(
+        userPubkeyHex: userPubkey,
+      );
+      if (!_isCurrentSession(generation, userPubkey)) return;
 
-      if (follows.isNotEmpty) {
-        await FollowSetService.instance
-            .loadFollowedUsersSets(followedPubkeys: follows);
-      }
+      await FollowSetService.instance.loadFollowedUsersSets(
+        followedPubkeys: follows,
+      );
     });
   }
 
@@ -576,23 +616,29 @@ class SyncService {
     required String image,
     required List<String> pubkeys,
   }) async {
-    final event = await _publish(() => _publisher.createFollowSet(
-          dTag: dTag,
-          title: title,
-          description: description,
-          image: image,
-          pubkeys: pubkeys,
-        ));
+    final event = await _publish(
+      () => _publisher.createFollowSet(
+        dTag: dTag,
+        title: title,
+        description: description,
+        image: image,
+        pubkeys: pubkeys,
+      ),
+    );
     return event;
   }
 
-  Future<void> syncArticles(
-      {List<String>? authors, int limit = 50, bool force = false}) async {
+  Future<void> syncArticles({
+    List<String>? authors,
+    int limit = 50,
+    bool force = false,
+  }) async {
     final key = 'articles_${authors?.join('_') ?? 'global'}';
     if (!force && !_shouldSync(key)) return;
 
     await _sync('articles', () async {
-      final since = _getSincestamp(key) ??
+      final since =
+          _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 7);
       final filter = <String, dynamic>{
         'kinds': [30023],
@@ -633,10 +679,12 @@ class SyncService {
         final profileFilter = <String, dynamic>{
           'kinds': [0],
           'authors': [pubkey],
-          'limit': 1
+          'limit': 1,
         };
-        final profileEvents =
-            await _relayService.fetchEvents(profileFilter, timeoutSecs: 8);
+        final profileEvents = await _relayService.fetchEvents(
+          profileFilter,
+          timeoutSecs: 8,
+        );
         if (profileEvents.isNotEmpty) {
           await rust_db.dbSaveEvents(eventsJson: jsonEncode(profileEvents));
           profile = await fetchProfile();
@@ -705,7 +753,8 @@ class SyncService {
     if (!force && !_shouldSync(key)) return;
 
     await _sync('hashtag', () async {
-      final since = _getSincestamp(key) ??
+      final since =
+          _getSincestamp(key) ??
           (DateTime.now().millisecondsSinceEpoch ~/ 1000 - 86400 * 2);
       final filter = <String, dynamic>{
         'kinds': [1],
@@ -771,8 +820,9 @@ class SyncService {
       var pendingIds = <String>[noteId];
 
       for (var depth = 0; depth < 5 && pendingIds.isNotEmpty; depth++) {
-        final idsToFetch =
-            pendingIds.where((id) => !processedIds.contains(id)).toList();
+        final idsToFetch = pendingIds
+            .where((id) => !processedIds.contains(id))
+            .toList();
         if (idsToFetch.isEmpty) break;
 
         final filter = <String, dynamic>{'ids': idsToFetch};
@@ -783,8 +833,9 @@ class SyncService {
         }
 
         final parentIds = _extractParentIds(events);
-        pendingIds =
-            parentIds.where((id) => !processedIds.contains(id)).toList();
+        pendingIds = parentIds
+            .where((id) => !processedIds.contains(id))
+            .toList();
         if (allEvents.length > 200) break;
       }
 
@@ -821,17 +872,17 @@ class SyncService {
     String? currentUserPubkeyHex,
     List<String> mutedPubkeys = const [],
     List<String> mutedWords = const [],
-  }) =>
-      _relayService.fetchFullThreadLocal(
-        noteId,
-        currentUserPubkeyHex: currentUserPubkeyHex,
-        mutedPubkeys: mutedPubkeys,
-        mutedWords: mutedWords,
-      );
+  }) => _relayService.fetchFullThreadLocal(
+    noteId,
+    currentUserPubkeyHex: currentUserPubkeyHex,
+    mutedPubkeys: mutedPubkeys,
+    mutedWords: mutedWords,
+  );
 
-  Future<Map<String, dynamic>> publishNote(
-          {required String content, List<List<String>>? tags}) =>
-      _publish(() => _publisher.createNote(content: content, tags: tags));
+  Future<Map<String, dynamic>> publishNote({
+    required String content,
+    List<List<String>>? tags,
+  }) => _publish(() => _publisher.createNote(content: content, tags: tags));
 
   Future<Map<String, dynamic>> publishReply({
     required String content,
@@ -840,74 +891,83 @@ class SyncService {
     required String parentAuthor,
     String? replyAuthor,
     List<List<String>>? tags,
-  }) =>
-      _publish(() => _publisher.createReply(
-            content: content,
-            rootId: rootId,
-            replyToId: replyToId,
-            rootAuthor: parentAuthor,
-            replyAuthor: replyAuthor,
-            additionalTags: tags ?? const [],
-          ));
+  }) => _publish(
+    () => _publisher.createReply(
+      content: content,
+      rootId: rootId,
+      replyToId: replyToId,
+      rootAuthor: parentAuthor,
+      replyAuthor: replyAuthor,
+      additionalTags: tags ?? const [],
+    ),
+  );
 
-  Future<Map<String, dynamic>> publishQuote(
-          {required String content,
-          required String quotedNoteId,
-          String? quotedAuthor,
-          List<List<String>>? tags}) =>
-      _publish(() => _publisher.createQuote(
-          content: content,
-          quotedNoteId: quotedNoteId,
-          quotedAuthor: quotedAuthor,
-          additionalTags: tags ?? const []));
+  Future<Map<String, dynamic>> publishQuote({
+    required String content,
+    required String quotedNoteId,
+    String? quotedAuthor,
+    List<List<String>>? tags,
+  }) => _publish(
+    () => _publisher.createQuote(
+      content: content,
+      quotedNoteId: quotedNoteId,
+      quotedAuthor: quotedAuthor,
+      additionalTags: tags ?? const [],
+    ),
+  );
 
-  Future<Map<String, dynamic>> publishReaction(
-          {required String targetEventId,
-          required String targetAuthor,
-          String content = '+'}) =>
-      _publish(() => _publisher.createReaction(
-          targetEventId: targetEventId,
-          targetAuthor: targetAuthor,
-          content: content));
+  Future<Map<String, dynamic>> publishReaction({
+    required String targetEventId,
+    required String targetAuthor,
+    String content = '+',
+  }) => _publish(
+    () => _publisher.createReaction(
+      targetEventId: targetEventId,
+      targetAuthor: targetAuthor,
+      content: content,
+    ),
+  );
 
-  Future<Map<String, dynamic>> publishRepost(
-          {required String noteId,
-          required String noteAuthor,
-          required String originalContent}) =>
-      _publish(() => _publisher.createRepost(
-          noteId: noteId,
-          noteAuthor: noteAuthor,
-          originalContent: originalContent));
+  Future<Map<String, dynamic>> publishRepost({
+    required String noteId,
+    required String noteAuthor,
+    required String originalContent,
+  }) => _publish(
+    () => _publisher.createRepost(
+      noteId: noteId,
+      noteAuthor: noteAuthor,
+      originalContent: originalContent,
+    ),
+  );
 
-  Future<Map<String, dynamic>> publishDeletion(
-      {required List<String> eventIds, String? reason}) async {
+  Future<Map<String, dynamic>> publishDeletion({
+    required List<String> eventIds,
+    String? reason,
+  }) async {
     final event = await _publish(
-        () => _publisher.createDeletion(eventIds: eventIds, reason: reason));
+      () => _publisher.createDeletion(eventIds: eventIds, reason: reason),
+    );
     await rust_db.dbDeleteEventsByIds(eventIds: eventIds);
     _db.notifyChange();
     return event;
   }
 
-  Future<Map<String, dynamic>> publishFollow(
-      {required List<String> followingPubkeys}) async {
+  Future<Map<String, dynamic>> publishFollow({
+    required List<String> followingPubkeys,
+  }) async {
     final currentUserHex = AuthService.instance.currentUserPubkeyHex;
     final publishedFollows = followingPubkeys
-        .where((pubkey) =>
-            pubkey.isNotEmpty &&
-            (currentUserHex == null ||
-                pubkey.toLowerCase() != currentUserHex.toLowerCase()))
+        .where(
+          (pubkey) =>
+              pubkey.isNotEmpty &&
+              (currentUserHex == null ||
+                  pubkey.toLowerCase() != currentUserHex.toLowerCase()),
+        )
         .toSet()
         .toList();
-    final event = await _publish(
+    return _publish(
       () => _publisher.createFollow(followingPubkeys: publishedFollows),
     );
-    final pubkey = event['pubkey'] as String? ?? '';
-
-    final listWithUser = publishedFollows.toSet()..add(pubkey);
-    await rust_db.dbSaveFollowingList(
-        pubkeyHex: pubkey, followsHex: listWithUser.toList());
-
-    return event;
   }
 
   Future<Map<String, dynamic>> publishMute({
@@ -915,10 +975,10 @@ class SyncService {
     List<String>? mutedWords,
   }) async {
     final words = mutedWords ?? EncryptedMuteService.instance.mutedWords;
-    final event = await _publish(() => _publisher.createMute(
-          mutedPubkeys: mutedPubkeys,
-          mutedWords: words,
-        ));
+    final event = await _publish(
+      () =>
+          _publisher.createMute(mutedPubkeys: mutedPubkeys, mutedWords: words),
+    );
     return event;
   }
 
@@ -926,36 +986,32 @@ class SyncService {
     required String reportedPubkey,
     required String reportType,
     String content = '',
-  }) =>
-      _publish(() => _publisher.createReport(
-            reportedPubkey: reportedPubkey,
-            reportType: reportType,
-            content: content,
-          ));
+  }) => _publish(
+    () => _publisher.createReport(
+      reportedPubkey: reportedPubkey,
+      reportType: reportType,
+      content: content,
+    ),
+  );
 
-  Future<Map<String, dynamic>> publishProfileUpdate(
-      {required Map<String, dynamic> profileContent}) async {
-    final event = await _publish(
-        () => _publisher.createProfileUpdate(profileContent: profileContent));
-    final pubkey = event['pubkey'] as String? ?? '';
-    final profileData =
-        profileContent.map((k, v) => MapEntry(k, v?.toString() ?? ''));
-    await rust_db.dbSaveProfile(
-        pubkeyHex: pubkey, profileJson: jsonEncode(profileData));
-    return event;
+  Future<Map<String, dynamic>> publishProfileUpdate({
+    required Map<String, dynamic> profileContent,
+  }) async {
+    return _publish(
+      () => _publisher.createProfileUpdate(profileContent: profileContent),
+    );
   }
 
-  void startPeriodicSync(String userPubkey,
-      {Duration interval = const Duration(minutes: 10)}) {
+  void startPeriodicSync(
+    String userPubkey, {
+    Duration interval = const Duration(minutes: 10),
+  }) {
     stopPeriodicSync();
     _periodicTimer = Timer.periodic(interval, (_) async {
       if (_feedSubscription != null || _notificationSubscription != null) {
         return;
       }
-      await Future.wait([
-        syncFeed(userPubkey),
-        syncNotifications(userPubkey),
-      ]);
+      await Future.wait([syncFeed(userPubkey), syncNotifications(userPubkey)]);
     });
     _lastSyncCleanupTimer?.cancel();
     _lastSyncCleanupTimer = Timer.periodic(const Duration(hours: 1), (_) {
@@ -1020,14 +1076,11 @@ class SyncService {
         _realtimeUserPubkey == userPubkey;
   }
 
-  Future<void> _startFeedSubscription(
-    String userPubkey,
-    int generation,
-  ) async {
+  Future<void> _startFeedSubscription(String userPubkey, int generation) async {
     try {
-      final follows = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
-      if (follows.isEmpty ||
-          !_isCurrentRealtimeRequest(userPubkey, generation)) {
+      final following = await rust_db.dbGetFollowingList(pubkeyHex: userPubkey);
+      final follows = {...following, userPubkey}.toList();
+      if (!_isCurrentRealtimeRequest(userPubkey, generation)) {
         return;
       }
 
@@ -1054,9 +1107,7 @@ class SyncService {
             }
             final eventId = eventData['id'] as String?;
             if (_isDuplicate(eventId)) {
-              _db.notifyFeedChange(
-                ids: eventId == null ? const [] : [eventId],
-              );
+              _db.notifyFeedChange(ids: eventId == null ? const [] : [eventId]);
               return;
             }
             final kind = (eventData['kind'] as num?)?.toInt();
@@ -1134,10 +1185,9 @@ class SyncService {
             if (muteService.shouldFilterEvent(eventData)) return;
             await rust_db.dbSaveEvents(eventsJson: jsonEncode([eventData]));
             _notifyNotificationChange();
-            _syncMissingProfilesInBackground(
-              [eventData],
-              onComplete: _notifyNotificationChange,
-            );
+            _syncMissingProfilesInBackground([
+              eventData,
+            ], onComplete: _notifyNotificationChange);
           } catch (_) {}
         },
         onError: (_) {
@@ -1158,17 +1208,15 @@ class SyncService {
     }
   }
 
-  void _scheduleReconnect({
-    required bool isFeed,
-    required int generation,
-  }) {
+  void _scheduleReconnect({required bool isFeed, required int generation}) {
     final userPubkey = _realtimeUserPubkey;
     if (userPubkey == null ||
         !_isCurrentRealtimeRequest(userPubkey, generation)) {
       return;
     }
-    final attempts =
-        isFeed ? _feedReconnectAttempts : _notificationReconnectAttempts;
+    final attempts = isFeed
+        ? _feedReconnectAttempts
+        : _notificationReconnectAttempts;
     final backoff = attempts < _reconnectBackoff.length
         ? _reconnectBackoff[attempts]
         : _reconnectBackoff.last;
@@ -1203,9 +1251,10 @@ class SyncService {
     _notificationSubscription = null;
   }
 
-  Future<String?> uploadMedia(String filePath,
-          {String blossomUrl = 'https://blossom.primal.net'}) =>
-      _publisher.uploadMedia(filePath, blossomUrl: blossomUrl);
+  Future<String?> uploadMedia(
+    String filePath, {
+    String blossomUrl = 'https://blossom.primal.net',
+  }) => _publisher.uploadMedia(filePath, blossomUrl: blossomUrl);
 
   void prefetchQuotedNotes(List<String> eventIds) {
     if (eventIds.isEmpty) return;
@@ -1229,44 +1278,78 @@ class SyncService {
   }
 
   void dispose() {
+    _disposed = true;
     stopPeriodicSync();
     stopRealtimeSubscriptions();
     _syncStatusController.close();
   }
 
+  void _emitSyncStatus(SyncOperationStatus status) {
+    if (!_disposed && !_syncStatusController.isClosed) {
+      _syncStatusController.add(status);
+    }
+  }
+
   Future<void> _sync(String operation, Future<void> Function() action) async {
-    _syncStatusController.add(SyncOperationStatus(
-        operation: operation, state: SyncOperationState.syncing));
+    if (_disposed) return;
+    _emitSyncStatus(
+      SyncOperationStatus(
+        operation: operation,
+        state: SyncOperationState.syncing,
+      ),
+    );
     try {
       await action();
-      _syncStatusController.add(SyncOperationStatus(
-          operation: operation, state: SyncOperationState.completed));
+      if (_disposed) return;
+      _emitSyncStatus(
+        SyncOperationStatus(
+          operation: operation,
+          state: SyncOperationState.completed,
+        ),
+      );
     } catch (e) {
-      _syncStatusController.add(SyncOperationStatus(
+      if (_disposed) return;
+      _emitSyncStatus(
+        SyncOperationStatus(
           operation: operation,
           state: SyncOperationState.error,
-          error: e.toString()));
+          error: e.toString(),
+        ),
+      );
     }
   }
 
   Future<Map<String, dynamic>> _publish(
-      Future<Map<String, dynamic>> Function() createEvent) async {
+    Future<Map<String, dynamic>> Function() createEvent,
+  ) async {
+    final generation = FollowSetService.instance.sessionGeneration;
+    final userPubkey = _authService.currentUserPubkeyHex;
+    if (_disposed) throw StateError('Session ended');
     final event = await createEvent();
+    if (!_isCurrentSession(generation, userPubkey)) {
+      throw StateError('Account changed before publication');
+    }
+    if (userPubkey != null && event['pubkey'] != userPubkey) {
+      throw StateError('Event signer does not match the active account');
+    }
     final eventJson = jsonEncode(event);
     final result = await _relayService.sendEvent(eventJson);
     final success = (result['success'] as List<dynamic>?) ?? const [];
     if (success.isEmpty) {
       final failed = result['failed'];
       throw StateError(
-          'No relay accepted the event${failed == null ? '' : ': $failed'}');
+        'No relay accepted the event${failed == null ? '' : ': $failed'}',
+      );
     }
 
     await rust_db.dbSaveEvents(eventsJson: jsonEncode([event]));
     _db.notifyChange();
 
     if (kDebugMode) {
-      print('[SyncService] Event dispatched: ${result['id']} '
-          'success=${success.length} failed=${result['failed']}');
+      print(
+        '[SyncService] Event dispatched: ${result['id']} '
+        'success=${success.length} failed=${result['failed']}',
+      );
     }
     return event;
   }
@@ -1320,10 +1403,12 @@ class SyncService {
   }
 
   Future<Set<String>> _extractAllPubkeys(
-      List<Map<String, dynamic>> events) async {
+    List<Map<String, dynamic>> events,
+  ) async {
     try {
       final ids = await rust_db.extractPubkeysFromEvents(
-          eventsJson: jsonEncode(events));
+        eventsJson: jsonEncode(events),
+      );
       return ids.toSet();
     } catch (_) {
       return events
@@ -1335,12 +1420,14 @@ class SyncService {
 
   Future<void> _syncMissingProfiles(Set<String> pubkeys) async {
     if (pubkeys.isEmpty) return;
-    final existingProfilesJson =
-        await rust_db.dbGetProfiles(pubkeysHex: pubkeys.toList());
+    final existingProfilesJson = await rust_db.dbGetProfiles(
+      pubkeysHex: pubkeys.toList(),
+    );
     final existingProfiles =
         (jsonDecode(existingProfilesJson) as Map<String, dynamic>);
-    final missingProfiles =
-        pubkeys.where((p) => !existingProfiles.containsKey(p)).toList();
+    final missingProfiles = pubkeys
+        .where((p) => !existingProfiles.containsKey(p))
+        .toList();
     if (missingProfiles.isNotEmpty) {
       await syncProfiles(missingProfiles);
     }
@@ -1412,8 +1499,9 @@ class SyncService {
   void _fetchThreadAncestorsInBackground(List<Map<String, dynamic>> events) {
     Future.microtask(() async {
       try {
-        var replyEventIds =
-            await rust_db.filterReplyEventIds(eventsJson: jsonEncode(events));
+        var replyEventIds = await rust_db.filterReplyEventIds(
+          eventsJson: jsonEncode(events),
+        );
         if (replyEventIds.isEmpty) return;
         if (replyEventIds.length > 40) {
           replyEventIds = replyEventIds.sublist(0, 40);
@@ -1441,7 +1529,8 @@ class SyncService {
     Future.microtask(() async {
       try {
         final ids = await rust_db.extractRepostOriginalIds(
-            eventsJson: jsonEncode(events));
+          eventsJson: jsonEncode(events),
+        );
         if (ids.isEmpty) return;
         _fetchRepostOriginalsInBackground(ids);
       } catch (_) {}
@@ -1451,7 +1540,8 @@ class SyncService {
   Future<void> _queueMissingRepostOriginals(int sinceTimestamp) async {
     try {
       final missing = await rust_db.queueMissingRepostOriginals(
-          sinceTimestamp: sinceTimestamp);
+        sinceTimestamp: sinceTimestamp,
+      );
       if (missing.isNotEmpty) {
         _fetchRepostOriginalsInBackground(missing);
       }
@@ -1485,32 +1575,26 @@ class SyncService {
   Future<Map<String, dynamic>> broadcastEvents(
     List<Map<String, dynamic>> events, {
     List<String>? relayUrls,
-  }) =>
-      _relayService.broadcastEvents(events, relayUrls: relayUrls);
+  }) => _relayService.broadcastEvents(events, relayUrls: relayUrls);
 
   Future<List<Map<String, dynamic>>> fetchEventsForAuthor(
     String pubkeyHex, {
     int timeoutSecs = 30,
-  }) =>
-      _relayService.fetchEvents(
-        {
-          'authors': [pubkeyHex]
-        },
-        timeoutSecs: timeoutSecs,
-      );
+  }) => _relayService.fetchEvents({
+    'authors': [pubkeyHex],
+  }, timeoutSecs: timeoutSecs);
 
   Future<List<Map<String, dynamic>>> fetchEventsWithFilter(
     Map<String, dynamic> filter, {
     int timeoutSecs = 10,
-  }) =>
-      _relayService.fetchEvents(filter, timeoutSecs: timeoutSecs);
+  }) => _relayService.fetchEvents(filter, timeoutSecs: timeoutSecs);
 
   Stream<Map<String, dynamic>> fetchAllEventsForAuthor(String pubkeyHex) =>
       _relayService.fetchAllEventsForAuthor(pubkeyHex);
 
   Stream<Map<String, dynamic>> streamBroadcastEvents(
-          List<Map<String, dynamic>> events) =>
-      _relayService.streamBroadcastEvents(events);
+    List<Map<String, dynamic>> events,
+  ) => _relayService.streamBroadcastEvents(events);
 
   Future<Map<String, dynamic>> sendEventJson(String eventJson) =>
       _relayService.sendEvent(eventJson);

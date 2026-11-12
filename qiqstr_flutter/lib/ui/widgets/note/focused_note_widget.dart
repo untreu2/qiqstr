@@ -372,12 +372,12 @@ class _Avatar extends StatelessWidget {
           memCacheWidth: cacheDim,
           maxWidthDiskCache: cacheDim,
           maxHeightDiskCache: cacheDim,
-          placeholder: (_, __) => PhosphorIcon(
+          placeholder: (_, _) => PhosphorIcon(
             PhosphorIcons.user(),
             size: radius,
             color: colors.textSecondary,
           ),
-          errorWidget: (_, __, ___) => PhosphorIcon(
+          errorWidget: (_, _, _) => PhosphorIcon(
             PhosphorIcons.user(),
             size: radius,
             color: colors.textSecondary,

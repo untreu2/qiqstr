@@ -26,9 +26,10 @@ import 'core/bloc/observers/app_bloc_observer.dart';
 import 'src/rust/frb_generated.dart';
 import 'package:breez_sdk_spark_flutter/breez_sdk_spark.dart';
 import 'l10n/app_localizations.dart';
+import 'ui/theme/theme_manager.dart';
 import 'constants/database.dart';
 
-Future<void> _sanitizeLmdbBeforeRust() async {
+Future<void> _prepareLmdbBeforeRust() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final dbVersion = prefs.getInt('lmdb_version') ?? 0;
@@ -38,7 +39,7 @@ Future<void> _sanitizeLmdbBeforeRust() async {
     final dbDir = Directory(dbPath);
 
     if (dbVersion < lmdbSchemaVersion && await dbDir.exists()) {
-      await dbDir.delete(recursive: true);
+      await dbDir.rename('$dbPath.backup-${DateTime.now().microsecondsSinceEpoch}');
       await prefs.setInt('lmdb_version', lmdbSchemaVersion);
       return;
     }
@@ -48,102 +49,106 @@ Future<void> _sanitizeLmdbBeforeRust() async {
       return;
     }
 
-    final lockFile = File('$dbPath/lock.mdb');
-    if (await lockFile.exists()) {
-      await lockFile.delete();
-    }
-
     final dataFile = File('$dbPath/data.mdb');
     if (await dataFile.exists()) {
       final stat = await dataFile.stat();
       if (stat.size == 0) {
-        await dbDir.delete(recursive: true);
+        await dbDir.rename('$dbPath.empty-${DateTime.now().microsecondsSinceEpoch}');
       }
     }
 
     await prefs.setInt('lmdb_version', lmdbSchemaVersion);
-  } catch (_) {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final dbDir = Directory('${dir.path}/nostr-lmdb');
-      if (await dbDir.exists()) {
-        await dbDir.delete(recursive: true);
-      }
-    } catch (_) {}
+  } catch (error) {
+    logError('Could not prepare local database', 'Main', error);
   }
 }
 
 void main() {
-  runZonedGuarded(() async {
-    final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  runZonedGuarded(
+    () async {
+      final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+      FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-    await _sanitizeLmdbBeforeRust();
-    await RustLib.init();
-    await BreezSdkSparkLib.init();
+      await _prepareLmdbBeforeRust();
+      await RustLib.init();
+      await BreezSdkSparkLib.init();
 
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
-    PaintingBinding.instance.imageCache.maximumSize = 300;
+      PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
+      PaintingBinding.instance.imageCache.maximumSize = 300;
 
-    debugProfileBuildsEnabled = false;
-    debugPrintRebuildDirtyWidgets = false;
+      debugProfileBuildsEnabled = false;
+      debugPrintRebuildDirtyWidgets = false;
 
-    loggingService.configure(
-      level: LogLevel.error,
-      enabled: true,
-    );
+      loggingService.configure(level: LogLevel.error, enabled: true);
 
-    FlutterError.onError = (FlutterErrorDetails details) {
-      if (details.exception is SocketException) {
+      FlutterError.onError = (FlutterErrorDetails details) {
+        if (details.exception is SocketException) {
+          return;
+        }
+        crashReporting.recordError(
+          details.exception,
+          details.stack,
+          context: 'FlutterError',
+          fatal: true,
+        );
+        FlutterError.presentError(details);
+      };
+
+      try {
+        PlatformDispatcher.instance.onError = (error, stack) {
+          if (error is SocketException) {
+            return true;
+          }
+          crashReporting.recordError(
+            error,
+            stack,
+            context: 'PlatformDispatcher',
+            fatal: true,
+          );
+          return true;
+        };
+      } catch (e) {
+        logError('Could not set platform error handler', 'Main', e);
+      }
+
+      await AppDI.initialize();
+
+      Bloc.observer = AppBlocObserver();
+
+      FlutterNativeSplash.remove();
+
+      runApp(
+        MultiBlocProvider(
+          providers: [
+            BlocProvider<ThemeBloc>(
+              create: (context) => AppDI.get<ThemeBloc>()
+                ..add(
+                  ThemeSystemBrightnessChanged(
+                    WidgetsBinding
+                            .instance
+                            .platformDispatcher
+                            .platformBrightness ==
+                        Brightness.dark,
+                  ),
+                )
+                ..add(const ThemeInitialized()),
+            ),
+            BlocProvider<LocaleBloc>(
+              create: (context) =>
+                  AppDI.get<LocaleBloc>()..add(const LocaleInitialized()),
+            ),
+          ],
+          child: const QiqstrApp(),
+        ),
+      );
+    },
+    (error, stack) {
+      if (error is SocketException) {
         return;
       }
-      crashReporting.recordError(
-        details.exception,
-        details.stack,
-        context: 'FlutterError',
-        fatal: true,
-      );
-      FlutterError.presentError(details);
-    };
-
-    try {
-      PlatformDispatcher.instance.onError = (error, stack) {
-        if (error is SocketException) {
-          return true;
-        }
-        crashReporting.recordError(error, stack,
-            context: 'PlatformDispatcher', fatal: true);
-        return true;
-      };
-    } catch (e) {
-      logError('Could not set platform error handler', 'Main', e);
-    }
-
-    await AppDI.initialize();
-
-    Bloc.observer = AppBlocObserver();
-
-    FlutterNativeSplash.remove();
-
-    runApp(
-      MultiBlocProvider(
-        providers: [
-          BlocProvider<ThemeBloc>(
-            create: (context) => ThemeBloc()..add(const ThemeInitialized()),
-          ),
-          BlocProvider<LocaleBloc>(
-            create: (context) => LocaleBloc()..add(const LocaleInitialized()),
-          ),
-        ],
-        child: const QiqstrApp(),
-      ),
-    );
-  }, (error, stack) {
-    if (error is SocketException) {
-      return;
-    }
-    crashReporting.recordError(error, stack, context: 'Zone', fatal: true);
-  });
+      crashReporting.recordError(error, stack, context: 'Zone', fatal: true);
+    },
+  );
 }
 
 void unawaited(Future<void> future) {
@@ -171,6 +176,16 @@ class _QiqstrAppState extends State<QiqstrApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    context.read<ThemeBloc>().add(
+      ThemeSystemBrightnessChanged(
+        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark,
+      ),
+    );
   }
 
   @override
@@ -261,18 +276,30 @@ class _QiqstrAppState extends State<QiqstrApp> with WidgetsBindingObserver {
                       displayColor: colors.textPrimary,
                     )
                     .copyWith(
-                      bodyLarge:
-                          TextStyle(height: 2.1, color: colors.textPrimary),
-                      bodyMedium:
-                          TextStyle(height: 2.1, color: colors.textPrimary),
-                      bodySmall:
-                          TextStyle(height: 2.1, color: colors.textPrimary),
-                      titleLarge:
-                          TextStyle(height: 2.1, color: colors.textPrimary),
-                      titleMedium:
-                          TextStyle(height: 2.1, color: colors.textPrimary),
-                      titleSmall:
-                          TextStyle(height: 2.1, color: colors.textPrimary),
+                      bodyLarge: TextStyle(
+                        height: 2.1,
+                        color: colors.textPrimary,
+                      ),
+                      bodyMedium: TextStyle(
+                        height: 2.1,
+                        color: colors.textPrimary,
+                      ),
+                      bodySmall: TextStyle(
+                        height: 2.1,
+                        color: colors.textPrimary,
+                      ),
+                      titleLarge: TextStyle(
+                        height: 2.1,
+                        color: colors.textPrimary,
+                      ),
+                      titleMedium: TextStyle(
+                        height: 2.1,
+                        color: colors.textPrimary,
+                      ),
+                      titleSmall: TextStyle(
+                        height: 2.1,
+                        color: colors.textPrimary,
+                      ),
                     ),
                 colorScheme: isDark
                     ? ColorScheme.dark(

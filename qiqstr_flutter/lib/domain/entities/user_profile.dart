@@ -77,15 +77,15 @@ class UserProfile extends Equatable {
   Map<String, dynamic> toMap() {
     return {
       'pubkey': pubkey,
-      if (name != null) 'name': name!,
-      if (displayName != null) 'display_name': displayName!,
-      if (about != null) 'about': about!,
-      if (picture != null) 'picture': picture!,
-      if (banner != null) 'banner': banner!,
-      if (nip05 != null) 'nip05': nip05!,
-      if (lud16 != null) 'lud16': lud16!,
-      if (website != null) 'website': website!,
-      if (location != null) 'location': location!,
+      'name': ?name,
+      'display_name': ?displayName,
+      'about': ?about,
+      'picture': ?picture,
+      'banner': ?banner,
+      'nip05': ?nip05,
+      'lud16': ?lud16,
+      'website': ?website,
+      'location': ?location,
     };
   }
 }

@@ -118,7 +118,7 @@ abstract interface class FeedRepository {
 class FeedRepositoryImpl implements FeedRepository {
   final RustDatabaseService _events;
 
-  FeedRepositoryImpl({required RustDatabaseService events}) : _events = events;
+  FeedRepositoryImpl({required this._events});
 
   List<String> get _mutedPubkeys => EncryptedMuteService.instance.mutedPubkeys;
   List<String> get _mutedWords => EncryptedMuteService.instance.mutedWords;

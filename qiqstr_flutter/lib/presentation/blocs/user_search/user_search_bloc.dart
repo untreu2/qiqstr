@@ -1,3 +1,4 @@
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/services/auth_service.dart';
@@ -14,16 +15,15 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
   final VertexSearchService _vertexSearchService;
 
   UserSearchBloc({
-    required ProfileRepository profileRepository,
-    required AuthService authService,
-    required SyncService syncService,
-    required VertexSearchService vertexSearchService,
-  })  : _profileRepository = profileRepository,
-        _authService = authService,
-        _syncService = syncService,
-        _vertexSearchService = vertexSearchService,
-        super(const UserSearchLoaded(filteredUsers: [])) {
-    on<UserSearchQueryChanged>(_onUserSearchQueryChanged);
+    required this._profileRepository,
+    required this._authService,
+    required this._syncService,
+    required this._vertexSearchService,
+  })  : super(const UserSearchLoaded(filteredUsers: [])) {
+    on<UserSearchQueryChanged>(
+      _onUserSearchQueryChanged,
+      transformer: restartable(),
+    );
   }
 
   Map<String, dynamic> _profileToMap(UserProfile profile) {
@@ -74,7 +74,9 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
         }
 
         await _syncService.syncProfile(pubkeyHex);
+        if (emit.isDone) return;
         final profile = await _profileRepository.getProfile(pubkeyHex);
+        if (emit.isDone) return;
 
         if (profile == null) {
           emit(const UserSearchLoaded(filteredUsers: [], isSearching: false));
@@ -93,6 +95,7 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
         _profileRepository.searchProfiles(query),
       ]);
 
+      if (emit.isDone) return;
       final vertexProfiles = results[0];
       final localProfiles = results[1];
 
@@ -116,6 +119,7 @@ class UserSearchBloc extends Bloc<UserSearchEvent, UserSearchState> {
         isSearching: false,
       ));
     } catch (e) {
+      if (emit.isDone) return;
       emit(UserSearchError(e.toString()));
     }
   }

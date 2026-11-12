@@ -3,14 +3,14 @@ import Observation
 import UIKit
 
 enum DMConversationFilter: String, CaseIterable, Identifiable {
-    case following, other
+    case primary, requests
     var id: String { rawValue }
 }
 
 @MainActor
 @Observable
 final class DMConversationsViewModel {
-    var filter: DMConversationFilter = .following
+    var filter: DMConversationFilter = .primary
     var showNewMessage = false
     @ObservationIgnored private var didAutoSelect = false
     private let service = DMService.shared
@@ -45,14 +45,14 @@ final class DMConversationsViewModel {
     }
 
     func title(for filter: DMConversationFilter) -> String {
-        let base = filter == .following ? L("dmTabFollowing") : L("dmTabOther")
+        let base = filter == .primary ? L("dmTabPrimary") : L("dmTabRequests")
         let unread = unreadCount(filter)
         return unread > 0 ? "\(base) (\(unread))" : base
     }
 
     private func matches(_ conversation: DMConversation, _ filter: DMConversationFilter) -> Bool {
-        let followed = service.isFollowing(conversation.peer)
-        return filter == .following ? followed : !followed
+        let known = service.isKnown(conversation.peer)
+        return filter == .primary ? known : !known
     }
 
     var hasLoaded: Bool { service.hasLoaded }
@@ -66,7 +66,7 @@ final class DMConversationsViewModel {
     func autoSelectFilter() {
         guard !didAutoSelect, service.hasLoaded else { return }
         didAutoSelect = true
-        if filter == .following, visibleConversations.isEmpty, hasAnyConversation { filter = .other }
+        if filter == .primary, visibleConversations.isEmpty, hasAnyConversation { filter = .requests }
     }
 
     func disappeared() { service.isListVisible = false }

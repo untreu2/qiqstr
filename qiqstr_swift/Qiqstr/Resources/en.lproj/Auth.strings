@@ -68,3 +68,7 @@
 "authNcryptsecWrongPassword" = "Wrong password, or the backup is damaged.";
 "authNcryptsecPasswordRequired" = "Enter the password for this encrypted key.";
 "authDecrypting" = "Decrypting…";
+"authTermsPromptMessage" = "To continue, you need to agree to qiqstr's Terms of Use and Privacy Policy.";
+"authTermsAgree" = "Agree and continue";
+"authTermsRead" = "Read terms";
+"authTermsAgreeShort" = "Agree";

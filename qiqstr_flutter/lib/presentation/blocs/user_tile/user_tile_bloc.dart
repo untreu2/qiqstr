@@ -12,14 +12,11 @@ class UserTileBloc extends Bloc<UserTileEvent, UserTileState> {
   final String userNpub;
 
   UserTileBloc({
-    required FollowingRepository followingRepository,
-    required SyncService syncService,
-    required AuthService authService,
+    required this._followingRepository,
+    required this._syncService,
+    required this._authService,
     required this.userNpub,
-  })  : _followingRepository = followingRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const UserTileInitial()) {
+  })  : super(const UserTileInitial()) {
     on<UserTileInitialized>(_onUserTileInitialized);
     on<UserTileFollowToggled>(_onUserTileFollowToggled);
   }

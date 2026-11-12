@@ -42,19 +42,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   int _likesWatchGeneration = 0;
 
   ProfileBloc({
-    required FeedRepository feedRepository,
-    required ProfileRepository profileRepository,
-    required FollowingRepository followingRepository,
-    required ArticleRepository articleRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _feedRepository = feedRepository,
-        _profileRepository = profileRepository,
-        _followingRepository = followingRepository,
-        _articleRepository = articleRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const ProfileInitial()) {
+    required this._feedRepository,
+    required this._profileRepository,
+    required this._followingRepository,
+    required this._articleRepository,
+    required this._syncService,
+    required this._authService,
+  })  : super(const ProfileInitial()) {
     on<ProfileLoadRequested>(_onProfileLoaded, transformer: restartable());
     on<ProfileRefreshed>(_onProfileRefreshed, transformer: droppable());
     on<ProfileFollowToggled>(
@@ -187,7 +181,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
         emit(ProfileLoaded(
           user: placeholderUser,
-          isFollowing: false,
+          isFollowing: isFollowing,
           isCurrentUser: isCurrentUser,
           profiles: {targetHex: placeholderUser},
           notes: const [],
@@ -304,39 +298,26 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     emit(currentState.copyWith(isFollowing: !wasFollowing));
 
     try {
-      final currentUserHex = currentState.currentUserHex;
-
+      final following = await _followingRepository
+          .getFollowing(currentState.currentUserHex);
+      if (isClosed || generation != _profileGeneration || emit.isDone) return;
+      final updatedFollows = {...?following};
       if (wasFollowing) {
-        await _followingRepository.unfollow(currentUserHex, targetHex);
-        final updatedFollows =
-            await _followingRepository.getFollowing(currentUserHex);
-        await _syncService.publishFollow(
-          followingPubkeys: updatedFollows ?? const [],
-        );
+        updatedFollows.remove(targetHex);
       } else {
-        await _followingRepository.follow(currentUserHex, targetHex);
-        final updatedFollows =
-            await _followingRepository.getFollowing(currentUserHex);
-        await _syncService.publishFollow(
-          followingPubkeys: updatedFollows ?? const [],
-        );
+        updatedFollows.add(targetHex);
       }
+      await _syncService.publishFollow(
+        followingPubkeys: updatedFollows.toList(),
+      );
     } catch (e) {
-      try {
-        final currentUserHex = currentState.currentUserHex;
-        if (wasFollowing) {
-          await _followingRepository.follow(currentUserHex, targetHex);
-        } else {
-          await _followingRepository.unfollow(currentUserHex, targetHex);
-        }
-      } catch (_) {}
       if (isClosed ||
           generation != _profileGeneration ||
           state is! ProfileLoaded ||
           (state as ProfileLoaded).currentProfileHex != targetHex) {
         return;
       }
-      emit(currentState.copyWith(
+      emit((state as ProfileLoaded).copyWith(
         isFollowing: wasFollowing,
         followError: 'Failed to ${wasFollowing ? 'unfollow' : 'follow'} user',
       ));

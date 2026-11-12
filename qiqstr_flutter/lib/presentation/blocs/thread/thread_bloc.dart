@@ -28,19 +28,13 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
   final Set<int> _failedNetworkLoads = <int>{};
 
   ThreadBloc({
-    required FeedRepository feedRepository,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required AuthService authService,
-    required EncryptedMuteService muteService,
-    required InteractionService interactionService,
-  })  : _feedRepository = feedRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        _authService = authService,
-        _muteService = muteService,
-        _interactionService = interactionService,
-        super(const ThreadInitial()) {
+    required this._feedRepository,
+    required this._profileRepository,
+    required this._syncService,
+    required this._authService,
+    required this._muteService,
+    required this._interactionService,
+  })  : super(const ThreadInitial()) {
     on<ThreadLoadRequested>(_onThreadLoaded, transformer: restartable());
     on<ThreadRefreshed>(_onThreadRefreshed, transformer: droppable());
     on<ThreadProfilesUpdated>(_onThreadProfilesUpdated);
@@ -292,7 +286,10 @@ class ThreadBloc extends Bloc<ThreadEvent, ThreadState> {
       event.currentUserHex,
       repliesSynced: true,
     );
-    if (newState == null) return;
+    if (newState == null) {
+      _onThreadNetworkFailed(ThreadNetworkFailed(event.requestId), emit);
+      return;
+    }
 
     _currentRootNoteId = newState.rootNoteId;
 

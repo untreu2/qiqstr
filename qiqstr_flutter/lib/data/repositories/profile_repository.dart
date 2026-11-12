@@ -14,10 +14,9 @@ class ProfileRepository {
   final PrimalCacheService _primalCacheService;
 
   ProfileRepository({
-    required RustDatabaseService events,
+    required this._events,
     PrimalCacheService? primalCacheService,
-  })  : _events = events,
-        _primalCacheService = primalCacheService ?? PrimalCacheService.instance;
+  })  : _primalCacheService = primalCacheService ?? PrimalCacheService.instance;
 
   UserProfile _toProfile(String pubkey, Map<String, dynamic> m) {
     return UserProfile(

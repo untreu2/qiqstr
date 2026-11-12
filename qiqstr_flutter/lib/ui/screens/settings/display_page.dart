@@ -57,7 +57,11 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 
-  Widget _buildDisplaySection(BuildContext context, ThemeState themeState, AppLocalizations l10n) {
+  Widget _buildDisplaySection(
+    BuildContext context,
+    ThemeState themeState,
+    AppLocalizations l10n,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -74,7 +78,10 @@ class _DisplayPageState extends State<DisplayPage> {
   }
 
   Widget _buildExpandedNoteModeToggleItem(
-      BuildContext context, ThemeState themeState, AppLocalizations l10n) {
+    BuildContext context,
+    ThemeState themeState,
+    AppLocalizations l10n,
+  ) {
     return GestureDetector(
       onTap: () =>
           context.read<ThemeBloc>().add(const ExpandedNoteModeToggled()),
@@ -109,13 +116,15 @@ class _DisplayPageState extends State<DisplayPage> {
             ),
             Switch(
               value: themeState.isExpandedNoteMode,
-              onChanged: (value) => context
-                  .read<ThemeBloc>()
-                  .add(const ExpandedNoteModeToggled()),
+              onChanged: (value) => context.read<ThemeBloc>().add(
+                const ExpandedNoteModeToggled(),
+              ),
               activeThumbColor: context.colors.switchActive,
               inactiveThumbColor: context.colors.textSecondary,
               inactiveTrackColor: context.colors.border,
-              activeTrackColor: context.colors.switchActive.withValues(alpha: 0.3),
+              activeTrackColor: context.colors.switchActive.withValues(
+                alpha: 0.3,
+              ),
             ),
           ],
         ),
@@ -123,7 +132,11 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 
-  Widget _buildThemeToggleItem(BuildContext context, ThemeState themeState, AppLocalizations l10n) {
+  Widget _buildThemeToggleItem(
+    BuildContext context,
+    ThemeState themeState,
+    AppLocalizations l10n,
+  ) {
     return GestureDetector(
       onTap: () => context.read<ThemeBloc>().add(const ThemeToggled()),
       child: Container(
@@ -136,7 +149,9 @@ class _DisplayPageState extends State<DisplayPage> {
         child: Row(
           children: [
             PhosphorIcon(
-              themeState.isDarkMode ? PhosphorIcons.moon() : PhosphorIcons.sun(),
+              themeState.isDarkMode
+                  ? PhosphorIcons.moon()
+                  : PhosphorIcons.sun(),
               size: 22,
               color: context.colors.textPrimary,
             ),
@@ -158,7 +173,9 @@ class _DisplayPageState extends State<DisplayPage> {
               activeThumbColor: context.colors.switchActive,
               inactiveThumbColor: context.colors.textSecondary,
               inactiveTrackColor: context.colors.border,
-              activeTrackColor: context.colors.switchActive.withValues(alpha: 0.3),
+              activeTrackColor: context.colors.switchActive.withValues(
+                alpha: 0.3,
+              ),
             ),
           ],
         ),
@@ -167,7 +184,10 @@ class _DisplayPageState extends State<DisplayPage> {
   }
 
   Widget _buildBottomNavOrderSection(
-      BuildContext context, ThemeState themeState, AppLocalizations l10n) {
+    BuildContext context,
+    ThemeState themeState,
+    AppLocalizations l10n,
+  ) {
     final navItems = [
       {'index': 0, 'name': l10n.home, 'icon': PhosphorIcons.house()},
       {'index': 1, 'name': l10n.dm, 'icon': PhosphorIcons.chatCircle()},
@@ -190,18 +210,20 @@ class _DisplayPageState extends State<DisplayPage> {
         children: [
           Row(
             children: [
-            PhosphorIcon(
-              PhosphorIcons.list(),
-              size: 22,
-              color: context.colors.textPrimary,
-            ),
+              PhosphorIcon(
+                PhosphorIcons.list(),
+                size: 22,
+                color: context.colors.textPrimary,
+              ),
               const SizedBox(width: 8),
-              Text(
-                l10n.navigationBarOrder,
-                style: TextStyle(
-                  color: context.colors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  l10n.navigationBarOrder,
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -209,10 +231,7 @@ class _DisplayPageState extends State<DisplayPage> {
           const SizedBox(height: 8),
           Text(
             l10n.pressAndHoldToDrag,
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 16),
           Row(
@@ -249,9 +268,9 @@ class _DisplayPageState extends State<DisplayPage> {
                         final newPos = newOrder.indexOf(originalIndex);
                         newOrder.removeAt(oldPos);
                         newOrder.insert(newPos, draggedIndex);
-                        context
-                            .read<ThemeBloc>()
-                            .add(BottomNavOrderSet(newOrder));
+                        context.read<ThemeBloc>().add(
+                          BottomNavOrderSet(newOrder),
+                        );
                       }
                     },
                     builder: (context, candidateData, rejectedData) {

@@ -66,6 +66,22 @@ impl HybridDatabase {
         });
         Self { lmdb, memory }
     }
+
+    pub(crate) async fn remove_invalid_replaceable_events(&self) -> Result<(), DatabaseError> {
+        let events = self
+            .lmdb
+            .query(Filter::new().kinds([Kind::Metadata, Kind::ContactList, Kind::MuteList]))
+            .await?;
+        let invalid: Vec<EventId> = events
+            .into_iter()
+            .filter(|event| event.verify().is_err())
+            .map(|event| event.id)
+            .collect();
+        if !invalid.is_empty() {
+            self.lmdb.delete(Filter::new().ids(invalid)).await?;
+        }
+        Ok(())
+    }
 }
 
 impl NostrDatabase for HybridDatabase {
@@ -171,8 +187,90 @@ impl NostrDatabase for HybridDatabase {
     fn wipe(&self) -> BoxedFuture<'_, Result<(), DatabaseError>> {
         Box::pin(async move {
             self.memory.wipe().await?;
-            self.lmdb.wipe().await?;
+            // nostr-lmdb 0.44 clears the unnamed database during wipe, invalidating
+            // its named database handles. Delete event batches to preserve the schema.
+            loop {
+                let events = self.lmdb.query(Filter::new().limit(500)).await?;
+                if events.is_empty() {
+                    break;
+                }
+                let ids: Vec<EventId> = events.into_iter().map(|event| event.id).collect();
+                self.lmdb.delete(Filter::new().ids(ids)).await?;
+            }
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn mixed_queries_preserve_order_and_limit_and_wipe_allows_reuse() {
+        let path = std::env::temp_dir().join(format!("qiqstr-lmdb-{}", rand::random::<u64>()));
+        std::fs::create_dir(&path).unwrap();
+        let db = HybridDatabase::new(
+            NostrLMDB::builder(&path)
+                .map_size(16 * 1024 * 1024)
+                .build()
+                .unwrap(),
+        );
+        let keys = Keys::generate();
+        for (kind, timestamp) in [
+            (Kind::TextNote, 1),
+            (Kind::from(2), 2),
+            (Kind::TextNote, 3),
+            (Kind::from(2), 4),
+        ] {
+            let event = EventBuilder::new(kind, "test")
+                .custom_created_at(Timestamp::from(timestamp))
+                .sign_with_keys(&keys)
+                .unwrap();
+            db.save_event(&event).await.unwrap();
+        }
+        let events = db.query(Filter::new().limit(2)).await.unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events
+                .into_iter()
+                .map(|event| event.created_at.as_secs())
+                .collect::<Vec<_>>(),
+            [4, 3]
+        );
+        let legitimate = EventBuilder::new(Kind::Metadata, "{}")
+            .custom_created_at(Timestamp::from(100))
+            .sign_with_keys(&keys)
+            .unwrap();
+        let fake = EventBuilder::new(Kind::Metadata, "{}")
+            .custom_created_at(Timestamp::from(200))
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        let mut raw: serde_json::Value = serde_json::from_str(&fake.as_json()).unwrap();
+        raw["pubkey"] = serde_json::json!(keys.public_key().to_hex());
+        let fake = Event::from_json(raw.to_string()).unwrap();
+        db.save_event(&fake).await.unwrap();
+        assert!(matches!(
+            db.save_event(&legitimate).await.unwrap(),
+            SaveEventStatus::Rejected(_)
+        ));
+        db.remove_invalid_replaceable_events().await.unwrap();
+        assert!(matches!(
+            db.save_event(&legitimate).await.unwrap(),
+            SaveEventStatus::Success
+        ));
+        assert!(db.event_by_id(&fake.id).await.unwrap().is_none());
+        db.wipe().await.unwrap();
+        assert_eq!(db.count(Filter::new()).await.unwrap(), 0);
+        let event = EventBuilder::text_note("after wipe")
+            .sign_with_keys(&keys)
+            .unwrap();
+        assert!(matches!(
+            db.save_event(&event).await.unwrap(),
+            SaveEventStatus::Success
+        ));
+        assert!(db.event_by_id(&event.id).await.unwrap().is_some());
+        drop(db);
+        std::fs::remove_dir_all(path).unwrap();
     }
 }

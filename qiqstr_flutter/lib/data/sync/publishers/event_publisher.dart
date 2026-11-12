@@ -13,8 +13,33 @@ import '../../../src/rust/api/crypto.dart' as rust_crypto;
 class EventPublisher {
   final AuthService _authService;
 
-  EventPublisher({required AuthService authService})
-      : _authService = authService;
+  EventPublisher({required this._authService});
+
+  (String?, int, int, int) get _publicationSession => (
+    _authService.currentUserPubkeyHex,
+    EncryptedBookmarkService.instance.sessionGeneration,
+    EncryptedMuteService.instance.sessionGeneration,
+    FollowSetService.instance.sessionGeneration,
+  );
+
+  void _checkPublicationSession((String?, int, int, int) session) {
+    if (session.$1 == null || session != _publicationSession) {
+      throw StateError('Account changed before event creation');
+    }
+  }
+
+  Future<({String privateKey, String publicKey})> _getListSigningKeys(
+    (String?, int, int, int) session,
+  ) async {
+    _checkPublicationSession(session);
+    final privateKey = await _getPrivateKey();
+    _checkPublicationSession(session);
+    final publicKey = rust_crypto.getPublicKey(privateKeyHex: privateKey);
+    if (publicKey != session.$1) {
+      throw StateError('Signing key does not match the active account');
+    }
+    return (privateKey: privateKey, publicKey: publicKey);
+  }
 
   Future<String> _getPrivateKey() async {
     final result = await _authService.getCurrentUserPrivateKey();
@@ -162,45 +187,41 @@ class EventPublisher {
     required List<String> mutedPubkeys,
     required List<String> mutedWords,
   }) async {
-    final privateKey = await _getPrivateKey();
-    final authResult = await _authService.getCurrentUserPublicKeyHex();
-    if (authResult.isError || authResult.data == null) {
-      throw Exception('Not authenticated');
-    }
-    final publicKey = authResult.data!;
+    final session = _publicationSession;
+    final keys = await _getListSigningKeys(session);
+    _checkPublicationSession(session);
 
     return EncryptedMuteService.instance.createEncryptedMuteEvent(
       mutedPubkeys: mutedPubkeys,
       mutedWords: mutedWords,
-      privateKeyHex: privateKey,
-      publicKeyHex: publicKey,
+      privateKeyHex: keys.privateKey,
+      publicKeyHex: keys.publicKey,
     );
   }
 
   Future<Map<String, dynamic>> createBookmark({
     required List<String> bookmarkedEventIds,
   }) async {
-    final privateKey = await _getPrivateKey();
-    final authResult = await _authService.getCurrentUserPublicKeyHex();
-    if (authResult.isError || authResult.data == null) {
-      throw Exception('Not authenticated');
-    }
-    final publicKey = authResult.data!;
+    final session = _publicationSession;
+    final keys = await _getListSigningKeys(session);
+    _checkPublicationSession(session);
 
     return EncryptedBookmarkService.instance.createEncryptedBookmarkEvent(
       bookmarkedEventIds: bookmarkedEventIds,
-      privateKeyHex: privateKey,
-      publicKeyHex: publicKey,
+      privateKeyHex: keys.privateKey,
+      publicKeyHex: keys.publicKey,
     );
   }
 
   Future<Map<String, dynamic>> createPinnedNotes({
     required List<String> pinnedNoteIds,
   }) async {
-    final privateKey = await _getPrivateKey();
+    final session = _publicationSession;
+    final keys = await _getListSigningKeys(session);
+    _checkPublicationSession(session);
     return PinnedNotesService.instance.createPinnedNotesEvent(
       pinnedNoteIds: pinnedNoteIds,
-      privateKeyHex: privateKey,
+      privateKeyHex: keys.privateKey,
     );
   }
 
@@ -211,14 +232,16 @@ class EventPublisher {
     required String image,
     required List<String> pubkeys,
   }) async {
-    final privateKey = await _getPrivateKey();
+    final session = _publicationSession;
+    final keys = await _getListSigningKeys(session);
+    _checkPublicationSession(session);
     return FollowSetService.instance.createFollowSetEvent(
       dTag: dTag,
       title: title,
       description: description,
       image: image,
       pubkeys: pubkeys,
-      privateKeyHex: privateKey,
+      privateKeyHex: keys.privateKey,
     );
   }
 
@@ -268,8 +291,10 @@ class EventPublisher {
     }
   }
 
-  Future<String?> uploadMedia(String filePath,
-      {String blossomUrl = 'https://blossom.primal.net'}) async {
+  Future<String?> uploadMedia(
+    String filePath, {
+    String blossomUrl = 'https://blossom.primal.net',
+  }) async {
     try {
       final privateKey = await _getPrivateKey();
       final file = File(filePath);
@@ -282,12 +307,12 @@ class EventPublisher {
       final mimeType = lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')
           ? 'image/jpeg'
           : lowerPath.endsWith('.png')
-              ? 'image/png'
-              : lowerPath.endsWith('.gif')
-                  ? 'image/gif'
-                  : lowerPath.endsWith('.mp4')
-                      ? 'video/mp4'
-                      : 'application/octet-stream';
+          ? 'image/png'
+          : lowerPath.endsWith('.gif')
+          ? 'image/gif'
+          : lowerPath.endsWith('.mp4')
+          ? 'video/mp4'
+          : 'application/octet-stream';
 
       final expiration = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600;
       final authEventJson = rust_events.createBlossomAuthEvent(
@@ -302,8 +327,9 @@ class EventPublisher {
 
       final httpClient = HttpClient();
       try {
-        final request =
-            await httpClient.putUrl(Uri.parse('$cleanedUrl/upload'));
+        final request = await httpClient.putUrl(
+          Uri.parse('$cleanedUrl/upload'),
+        );
         request.headers.set('Authorization', 'Nostr $authBase64');
         request.headers.set('Content-Type', mimeType);
         request.add(fileBytes);
@@ -318,7 +344,8 @@ class EventPublisher {
           return url.isNotEmpty ? url : sha256;
         } else {
           throw Exception(
-              'Upload failed with status ${response.statusCode}: $responseBody');
+            'Upload failed with status ${response.statusCode}: $responseBody',
+          );
         }
       } finally {
         httpClient.close();

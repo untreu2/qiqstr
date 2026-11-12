@@ -68,3 +68,7 @@
 "authNcryptsecWrongPassword" = "Parola yanlış ya da yedek bozuk.";
 "authNcryptsecPasswordRequired" = "Bu şifreli anahtarın parolasını gir.";
 "authDecrypting" = "Şifre çözülüyor…";
+"authTermsPromptMessage" = "Devam etmek için qiqstr'ın Kullanım Koşulları ve Gizlilik Politikası'nı kabul etmen gerekiyor.";
+"authTermsAgree" = "Kabul et ve devam et";
+"authTermsRead" = "Koşulları oku";
+"authTermsAgreeShort" = "Kabul et";

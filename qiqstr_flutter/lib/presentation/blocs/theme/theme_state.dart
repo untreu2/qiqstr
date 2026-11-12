@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
 import '../../../core/bloc/base/base_state.dart';
-import '../../../ui/theme/theme_manager.dart';
 
 class ThemeState extends BaseState {
   final bool? isDarkModeOverride;
+  final bool systemIsDark;
   final bool isExpandedNoteMode;
   final List<int> bottomNavOrder;
   final bool oneTapZap;
@@ -11,28 +10,20 @@ class ThemeState extends BaseState {
 
   const ThemeState({
     this.isDarkModeOverride,
+    this.systemIsDark = false,
     this.isExpandedNoteMode = false,
     this.bottomNavOrder = const [0, 1, 2, 3],
     this.oneTapZap = false,
     this.defaultZapAmount = 21,
   });
 
-  bool get isDarkMode {
-    if (isDarkModeOverride != null) {
-      return isDarkModeOverride!;
-    }
-    final brightness =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    return brightness == Brightness.dark;
-  }
+  bool get isDarkMode => isDarkModeOverride ?? systemIsDark;
 
   bool get isSystemTheme => isDarkModeOverride == null;
 
-  AppThemeColors get colors =>
-      isDarkMode ? AppThemeColors.dark() : AppThemeColors.light();
-
   ThemeState copyWith({
     bool? isDarkModeOverride,
+    bool? systemIsDark,
     bool clearDarkModeOverride = false,
     bool? isExpandedNoteMode,
     List<int>? bottomNavOrder,
@@ -43,6 +34,7 @@ class ThemeState extends BaseState {
       isDarkModeOverride: clearDarkModeOverride
           ? null
           : (isDarkModeOverride ?? this.isDarkModeOverride),
+      systemIsDark: systemIsDark ?? this.systemIsDark,
       isExpandedNoteMode: isExpandedNoteMode ?? this.isExpandedNoteMode,
       bottomNavOrder: bottomNavOrder ?? this.bottomNavOrder,
       oneTapZap: oneTapZap ?? this.oneTapZap,
@@ -52,10 +44,11 @@ class ThemeState extends BaseState {
 
   @override
   List<Object?> get props => [
-        isDarkModeOverride,
-        isExpandedNoteMode,
-        bottomNavOrder,
-        oneTapZap,
-        defaultZapAmount,
-      ];
+    isDarkModeOverride,
+    systemIsDark,
+    isExpandedNoteMode,
+    bottomNavOrder,
+    oneTapZap,
+    defaultZapAmount,
+  ];
 }

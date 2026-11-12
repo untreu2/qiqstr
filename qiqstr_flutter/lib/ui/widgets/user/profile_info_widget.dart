@@ -467,12 +467,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               placeholderFadeInDuration: Duration.zero,
               memCacheHeight: (bannerHeight * 2).round(),
               maxHeightDiskCache: (bannerHeight * 3).round(),
-              placeholder: (_, __) => Container(
+              placeholder: (_, _) => Container(
                 height: bannerHeight,
                 width: screenWidth,
                 color: context.colors.grey700,
               ),
-              errorWidget: (_, __, ___) => Container(
+              errorWidget: (_, _, _) => Container(
                 height: bannerHeight,
                 width: screenWidth,
                 color: context.colors.background,

@@ -9,10 +9,9 @@ class EditNewAccountProfileBloc
   final String npub;
 
   EditNewAccountProfileBloc({
-    required SyncService syncService,
+    required this._syncService,
     required this.npub,
-  })  : _syncService = syncService,
-        super(const EditNewAccountProfileInitial()) {
+  })  : super(const EditNewAccountProfileInitial()) {
     on<EditNewAccountProfilePictureUploaded>(
         _onEditNewAccountProfilePictureUploaded);
     on<EditNewAccountProfileBannerUploaded>(

@@ -9,8 +9,8 @@ use nostr_lmdb::NostrLMDB;
 use nostr_sdk::prelude::*;
 use tokio::sync::RwLock;
 
-use crate::hybrid_database::HybridDatabase;
 use crate::frb_generated::StreamSink;
+use crate::hybrid_database::HybridDatabase;
 
 static COUNTING_CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
 
@@ -45,76 +45,35 @@ pub(crate) async fn get_client_pub() -> Result<Client> {
     get_client().await
 }
 
-fn sanitize_lmdb_dir(path: &str) {
-    let db_dir = std::path::Path::new(path);
-    if !db_dir.exists() {
-        return;
-    }
-
-    let lock_file = db_dir.join("lock.mdb");
-    if lock_file.exists() {
-        let _ = fs::remove_file(&lock_file);
-    }
-
-    let data_file = db_dir.join("data.mdb");
-    if data_file.exists() {
-        match fs::metadata(&data_file) {
-            Ok(meta) if meta.len() == 0 => {
-                let _ = fs::remove_dir_all(db_dir);
-            }
-            Err(_) => {
-                let _ = fs::remove_dir_all(db_dir);
-            }
-            _ => {}
-        }
-    }
-}
-
 const LMDB_MAP_SIZES: &[usize] = &[
-    2 * 1024 * 1024 * 1024,  // 2 GB
-    1024 * 1024 * 1024,       // 1 GB
-    512 * 1024 * 1024,        // 512 MB
-    256 * 1024 * 1024,        // 256 MB
+    2 * 1024 * 1024 * 1024, // 2 GB
+    1024 * 1024 * 1024,     // 1 GB
+    512 * 1024 * 1024,      // 512 MB
+    256 * 1024 * 1024,      // 256 MB
 ];
 
 fn try_open_lmdb(path: &str) -> Result<NostrLMDB> {
     let path_owned = path.to_string();
 
+    let mut last_error = String::new();
     for &map_size in LMDB_MAP_SIZES {
         let p = path_owned.clone();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            NostrLMDB::builder(&p)
-                .map_size(map_size)
-                .build()
+            NostrLMDB::builder(&p).map_size(map_size).build()
         }));
 
         match result {
             Ok(Ok(db)) => return Ok(db),
-            Ok(Err(_)) => continue,
-            Err(_) => continue,
+            Ok(Err(error)) => {
+                if last_error.is_empty() {
+                    last_error = error.to_string();
+                }
+            }
+            Err(_) => last_error = "LMDB initialization panicked".to_string(),
         }
     }
 
-    Err(anyhow!("LMDB open failed with all map sizes"))
-}
-
-fn wipe_db_directory(path: &str) {
-    let db_path = std::path::Path::new(path);
-    if db_path.exists() {
-        let _ = fs::remove_dir_all(db_path);
-    }
-}
-
-fn open_or_recreate_lmdb(path: &str) -> Result<NostrLMDB> {
-    sanitize_lmdb_dir(path);
-
-    match try_open_lmdb(path) {
-        Ok(db) => Ok(db),
-        Err(_) => {
-            wipe_db_directory(path);
-            try_open_lmdb(path)
-        }
-    }
+    Err(anyhow!("LMDB open failed: {}", last_error))
 }
 
 pub async fn init_client(
@@ -123,6 +82,10 @@ pub async fn init_client(
     db_path: Option<String>,
     discovery_relays: Vec<String>,
 ) -> Result<()> {
+    let mut lock = state().write().await;
+    for url in relay_urls.iter().chain(&discovery_relays) {
+        RelayUrl::parse(url)?;
+    }
     let mut builder = Client::builder();
 
     if let Some(ref sk_hex) = private_key_hex {
@@ -131,12 +94,10 @@ pub async fn init_client(
     }
 
     if let Some(ref path) = db_path {
-        let lmdb = open_or_recreate_lmdb(path)?;
+        let lmdb = try_open_lmdb(path)?;
         let database = HybridDatabase::new(lmdb);
+        database.remove_invalid_replaceable_events().await?;
         builder = builder.database(database);
-
-        let mut db_path_lock = db_path_state().write().await;
-        *db_path_lock = Some(path.clone());
     }
 
     let client = builder.build();
@@ -158,10 +119,14 @@ pub async fn init_client(
         *ur = relay_urls;
     }
 
-    let mut lock = state().write().await;
     if let Some(old_client) = lock.take() {
-        old_client.disconnect().await;
+        old_client.unset_signer().await;
+        old_client.shutdown().await;
     }
+    if let Some(counting_client) = counting_client_lock().write().await.take() {
+        counting_client.shutdown().await;
+    }
+    *db_path_state().write().await = db_path;
     *lock = Some(client);
 
     Ok(())
@@ -195,6 +160,21 @@ pub async fn wait_for_ready(timeout_secs: u32) -> Result<u32> {
 pub async fn disconnect_relays() -> Result<()> {
     let client = get_client().await?;
     client.disconnect().await;
+    Ok(())
+}
+
+pub async fn shutdown_client() -> Result<()> {
+    let mut lock = state().write().await;
+    if let Some(client) = lock.take() {
+        client.unset_signer().await;
+        client.shutdown().await;
+    }
+    if let Some(client) = counting_client_lock().write().await.take() {
+        client.shutdown().await;
+    }
+    user_relays_state().write().await.clear();
+    *db_path_state().write().await = None;
+    super::database::set_active_mute_list(Vec::new(), Vec::new());
     Ok(())
 }
 
@@ -232,10 +212,14 @@ pub async fn add_relay_with_flags(url: String, read: bool, write: bool) -> Resul
         let relays = client.relays().await;
         if let Some(relay) = relays.get(&relay_url) {
             let flags = relay.flags();
-            if !read {
+            if read {
+                flags.add(RelayServiceFlags::READ);
+            } else {
                 flags.remove(RelayServiceFlags::READ);
             }
-            if !write {
+            if write {
+                flags.add(RelayServiceFlags::WRITE);
+            } else {
                 flags.remove(RelayServiceFlags::WRITE);
             }
         }
@@ -346,70 +330,80 @@ pub async fn get_relay_status() -> Result<String> {
 
 #[frb]
 pub async fn stream_relay_status(sink: StreamSink<String>) -> Result<()> {
-    let mut interval = tokio::time::interval(Duration::from_millis(800));
-    loop {
-        interval.tick().await;
-        let Ok(client) = get_client().await else {
-            break;
-        };
-        let relays = client.relays().await;
-        let mut relay_list = Vec::new();
-        for (url, relay) in relays.iter() {
-            let status = relay.status();
-            let stats = relay.stats();
-            let flags = relay.flags();
-            let is_discovery = flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-                && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-                && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All);
-
-            let status_str = match status {
-                RelayStatus::Initialized => "initialized",
-                RelayStatus::Pending => "pending",
-                RelayStatus::Connecting => "connecting",
-                RelayStatus::Connected => "connected",
-                RelayStatus::Disconnected => "disconnected",
-                RelayStatus::Terminated => "terminated",
-                RelayStatus::Banned => "banned",
-                RelayStatus::Sleeping => "sleeping",
+    let result: Result<()> = async {
+        let mut interval = tokio::time::interval(Duration::from_millis(800));
+        loop {
+            interval.tick().await;
+            let Ok(client) = get_client().await else {
+                break;
             };
+            let relays = client.relays().await;
+            let mut relay_list = Vec::new();
+            for (url, relay) in relays.iter() {
+                let status = relay.status();
+                let stats = relay.stats();
+                let flags = relay.flags();
+                let is_discovery = flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
+                    && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
+                    && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All);
 
-            let latency_ms: u64 = relay
-                .stats()
-                .latency()
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0);
+                let status_str = match status {
+                    RelayStatus::Initialized => "initialized",
+                    RelayStatus::Pending => "pending",
+                    RelayStatus::Connecting => "connecting",
+                    RelayStatus::Connected => "connected",
+                    RelayStatus::Disconnected => "disconnected",
+                    RelayStatus::Terminated => "terminated",
+                    RelayStatus::Banned => "banned",
+                    RelayStatus::Sleeping => "sleeping",
+                };
 
-            let relay_info = serde_json::json!({
-                "url": url.to_string(),
-                "status": status_str,
-                "isDiscovery": is_discovery,
-                "attempts": stats.attempts(),
-                "success": stats.success(),
-                "bytesSent": stats.bytes_sent(),
-                "bytesReceived": stats.bytes_received(),
-                "connectedAt": stats.connected_at().as_secs(),
-                "latencyMs": latency_ms,
+                let latency_ms: u64 = relay
+                    .stats()
+                    .latency()
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+
+                let relay_info = serde_json::json!({
+                    "url": url.to_string(),
+                    "status": status_str,
+                    "isDiscovery": is_discovery,
+                    "attempts": stats.attempts(),
+                    "success": stats.success(),
+                    "bytesSent": stats.bytes_sent(),
+                    "bytesReceived": stats.bytes_received(),
+                    "connectedAt": stats.connected_at().as_secs(),
+                    "latencyMs": latency_ms,
+                });
+                relay_list.push(relay_info);
+            }
+
+            let total = relay_list
+                .iter()
+                .filter(|r| r["isDiscovery"] == false)
+                .count();
+            let connected = relay_list
+                .iter()
+                .filter(|r| r["status"] == "connected" && r["isDiscovery"] == false)
+                .count();
+
+            let result = serde_json::json!({
+                "summary": {
+                    "totalRelays": total,
+                    "connectedRelays": connected,
+                },
+                "relays": relay_list,
             });
-            relay_list.push(relay_info);
+
+            if sink.add(result.to_string()).is_err() {
+                break;
+            }
         }
-
-        let total = relay_list.iter().filter(|r| r["isDiscovery"] == false).count();
-        let connected = relay_list
-            .iter()
-            .filter(|r| r["status"] == "connected" && r["isDiscovery"] == false)
-            .count();
-
-        let result = serde_json::json!({
-            "summary": {
-                "totalRelays": total,
-                "connectedRelays": connected,
-            },
-            "relays": relay_list,
-        });
-
-        if sink.add(result.to_string()).is_err() {
-            break;
-        }
+        Ok(())
+    }
+    .await;
+    if let Err(error) = result {
+        let _ = sink.add_error(error);
     }
     Ok(())
 }
@@ -431,7 +425,8 @@ pub async fn discover_and_connect_outbox_relays(
             "discoveredRelays": 0,
             "addedRelays": 0,
             "totalConnected": 0,
-        }).to_string());
+        })
+        .to_string());
     }
 
     let mut outbox_freq: HashMap<String, usize> = HashMap::new();
@@ -450,26 +445,24 @@ pub async fn discover_and_connect_outbox_relays(
 
     let chunk_results = futures::future::join_all(chunk_futures).await;
 
-    for result in chunk_results {
-        if let Ok(events) = result {
-            for event in events.into_iter() {
-                for tag in event.tags.iter() {
-                    let tag_vec: Vec<&str> = tag.as_slice().iter().map(|s| s.as_str()).collect();
-                    if tag_vec.len() >= 2 && tag_vec[0] == "r" {
-                        let relay_url = tag_vec[1].to_string();
-                        let mode = tag_vec.get(2).copied().unwrap_or("");
+    for events in chunk_results.into_iter().flatten() {
+        for event in events.into_iter() {
+            for tag in event.tags.iter() {
+                let tag_vec: Vec<&str> = tag.as_slice().iter().map(|s| s.as_str()).collect();
+                if tag_vec.len() >= 2 && tag_vec[0] == "r" {
+                    let relay_url = tag_vec[1].to_string();
+                    let mode = tag_vec.get(2).copied().unwrap_or("");
 
-                        match mode {
-                            "write" => {
-                                *outbox_freq.entry(relay_url).or_insert(0) += 1;
-                            }
-                            "read" => {
-                                *inbox_freq.entry(relay_url).or_insert(0) += 1;
-                            }
-                            _ => {
-                                *outbox_freq.entry(relay_url.clone()).or_insert(0) += 1;
-                                *inbox_freq.entry(relay_url).or_insert(0) += 1;
-                            }
+                    match mode {
+                        "write" => {
+                            *outbox_freq.entry(relay_url).or_insert(0) += 1;
+                        }
+                        "read" => {
+                            *inbox_freq.entry(relay_url).or_insert(0) += 1;
+                        }
+                        _ => {
+                            *outbox_freq.entry(relay_url.clone()).or_insert(0) += 1;
+                            *inbox_freq.entry(relay_url).or_insert(0) += 1;
                         }
                     }
                 }
@@ -508,7 +501,7 @@ pub async fn discover_and_connect_outbox_relays(
         .map(|(url, (count, is_outbox, is_inbox))| (url, count, is_outbox, is_inbox))
         .collect();
 
-    candidates.sort_by(|a, b| b.1.cmp(&a.1));
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.1));
     candidates.truncate(max_outbox_relays);
 
     let discovered_count = candidates.len() as u32;
@@ -517,7 +510,9 @@ pub async fn discover_and_connect_outbox_relays(
     let parsed_candidates: Vec<_> = candidates
         .iter()
         .filter_map(|(url, _, is_outbox, is_inbox)| {
-            RelayUrl::parse(url.as_str()).ok().map(|relay_url| (relay_url, *is_outbox, *is_inbox))
+            RelayUrl::parse(url.as_str())
+                .ok()
+                .map(|relay_url| (relay_url, *is_outbox, *is_inbox))
         })
         .collect();
 
@@ -567,8 +562,7 @@ pub async fn discover_and_connect_outbox_relays(
 pub async fn sync_events(filter_json: String) -> Result<String> {
     let client = get_client().await?;
     let filter = Filter::from_json(&filter_json)?;
-    let opts = SyncOptions::default()
-        .initial_timeout(Duration::from_secs(5));
+    let opts = SyncOptions::default().initial_timeout(Duration::from_secs(5));
 
     let sync_future = client.sync(filter, &opts);
     let output = match tokio::time::timeout(Duration::from_secs(12), sync_future).await {
@@ -579,7 +573,8 @@ pub async fn sync_events(filter_json: String) -> Result<String> {
                 "sent": 0,
                 "local": 0,
                 "remote": 0,
-            }).to_string());
+            })
+            .to_string());
         }
         Err(_) => {
             return Ok(serde_json::json!({
@@ -587,7 +582,8 @@ pub async fn sync_events(filter_json: String) -> Result<String> {
                 "sent": 0,
                 "local": 0,
                 "remote": 0,
-            }).to_string());
+            })
+            .to_string());
         }
     };
 
@@ -606,7 +602,9 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
     let filter = Filter::from_json(&filter_json)?;
     let timeout = Duration::from_secs(timeout_secs as u64);
 
-    let events: Events = client.fetch_events(filter, timeout).await
+    let events: Events = client
+        .fetch_events(filter, timeout)
+        .await
         .unwrap_or_default();
 
     let events_json: Vec<serde_json::Value> = events
@@ -616,7 +614,6 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
 
     Ok(serde_json::to_string(&events_json)?)
 }
-
 
 pub async fn fetch_counts_from_relays(
     note_ids: Vec<String>,
@@ -670,12 +667,19 @@ pub async fn fetch_counts_from_relays(
     client.connect().await;
 
     let filter = Filter::new()
-        .kinds([Kind::Reaction, Kind::Repost, Kind::ZapReceipt, Kind::TextNote])
+        .kinds([
+            Kind::Reaction,
+            Kind::Repost,
+            Kind::ZapReceipt,
+            Kind::TextNote,
+        ])
         .events(ids)
         .limit(500);
 
     let timeout = Duration::from_secs(5);
-    let events = client.fetch_events(filter, timeout).await
+    let events = client
+        .fetch_events(filter, timeout)
+        .await
         .unwrap_or_default();
 
     let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
@@ -693,7 +697,7 @@ pub async fn fetch_counts_from_relays(
     for event in events.iter() {
         let kind = event.kind;
         let event_id_hex = event.id.to_hex();
-        let is_user = user_pk.as_ref().map_or(false, |pk| event.pubkey == *pk);
+        let is_user = user_pk.as_ref().is_some_and(|pk| event.pubkey == *pk);
         let zap_sats = if kind == Kind::ZapReceipt {
             super::database::extract_zap_amount_sats(event) as usize
         } else {
@@ -718,19 +722,19 @@ pub async fn fetch_counts_from_relays(
                 let seen = counted_events.get_mut(&target_id).unwrap();
                 if seen.insert(event_id_hex) {
                     match kind {
-                        k if k == Kind::Reaction => {
+                        Kind::Reaction => {
                             c[0] += 1;
                             if is_user {
                                 user_reacted.insert(target_id, true);
                             }
                         }
-                        k if k == Kind::Repost => {
+                        Kind::Repost => {
                             c[1] += 1;
                             if is_user {
                                 user_reposted.insert(target_id, true);
                             }
                         }
-                        k if k == Kind::ZapReceipt => c[2] += zap_sats,
+                        Kind::ZapReceipt => c[2] += zap_sats,
                         _ => {}
                     }
                 }
@@ -761,202 +765,198 @@ pub async fn stream_interaction_counts(
     user_pubkey_hex: Option<String>,
     sink: StreamSink<String>,
 ) -> Result<()> {
-    let main_client = get_client().await?;
+    let result: Result<()> = async {
+        let main_client = get_client().await?;
 
-    let ids: Vec<EventId> = note_ids
-        .iter()
-        .filter_map(|id| EventId::from_hex(id).ok())
-        .collect();
+        let ids: Vec<EventId> = note_ids
+            .iter()
+            .filter_map(|id| EventId::from_hex(id).ok())
+            .collect();
 
-    if ids.is_empty() {
-        return Ok(());
-    }
-
-    let user_pk = user_pubkey_hex
-        .as_ref()
-        .and_then(|h| PublicKey::from_hex(h).ok());
-
-    let lock = counting_client_lock();
-    let client = {
-        let reader = lock.read().await;
-        reader.clone()
-    };
-    let client = match client {
-        Some(c) => c,
-        None => {
-            let mut writer = lock.write().await;
-            if let Some(ref c) = *writer {
-                c.clone()
-            } else {
-                let c = Client::builder()
-                    .database(MemoryDatabase::default())
-                    .build();
-                *writer = Some(c.clone());
-                c
-            }
+        if ids.is_empty() {
+            return Ok(());
         }
-    };
 
-    let relay_urls: Vec<String> = main_client
-        .relays()
-        .await
-        .keys()
-        .map(|u| u.to_string())
-        .collect();
-    for url in &relay_urls {
-        let _ = client.add_relay(url.as_str()).await;
-    }
-    client.connect().await;
+        let user_pk = user_pubkey_hex
+            .as_ref()
+            .and_then(|h| PublicKey::from_hex(h).ok());
 
-    let filter = Filter::new()
-        .kinds([Kind::Reaction, Kind::Repost, Kind::ZapReceipt, Kind::TextNote])
-        .events(ids);
+        let lock = counting_client_lock();
+        let client = {
+            let reader = lock.read().await;
+            reader.clone()
+        };
+        let client = match client {
+            Some(c) => c,
+            None => {
+                let mut writer = lock.write().await;
+                if let Some(ref c) = *writer {
+                    c.clone()
+                } else {
+                    let c = Client::builder()
+                        .database(MemoryDatabase::default())
+                        .build();
+                    *writer = Some(c.clone());
+                    c
+                }
+            }
+        };
 
-    let Output { val: sub_id, .. } = client
-        .subscribe(filter, None)
-        .await
-        .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
+        let relay_urls: Vec<String> = main_client
+            .relays()
+            .await
+            .keys()
+            .map(|u| u.to_string())
+            .collect();
+        for url in &relay_urls {
+            let _ = client.add_relay(url.as_str()).await;
+        }
+        client.connect().await;
 
-    let mut notifications = client.notifications();
+        let filter = Filter::new()
+            .kinds([
+                Kind::Reaction,
+                Kind::Repost,
+                Kind::ZapReceipt,
+                Kind::TextNote,
+            ])
+            .events(ids);
 
-    let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
-    let mut user_reacted: HashMap<String, bool> = HashMap::new();
-    let mut user_reposted: HashMap<String, bool> = HashMap::new();
-    let mut seen_events: HashSet<String> = HashSet::new();
+        let mut notifications = client.notifications();
+        let Output { val: sub_id, .. } = client
+            .subscribe(filter, None)
+            .await
+            .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
 
-    for nid in &note_ids {
-        counts.insert(nid.clone(), [0; 4]);
-        user_reacted.insert(nid.clone(), false);
-        user_reposted.insert(nid.clone(), false);
-    }
+        let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
+        let mut user_reacted: HashMap<String, bool> = HashMap::new();
+        let mut user_reposted: HashMap<String, bool> = HashMap::new();
+        let mut seen_events: HashSet<String> = HashSet::new();
 
-    let mut eose_count: usize = 0;
-    let relay_count = relay_urls.len();
-    let mut last_emit = std::time::Instant::now();
-    let mut has_data = false;
+        for nid in &note_ids {
+            counts.insert(nid.clone(), [0; 4]);
+            user_reacted.insert(nid.clone(), false);
+            user_reposted.insert(nid.clone(), false);
+        }
 
-    loop {
-        let recv = tokio::time::timeout(
-            Duration::from_secs(3),
-            notifications.recv(),
-        )
-        .await;
+        let mut eose_count: usize = 0;
+        let relay_count = relay_urls.len();
+        let mut last_emit = std::time::Instant::now();
+        let mut has_data = false;
 
-        match recv {
-            Ok(Ok(notification)) => match notification {
-                RelayPoolNotification::Event {
-                    subscription_id,
-                    event,
-                    ..
-                } => {
-                    if subscription_id != sub_id {
-                        continue;
-                    }
-                    let event_id = event.id.to_hex();
-                    if seen_events.contains(&event_id) {
-                        continue;
-                    }
-                    seen_events.insert(event_id);
+        loop {
+            let recv = tokio::time::timeout(Duration::from_secs(3), notifications.recv()).await;
 
-                    let kind = event.kind;
-                    let is_user = user_pk
-                        .as_ref()
-                        .map_or(false, |pk| event.pubkey == *pk);
-                    let zap_sats = if kind == Kind::ZapReceipt {
-                        super::database::extract_zap_amount_sats(&event) as usize
-                    } else {
-                        0
-                    };
+            match recv {
+                Ok(Ok(notification)) => match notification {
+                    RelayPoolNotification::Event {
+                        subscription_id,
+                        event,
+                        ..
+                    } => {
+                        if subscription_id != sub_id {
+                            continue;
+                        }
+                        let event_id = event.id.to_hex();
+                        if seen_events.contains(&event_id) {
+                            continue;
+                        }
+                        seen_events.insert(event_id);
 
-                    let mut counted_for: HashSet<String> = HashSet::new();
-                    for tag in event.tags.iter() {
-                        let tag_kind = tag.kind();
-                        if matches!(
-                            tag_kind,
-                            TagKind::SingleLetter(SingleLetterTag {
-                                character: Alphabet::E,
-                                ..
-                            })
-                        ) {
-                            if let Some(ref_id) = tag.content() {
-                                let ref_hex = ref_id.to_string();
-                                if counted_for.contains(&ref_hex) {
-                                    continue;
-                                }
-                                if let Some(c) = counts.get_mut(&ref_hex) {
-                                    counted_for.insert(ref_hex.clone());
-                                    has_data = true;
-                                    match kind {
-                                        k if k == Kind::Reaction => {
-                                            c[0] += 1;
-                                            if is_user {
-                                                user_reacted
-                                                    .insert(ref_hex, true);
+                        let kind = event.kind;
+                        let is_user = user_pk.as_ref().map_or(false, |pk| event.pubkey == *pk);
+                        let zap_sats = if kind == Kind::ZapReceipt {
+                            super::database::extract_zap_amount_sats(&event) as usize
+                        } else {
+                            0
+                        };
+
+                        let mut counted_for: HashSet<String> = HashSet::new();
+                        for tag in event.tags.iter() {
+                            let tag_kind = tag.kind();
+                            if matches!(
+                                tag_kind,
+                                TagKind::SingleLetter(SingleLetterTag {
+                                    character: Alphabet::E,
+                                    ..
+                                })
+                            ) {
+                                if let Some(ref_id) = tag.content() {
+                                    let ref_hex = ref_id.to_string();
+                                    if counted_for.contains(&ref_hex) {
+                                        continue;
+                                    }
+                                    if let Some(c) = counts.get_mut(&ref_hex) {
+                                        counted_for.insert(ref_hex.clone());
+                                        has_data = true;
+                                        match kind {
+                                            Kind::Reaction => {
+                                                c[0] += 1;
+                                                if is_user {
+                                                    user_reacted.insert(ref_hex, true);
+                                                }
                                             }
-                                        }
-                                        k if k == Kind::Repost => {
-                                            c[1] += 1;
-                                            if is_user {
-                                                user_reposted
-                                                    .insert(ref_hex, true);
+                                            Kind::Repost => {
+                                                c[1] += 1;
+                                                if is_user {
+                                                    user_reposted.insert(ref_hex, true);
+                                                }
                                             }
+                                            Kind::ZapReceipt => {
+                                                c[2] += zap_sats;
+                                            }
+                                            Kind::TextNote => {
+                                                c[3] += 1;
+                                            }
+                                            _ => {}
                                         }
-                                        k if k == Kind::ZapReceipt => {
-                                            c[2] += zap_sats;
-                                        }
-                                        k if k == Kind::TextNote => {
-                                            c[3] += 1;
-                                        }
-                                        _ => {}
                                     }
                                 }
                             }
                         }
-                    }
 
-                    if has_data
-                        && last_emit.elapsed() >= Duration::from_millis(250)
-                    {
-                        let json = build_counts_json(
-                            &counts,
-                            &note_ids,
-                            &user_reacted,
-                            &user_reposted,
-                        );
-                        if sink.add(json).is_err() {
-                            break;
-                        }
-                        last_emit = std::time::Instant::now();
-                    }
-                }
-                RelayPoolNotification::Message { message, .. } => {
-                    if let RelayMessage::EndOfStoredEvents(sid) = message {
-                        if *sid == sub_id {
-                            eose_count += 1;
-                            if eose_count >= relay_count {
+                        if has_data && last_emit.elapsed() >= Duration::from_millis(250) {
+                            let json = build_counts_json(
+                                &counts,
+                                &note_ids,
+                                &user_reacted,
+                                &user_reposted,
+                            );
+                            if sink.add(json).is_err() {
                                 break;
+                            }
+                            last_emit = std::time::Instant::now();
+                        }
+                    }
+                    RelayPoolNotification::Message { message, .. } => {
+                        if let RelayMessage::EndOfStoredEvents(sid) = message {
+                            if *sid == sub_id {
+                                eose_count += 1;
+                                if eose_count >= relay_count {
+                                    break;
+                                }
                             }
                         }
                     }
-                }
-                RelayPoolNotification::Shutdown => break,
-            },
-            Ok(Err(_)) => break,
-            Err(_) => break,
+                    RelayPoolNotification::Shutdown => break,
+                },
+                Ok(Err(_)) => break,
+                Err(_) => break,
+            }
         }
-    }
 
-    if has_data {
-        let json = build_counts_json(
-            &counts,
-            &note_ids,
-            &user_reacted,
-            &user_reposted,
-        );
-        let _ = sink.add(json);
-    }
+        if has_data {
+            let json = build_counts_json(&counts, &note_ids, &user_reacted, &user_reposted);
+            let _ = sink.add(json);
+        }
 
-    let _ = client.unsubscribe(&sub_id).await;
+        let _ = client.unsubscribe(&sub_id).await;
+        Ok(())
+    }
+    .await;
+    if let Err(error) = result {
+        let _ = sink.add_error(error);
+    }
     Ok(())
 }
 
@@ -992,7 +992,7 @@ pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Op
     let timeout = Duration::from_secs(timeout_secs as u64);
 
     let events: Events = client.fetch_events(filter, timeout).await?;
-    
+
     if let Some(event) = events.first_owned() {
         Ok(Some(event.as_json()))
     } else {
@@ -1032,7 +1032,7 @@ pub async fn fetch_events_multi_filter(filters_json: String, timeout_secs: u32) 
 
     let filters: Vec<Filter> = filters_raw
         .iter()
-        .filter_map(|raw| Filter::from_json(&raw.to_string()).ok())
+        .filter_map(|raw| Filter::from_json(raw.to_string()).ok())
         .collect();
 
     if filters.is_empty() {
@@ -1068,61 +1068,96 @@ pub async fn fetch_events_multi_filter(filters_json: String, timeout_secs: u32) 
     Ok(serde_json::to_string(&events_json)?)
 }
 
-pub async fn send_event(event_json: String) -> Result<String> {
-    let client = get_client().await?;
-    let event = Event::from_json(&event_json)?;
-    let output = tokio::time::timeout(
-        Duration::from_secs(12),
-        client.send_event(&event),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("event dispatch timed out"))??;
+async fn publish_event(
+    client: &Client,
+    event: &Event,
+    targets: Option<&[RelayUrl]>,
+) -> Result<Output<EventId>> {
+    event.verify()?;
+    let relays = client.relays().await;
+    if let Some(targets) = targets {
+        if targets.iter().any(|url| !relays.contains_key(url)) {
+            return Err(anyhow!("Publication target is not a configured relay"));
+        }
+    }
+    let selected: Vec<_> = relays
+        .into_iter()
+        .filter(|(url, relay)| {
+            targets.map_or_else(
+                || relay.flags().has(RelayServiceFlags::WRITE, FlagCheck::All),
+                |targets| targets.contains(url),
+            )
+        })
+        .collect();
+    if selected.is_empty() {
+        return Err(anyhow!("No publication relays configured"));
+    }
+    let requests = selected.into_iter().map(|(url, relay)| async move {
+        let result = tokio::time::timeout(Duration::from_secs(12), relay.send_event(event)).await;
+        let result = match result {
+            Ok(result) => result.map_err(|error| error.to_string()),
+            Err(_) => Err("Event dispatch timed out".to_string()),
+        };
+        (url, result)
+    });
+    let mut output = Output {
+        val: event.id,
+        success: HashSet::new(),
+        failed: HashMap::new(),
+    };
+    for (url, result) in futures::future::join_all(requests).await {
+        match result {
+            Ok(_) => {
+                output.success.insert(url);
+            }
+            Err(error) => {
+                output.failed.insert(url, error);
+            }
+        }
+    }
+    if !output.success.is_empty() {
+        client.database().save_event(event).await?;
+    }
+    Ok(output)
+}
 
-    let success: Vec<String> = output.success.iter().map(|u| u.to_string()).collect();
+fn published_event_json(output: Output<EventId>) -> Result<String> {
+    if output.success.is_empty() {
+        return Err(anyhow!("No relay accepted the event: {:?}", output.failed));
+    }
+    let success: Vec<String> = output.success.iter().map(ToString::to_string).collect();
     let failed: HashMap<String, String> = output
         .failed
         .iter()
-        .map(|(u, e)| (u.to_string(), e.to_string()))
+        .map(|(url, error)| (url.to_string(), error.to_string()))
         .collect();
+    Ok(
+        serde_json::json!({ "id": output.id().to_hex(), "success": success, "failed": failed })
+            .to_string(),
+    )
+}
 
-    let result = serde_json::json!({
-        "id": output.id().to_hex(),
-        "success": success,
-        "failed": failed,
-    });
-
-    Ok(result.to_string())
+pub async fn send_event(event_json: String) -> Result<String> {
+    let client = get_client().await?;
+    let event = Event::from_json(&event_json)?;
+    let output = publish_event(&client, &event, None).await?;
+    published_event_json(output)
 }
 
 pub async fn send_event_to(event_json: String, relay_urls: Vec<String>) -> Result<String> {
     let client = get_client().await?;
     let event = Event::from_json(&event_json)?;
-
+    event.verify()?;
     let urls: Vec<RelayUrl> = relay_urls
         .iter()
-        .filter_map(|u| RelayUrl::parse(u).ok())
-        .collect();
-
-    let add_futures: Vec<_> = urls.iter().map(|url| client.add_relay(url.as_str())).collect();
-    futures::future::join_all(add_futures).await;
+        .map(|url| RelayUrl::parse(url))
+        .collect::<std::result::Result<_, _>>()?;
+    for url in &urls {
+        client.add_relay(url.as_str()).await?;
+    }
     client.connect().await;
-
-    let output = client.send_event_to(urls, &event).await?;
-
-    let success: Vec<String> = output.success.iter().map(|u| u.to_string()).collect();
-    let failed: HashMap<String, String> = output
-        .failed
-        .iter()
-        .map(|(u, e)| (u.to_string(), e.to_string()))
-        .collect();
-
-    let result = serde_json::json!({
-        "id": output.id().to_hex(),
-        "success": success,
-        "failed": failed,
-    });
-
-    Ok(result.to_string())
+    let output = publish_event(&client, &event, Some(&urls)).await?;
+    published_event_json(output)
 }
 
 pub async fn broadcast_events(
@@ -1142,7 +1177,10 @@ pub async fn broadcast_events(
     });
 
     if let Some(ref urls) = target_urls {
-        let add_futures: Vec<_> = urls.iter().map(|url| client.add_relay(url.as_str())).collect();
+        let add_futures: Vec<_> = urls
+            .iter()
+            .map(|url| client.add_relay(url.as_str()))
+            .collect();
         futures::future::join_all(add_futures).await;
         client.connect().await;
     }
@@ -1151,9 +1189,9 @@ pub async fn broadcast_events(
         let event_str = event_val.to_string();
         if let Ok(event) = Event::from_json(&event_str) {
             let send_result = if let Some(ref urls) = target_urls {
-                client.send_event_to(urls.clone(), &event).await
+                publish_event(&client, &event, Some(urls)).await
             } else {
-                client.send_event(&event).await
+                publish_event(&client, &event, None).await
             };
 
             match send_result {
@@ -1182,86 +1220,104 @@ pub async fn stream_broadcast_events(
     relay_urls: Option<Vec<String>>,
     sink: StreamSink<String>,
 ) -> Result<()> {
-    let client = get_client().await?;
-    let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
-    let total = events.len() as u32;
+    let result: Result<()> = async {
+        let client = get_client().await?;
+        let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
+        let total = events.len() as u32;
 
-    let target_urls: Option<Vec<RelayUrl>> = relay_urls.map(|urls| {
-        urls.iter()
-            .filter_map(|u| RelayUrl::parse(u).ok())
-            .collect()
-    });
+        let target_urls: Option<Vec<RelayUrl>> = relay_urls.map(|urls| {
+            urls.iter()
+                .filter_map(|u| RelayUrl::parse(u).ok())
+                .collect()
+        });
 
-    if let Some(ref urls) = target_urls {
-        let add_futures: Vec<_> = urls.iter().map(|url| client.add_relay(url.as_str())).collect();
-        futures::future::join_all(add_futures).await;
-        client.connect().await;
-    }
-
-    let mut sent = 0u32;
-    let mut failed = 0u32;
-
-    const BATCH_SIZE: usize = 50;
-
-    for chunk in events.chunks(BATCH_SIZE) {
-        let futures: Vec<_> = chunk
-            .iter()
-            .map(|event_val| {
-                let client = client.clone();
-                let target_urls = target_urls.clone();
-                let event_str = event_val.to_string();
-                async move {
-                    let Ok(event) = Event::from_json(&event_str) else {
-                        return false;
-                    };
-                    let result = if let Some(ref urls) = target_urls {
-                        client.send_event_to(urls.clone(), &event).await
-                    } else {
-                        client.send_event(&event).await
-                    };
-                    match result {
-                        Ok(output) => !output.success.is_empty(),
-                        Err(_) => false,
-                    }
-                }
-            })
-            .collect();
-
-        let results = futures::future::join_all(futures).await;
-
-        for ok in results {
-            if ok { sent += 1; } else { failed += 1; }
+        if let Some(ref urls) = target_urls {
+            let add_futures: Vec<_> = urls
+                .iter()
+                .map(|url| client.add_relay(url.as_str()))
+                .collect();
+            futures::future::join_all(add_futures).await;
+            client.connect().await;
         }
 
-        let progress = serde_json::json!({
+        let mut sent = 0u32;
+        let mut failed = 0u32;
+
+        const BATCH_SIZE: usize = 50;
+
+        for chunk in events.chunks(BATCH_SIZE) {
+            let futures: Vec<_> = chunk
+                .iter()
+                .map(|event_val| {
+                    let client = client.clone();
+                    let target_urls = target_urls.clone();
+                    let event_str = event_val.to_string();
+                    async move {
+                        let Ok(event) = Event::from_json(&event_str) else {
+                            return false;
+                        };
+                        let result = if let Some(ref urls) = target_urls {
+                            publish_event(&client, &event, Some(urls)).await
+                        } else {
+                            publish_event(&client, &event, None).await
+                        };
+                        match result {
+                            Ok(output) => !output.success.is_empty(),
+                            Err(_) => false,
+                        }
+                    }
+                })
+                .collect();
+
+            let results = futures::future::join_all(futures).await;
+
+            for ok in results {
+                if ok {
+                    sent += 1;
+                } else {
+                    failed += 1;
+                }
+            }
+
+            let progress = serde_json::json!({
+                "sent": sent,
+                "failed": failed,
+                "total": total,
+                "done": false,
+            });
+            if sink.add(progress.to_string()).is_err() {
+                return Ok(());
+            }
+        }
+
+        let done = serde_json::json!({
             "sent": sent,
             "failed": failed,
             "total": total,
-            "done": false,
+            "done": true,
         });
-        if sink.add(progress.to_string()).is_err() {
-            return Ok(());
-        }
+        let _ = sink.add(done.to_string());
+
+        Ok(())
     }
-
-    let done = serde_json::json!({
-        "sent": sent,
-        "failed": failed,
-        "total": total,
-        "done": true,
-    });
-    let _ = sink.add(done.to_string());
-
+    .await;
+    if let Err(error) = result {
+        let _ = sink.add_error(error);
+    }
     Ok(())
 }
 
 pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Result<String> {
     let client = get_client().await?;
-    
+
     let tags: Vec<Tag> = if relay_urls.len() == 1 && relay_urls[0] == "ALL_RELAYS" {
-        vec![Tag::custom(TagKind::Custom("relay".into()), vec!["ALL_RELAYS"])]
+        vec![Tag::custom(
+            TagKind::Custom("relay".into()),
+            vec!["ALL_RELAYS"],
+        )]
     } else {
-        relay_urls.iter()
+        relay_urls
+            .iter()
             .map(|url| Tag::custom(TagKind::Custom("relay".into()), vec![url.as_str()]))
             .collect()
     };
@@ -1271,17 +1327,16 @@ pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Resul
 
     let ur = user_relays_state().read().await;
     let urls: Vec<RelayUrl> = if relay_urls.len() == 1 && relay_urls[0] == "ALL_RELAYS" {
-        ur.iter()
-            .filter_map(|u| RelayUrl::parse(u).ok())
-            .collect()
+        ur.iter().filter_map(|u| RelayUrl::parse(u).ok()).collect()
     } else {
-        relay_urls.iter()
+        relay_urls
+            .iter()
             .filter_map(|u| RelayUrl::parse(u).ok())
             .collect()
     };
     drop(ur);
 
-    let output = client.send_event_to(urls, &event).await?;
+    let output = publish_event(&client, &event, Some(&urls)).await?;
 
     let success_count = output.success.len();
     let failed_count = output.failed.len();
@@ -1297,31 +1352,29 @@ pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Resul
 
 pub async fn delete_events(event_ids: Vec<String>, reason: String) -> Result<String> {
     let client = get_client().await?;
-    
+
     let event_tags: Vec<Tag> = event_ids
         .iter()
         .filter_map(|id| EventId::from_hex(id).ok())
-        .map(|event_id| Tag::event(event_id))
+        .map(Tag::event)
         .collect();
 
     if event_tags.is_empty() {
         return Ok(serde_json::json!({
             "totalSuccess": 0,
             "totalFailed": 0,
-        }).to_string());
+        })
+        .to_string());
     }
 
     let builder = EventBuilder::new(Kind::EventDeletion, reason).tags(event_tags);
     let event = client.sign_event_builder(builder).await?;
 
     let ur = user_relays_state().read().await;
-    let urls: Vec<RelayUrl> = ur
-        .iter()
-        .filter_map(|u| RelayUrl::parse(u).ok())
-        .collect();
+    let urls: Vec<RelayUrl> = ur.iter().filter_map(|u| RelayUrl::parse(u).ok()).collect();
     drop(ur);
 
-    let output = client.send_event_to(urls, &event).await?;
+    let output = publish_event(&client, &event, Some(&urls)).await?;
 
     let success_count = output.success.len();
     let failed_count = output.failed.len();
@@ -1340,118 +1393,119 @@ pub async fn fetch_all_events_for_author(
     author_hex: String,
     sink: StreamSink<String>,
 ) -> Result<()> {
-    let client = get_client().await?;
-    let pubkey = PublicKey::from_hex(&author_hex)?;
+    let result: Result<()> = async {
+        let client = get_client().await?;
+        let pubkey = PublicKey::from_hex(&author_hex)?;
 
-    const PAGE_SIZE: usize = 500;
-    let mut seen: HashSet<String> = HashSet::new();
+        const PAGE_SIZE: usize = 500;
+        let mut seen: HashSet<String> = HashSet::new();
 
-    // Collect read-capable relay URLs
-    let relay_urls: Vec<RelayUrl> = {
-        let relays = client.relays().await;
-        relays
-            .iter()
-            .filter(|(_, r)| {
-                let flags = r.flags();
-                !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-                    && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-                    && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
-            })
-            .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
-            .collect()
-    };
+        // Collect read-capable relay URLs
+        let relay_urls: Vec<RelayUrl> = {
+            let relays = client.relays().await;
+            relays
+                .iter()
+                .filter(|(_, r)| {
+                    let flags = r.flags();
+                    !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
+                        && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
+                        && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
+                })
+                .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
+                .collect()
+        };
 
-    if relay_urls.is_empty() {
-        return Ok(());
-    }
-
-    // Per-relay `until` cursor (unix secs). None = start from now.
-    let mut cursors: HashMap<String, u64> = HashMap::new();
-    // Relays that returned 0 new events on the last page are done.
-    let mut exhausted: HashSet<String> = HashSet::new();
-
-    loop {
-        let active: Vec<&RelayUrl> = relay_urls
-            .iter()
-            .filter(|u| !exhausted.contains(u.as_str()))
-            .collect();
-
-        if active.is_empty() {
-            break;
+        if relay_urls.is_empty() {
+            return Ok(());
         }
 
-        // Query each active relay individually so we can track per-relay cursors.
-        for relay_url in active {
-            let key = relay_url.to_string();
-            let until_ts = cursors.get(&key).copied();
+        // Per-relay `until` cursor (unix secs). None = start from now.
+        let mut cursors: HashMap<String, u64> = HashMap::new();
+        // Relays that returned 0 new events on the last page are done.
+        let mut exhausted: HashSet<String> = HashSet::new();
 
-            let mut filter = Filter::new()
-                .author(pubkey)
-                .limit(PAGE_SIZE);
-            if let Some(ts) = until_ts {
-                filter = filter.until(Timestamp::from(ts));
+        loop {
+            let active: Vec<&RelayUrl> = relay_urls
+                .iter()
+                .filter(|u| !exhausted.contains(u.as_str()))
+                .collect();
+
+            if active.is_empty() {
+                break;
             }
 
-            // fetch_events_from hits the relay directly (no LMDB merge).
-            // It closes automatically on EOSE, returning exactly what that
-            // relay has for this filter page.
-            let events = match client
-                .fetch_events_from(
-                    vec![relay_url.clone()],
-                    filter,
-                    Duration::from_secs(15),
-                )
-                .await
-            {
-                Ok(e) => e,
-                Err(_) => {
-                    exhausted.insert(key);
-                    continue;
+            // Query each active relay individually so we can track per-relay cursors.
+            for relay_url in active {
+                let key = relay_url.to_string();
+                let until_ts = cursors.get(&key).copied();
+
+                let mut filter = Filter::new().author(pubkey).limit(PAGE_SIZE);
+                if let Some(ts) = until_ts {
+                    filter = filter.until(Timestamp::from(ts));
                 }
-            };
 
-            let mut new_count = 0usize;
-            let mut oldest_ts: Option<u64> = None;
-
-            for event in events.into_iter() {
-                let id_hex = event.id.to_hex();
-                if seen.contains(&id_hex) {
-                    continue;
-                }
-                seen.insert(id_hex);
-                new_count += 1;
-
-                let ts = event.created_at.as_secs();
-                oldest_ts = Some(match oldest_ts {
-                    None => ts,
-                    Some(prev) => prev.min(ts),
-                });
-
-                let json = match serde_json::from_str::<serde_json::Value>(&event.as_json()) {
-                    Ok(v) => serde_json::to_string(&v).unwrap_or_default(),
-                    Err(_) => continue,
+                // fetch_events_from hits the relay directly (no LMDB merge).
+                // It closes automatically on EOSE, returning exactly what that
+                // relay has for this filter page.
+                let events = match client
+                    .fetch_events_from(vec![relay_url.clone()], filter, Duration::from_secs(15))
+                    .await
+                {
+                    Ok(e) => e,
+                    Err(_) => {
+                        exhausted.insert(key);
+                        continue;
+                    }
                 };
-                if sink.add(json).is_err() {
-                    return Ok(());
-                }
-            }
 
-            if new_count == 0 {
-                // Relay truly has nothing older — done with this relay.
-                exhausted.insert(key);
-            } else if let Some(oldest) = oldest_ts {
-                if oldest == 0 {
-                    exhausted.insert(key);
-                } else {
-                    // Advance the cursor back one second and fetch the next page.
-                    cursors.insert(key, oldest - 1);
+                let mut new_count = 0usize;
+                let mut oldest_ts: Option<u64> = None;
+
+                for event in events.into_iter() {
+                    let id_hex = event.id.to_hex();
+                    if seen.contains(&id_hex) {
+                        continue;
+                    }
+                    seen.insert(id_hex);
+                    new_count += 1;
+
+                    let ts = event.created_at.as_secs();
+                    oldest_ts = Some(match oldest_ts {
+                        None => ts,
+                        Some(prev) => prev.min(ts),
+                    });
+
+                    let json = match serde_json::from_str::<serde_json::Value>(&event.as_json()) {
+                        Ok(v) => serde_json::to_string(&v).unwrap_or_default(),
+                        Err(_) => continue,
+                    };
+                    if sink.add(json).is_err() {
+                        return Ok(());
+                    }
                 }
-            } else {
-                exhausted.insert(key);
+
+                if new_count == 0 {
+                    // Relay truly has nothing older — done with this relay.
+                    exhausted.insert(key);
+                } else if let Some(oldest) = oldest_ts {
+                    if oldest == 0 {
+                        exhausted.insert(key);
+                    } else {
+                        // Advance the cursor back one second and fetch the next page.
+                        cursors.insert(key, oldest - 1);
+                    }
+                } else {
+                    exhausted.insert(key);
+                }
             }
         }
-    }
 
+        Ok(())
+    }
+    .await;
+    if let Err(error) = result {
+        let _ = sink.add_error(error);
+    }
     Ok(())
 }
 
@@ -1462,202 +1516,211 @@ pub async fn fetch_profile_events(
     since_timestamp: i64,
     sink: StreamSink<String>,
 ) -> Result<()> {
-    let client = get_client().await?;
-    let pubkey = PublicKey::from_hex(&author_hex)?;
+    let result: Result<()> = async {
+        let client = get_client().await?;
+        let pubkey = PublicKey::from_hex(&author_hex)?;
 
-    let kind_list: Vec<Kind> = kinds_str
-        .split(',')
-        .filter_map(|s| s.trim().parse::<u16>().ok())
-        .map(Kind::from)
-        .collect();
+        let kind_list: Vec<Kind> = kinds_str
+            .split(',')
+            .filter_map(|s| s.trim().parse::<u16>().ok())
+            .map(Kind::from)
+            .collect();
 
-    if kind_list.is_empty() {
-        return Ok(());
-    }
+        if kind_list.is_empty() {
+            return Ok(());
+        }
 
-    const PAGE_SIZE: usize = 500;
-    let seen = std::sync::Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
+        const PAGE_SIZE: usize = 500;
+        let seen = std::sync::Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
 
-    let relay_urls: Vec<RelayUrl> = {
-        let relays = client.relays().await;
-        relays
-            .iter()
-            .filter(|(_, r)| {
-                let flags = r.flags();
-                !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-                    && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-                    && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
-            })
-            .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
-            .collect()
-    };
-
-    if relay_urls.is_empty() {
-        return Ok(());
-    }
-
-    let since_ts = if since_timestamp > 0 {
-        Some(Timestamp::from(since_timestamp as u64))
-    } else {
-        None
-    };
-
-    let cursors = std::sync::Arc::new(tokio::sync::Mutex::new(HashMap::<String, u64>::new()));
-    let exhausted = std::sync::Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
-    let sink = std::sync::Arc::new(sink);
-
-    loop {
-        let active: Vec<RelayUrl> = {
-            let ex = exhausted.lock().await;
-            relay_urls
+        let relay_urls: Vec<RelayUrl> = {
+            let relays = client.relays().await;
+            relays
                 .iter()
-                .filter(|u| !ex.contains(u.as_str()))
-                .cloned()
+                .filter(|(_, r)| {
+                    let flags = r.flags();
+                    !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
+                        && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
+                        && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
+                })
+                .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
                 .collect()
         };
 
-        if active.is_empty() {
-            break;
+        if relay_urls.is_empty() {
+            return Ok(());
         }
 
-        let mut handles = Vec::new();
-        for relay_url in active {
-            let client = client.clone();
-            let kind_list = kind_list.clone();
-            let seen = seen.clone();
-            let cursors = cursors.clone();
-            let exhausted = exhausted.clone();
-            let sink = sink.clone();
+        let since_ts = if since_timestamp > 0 {
+            Some(Timestamp::from(since_timestamp as u64))
+        } else {
+            None
+        };
 
-            handles.push(tokio::spawn(async move {
-                let key = relay_url.to_string();
-                let until_ts = cursors.lock().await.get(&key).copied();
+        let cursors = std::sync::Arc::new(tokio::sync::Mutex::new(HashMap::<String, u64>::new()));
+        let exhausted = std::sync::Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
+        let sink = std::sync::Arc::new(sink.clone());
 
-                let mut filter = Filter::new()
-                    .author(pubkey)
-                    .kinds(kind_list)
-                    .limit(PAGE_SIZE);
-                if let Some(ts) = until_ts {
-                    filter = filter.until(Timestamp::from(ts));
-                }
-                if let Some(since) = since_ts {
-                    filter = filter.since(since);
-                }
+        loop {
+            let active: Vec<RelayUrl> = {
+                let ex = exhausted.lock().await;
+                relay_urls
+                    .iter()
+                    .filter(|u| !ex.contains(u.as_str()))
+                    .cloned()
+                    .collect()
+            };
 
-                let events = match client
-                    .fetch_events_from(
-                        vec![relay_url],
-                        filter,
-                        Duration::from_secs(15),
-                    )
-                    .await
-                {
-                    Ok(e) => e,
-                    Err(_) => {
-                        exhausted.lock().await.insert(key);
-                        return false;
+            if active.is_empty() {
+                break;
+            }
+
+            let mut handles = Vec::new();
+            for relay_url in active {
+                let client = client.clone();
+                let kind_list = kind_list.clone();
+                let seen = seen.clone();
+                let cursors = cursors.clone();
+                let exhausted = exhausted.clone();
+                let sink = sink.clone();
+
+                handles.push(tokio::spawn(async move {
+                    let key = relay_url.to_string();
+                    let until_ts = cursors.lock().await.get(&key).copied();
+
+                    let mut filter = Filter::new()
+                        .author(pubkey)
+                        .kinds(kind_list)
+                        .limit(PAGE_SIZE);
+                    if let Some(ts) = until_ts {
+                        filter = filter.until(Timestamp::from(ts));
                     }
-                };
+                    if let Some(since) = since_ts {
+                        filter = filter.since(since);
+                    }
 
-                let mut new_count = 0usize;
-                let mut oldest_ts: Option<u64> = None;
-
-                for event in events.into_iter() {
-                    let id_hex = event.id.to_hex();
+                    let events = match client
+                        .fetch_events_from(vec![relay_url], filter, Duration::from_secs(15))
+                        .await
                     {
-                        let mut s = seen.lock().await;
-                        if s.contains(&id_hex) {
-                            continue;
+                        Ok(e) => e,
+                        Err(_) => {
+                            exhausted.lock().await.insert(key);
+                            return false;
                         }
-                        s.insert(id_hex);
-                    }
-                    new_count += 1;
-
-                    let ts = event.created_at.as_secs();
-                    oldest_ts = Some(match oldest_ts {
-                        None => ts,
-                        Some(prev) => prev.min(ts),
-                    });
-
-                    let _ = client.database().save_event(&event).await;
-
-                    let json = match serde_json::from_str::<serde_json::Value>(&event.as_json()) {
-                        Ok(v) => serde_json::to_string(&v).unwrap_or_default(),
-                        Err(_) => continue,
                     };
-                    if sink.add(json).is_err() {
-                        return false;
-                    }
-                }
 
-                if new_count == 0 {
-                    exhausted.lock().await.insert(key);
-                } else if let Some(oldest) = oldest_ts {
-                    if oldest == 0 {
+                    let mut new_count = 0usize;
+                    let mut oldest_ts: Option<u64> = None;
+
+                    for event in events.into_iter() {
+                        let id_hex = event.id.to_hex();
+                        {
+                            let mut s = seen.lock().await;
+                            if s.contains(&id_hex) {
+                                continue;
+                            }
+                            s.insert(id_hex);
+                        }
+                        new_count += 1;
+
+                        let ts = event.created_at.as_secs();
+                        oldest_ts = Some(match oldest_ts {
+                            None => ts,
+                            Some(prev) => prev.min(ts),
+                        });
+
+                        let _ = client.database().save_event(&event).await;
+
+                        let json = match serde_json::from_str::<serde_json::Value>(&event.as_json())
+                        {
+                            Ok(v) => serde_json::to_string(&v).unwrap_or_default(),
+                            Err(_) => continue,
+                        };
+                        if sink.add(json).is_err() {
+                            return false;
+                        }
+                    }
+
+                    if new_count == 0 {
                         exhausted.lock().await.insert(key);
+                    } else if let Some(oldest) = oldest_ts {
+                        if oldest == 0 {
+                            exhausted.lock().await.insert(key);
+                        } else {
+                            cursors.lock().await.insert(key, oldest - 1);
+                        }
                     } else {
-                        cursors.lock().await.insert(key, oldest - 1);
+                        exhausted.lock().await.insert(key);
                     }
-                } else {
-                    exhausted.lock().await.insert(key);
-                }
 
-                true
-            }));
+                    true
+                }));
+            }
+
+            for handle in handles {
+                let _ = handle.await;
+            }
         }
 
-        for handle in handles {
-            let _ = handle.await;
-        }
+        Ok(())
     }
-
+    .await;
+    if let Err(error) = result {
+        let _ = sink.add_error(error);
+    }
     Ok(())
 }
 
 #[frb]
-pub async fn subscribe_to_events(
-    filter_json: String,
-    sink: StreamSink<String>,
-) -> Result<()> {
-    let client = get_client().await?;
-    let filter = Filter::from_json(&filter_json)?;
+pub async fn subscribe_to_events(filter_json: String, sink: StreamSink<String>) -> Result<()> {
+    let result: Result<()> = async {
+        let client = get_client().await?;
+        let filter = Filter::from_json(&filter_json)?;
 
-    let Output { val: sub_id, .. } = client.subscribe(filter, None).await
-        .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
+        let mut notifications = client.notifications();
+        let Output { val: sub_id, .. } = client
+            .subscribe(filter, None)
+            .await
+            .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
 
-    let mut notifications = client.notifications();
-
-    loop {
-        match notifications.recv().await {
-            Ok(notification) => {
-                if let RelayPoolNotification::Event {
-                    subscription_id,
-                    event,
-                    ..
-                } = notification
-                {
-                    if subscription_id == sub_id {
-                        let _ = client.database().save_event(&event).await;
-                        if let Ok(json) = serde_json::to_string(
-                            &serde_json::from_str::<serde_json::Value>(&event.as_json())
-                                .unwrap_or_default(),
-                        ) {
-                            if sink.add(json).is_err() {
-                                break;
+        loop {
+            match notifications.recv().await {
+                Ok(notification) => {
+                    if let RelayPoolNotification::Event {
+                        subscription_id,
+                        event,
+                        ..
+                    } = notification
+                    {
+                        if subscription_id == sub_id {
+                            let _ = client.database().save_event(&event).await;
+                            if let Ok(json) = serde_json::to_string(
+                                &serde_json::from_str::<serde_json::Value>(&event.as_json())
+                                    .unwrap_or_default(),
+                            ) {
+                                if sink.add(json).is_err() {
+                                    break;
+                                }
                             }
                         }
+                    } else if let RelayPoolNotification::Shutdown = notification {
+                        break;
                     }
-                } else if let RelayPoolNotification::Shutdown = notification {
-                    break;
                 }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
             }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
         }
+
+        let _ = client.unsubscribe(&sub_id).await;
+
+        Ok(())
     }
-
-    let _ = client.unsubscribe(&sub_id).await;
-
+    .await;
+    if let Err(error) = result {
+        let _ = sink.add_error(error);
+    }
     Ok(())
 }
 
@@ -1723,10 +1786,7 @@ async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<
     Ok(current_id)
 }
 
-pub async fn sync_replies_recursive(
-    note_id: String,
-    max_depth: u32,
-) -> Result<u32> {
+pub async fn sync_replies_recursive(note_id: String, max_depth: u32) -> Result<u32> {
     let client = get_client().await?;
     let mut processed_ids: HashSet<String> = HashSet::new();
     processed_ids.insert(note_id.clone());
@@ -1743,9 +1803,7 @@ pub async fn sync_replies_recursive(
             .events(pending_ids.clone())
             .limit(200);
 
-        let events: Events = client
-            .fetch_events(filter, Duration::from_secs(8))
-            .await?;
+        let events: Events = client.fetch_events(filter, Duration::from_secs(8)).await?;
 
         let mut new_ids: Vec<EventId> = Vec::new();
         for event in events.iter() {
@@ -1781,8 +1839,7 @@ pub async fn sync_replies_recursive(
             .kind(Kind::Metadata)
             .limit(all_pubkeys.len());
         let existing = client.database().query(existing_filter.clone()).await?;
-        let existing_pks: HashSet<PublicKey> =
-            existing.iter().map(|e| e.pubkey).collect();
+        let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
         let missing: Vec<PublicKey> = all_pubkeys
             .into_iter()
             .filter(|pk| !existing_pks.contains(pk))
@@ -1842,10 +1899,7 @@ pub async fn build_thread_structure(
 
         if parent.is_none() {
             if let Some(ref rr) = reply_root {
-                if *rr == root_id
-                    || reply_ids.contains(rr)
-                    || notes_map.contains_key(rr)
-                {
+                if *rr == root_id || reply_ids.contains(rr) || notes_map.contains_key(rr) {
                     parent = Some(rr.clone());
                 } else {
                     parent = Some(root_id.clone());
@@ -1864,10 +1918,7 @@ pub async fn build_thread_structure(
             parent
         };
 
-        children_map
-            .entry(parent)
-            .or_default()
-            .push(reply.clone());
+        children_map.entry(parent).or_default().push(reply.clone());
     }
 
     for children in children_map.values_mut() {
@@ -1913,7 +1964,10 @@ pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
                 Some(e) => e,
                 None => {
                     let f = Filter::new().id(eid).limit(1);
-                    let fetched = client.fetch_events(f, Duration::from_secs(5)).await.unwrap_or_default();
+                    let fetched = client
+                        .fetch_events(f, Duration::from_secs(5))
+                        .await
+                        .unwrap_or_default();
                     total_fetched += fetched.len() as u32;
                     match fetched.into_iter().next() {
                         Some(e) => e,
@@ -1970,7 +2024,11 @@ pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
                 .authors(new_pubkeys.iter().cloned().collect::<Vec<_>>())
                 .kind(Kind::Metadata)
                 .limit(new_pubkeys.len());
-            let existing = client.database().query(existing_filter).await.unwrap_or_default();
+            let existing = client
+                .database()
+                .query(existing_filter)
+                .await
+                .unwrap_or_default();
             let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
             let missing_pks: Vec<PublicKey> = new_pubkeys
                 .into_iter()
@@ -2052,9 +2110,7 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
     }
 
     let filter = Filter::new().ids(missing_ids.clone()).limit(30);
-    let fetched: Events = client
-        .fetch_events(filter, Duration::from_secs(5))
-        .await?;
+    let fetched: Events = client.fetch_events(filter, Duration::from_secs(5)).await?;
 
     let fetched_count = fetched.len() as u32;
 
@@ -2085,17 +2141,14 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
     Ok(fetched_count)
 }
 
-pub async fn merge_and_sort_notes(
-    existing_json: String,
-    incoming_json: String,
-) -> Result<String> {
+pub async fn merge_and_sort_notes(existing_json: String, incoming_json: String) -> Result<String> {
     let existing: Vec<serde_json::Value> = serde_json::from_str(&existing_json)?;
     let incoming: Vec<serde_json::Value> = serde_json::from_str(&incoming_json)?;
 
     let mut seen: HashSet<String> = HashSet::new();
     let mut merged: Vec<serde_json::Value> = Vec::new();
 
-    for note in incoming.into_iter().chain(existing.into_iter()) {
+    for note in incoming.into_iter().chain(existing) {
         let id = note["id"].as_str().unwrap_or("").to_string();
         if id.is_empty() || seen.contains(&id) {
             continue;
@@ -2173,12 +2226,24 @@ pub async fn fetch_full_thread_local(
     let mut root_id = resolve_thread_root_local(&client, &resolved_note_id).await?;
 
     let root_eid = EventId::from_hex(&root_id)?;
-    let root_event = match client.database().event_by_id(&root_eid).await.ok().flatten() {
+    let root_event = match client
+        .database()
+        .event_by_id(&root_eid)
+        .await
+        .ok()
+        .flatten()
+    {
         Some(e) => e,
         None => {
             // Try the resolved id as root.
             let resolved_eid = EventId::from_hex(&resolved_note_id)?;
-            match client.database().event_by_id(&resolved_eid).await.ok().flatten() {
+            match client
+                .database()
+                .event_by_id(&resolved_eid)
+                .await
+                .ok()
+                .flatten()
+            {
                 Some(e) => {
                     root_id = resolved_note_id.clone();
                     e
@@ -2232,7 +2297,11 @@ pub async fn fetch_full_thread_local(
         .kind(Kind::TextNote)
         .events(all_eids)
         .limit(500);
-    let reply_events = client.database().query(reply_filter).await.unwrap_or_default();
+    let reply_events = client
+        .database()
+        .query(reply_filter)
+        .await
+        .unwrap_or_default();
 
     let mut all_events: Vec<Event> = Vec::with_capacity(1 + reply_events.len());
     all_events.push(root_event);
@@ -2248,13 +2317,9 @@ pub async fn fetch_full_thread_local(
         }
     }
 
-    let hydrated_json = super::database::hydrate_notes_pub(
-        &client,
-        &all_events,
-        false,
-        current_user_pubkey_hex,
-    )
-    .await?;
+    let hydrated_json =
+        super::database::hydrate_notes_pub(&client, &all_events, false, current_user_pubkey_hex)
+            .await?;
 
     let result = build_thread_result_json(&hydrated_json, &root_id, &resolved_note_id)?;
     Ok(Some(result))
@@ -2487,9 +2552,7 @@ pub async fn fetch_full_thread(
                 .kind(Kind::TextNote)
                 .events(pending_ids.clone())
                 .limit(200);
-            let events = client
-                .fetch_events(filter, Duration::from_secs(4))
-                .await?;
+            let events = client.fetch_events(filter, Duration::from_secs(4)).await?;
 
             let mut new_ids: Vec<EventId> = Vec::new();
             for event in events.iter() {
@@ -2540,8 +2603,7 @@ pub async fn fetch_full_thread(
                 .query(existing_filter)
                 .await
                 .unwrap_or_default();
-            let existing_pks: HashSet<PublicKey> =
-                existing.iter().map(|e| e.pubkey).collect();
+            let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
             let missing: Vec<PublicKey> = all_pubkeys
                 .into_iter()
                 .filter(|pk| !existing_pks.contains(pk))
@@ -2594,13 +2656,9 @@ pub async fn fetch_full_thread(
         }
     }
 
-    let hydrated_json = super::database::hydrate_notes_pub(
-        &client,
-        &all_events,
-        false,
-        current_user_pubkey_hex,
-    )
-    .await?;
+    let hydrated_json =
+        super::database::hydrate_notes_pub(&client, &all_events, false, current_user_pubkey_hex)
+            .await?;
 
     let result = build_thread_result_json(&hydrated_json, &root_id, &resolved_note_id)?;
     Ok(result)
@@ -2663,9 +2721,16 @@ pub async fn fetch_missing_profiles_for_events(events_json: String) -> Result<u3
         .authors(pk_list.clone())
         .kind(Kind::Metadata)
         .limit(pk_list.len());
-    let existing = client.database().query(existing_filter).await.unwrap_or_default();
+    let existing = client
+        .database()
+        .query(existing_filter)
+        .await
+        .unwrap_or_default();
     let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
-    let missing: Vec<PublicKey> = pk_list.into_iter().filter(|pk| !existing_pks.contains(pk)).collect();
+    let missing: Vec<PublicKey> = pk_list
+        .into_iter()
+        .filter(|pk| !existing_pks.contains(pk))
+        .collect();
 
     if missing.is_empty() {
         return Ok(0);
@@ -2676,7 +2741,9 @@ pub async fn fetch_missing_profiles_for_events(events_json: String) -> Result<u3
         .authors(missing)
         .kind(Kind::Metadata)
         .limit(fetched_count as usize);
-    let _ = client.fetch_events(profile_filter, Duration::from_secs(5)).await;
+    let _ = client
+        .fetch_events(profile_filter, Duration::from_secs(5))
+        .await;
 
     Ok(fetched_count)
 }
@@ -2708,13 +2775,19 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
     }
 
     let filter = Filter::new().ids(missing_ids).limit(50);
-    let fetched = client.fetch_events(filter, Duration::from_secs(6)).await.unwrap_or_default();
+    let fetched = client
+        .fetch_events(filter, Duration::from_secs(6))
+        .await
+        .unwrap_or_default();
     let fetched_count = fetched.len() as u32;
 
     if fetched_count > 0 {
         let mut missing_pks: HashSet<PublicKey> = HashSet::new();
         for ev in fetched.iter() {
-            let pk_filter = Filter::new().author(ev.pubkey).kind(Kind::Metadata).limit(1);
+            let pk_filter = Filter::new()
+                .author(ev.pubkey)
+                .kind(Kind::Metadata)
+                .limit(1);
             let profile = client.database().query(pk_filter).await.unwrap_or_default();
             if profile.is_empty() {
                 missing_pks.insert(ev.pubkey);
@@ -2725,7 +2798,9 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
                 .authors(missing_pks.into_iter().collect::<Vec<_>>())
                 .kind(Kind::Metadata)
                 .limit(50);
-            let _ = client.fetch_events(profile_filter, Duration::from_secs(5)).await;
+            let _ = client
+                .fetch_events(profile_filter, Duration::from_secs(5))
+                .await;
         }
     }
 
@@ -2733,18 +2808,21 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
 }
 
 pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> {
-    use tokio_tungstenite::{connect_async, tungstenite::Message};
     use futures::{SinkExt, StreamExt};
+    use tokio_tungstenite::{connect_async, tungstenite::Message};
 
     if pubkey_hexes.is_empty() {
         return Ok("{}".to_string());
     }
 
     let primal_url = "wss://cache2.primal.net/v1";
-    let sub_id = format!("primal_fc_{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0));
+    let sub_id = format!(
+        "primal_fc_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
 
     let request = serde_json::json!([
         "REQ",
@@ -2757,13 +2835,11 @@ pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> 
         }
     ]);
 
-    let (ws_stream, _) = match tokio::time::timeout(
-        Duration::from_secs(5),
-        connect_async(primal_url),
-    ).await {
-        Ok(Ok(s)) => s,
-        _ => return Ok("{}".to_string()),
-    };
+    let (ws_stream, _) =
+        match tokio::time::timeout(Duration::from_secs(5), connect_async(primal_url)).await {
+            Ok(Ok(s)) => s,
+            _ => return Ok("{}".to_string()),
+        };
 
     let (mut write, mut read) = ws_stream.split();
     let _ = write.send(Message::Text(request.to_string())).await;
@@ -2781,7 +2857,7 @@ pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> 
                     Some(Ok(Message::Text(text))) => {
                         if let Ok(decoded) = serde_json::from_str::<serde_json::Value>(&text) {
                             if let Some(arr) = decoded.as_array() {
-                                if arr.len() >= 1 {
+                                if !arr.is_empty() {
                                     let msg_type = arr[0].as_str().unwrap_or("");
                                     if msg_type == "EOSE" {
                                         break;
@@ -2813,4 +2889,233 @@ pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> 
     }
 
     Ok(serde_json::to_string(&follower_counts)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn publication_requires_at_least_one_relay_acknowledgement() {
+        let event = EventBuilder::text_note("hello")
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        let url = RelayUrl::parse("wss://relay.example").unwrap();
+        let mut output = Output {
+            val: event.id,
+            success: HashSet::new(),
+            failed: HashMap::from([(url.clone(), "rejected".into())]),
+        };
+        assert!(published_event_json(output.clone()).is_err());
+        output.success.insert(url);
+        assert!(published_event_json(output).is_ok());
+    }
+
+    #[tokio::test]
+    async fn rejected_publications_preserve_persistent_events_until_a_relay_accepts() {
+        use futures::{SinkExt, StreamExt};
+        use tokio::net::TcpListener;
+        use tokio_tungstenite::{accept_async, tungstenite::Message};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = RelayUrl::parse(&format!("ws://{}", listener.local_addr().unwrap())).unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(stream).await.unwrap();
+            while let Some(Ok(message)) = socket.next().await {
+                let Message::Text(text) = message else {
+                    continue;
+                };
+                let message: serde_json::Value = serde_json::from_str(&text).unwrap();
+                if message[0] == "EVENT" {
+                    let event = Event::from_json(message[1].to_string()).unwrap();
+                    let accepted = event.content == "accepted";
+                    socket
+                        .send(Message::Text(
+                            serde_json::json!([
+                                "OK",
+                                event.id.to_hex(),
+                                accepted,
+                                if accepted {
+                                    ""
+                                } else {
+                                    "blocked: test rejection"
+                                }
+                            ])
+                            .to_string(),
+                        ))
+                        .await
+                        .unwrap();
+                }
+            }
+        });
+        let path = std::env::temp_dir().join(format!("qiqstr-publish-{}", rand::random::<u64>()));
+        std::fs::create_dir(&path).unwrap();
+        let client = Client::builder()
+            .database(HybridDatabase::new(
+                NostrLMDB::builder(&path)
+                    .map_size(16 * 1024 * 1024)
+                    .build()
+                    .unwrap(),
+            ))
+            .build();
+        client.add_relay(url.as_str()).await.unwrap();
+        client.connect().await;
+        client.wait_for_connection(Duration::from_secs(2)).await;
+        let targets = [url];
+        let mut retained = Vec::new();
+        for directed in [false, true] {
+            let targets = directed.then_some(targets.as_slice());
+            for kind in [
+                Kind::ContactList,
+                Kind::MuteList,
+                Kind::from(10003),
+                Kind::from(30000),
+            ] {
+                let owner = Keys::generate();
+                let previous = EventBuilder::new(kind, "previous")
+                    .tag(Tag::identifier("list"))
+                    .custom_created_at(Timestamp::from(1))
+                    .sign_with_keys(&owner)
+                    .unwrap();
+                let rejected = EventBuilder::new(kind, "rejected")
+                    .tag(Tag::identifier("list"))
+                    .custom_created_at(Timestamp::from(2))
+                    .sign_with_keys(&owner)
+                    .unwrap();
+                client.database().save_event(&previous).await.unwrap();
+                let output = publish_event(&client, &rejected, targets).await.unwrap();
+                assert!(published_event_json(output).is_err());
+                assert!(
+                    client
+                        .database()
+                        .event_by_id(&rejected.id)
+                        .await
+                        .unwrap()
+                        .is_none(),
+                    "rejected mutation was cached"
+                );
+                assert_eq!(
+                    client.database().event_by_id(&previous.id).await.unwrap(),
+                    Some(previous.clone()),
+                    "previous signed state was lost"
+                );
+                retained.push(previous.id);
+            }
+            let owner = Keys::generate();
+            let previous = EventBuilder::new(Kind::ContactList, "previous")
+                .custom_created_at(Timestamp::from(1))
+                .sign_with_keys(&owner)
+                .unwrap();
+            let accepted = EventBuilder::new(Kind::ContactList, "accepted")
+                .custom_created_at(Timestamp::from(2))
+                .sign_with_keys(&owner)
+                .unwrap();
+            client.database().save_event(&previous).await.unwrap();
+            assert!(published_event_json(
+                publish_event(&client, &accepted, targets).await.unwrap()
+            )
+            .is_ok());
+            assert!(client
+                .database()
+                .event_by_id(&previous.id)
+                .await
+                .unwrap()
+                .is_none());
+            assert_eq!(
+                client.database().event_by_id(&accepted.id).await.unwrap(),
+                Some(accepted.clone())
+            );
+            retained.push(accepted.id);
+            let owner = Keys::generate();
+            let rejected = EventBuilder::text_note("rejected")
+                .sign_with_keys(&owner)
+                .unwrap();
+            assert!(published_event_json(
+                publish_event(&client, &rejected, targets).await.unwrap()
+            )
+            .is_err());
+            assert!(client
+                .database()
+                .event_by_id(&rejected.id)
+                .await
+                .unwrap()
+                .is_none());
+            let accepted = EventBuilder::text_note("accepted")
+                .sign_with_keys(&owner)
+                .unwrap();
+            assert!(published_event_json(
+                publish_event(&client, &accepted, targets).await.unwrap()
+            )
+            .is_ok());
+            assert_eq!(
+                client.database().event_by_id(&accepted.id).await.unwrap(),
+                Some(accepted.clone())
+            );
+            retained.push(accepted.id);
+            let rejected_deletion = EventBuilder::new(Kind::EventDeletion, "rejected")
+                .tag(Tag::event(accepted.id))
+                .sign_with_keys(&owner)
+                .unwrap();
+            assert!(published_event_json(
+                publish_event(&client, &rejected_deletion, targets)
+                    .await
+                    .unwrap()
+            )
+            .is_err());
+            assert!(client
+                .database()
+                .event_by_id(&accepted.id)
+                .await
+                .unwrap()
+                .is_some());
+        }
+        client.shutdown().await;
+        drop(client);
+        server.await.unwrap();
+        let reopened = NostrLMDB::builder(&path)
+            .map_size(16 * 1024 * 1024)
+            .build()
+            .unwrap();
+        for id in retained {
+            assert!(reopened.event_by_id(&id).await.unwrap().is_some());
+        }
+        drop(reopened);
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn client_reinitialization_clears_counting_relays_and_preserves_valid_configuration_on_error(
+    ) {
+        init_client(vec![], None, None, vec![]).await.unwrap();
+        let counter = Client::default();
+        counter.add_relay("wss://old.example").await.unwrap();
+        *counting_client_lock().write().await = Some(counter);
+        init_client(vec!["wss://new.example".into()], None, None, vec![])
+            .await
+            .unwrap();
+        assert!(counting_client_lock().read().await.is_none());
+        assert_eq!(get_relay_list().await.unwrap(), ["wss://new.example"]);
+        assert!(
+            init_client(vec!["invalid relay".into()], None, None, vec![])
+                .await
+                .is_err()
+        );
+        assert_eq!(get_relay_list().await.unwrap(), ["wss://new.example"]);
+        add_relay_with_flags("wss://new.example".into(), false, false)
+            .await
+            .unwrap();
+        add_relay_with_flags("wss://new.example".into(), true, true)
+            .await
+            .unwrap();
+        let client = get_client().await.unwrap();
+        let relays = client.relays().await;
+        let relay = relays.values().next().unwrap();
+        assert!(relay.flags().has(RelayServiceFlags::READ, FlagCheck::All));
+        assert!(relay.flags().has(RelayServiceFlags::WRITE, FlagCheck::All));
+        shutdown_client().await.unwrap();
+        assert!(!is_client_initialized().await);
+        assert!(get_client().await.is_err());
+        assert!(db_path_state().read().await.is_none());
+    }
 }

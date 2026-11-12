@@ -671,3 +671,4 @@
 "cashuMeltAllConfirm" = "Send all {amount} sats to your Lightning address?";
 "mediaUploadFailed" = "Media upload failed. Please try again.";
 "cashuMeltAllSuccess" = "Sent {amount} sats to Lightning";
+"close" = "Close";

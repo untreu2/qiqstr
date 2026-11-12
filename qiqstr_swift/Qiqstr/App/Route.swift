@@ -11,7 +11,7 @@ enum Route: Hashable {
     case noteStatistics(String)
     case followList(String, FollowListMode)
     case hashtag(String)
-    case explore
+    case reads
     case article(String)
     case articleAddress(String)
     case editProfile
@@ -26,6 +26,9 @@ enum Route: Hashable {
     case suggestedFollows
     case liveStreams
     case liveStream(String)
+    case discoverFeeds
+    case discoverFeed(String)
+    case followPack(String)
 }
 
 struct RouteDestination: View {
@@ -39,7 +42,7 @@ struct RouteDestination: View {
         case .noteStatistics(let id): NoteStatisticsView(noteId: id)
         case .followList(let pubkey, let mode): FollowListView(pubkey: pubkey, mode: mode)
         case .hashtag(let tag): HashtagFeedView(tag: tag)
-        case .explore: ExploreView()
+        case .reads: ExploreView()
         case .article(let id): ArticleDetailView(articleId: id)
         case .articleAddress(let naddr): ArticleDetailView(naddr: naddr)
         case .editProfile: EditProfileView()
@@ -54,6 +57,9 @@ struct RouteDestination: View {
         case .suggestedFollows: SuggestedFollowsView(onFinish: nil)
         case .liveStreams: LiveListView()
         case .liveStream(let coordinate): LiveStreamView(coordinate: coordinate)
+        case .discoverFeeds: DiscoverFeedsView()
+        case .discoverFeed(let id): DiscoverFeedView(feedId: id)
+        case .followPack(let id): FollowPackView(packId: id)
         }
     }
 }

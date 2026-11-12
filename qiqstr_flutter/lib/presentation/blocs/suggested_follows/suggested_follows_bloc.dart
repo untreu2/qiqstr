@@ -15,15 +15,11 @@ class SuggestedFollowsBloc
   final AuthService _authService;
 
   SuggestedFollowsBloc({
-    required FollowingRepository followingRepository,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _followingRepository = followingRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const SuggestedFollowsInitial()) {
+    required this._followingRepository,
+    required this._profileRepository,
+    required this._syncService,
+    required this._authService,
+  })  : super(const SuggestedFollowsInitial()) {
     on<SuggestedFollowsLoadRequested>(_onSuggestedFollowsLoadRequested);
     on<SuggestedFollowsUserToggled>(_onSuggestedFollowsUserToggled);
     on<SuggestedFollowsFollowSelectedRequested>(

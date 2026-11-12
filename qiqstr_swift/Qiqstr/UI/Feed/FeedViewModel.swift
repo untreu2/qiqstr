@@ -2,6 +2,8 @@ import Foundation
 import Observation
 
 enum FeedSource: Hashable {
+    case explore
+    case discover(DiscoverFeed)
     case following
     case list(FeedFollowSet)
     case topic(String)
@@ -9,6 +11,8 @@ enum FeedSource: Hashable {
 
     var id: String {
         switch self {
+        case .explore: "explore"
+        case .discover(let feed): "dvm_\(feed.id)"
         case .following: "following"
         case .list(let set): set.id
         case .topic(let tag): "topic_\(tag)"
@@ -18,10 +22,21 @@ enum FeedSource: Hashable {
 
     var title: String {
         switch self {
+        case .explore: L("feedExplore")
+        case .discover(let feed): feed.name
         case .following: L("all")
         case .list(let set): set.title
         case .topic(let tag): "#\(tag)"
         case .topics: L("feedTopics")
+        }
+    }
+
+    var isExplore: Bool { self == .explore }
+
+    var isCurated: Bool {
+        switch self {
+        case .explore, .discover: true
+        default: false
         }
     }
 
@@ -45,7 +60,7 @@ final class FeedViewModel {
     private(set) var isLoadingMore = false
     private(set) var canLoadMore = true
     private(set) var lists: [FeedFollowSet] = []
-    private(set) var source: FeedSource = .following
+    private(set) var source: FeedSource = .explore
     private(set) var scrollToTopToken = 0
     var sort: FeedSortMode {
         didSet {
@@ -92,17 +107,34 @@ final class FeedViewModel {
         case .topic(let tag): [tag]
         case .topics: followedTopics
         case .following: includeTopics ? followedTopics : []
-        case .list: []
+        case .list, .explore, .discover: []
         }
     }
 
     private func query(limit: Int) async -> [Note] {
+        if source.isExplore { return await Self.exploreNotes(force: false) }
+        if case .discover(let feed) = source { return await discoverNotes(feed, force: false) }
         let topics = activeTopics
         if source.isTopicFeed { return await Self.topicNotes(topics, limit: limit, includeReplies: true) }
         let home = await NoteRepository.feed(authors: authors, limit: limit, sort: sort)
         guard !topics.isEmpty else { return home }
         let extra = await Self.topicNotes(topics, limit: limit, includeReplies: false)
         return Self.interleave(home, extra, limit: limit, sort: sort)
+    }
+
+    private static func exploreNotes(force: Bool) async -> [Note] {
+        let ids = await TrendingService.shared.trendingNoteIds(force: force)
+        let byId = Dictionary(await NoteRepository.notes(ids).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ids.compactMap { byId[$0] }
+    }
+
+    @ObservationIgnored private var discoverCache: [String: [Note]] = [:]
+
+    private func discoverNotes(_ feed: DiscoverFeed, force: Bool) async -> [Note] {
+        if !force, let cached = discoverCache[feed.id] { return cached }
+        guard let notes = await ExploreService.shared.feedNotes(feed) else { return discoverCache[feed.id] ?? [] }
+        discoverCache[feed.id] = notes
+        return notes
     }
 
     private static func topicNotes(_ tags: [String], limit: Int, includeReplies: Bool) async -> [Note] {
@@ -179,7 +211,7 @@ final class FeedViewModel {
             if tags.isEmpty { select(.following) } else { refreshTopicsQuietly() }
         case .following:
             if includeTopics { refreshTopicsQuietly() }
-        case .list:
+        case .list, .explore, .discover:
             break
         }
     }
@@ -215,7 +247,7 @@ final class FeedViewModel {
         fetched = result
         let visible = filtered(result)
         let me = Session.shared.pubkey
-        if notes.isEmpty || acceptNext {
+        if notes.isEmpty || acceptNext || source.isCurated {
             acceptNext = false
             show(visible)
         } else {
@@ -238,7 +270,7 @@ final class FeedViewModel {
         }
         if !result.isEmpty { isSyncing = false }
         hasLoaded = true
-        canLoadMore = !exhaustedRelays || result.count >= limit
+        canLoadMore = !source.isCurated && (!exhaustedRelays || result.count >= limit)
         afterLoad(visible)
     }
 
@@ -294,6 +326,8 @@ final class FeedViewModel {
     func refresh() async {
         acceptNext = true
         switch source {
+        case .explore: _ = await TrendingService.shared.trendingNoteIds(force: true)
+        case .discover(let feed): _ = await discoverNotes(feed, force: true)
         case .following:
             async let feed: Void = SyncService.shared.syncFeed(force: true)
             async let topics: Void = syncTopics(activeTopics, force: true)
@@ -312,7 +346,7 @@ final class FeedViewModel {
     }
 
     func loadMore() async {
-        guard canLoadMore, !isLoadingMore else { return }
+        guard canLoadMore, !isLoadingMore, !source.isCurated else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
         let generation = self.generation
@@ -350,6 +384,7 @@ final class FeedViewModel {
         self.source = source
         resetForContextChange()
         switch source {
+        case .explore, .discover: break
         case .list(let set): Task { await SyncService.shared.syncListFeed(set.pubkeys) }
         case .topic, .topics: syncTopicsInBackground()
         case .following: if includeTopics { syncTopicsInBackground() }
@@ -374,6 +409,11 @@ final class FeedViewModel {
             self?.isSyncing = false
         }
         Task { await reload() }
+    }
+
+    func pinnedFeedsChanged(_ pinned: [DiscoverFeed]) {
+        guard case .discover(let feed) = source, !pinned.contains(where: { $0.id == feed.id }) else { return }
+        select(.explore)
     }
 
     func loadLists() async {

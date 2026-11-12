@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_event.dart';
@@ -11,7 +10,11 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   static const String _oneTapZapKey = 'one_tap_zap';
   static const String _defaultZapAmountKey = 'default_zap_amount';
 
-  ThemeBloc() : super(const ThemeState()) {
+  ThemeBloc({bool systemIsDark = false})
+    : super(ThemeState(systemIsDark: systemIsDark)) {
+    on<ThemeSystemBrightnessChanged>((event, emit) {
+      emit(state.copyWith(systemIsDark: event.isDark));
+    });
     on<ThemeInitialized>(_onInitialized);
     on<ThemeToggled>(_onToggled);
     on<ThemeSetDark>(_onSetDark);
@@ -24,7 +27,9 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   }
 
   Future<void> _onInitialized(
-      ThemeInitialized event, Emitter<ThemeState> emit) async {
+    ThemeInitialized event,
+    Emitter<ThemeState> emit,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
 
     bool? isDarkModeOverride;
@@ -37,30 +42,30 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     List<int> bottomNavOrder = [0, 1, 2, 3];
     final orderList = prefs.getStringList(_bottomNavOrderKey);
     if (orderList != null && orderList.length == 4) {
-      bottomNavOrder = orderList.map((e) => int.parse(e)).toList();
+      final parsed = orderList.map(int.tryParse).toList();
+      if (parsed.every((index) => index != null && index >= 0 && index < 4) &&
+          parsed.toSet().length == 4) {
+        bottomNavOrder = parsed.cast<int>();
+      }
     }
 
     final oneTapZap = prefs.getBool(_oneTapZapKey) ?? false;
     final defaultZapAmount = prefs.getInt(_defaultZapAmountKey) ?? 21;
 
-    emit(ThemeState(
-      isDarkModeOverride: isDarkModeOverride,
-      isExpandedNoteMode: isExpandedNoteMode,
-      bottomNavOrder: bottomNavOrder,
-      oneTapZap: oneTapZap,
-      defaultZapAmount: defaultZapAmount,
-    ));
+    emit(
+      ThemeState(
+        isDarkModeOverride: isDarkModeOverride,
+        systemIsDark: state.systemIsDark,
+        isExpandedNoteMode: isExpandedNoteMode,
+        bottomNavOrder: bottomNavOrder,
+        oneTapZap: oneTapZap,
+        defaultZapAmount: defaultZapAmount,
+      ),
+    );
   }
 
   Future<void> _onToggled(ThemeToggled event, Emitter<ThemeState> emit) async {
-    bool newDarkMode;
-    if (state.isDarkModeOverride == null) {
-      final brightness =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      newDarkMode = brightness == Brightness.light;
-    } else {
-      newDarkMode = !state.isDarkModeOverride!;
-    }
+    final newDarkMode = !state.isDarkMode;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_themeKey, newDarkMode);
@@ -77,14 +82,18 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   }
 
   Future<void> _onSetSystem(
-      ThemeSetSystem event, Emitter<ThemeState> emit) async {
+    ThemeSetSystem event,
+    Emitter<ThemeState> emit,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_themeKey);
     emit(state.copyWith(clearDarkModeOverride: true));
   }
 
   Future<void> _onExpandedNoteModeToggled(
-      ExpandedNoteModeToggled event, Emitter<ThemeState> emit) async {
+    ExpandedNoteModeToggled event,
+    Emitter<ThemeState> emit,
+  ) async {
     final newValue = !state.isExpandedNoteMode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_expandedNoteModeKey, newValue);
@@ -92,7 +101,9 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   }
 
   Future<void> _onExpandedNoteModeSet(
-      ExpandedNoteModeSet event, Emitter<ThemeState> emit) async {
+    ExpandedNoteModeSet event,
+    Emitter<ThemeState> emit,
+  ) async {
     if (state.isExpandedNoteMode != event.isExpanded) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_expandedNoteModeKey, event.isExpanded);
@@ -101,17 +112,25 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   }
 
   Future<void> _onBottomNavOrderSet(
-      BottomNavOrderSet event, Emitter<ThemeState> emit) async {
-    if (event.order.length == 4 && event.order.toSet().length == 4) {
+    BottomNavOrderSet event,
+    Emitter<ThemeState> emit,
+  ) async {
+    if (event.order.length == 4 &&
+        event.order.toSet().length == 4 &&
+        event.order.every((index) => index >= 0 && index < 4)) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
-          _bottomNavOrderKey, event.order.map((e) => e.toString()).toList());
+        _bottomNavOrderKey,
+        event.order.map((e) => e.toString()).toList(),
+      );
       emit(state.copyWith(bottomNavOrder: List.from(event.order)));
     }
   }
 
   Future<void> _onOneTapZapSet(
-      OneTapZapSet event, Emitter<ThemeState> emit) async {
+    OneTapZapSet event,
+    Emitter<ThemeState> emit,
+  ) async {
     if (state.oneTapZap != event.enabled) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_oneTapZapKey, event.enabled);
@@ -120,12 +139,13 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   }
 
   Future<void> _onDefaultZapAmountSet(
-      DefaultZapAmountSet event, Emitter<ThemeState> emit) async {
+    DefaultZapAmountSet event,
+    Emitter<ThemeState> emit,
+  ) async {
     if (event.amount > 0 && state.defaultZapAmount != event.amount) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_defaultZapAmountKey, event.amount);
       emit(state.copyWith(defaultZapAmount: event.amount));
     }
   }
-
 }

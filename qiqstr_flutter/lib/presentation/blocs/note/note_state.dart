@@ -56,21 +56,21 @@ class NoteComposeState extends NoteState {
 
   @override
   List<Object?> get props => [
-        content,
-        isReply,
-        isQuote,
-        rootId,
-        replyId,
-        parentAuthor,
-        quoteEventId,
-        mediaUrls,
-        mediaDimensions,
-        isUploadingMedia,
-        isPublishing,
-        isSearchingUsers,
-        userSuggestions,
-        canPost,
-      ];
+    content,
+    isReply,
+    isQuote,
+    rootId,
+    replyId,
+    parentAuthor,
+    quoteEventId,
+    mediaUrls,
+    mediaDimensions,
+    isUploadingMedia,
+    isPublishing,
+    isSearchingUsers,
+    userSuggestions,
+    canPost,
+  ];
 
   NoteComposeState copyWith({
     String? content,
@@ -87,13 +87,14 @@ class NoteComposeState extends NoteState {
     bool? isSearchingUsers,
     List<Map<String, dynamic>>? userSuggestions,
     bool? canPost,
+    bool clearReplyId = false,
   }) {
     return NoteComposeState(
       content: content ?? this.content,
       isReply: isReply ?? this.isReply,
       isQuote: isQuote ?? this.isQuote,
       rootId: rootId ?? this.rootId,
-      replyId: replyId ?? this.replyId,
+      replyId: clearReplyId ? null : (replyId ?? this.replyId),
       parentAuthor: parentAuthor ?? this.parentAuthor,
       quoteEventId: quoteEventId ?? this.quoteEventId,
       mediaUrls: mediaUrls ?? this.mediaUrls,

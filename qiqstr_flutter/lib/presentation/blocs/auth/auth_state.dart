@@ -59,11 +59,13 @@ class AuthInputState extends AuthState {
     bool? isValid,
     String? validationError,
     bool? obscureNsec,
+    bool clearValidationError = false,
   }) {
     return AuthInputState(
       nsecInput: nsecInput ?? this.nsecInput,
       isValid: isValid ?? this.isValid,
-      validationError: validationError ?? this.validationError,
+      validationError:
+          clearValidationError ? null : validationError ?? this.validationError,
       obscureNsec: obscureNsec ?? this.obscureNsec,
     );
   }

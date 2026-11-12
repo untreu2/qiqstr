@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../data/services/auth_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:qiqstr/ui/theme/theme_manager.dart';
+import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/title_widget.dart';

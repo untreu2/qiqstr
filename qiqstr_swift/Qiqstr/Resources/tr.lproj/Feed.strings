@@ -76,3 +76,6 @@
 "feedTopicInvalid" = "Harf, rakam, kısa çizgi veya alt çizgi kullan.";
 "feedTopicsUnavailable" = "Konuların yüklenemedi. Bağlantını kontrol edip tekrar dene.";
 "feedTopicPostsLastDay" = "{count, plural, =1{Son 24 saatte 1 gönderi} other{Son 24 saatte # gönderi}}";
+"reposted" = "Yeniden paylaşıldı";
+"liked" = "Beğenildi";
+"reactWithEmoji" = "Emoji ile tepki ver";

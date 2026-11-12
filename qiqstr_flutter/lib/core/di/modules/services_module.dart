@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app_di.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/encrypted_bookmark_service.dart';
+import '../../../data/services/encrypted_mute_service.dart';
+import '../../../data/services/encrypted_media_service.dart';
+import '../../../data/services/pinned_notes_service.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/spark_service.dart';
 import '../../../data/services/nwc_service.dart';
@@ -19,25 +23,26 @@ import '../../../data/services/vertex_search_service.dart';
 class ServicesModule extends DIModule {
   @override
   Future<void> register() async {
+    await clearAccountCaches();
     AppDI.registerLazySingleton<RustDatabaseService>(
-        () => RustDatabaseService.instance);
+      () => RustDatabaseService.instance,
+    );
     AppDI.registerLazySingleton<AuthService>(() => AuthService.instance);
     AppDI.registerLazySingleton<ValidationService>(
-        () => ValidationService.instance);
+      () => ValidationService.instance,
+    );
     AppDI.registerLazySingleton<SparkService>(
       () => SparkService(),
       dispose: (service) => service.dispose(),
     );
     AppDI.registerLazySingleton<NwcService>(() => NwcService());
     AppDI.registerLazySingleton<DmService>(
-      () => DmService(
-        authService: AppDI.get<AuthService>(),
-      ),
+      () => DmService(authService: AppDI.get<AuthService>()),
       dispose: (service) => service.dispose(),
     );
-    AppDI.registerLazySingleton<EventPublisher>(() => EventPublisher(
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerLazySingleton<EventPublisher>(
+      () => EventPublisher(authService: AppDI.get<AuthService>()),
+    );
     AppDI.registerLazySingleton<SyncService>(
       () => SyncService(
         db: AppDI.get<RustDatabaseService>(),
@@ -46,7 +51,8 @@ class ServicesModule extends DIModule {
       dispose: (service) => service.dispose(),
     );
     AppDI.registerLazySingleton<VertexSearchService>(
-        () => VertexSearchService.instance);
+      () => VertexSearchService.instance,
+    );
     await AuthService.instance.refreshCache();
 
     final currentNpub = AuthService.instance.currentUserNpub;
@@ -57,6 +63,16 @@ class ServicesModule extends DIModule {
     }
 
     await _initRelayService();
+  }
+
+  static Future<void> clearAccountCaches() async {
+    await EncryptedMediaService.instance.clearDecryptedMediaCache();
+    EncryptedBookmarkService.instance.clear();
+    EncryptedMuteService.instance.clear();
+    FollowSetService.instance.clear();
+    PinnedNotesService.instance.clear();
+    InteractionService.instance.setCurrentUser(null);
+    await rust_db.setActiveMuteList(mutedPubkeys: [], mutedWords: []);
   }
 
   Future<void> _initRelayService() async {
@@ -109,6 +125,7 @@ class ServicesModule extends DIModule {
 
   static Future<void> reinitializeForAccountSwitch() async {
     try {
+      await clearAccountCaches();
       final authService = AuthService.instance;
       await authService.refreshCache();
 
@@ -143,15 +160,18 @@ class ServicesModule extends DIModule {
         if (gossipEnabled) {
           Future.microtask(() async {
             try {
-              final follows =
-                  await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex!);
+              final follows = await rust_db.dbGetFollowingList(
+                pubkeyHex: userPubkeyHex!,
+              );
               if (follows.isNotEmpty) {
                 final allPubkeys = [userPubkeyHex, ...follows];
-                await RustRelayService.instance
-                    .discoverAndConnectOutboxRelays(allPubkeys);
+                await RustRelayService.instance.discoverAndConnectOutboxRelays(
+                  allPubkeys,
+                );
               } else {
-                await RustRelayService.instance
-                    .discoverAndConnectOutboxRelays([userPubkeyHex]);
+                await RustRelayService.instance.discoverAndConnectOutboxRelays([
+                  userPubkeyHex,
+                ]);
               }
             } catch (e) {
               if (kDebugMode) {
@@ -176,9 +196,7 @@ class ServicesModule extends DIModule {
     Future.microtask(() async {
       try {
         final sizeMb = (await rust_relay.getDatabaseSizeMb()).toInt();
-        if (sizeMb > 1500) {
-          await rust_db.dbWipeDirectory();
-        } else if (sizeMb > 500) {
+        if (sizeMb > 500) {
           await rust_db.dbSmartCleanup(
             ownPubkeyHex: ownPubkeyHex,
             interactionDays: 5,
@@ -198,13 +216,20 @@ class ServicesModule extends DIModule {
   }
 
   void _loadFollowSets(String userPubkeyHex) {
+    final service = FollowSetService.instance;
+    final generation = service.sessionGeneration;
+    bool isCurrentSession() =>
+        generation == service.sessionGeneration &&
+        AuthService.instance.currentUserPubkeyHex == userPubkeyHex;
     Future.microtask(() async {
       try {
-        final service = FollowSetService.instance;
-        if (!service.isInitialized) {
+        if (isCurrentSession() && !service.isInitialized) {
           await service.loadFromDatabase(userPubkeyHex: userPubkeyHex);
-          final follows =
-              await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex);
+          if (!isCurrentSession()) return;
+          final follows = await rust_db.dbGetFollowingList(
+            pubkeyHex: userPubkeyHex,
+          );
+          if (!isCurrentSession()) return;
           if (follows.isNotEmpty) {
             await service.loadFollowedUsersSets(followedPubkeys: follows);
           }
@@ -220,15 +245,18 @@ class ServicesModule extends DIModule {
   void _discoverOutboxRelays(String userPubkeyHex) {
     Future.microtask(() async {
       try {
-        final follows =
-            await rust_db.dbGetFollowingList(pubkeyHex: userPubkeyHex);
+        final follows = await rust_db.dbGetFollowingList(
+          pubkeyHex: userPubkeyHex,
+        );
         if (follows.isNotEmpty) {
           final allPubkeys = [userPubkeyHex, ...follows];
-          await RustRelayService.instance
-              .discoverAndConnectOutboxRelays(allPubkeys);
+          await RustRelayService.instance.discoverAndConnectOutboxRelays(
+            allPubkeys,
+          );
         } else {
-          await RustRelayService.instance
-              .discoverAndConnectOutboxRelays([userPubkeyHex]);
+          await RustRelayService.instance.discoverAndConnectOutboxRelays([
+            userPubkeyHex,
+          ]);
         }
       } catch (e) {
         if (kDebugMode) {

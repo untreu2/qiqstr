@@ -37,6 +37,7 @@ class PinnedNotesService {
       });
       final eventsJson =
           await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
+      if (_currentUserPubkey != userPubkeyHex) return;
       final events = jsonDecode(eventsJson) as List<dynamic>;
 
       if (events.isEmpty) {
@@ -49,6 +50,7 @@ class PinnedNotesService {
       _pinnedNoteIds = _extractEventIdsFromTags(event);
       _initialized = true;
     } catch (_) {
+      if (_currentUserPubkey != userPubkeyHex) return;
       _initialized = true;
     }
   }
@@ -76,10 +78,7 @@ class PinnedNotesService {
     final tags = event['tags'] as List<dynamic>? ?? [];
     return tags
         .where((tag) =>
-            tag is List &&
-            tag.isNotEmpty &&
-            tag[0] == 'e' &&
-            tag.length > 1)
+            tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length > 1)
         .map((tag) => (tag as List)[1] as String)
         .toList();
   }

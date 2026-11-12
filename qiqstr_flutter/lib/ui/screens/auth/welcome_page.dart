@@ -1,30 +1,25 @@
-import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/theme_manager.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/dialogs/language_dialog.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../core/di/app_di.dart';
+import '../../../presentation/blocs/welcome/welcome_bloc.dart';
+import '../../../presentation/blocs/welcome/welcome_event.dart';
+import '../../../presentation/blocs/welcome/welcome_state.dart';
 import '../../../presentation/blocs/locale/locale_bloc.dart';
 import '../../../presentation/blocs/locale/locale_state.dart';
 
-class WelcomePage extends StatefulWidget {
+class WelcomePage extends StatelessWidget {
   final bool isAddAccount;
   const WelcomePage({super.key, this.isAddAccount = false});
-
-  @override
-  State<WelcomePage> createState() => _WelcomePageState();
-}
-
-class _WelcomePageState extends State<WelcomePage> {
-  bool _acceptedTerms = false;
-  String _message = '';
 
   static const _termsUrl =
       'https://github.com/untreu2/qiqstr/blob/master/TERMS.md';
@@ -33,55 +28,59 @@ class _WelcomePageState extends State<WelcomePage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    return BlocBuilder<LocaleBloc, LocaleState>(
-      builder: (context, localeState) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: SafeArea(
-            child: Stack(
-              children: [
-                Column(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildTitle(context, l10n),
-                            const SizedBox(height: 32),
-                            _buildFeatures(context, l10n),
-                          ],
-                        ),
-                      ),
-                    ),
-                    _buildAcceptTerms(context, l10n),
-                    const SizedBox(height: 20),
-                    if (_message.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Center(
-                          child: Text(
-                            _message,
-                            style: TextStyle(
-                              color: context.colors.error,
-                              fontWeight: FontWeight.w600,
-                            ),
+    return BlocProvider(
+      create: (_) => AppDI.get<WelcomeBloc>(),
+      child: BlocBuilder<WelcomeBloc, WelcomeState>(
+        builder: (context, state) {
+          final localeState = context.watch<LocaleBloc>().state;
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildTitle(context, l10n),
+                              const SizedBox(height: 32),
+                              _buildFeatures(context, l10n),
+                            ],
                           ),
                         ),
                       ),
-                    _buildBottomButtons(context, l10n),
-                  ],
-                ),
-                _buildLanguageButton(context, localeState),
-                if (widget.isAddAccount)
-                  BackButtonWidget.floating(
-                    onPressed: () => context.pop(),
+                      _buildAcceptTerms(context, l10n),
+                      const SizedBox(height: 20),
+                      if (state.showTermsError)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Center(
+                            child: Text(
+                              l10n.acceptanceOfTermsIsRequired,
+                              style: TextStyle(
+                                color: context.colors.error,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      _buildBottomButtons(context, l10n),
+                    ],
                   ),
-              ],
+                  _buildLanguageButton(context, localeState),
+                  if (isAddAccount)
+                    BackButtonWidget.floating(
+                      onPressed: () => context.pop(),
+                    ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -210,9 +209,11 @@ class _WelcomePageState extends State<WelcomePage> {
   }
 
   Widget _buildAcceptTerms(BuildContext context, AppLocalizations l10n) {
+    final bloc = context.read<WelcomeBloc>();
+    final acceptedTerms = bloc.state.acceptedTerms;
     return Center(
       child: GestureDetector(
-        onTap: () => setState(() => _acceptedTerms = !_acceptedTerms),
+        onTap: () => bloc.add(WelcomeTermsChanged(!acceptedTerms)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -220,9 +221,9 @@ class _WelcomePageState extends State<WelcomePage> {
               width: 24,
               height: 24,
               child: Checkbox(
-                value: _acceptedTerms,
+                value: acceptedTerms,
                 onChanged: (value) =>
-                    setState(() => _acceptedTerms = value ?? false),
+                    bloc.add(WelcomeTermsChanged(value ?? false)),
                 activeColor: context.colors.textPrimary,
                 checkColor: context.colors.background,
                 side: BorderSide(color: context.colors.textSecondary),
@@ -238,17 +239,21 @@ class _WelcomePageState extends State<WelcomePage> {
                   ),
                   children: [
                     TextSpan(text: l10n.iAcceptThe),
-                    TextSpan(
-                      text: l10n.termsOfUse,
-                      style: TextStyle(
-                        color: context.colors.textPrimary,
-                        decoration: TextDecoration.underline,
+                    WidgetSpan(
+                      child: GestureDetector(
+                        onTap: () => launchUrl(
+                          Uri.parse(_termsUrl),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                        child: Text(
+                          l10n.termsOfUse,
+                          style: TextStyle(
+                            color: context.colors.textPrimary,
+                            decoration: TextDecoration.underline,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = () => launchUrl(
-                              Uri.parse(_termsUrl),
-                              mode: LaunchMode.externalApplication,
-                            ),
                     ),
                   ],
                 ),
@@ -261,6 +266,8 @@ class _WelcomePageState extends State<WelcomePage> {
   }
 
   Widget _buildBottomButtons(BuildContext context, AppLocalizations l10n) {
+    final bloc = context.read<WelcomeBloc>();
+    final acceptedTerms = bloc.state.acceptedTerms;
     return Padding(
       padding: const EdgeInsets.only(
         bottom: 16,
@@ -274,20 +281,19 @@ class _WelcomePageState extends State<WelcomePage> {
             width: double.infinity,
             child: PrimaryButton(
               label: l10n.createNewAccount,
-              onPressed: _acceptedTerms
-                  ? () => context.go(widget.isAddAccount
-                      ? '/signup?addAccount=true'
-                      : '/signup')
-                  : () => _showTermsRequired(l10n),
+              onPressed: acceptedTerms
+                  ? () => context
+                      .go(isAddAccount ? '/signup?addAccount=true' : '/signup')
+                  : () => bloc.add(const WelcomeTermsRequired()),
               size: ButtonSize.large,
             ),
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: _acceptedTerms
-                ? () => context.go(
-                    widget.isAddAccount ? '/login?addAccount=true' : '/login')
-                : () => _showTermsRequired(l10n),
+            onTap: acceptedTerms
+                ? () => context
+                    .go(isAddAccount ? '/login?addAccount=true' : '/login')
+                : () => bloc.add(const WelcomeTermsRequired()),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
@@ -303,10 +309,6 @@ class _WelcomePageState extends State<WelcomePage> {
         ],
       ),
     );
-  }
-
-  void _showTermsRequired(AppLocalizations l10n) {
-    setState(() => _message = l10n.acceptanceOfTermsIsRequired);
   }
 
   Widget _buildLanguageButton(BuildContext context, LocaleState localeState) {

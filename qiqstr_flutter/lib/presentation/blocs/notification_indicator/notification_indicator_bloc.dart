@@ -25,13 +25,10 @@ class NotificationIndicatorBloc
   int _watchGeneration = 0;
 
   NotificationIndicatorBloc({
-    required SyncService syncService,
-    required AuthService authService,
-    required NotificationRepository notificationRepository,
-  })  : _syncService = syncService,
-        _authService = authService,
-        _notificationRepository = notificationRepository,
-        super(const NotificationIndicatorInitial()) {
+    required this._syncService,
+    required this._authService,
+    required this._notificationRepository,
+  })  : super(const NotificationIndicatorInitial()) {
     on<NotificationIndicatorInitialized>(
       _onInitialized,
       transformer: restartable(),

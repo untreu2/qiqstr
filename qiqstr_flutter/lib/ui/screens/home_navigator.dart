@@ -6,7 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'package:qiqstr/ui/screens/note/share_note.dart';
+import 'note/share_note.dart';
 import '../theme/theme_manager.dart';
 import '../../core/di/app_di.dart';
 import '../../presentation/blocs/theme/theme_bloc.dart';
@@ -19,7 +19,6 @@ import '../../presentation/blocs/dm/dm_event.dart' as dm_events;
 import '../../presentation/blocs/dm_indicator/dm_indicator_bloc.dart';
 import '../../presentation/blocs/dm_indicator/dm_indicator_event.dart';
 import '../../presentation/blocs/dm_indicator/dm_indicator_state.dart';
-import '../../data/services/spark_service.dart';
 import '../../core/scroll_to_top_notifier.dart';
 
 class HomeNavigator extends StatefulWidget {
@@ -130,6 +129,7 @@ class _HomeNavigatorState extends State<HomeNavigator>
                   if (item['type'] == 'add') {
                     return Expanded(
                       child: GestureDetector(
+                        key: const ValueKey('compose-note'),
                         onTap: () async {
                           HapticFeedback.lightImpact();
                           final result = await ShareNotePage.show(context);
@@ -162,21 +162,15 @@ class _HomeNavigatorState extends State<HomeNavigator>
                   }
 
                   final originalIndex = index;
-                  final themeState = context.themeState;
-                  final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
-                  final pageViewIndex = navOrder.indexOf(originalIndex);
                   final bool isSelected =
-                      widget.navigationShell.currentIndex == pageViewIndex;
+                      widget.navigationShell.currentIndex == originalIndex;
 
                   return Expanded(
                     child: GestureDetector(
+                      key: ValueKey('navigation-$originalIndex'),
                       onTap: () {
                         HapticFeedback.lightImpact();
-                        final themeState = context.themeState;
-                        final navOrder =
-                            themeState?.bottomNavOrder ?? [0, 1, 2, 3];
-                        final pageViewIndex = navOrder.indexOf(originalIndex);
-                        _handleNavigation(pageViewIndex);
+                        _handleNavigation(originalIndex);
                       },
                       behavior: HitTestBehavior.opaque,
                       child: Center(
@@ -329,67 +323,53 @@ class _HomeNavigatorState extends State<HomeNavigator>
     );
   }
 
-  Future<void> _handleNavigation(int pageViewIndex) async {
-    final themeState = context.themeState;
-    final navOrder = themeState?.bottomNavOrder ?? [0, 1, 2, 3];
-    final originalIndex = navOrder[pageViewIndex];
-
+  void _handleNavigation(int originalIndex) {
     if (originalIndex == 0) {
-      if (widget.navigationShell.currentIndex == pageViewIndex) {
+      if (widget.navigationShell.currentIndex == originalIndex) {
         final location = GoRouterState.of(context).uri.toString();
         final isAtFeedRoot = location.startsWith('/home/feed') &&
             !location.startsWith('/home/feed/');
         if (isAtFeedRoot) {
           ScrollToTopNotifier.triggerFeed();
         } else {
-          widget.navigationShell.goBranch(pageViewIndex, initialLocation: true);
+          widget.navigationShell.goBranch(originalIndex, initialLocation: true);
         }
       } else {
         if (mounted) {
           _iconAnimationController.reset();
           _iconAnimationController.forward();
-          widget.navigationShell.goBranch(pageViewIndex);
+          widget.navigationShell.goBranch(originalIndex);
         }
       }
     } else if (originalIndex == 2) {
-      final sparkService = AppDI.get<SparkService>();
-      final isConnectedResult = await sparkService.isConnected();
-      final isConnected =
-          isConnectedResult.isSuccess && isConnectedResult.data == true;
-      if (!mounted) return;
-      if (!isConnected) {
-        context
-            .push('/onboarding-spark?npub=${Uri.encodeComponent(widget.npub)}');
-        return;
-      }
       _iconAnimationController.reset();
       _iconAnimationController.forward();
-      widget.navigationShell.goBranch(pageViewIndex);
+      widget.navigationShell.goBranch(originalIndex);
     } else if (originalIndex == 1) {
       AppDI.get<DmIndicatorBloc>().add(const DmIndicatorChecked());
       if (mounted) {
         _iconAnimationController.reset();
         _iconAnimationController.forward();
-        widget.navigationShell.goBranch(pageViewIndex);
+        widget.navigationShell.goBranch(originalIndex);
       }
     } else if (originalIndex == 3) {
       final indicatorBloc = AppDI.get<NotificationIndicatorBloc>();
       indicatorBloc.add(const NotificationIndicatorChecked());
-      if (widget.navigationShell.currentIndex == pageViewIndex) {
+      if (widget.navigationShell.currentIndex == originalIndex) {
         final npub = widget.npub;
         context.go('/home/notifications?npub=${Uri.encodeComponent(npub)}');
       } else {
         if (mounted) {
           _iconAnimationController.reset();
           _iconAnimationController.forward();
-          widget.navigationShell.goBranch(pageViewIndex);
+          widget.navigationShell.goBranch(originalIndex);
         }
       }
     } else {
       if (mounted) {
         _iconAnimationController.reset();
         _iconAnimationController.forward();
-        widget.navigationShell.goBranch(pageViewIndex);
+        widget.navigationShell.goBranch(originalIndex);
       }
     }
   }
@@ -412,13 +392,8 @@ class _HomeNavigatorState extends State<HomeNavigator>
                 return;
               }
 
-              final navOrder =
-                  context.themeState?.bottomNavOrder ?? [0, 1, 2, 3];
-              final feedPageViewIndex = navOrder.indexOf(0);
-
-              if (widget.navigationShell.currentIndex != feedPageViewIndex) {
-                widget.navigationShell
-                    .goBranch(feedPageViewIndex, initialLocation: true);
+              if (widget.navigationShell.currentIndex != 0) {
+                widget.navigationShell.goBranch(0, initialLocation: true);
               }
             },
             child: Scaffold(

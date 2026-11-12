@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:breez_sdk_spark_flutter/breez_sdk_spark.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -25,22 +26,20 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   StreamSubscription<SdkEvent>? _sdkEventSubscription;
 
   WalletBloc({
-    required SparkService sparkService,
-    required NwcService nwcService,
-    required AuthService authService,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
+    required this._sparkService,
+    required this._nwcService,
+    required this._authService,
+    required this._profileRepository,
+    required this._syncService,
     CashuService? cashuService,
-  })  : _sparkService = sparkService,
-        _nwcService = nwcService,
-        _authService = authService,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        _cashuService = cashuService ?? const CashuService(),
-        super(const WalletInitial()) {
+  }) : _cashuService = cashuService ?? const CashuService(),
+       super(const WalletInitial()) {
     on<WalletInitialized>(_onWalletInitialized);
     on<WalletBalanceRequested>(_onWalletBalanceRequested);
-    on<WalletPaymentRequested>(_onWalletPaymentRequested);
+    on<WalletPaymentRequested>(
+      _onWalletPaymentRequested,
+      transformer: droppable(),
+    );
     on<WalletTransactionsLoaded>(_onWalletTransactionsLoaded);
     on<WalletLightningAddressRequested>(_onWalletLightningAddressRequested);
     on<WalletLightningAddressRegistered>(_onWalletLightningAddressRegistered);
@@ -131,7 +130,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       'amount': payment.amount.toInt(),
       'timestamp': payment.timestamp.toInt(),
       'status': payment.status.name,
-      if (invoice != null) 'invoice': invoice,
+      'invoice': ?invoice,
     };
   }
 
@@ -147,7 +146,8 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     final paymentStatus = event.payment['status'] as String?;
     final paymentInvoice = event.payment['invoice'] as String?;
 
-    final isInvoiceMatch = current.watchedInvoice != null &&
+    final isInvoiceMatch =
+        current.watchedInvoice != null &&
         isIncoming &&
         paymentStatus == 'completed' &&
         paymentInvoice != null &&
@@ -163,10 +163,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       updatedTxs = [event.payment, ...existingTxs];
     }
 
-    emit(current.copyWith(
-      transactions: updatedTxs,
-      invoiceReceived: isInvoiceMatch ? true : current.invoiceReceived,
-    ));
+    emit(
+      current.copyWith(
+        transactions: updatedTxs,
+        invoiceReceived: isInvoiceMatch ? true : current.invoiceReceived,
+      ),
+    );
 
     add(const WalletBalanceRequested());
   }
@@ -184,10 +186,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     Emitter<WalletState> emit,
   ) async {
     if (state is WalletLoaded) {
-      emit((state as WalletLoaded).copyWith(
-        watchedInvoice: event.invoice,
-        invoiceReceived: false,
-      ));
+      emit(
+        (state as WalletLoaded).copyWith(
+          watchedInvoice: event.invoice,
+          invoiceReceived: false,
+        ),
+      );
     }
   }
 
@@ -196,10 +200,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     Emitter<WalletState> emit,
   ) async {
     if (state is WalletLoaded) {
-      emit((state as WalletLoaded).copyWith(
-        clearWatchedInvoice: true,
-        invoiceReceived: false,
-      ));
+      emit(
+        (state as WalletLoaded).copyWith(
+          clearWatchedInvoice: true,
+          invoiceReceived: false,
+        ),
+      );
     }
   }
 
@@ -213,10 +219,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       result.fold(
         (balanceMsat) {
           if (state is WalletLoaded) {
-            emit((state as WalletLoaded).copyWith(
-              balanceSats: balanceMsat ~/ 1000,
-              balanceError: null,
-            ));
+            emit(
+              (state as WalletLoaded).copyWith(
+                balanceSats: balanceMsat ~/ 1000,
+                clearBalanceError: true,
+              ),
+            );
           }
         },
         (error) {
@@ -234,11 +242,13 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     result.fold(
       (balanceSats) {
         if (state is WalletLoaded) {
-          emit((state as WalletLoaded).copyWith(
-            isConnected: true,
-            balanceSats: balanceSats,
-            balanceError: null,
-          ));
+          emit(
+            (state as WalletLoaded).copyWith(
+              isConnected: true,
+              balanceSats: balanceSats,
+              clearBalanceError: true,
+            ),
+          );
         } else {
           emit(WalletLoaded(isConnected: true, balanceSats: balanceSats));
         }
@@ -256,34 +266,29 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletPaymentRequested event,
     Emitter<WalletState> emit,
   ) async {
+    if (state is! WalletLoaded || !(state as WalletLoaded).isConnected) return;
     if (state is WalletLoaded && (state as WalletLoaded).isNwcMode) {
       final result = await _nwcService.payInvoice(event.invoice);
       if (isClosed) return;
-      result.fold(
-        (_) {
-          if (state is WalletLoaded) {
-            emit((state as WalletLoaded).copyWith(clearPaymentError: true));
-          }
-          add(const WalletBalanceRequested());
-          add(const WalletTransactionsLoaded());
-        },
-        (error) => _emitPaymentError(error, emit),
-      );
-      return;
-    }
-
-    final result = await _sparkService.payLightningInvoice(event.invoice);
-    if (isClosed) return;
-    result.fold(
-      (_) {
+      result.fold((_) {
         if (state is WalletLoaded) {
           emit((state as WalletLoaded).copyWith(clearPaymentError: true));
         }
         add(const WalletBalanceRequested());
         add(const WalletTransactionsLoaded());
-      },
-      (error) => _emitPaymentError(error, emit),
-    );
+      }, (error) => _emitPaymentError(error, emit));
+      return;
+    }
+
+    final result = await _sparkService.payLightningInvoice(event.invoice);
+    if (isClosed) return;
+    result.fold((_) {
+      if (state is WalletLoaded) {
+        emit((state as WalletLoaded).copyWith(clearPaymentError: true));
+      }
+      add(const WalletBalanceRequested());
+      add(const WalletTransactionsLoaded());
+    }, (error) => _emitPaymentError(error, emit));
   }
 
   void _emitPaymentError(String error, Emitter<WalletState> emit) {
@@ -309,10 +314,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       result.fold(
         (transactions) {
           if (state is WalletLoaded) {
-            emit((state as WalletLoaded).copyWith(
-              transactions: transactions,
-              isLoadingTransactions: false,
-            ));
+            emit(
+              (state as WalletLoaded).copyWith(
+                transactions: transactions,
+                isLoadingTransactions: false,
+              ),
+            );
           }
         },
         (error) {
@@ -320,8 +327,9 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
             debugPrint('[WalletBloc] NWC transactions error: $error');
           }
           if (state is WalletLoaded) {
-            emit((state as WalletLoaded)
-                .copyWith(isLoadingTransactions: false));
+            emit(
+              (state as WalletLoaded).copyWith(isLoadingTransactions: false),
+            );
           }
         },
       );
@@ -333,16 +341,20 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     result.fold(
       (transactions) {
         if (state is WalletLoaded) {
-          emit((state as WalletLoaded).copyWith(
-            transactions: transactions,
-            isLoadingTransactions: false,
-          ));
+          emit(
+            (state as WalletLoaded).copyWith(
+              transactions: transactions,
+              isLoadingTransactions: false,
+            ),
+          );
         } else {
-          emit(WalletLoaded(
-            isConnected: true,
-            transactions: transactions,
-            isLoadingTransactions: false,
-          ));
+          emit(
+            WalletLoaded(
+              isConnected: true,
+              transactions: transactions,
+              isLoadingTransactions: false,
+            ),
+          );
         }
       },
       (error) {
@@ -375,8 +387,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletLightningAddressRegistered event,
     Emitter<WalletState> emit,
   ) async {
-    final result =
-        await _sparkService.registerLightningAddress(event.username);
+    final result = await _sparkService.registerLightningAddress(event.username);
     if (isClosed) return;
     await result.fold(
       (address) async {
@@ -385,8 +396,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         }
         await _publishLud16ToProfile(address);
       },
-      (error) async =>
-          emit(WalletError('Failed to register address: $error')),
+      (error) async => emit(WalletError('Failed to register address: $error')),
     );
   }
 
@@ -397,11 +407,15 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     if (state is! WalletLoaded) return;
     final current = state as WalletLoaded;
 
-    emit(current.copyWith(
-      isRedeemingCashu: true,
-      clearCashuRedeemError: true,
-      clearCashuRedeemedAmount: true,
-    ));
+    if (current.isRedeemingCashu) return;
+
+    emit(
+      current.copyWith(
+        isRedeemingCashu: true,
+        clearCashuRedeemError: true,
+        clearCashuRedeemedAmount: true,
+      ),
+    );
 
     final result = await _cashuService.receiveAndMelt(
       token: event.token,
@@ -413,10 +427,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     result.fold(
       (amountSats) {
         if (state is WalletLoaded) {
-          emit((state as WalletLoaded).copyWith(
-            isRedeemingCashu: false,
-            cashuRedeemedAmountSats: amountSats,
-          ));
+          emit(
+            (state as WalletLoaded).copyWith(
+              isRedeemingCashu: false,
+              cashuRedeemedAmountSats: amountSats,
+            ),
+          );
           add(const WalletBalanceRequested());
           add(const WalletTransactionsLoaded());
           add(const WalletCashuBalanceRequested());
@@ -424,10 +440,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       },
       (error) {
         if (state is WalletLoaded) {
-          emit((state as WalletLoaded).copyWith(
-            isRedeemingCashu: false,
-            cashuRedeemError: error,
-          ));
+          emit(
+            (state as WalletLoaded).copyWith(
+              isRedeemingCashu: false,
+              cashuRedeemError: error,
+            ),
+          );
         }
       },
     );
@@ -439,12 +457,15 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   ) async {
     if (state is! WalletLoaded) return;
     final current = state as WalletLoaded;
+    if (current.isRedeemingCashu) return;
 
-    emit(current.copyWith(
-      isRedeemingCashu: true,
-      clearCashuRedeemError: true,
-      clearCashuRedeemedAmount: true,
-    ));
+    emit(
+      current.copyWith(
+        isRedeemingCashu: true,
+        clearCashuRedeemError: true,
+        clearCashuRedeemedAmount: true,
+      ),
+    );
 
     final result = await _cashuService.meltAll(
       lightningTarget: event.lightningTarget,
@@ -455,21 +476,26 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     result.fold(
       (totalSats) {
         if (state is WalletLoaded) {
-          emit((state as WalletLoaded).copyWith(
-            isRedeemingCashu: false,
-            cashuRedeemedAmountSats: totalSats,
-            cashuBalanceSats: 0,
-          ));
+          emit(
+            (state as WalletLoaded).copyWith(
+              isRedeemingCashu: false,
+              cashuRedeemedAmountSats: totalSats,
+            ),
+          );
           add(const WalletBalanceRequested());
           add(const WalletTransactionsLoaded());
+          add(const WalletCashuBalanceRequested());
         }
       },
       (error) {
         if (state is WalletLoaded) {
-          emit((state as WalletLoaded).copyWith(
-            isRedeemingCashu: false,
-            cashuRedeemError: error,
-          ));
+          emit(
+            (state as WalletLoaded).copyWith(
+              isRedeemingCashu: false,
+              cashuRedeemError: error,
+            ),
+          );
+          add(const WalletCashuBalanceRequested());
         }
       },
     );
@@ -481,16 +507,13 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   ) async {
     final result = await _cashuService.getBalance();
     if (isClosed) return;
-    result.fold(
-      (balance) {
-        if (state is WalletLoaded) {
-          emit((state as WalletLoaded).copyWith(
-            cashuBalanceSats: balance.totalSats,
-          ));
-        }
-      },
-      (_) {},
-    );
+    result.fold((balance) {
+      if (state is WalletLoaded) {
+        emit(
+          (state as WalletLoaded).copyWith(cashuBalanceSats: balance.totalSats),
+        );
+      }
+    }, (_) {});
   }
 
   Future<void> _publishLud16ToProfile(String lud16) async {
@@ -499,8 +522,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       if (pubkeyResult.isError || pubkeyResult.data == null) return;
 
       final pubkeyHex = pubkeyResult.data!;
-      var existingProfile =
-          await _profileRepository.getProfile(pubkeyHex);
+      var existingProfile = await _profileRepository.getProfile(pubkeyHex);
 
       if (existingProfile == null) {
         await _syncService.syncProfile(pubkeyHex);

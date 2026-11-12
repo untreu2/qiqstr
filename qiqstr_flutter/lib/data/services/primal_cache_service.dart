@@ -1,131 +1,173 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+
 import '../../constants/relays.dart';
+import '../../core/base/result.dart';
 
 const int userFollowerCounts = 10000133;
 
 class PrimalCacheService {
-  static PrimalCacheService? _instance;
-  static PrimalCacheService get instance {
-    _instance ??= PrimalCacheService._internal();
-    return _instance!;
-  }
+  static final PrimalCacheService instance = PrimalCacheService();
 
-  PrimalCacheService._internal();
+  PrimalCacheService({
+    Future<WebSocket> Function()? socketFactory,
+    this._connectionTimeout = const Duration(seconds: 5),
+    this._requestTimeout = const Duration(seconds: 8),
+  }) : _socketFactory =
+           socketFactory ?? (() => WebSocket.connect(primalCacheUrl));
 
   static const Duration _followerCountTtl = Duration(minutes: 5);
 
+  final Future<WebSocket> Function() _socketFactory;
+  final Duration _connectionTimeout;
+  final Duration _requestTimeout;
   WebSocket? _ws;
-  bool _connecting = false;
-  final Map<String, Completer<Map<String, int>>> _pendingCountRequests = {};
+  Future<WebSocket?>? _connection;
+  bool _disposed = false;
+  final Map<String, _FollowerCountRequest> _pendingCountRequests = {};
   int _subscriptionCounter = 0;
   final Map<String, int> _followerCountCache = {};
   final Map<String, DateTime> _followerCountCacheTime = {};
 
-  Future<WebSocket?> _ensureConnection() async {
-    if (_ws != null && _ws!.readyState == WebSocket.open) return _ws;
-    if (_connecting) {
-      for (int i = 0; i < 20; i++) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (_ws != null && _ws!.readyState == WebSocket.open) return _ws;
-      }
-      return null;
+  Future<WebSocket?> _ensureConnection() {
+    if (_disposed) return Future.value();
+    final socket = _ws;
+    if (socket != null) {
+      if (socket.readyState == WebSocket.open) return Future.value(socket);
+      _onDisconnected(socket);
     }
+    return _connection ??= _connect();
+  }
 
-    _connecting = true;
+  Future<WebSocket?> _connect() async {
+    var abandoned = false;
     try {
-      _ws = await WebSocket.connect(primalCacheUrl)
-          .timeout(const Duration(seconds: 5));
-      _ws!.listen(
-        (data) {
-          try {
-            final decoded = jsonDecode(data as String) as List<dynamic>;
-            _handleMessage(decoded);
-          } catch (_) {}
-        },
-        onDone: () {
-          _ws = null;
-        },
-        onError: (_) {
-          _ws = null;
-        },
-      );
-      return _ws;
-    } catch (e) {
-      if (kDebugMode) {
-        print('[PrimalCacheService] Connection error: $e');
+      final socket = await Future.sync(_socketFactory)
+          .then((socket) {
+            if (abandoned || _disposed) {
+              unawaited(_closeSocket(socket));
+              return null;
+            }
+            return socket;
+          })
+          .timeout(
+            _connectionTimeout,
+            onTimeout: () {
+              abandoned = true;
+              return null;
+            },
+          );
+      if (socket == null) return null;
+      if (_disposed) {
+        unawaited(_closeSocket(socket));
+        return null;
       }
+      _ws = socket;
+      socket.listen(
+        (data) => _handleMessage(socket, data),
+        onDone: () => _onDisconnected(socket),
+        onError: (_) => _onDisconnected(socket),
+      );
+      return socket;
+    } catch (_) {
       return null;
     } finally {
-      _connecting = false;
+      _connection = null;
     }
   }
 
-  void _handleMessage(List<dynamic> decoded) {
+  void _onDisconnected(WebSocket socket) {
+    if (identical(_ws, socket)) _ws = null;
+    final subscriptions = _pendingCountRequests.entries
+        .where((entry) => identical(entry.value.socket, socket))
+        .map((entry) => entry.key)
+        .toList();
+    for (final subscriptionId in subscriptions) {
+      _completeRequest(
+        subscriptionId,
+        Result.error('Primal connection closed'),
+      );
+    }
+    unawaited(_closeSocket(socket));
+  }
+
+  void _handleMessage(WebSocket socket, dynamic data) {
+    if (data is! String) return;
     try {
-      if (decoded.length < 2) return;
-      final messageType = decoded[0] as String;
-      final subscriptionId = decoded[1] as String;
+      final decoded = jsonDecode(data);
+      if (decoded is! List || decoded.length < 2) return;
+      final subscriptionId = decoded[1];
+      if (subscriptionId is! String) return;
+      final request = _pendingCountRequests[subscriptionId];
+      if (request == null || !identical(request.socket, socket)) return;
 
-      if (messageType == 'EVENT' && decoded.length >= 3) {
-        final event = decoded[2] as Map<String, dynamic>;
-        final kind = event['kind'] as int?;
-
-        if (kind == userFollowerCounts &&
-            _pendingCountRequests.containsKey(subscriptionId)) {
-          final completer = _pendingCountRequests.remove(subscriptionId);
-          if (completer != null && !completer.isCompleted) {
-            try {
-              final content = jsonDecode(event['content'] as String)
-                  as Map<String, dynamic>;
-              final followerCounts = <String, int>{};
-              content.forEach((key, value) {
-                if (value is int) {
-                  followerCounts[key] = value;
-                }
-              });
-              completer.complete(followerCounts);
-            } catch (e) {
-              if (kDebugMode) {
-                print('[PrimalCacheService] Parse error: $e');
-              }
-              completer.complete({});
+      switch (decoded[0]) {
+        case 'EVENT':
+          if (decoded.length < 3) return;
+          final event = decoded[2];
+          if (event is! Map || event['kind'] != userFollowerCounts) return;
+          if (!event.containsKey('content')) return;
+          final content = event['content'];
+          if (content != null && content is! String) return;
+          final counts = content == null ? null : jsonDecode(content as String);
+          if (counts != null && counts is! Map<String, dynamic>) return;
+          final parsed = <String, int>{};
+          if (counts is Map<String, dynamic>) {
+            for (final entry in counts.entries) {
+              if (!request.pubkeys.contains(entry.key)) continue;
+              final count = entry.value;
+              if (count is! int || count < 0) return;
+              parsed[entry.key] = count;
             }
           }
-        }
-      } else if (messageType == 'EOSE') {
-        final countCompleter = _pendingCountRequests.remove(subscriptionId);
-        countCompleter?.complete({});
+          request.counts.addAll(parsed);
+          request.receivedCounts = true;
+        case 'EOSE':
+          _completeRequest(
+            subscriptionId,
+            Result.success(
+              request.receivedCounts
+                  ? {
+                      for (final pubkey in request.pubkeys)
+                        pubkey: request.counts[pubkey] ?? 0,
+                    }
+                  : {},
+            ),
+          );
+        case 'NOTICE':
+        case 'CLOSED':
+          _completeRequest(
+            subscriptionId,
+            Result.error('Primal request rejected'),
+          );
       }
-    } catch (e) {
-      if (kDebugMode) {
-        print('[PrimalCacheService] Message handling error: $e');
-      }
+    } on FormatException {
+      return;
     }
   }
 
-  Future<bool> _send(String message) async {
-    try {
-      final ws = await _ensureConnection();
-      if (ws == null || ws.readyState != WebSocket.open) return false;
-      ws.add(message);
-      return true;
-    } catch (e) {
-      return false;
+  void _completeRequest(
+    String subscriptionId,
+    Result<Map<String, int>> result,
+  ) {
+    final request = _pendingCountRequests.remove(subscriptionId);
+    if (request != null && !request.completer.isCompleted) {
+      request.completer.complete(result);
     }
   }
 
-  void _closeSubscription(String subscriptionId) {
+  void _closeSubscription(WebSocket socket, String subscriptionId) {
+    if (socket.readyState != WebSocket.open) return;
     try {
-      final closeRequest = ['CLOSE', subscriptionId];
-      _send(jsonEncode(closeRequest));
-    } catch (e) {
-      if (kDebugMode) {
-        print('[PrimalCacheService] Close subscription error: $e');
-      }
-    }
+      socket.add(jsonEncode(['CLOSE', subscriptionId]));
+    } catch (_) {}
+  }
+
+  Future<void> _closeSocket(WebSocket socket) async {
+    try {
+      await socket.close();
+    } catch (_) {}
   }
 
   Future<int> fetchFollowerCount(String pubkeyHex) async {
@@ -134,12 +176,11 @@ class PrimalCacheService {
   }
 
   Future<Map<String, int>> fetchFollowerCounts(List<String> pubkeyHexes) async {
-    if (pubkeyHexes.isEmpty) return {};
+    if (_disposed || pubkeyHexes.isEmpty) return {};
 
     final now = DateTime.now();
     final result = <String, int>{};
-    final uncached = <String>[];
-
+    final uncached = <String>{};
     for (final pubkey in pubkeyHexes) {
       final cachedAt = _followerCountCacheTime[pubkey];
       if (cachedAt != null && now.difference(cachedAt) < _followerCountTtl) {
@@ -148,57 +189,69 @@ class PrimalCacheService {
         uncached.add(pubkey);
       }
     }
-
     if (uncached.isEmpty) return result;
 
-    final subscriptionId =
-        'primal_${++_subscriptionCounter}_${DateTime.now().millisecondsSinceEpoch}';
-    final completer = Completer<Map<String, int>>();
-    _pendingCountRequests[subscriptionId] = completer;
-
-    try {
-      final request = [
-        'REQ',
-        subscriptionId,
-        {
-          'cache': [
-            'user_infos',
-            {'pubkeys': uncached}
-          ]
-        }
-      ];
-
-      final sent = await _send(jsonEncode(request));
-      if (!sent) {
-        _pendingCountRequests.remove(subscriptionId);
-        return result;
-      }
-
-      final freshCounts = await completer.future.timeout(
-        const Duration(seconds: 8),
-        onTimeout: () {
-          _pendingCountRequests.remove(subscriptionId);
-          _closeSubscription(subscriptionId);
-          return {};
-        },
-      );
-
-      _closeSubscription(subscriptionId);
-
-      final fetchedAt = DateTime.now();
-      freshCounts.forEach((pubkey, count) {
-        _followerCountCache[pubkey] = count;
-        _followerCountCacheTime[pubkey] = fetchedAt;
-        result[pubkey] = count;
-      });
-
-      return result;
-    } catch (e) {
-      _pendingCountRequests.remove(subscriptionId);
-      if (kDebugMode) {
-        print('[PrimalCacheService] fetchFollowerCounts error: $e');
-      }
+    final socket = await _ensureConnection();
+    if (_disposed || socket == null || socket.readyState != WebSocket.open) {
       return result;
     }
+    final subscriptionId = 'primal_${++_subscriptionCounter}';
+    final request = _FollowerCountRequest(socket, uncached);
+    _pendingCountRequests[subscriptionId] = request;
+    try {
+      socket.add(
+        jsonEncode([
+          'REQ',
+          subscriptionId,
+          {
+            'cache': [
+              'user_infos',
+              {'pubkeys': uncached.toList()},
+            ],
+          },
+        ]),
+      );
+      final response = await request.completer.future.timeout(
+        _requestTimeout,
+        onTimeout: () => Result.error('Primal request timed out'),
+      );
+      if (_disposed) return result;
+      response.whenSuccess((counts) {
+        final fetchedAt = DateTime.now();
+        for (final entry in counts.entries) {
+          _followerCountCache[entry.key] = entry.value;
+          _followerCountCacheTime[entry.key] = fetchedAt;
+          result[entry.key] = entry.value;
+        }
+      });
+      return result;
+    } catch (_) {
+      return result;
+    } finally {
+      _pendingCountRequests.remove(subscriptionId);
+      _closeSubscription(socket, subscriptionId);
+    }
   }
+
+  Future<void> dispose() async {
+    _disposed = true;
+    final socket = _ws;
+    _ws = null;
+    for (final subscriptionId in _pendingCountRequests.keys.toList()) {
+      _completeRequest(subscriptionId, Result.error('Primal service disposed'));
+    }
+    _followerCountCache.clear();
+    _followerCountCacheTime.clear();
+    if (socket != null) await _closeSocket(socket);
+  }
+}
+
+class _FollowerCountRequest {
+  _FollowerCountRequest(this.socket, this.pubkeys);
+
+  final WebSocket socket;
+  final Set<String> pubkeys;
+  final Completer<Result<Map<String, int>>> completer = Completer();
+  final Map<String, int> counts = {};
+  bool receivedCounts = false;
 }

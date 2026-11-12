@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AuthTermsSheet: View {
+    var onAccept: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     private enum Block {
@@ -40,9 +41,21 @@ struct AuthTermsSheet: View {
             .navigationTitle(L("authTermsTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L("done")) { dismiss() }
-                        .accessibilityIdentifier("terms-done")
+                if let onAccept {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(L("cancel")) { dismiss() }
+                            .accessibilityIdentifier("terms-cancel")
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(L("authTermsAgreeShort"), action: onAccept)
+                            .buttonStyle(.glassProminent)
+                            .accessibilityIdentifier("terms-agree")
+                    }
+                } else {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(L("done")) { dismiss() }
+                            .accessibilityIdentifier("terms-done")
+                    }
                 }
             }
         }

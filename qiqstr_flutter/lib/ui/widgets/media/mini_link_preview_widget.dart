@@ -140,7 +140,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
                   maxHeightDiskCache: 120,
                   maxWidthDiskCache: 120,
                   memCacheWidth: 120,
-                  errorWidget: (_, __, ___) => Container(
+                  errorWidget: (_, _, _) => Container(
                     width: 48,
                     height: 48,
                     color: context.colors.grey800,

@@ -11,13 +11,10 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
   final AuthService _authService;
 
   EditProfileBloc({
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _profileRepository = profileRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const EditProfileInitial()) {
+    required this._profileRepository,
+    required this._syncService,
+    required this._authService,
+  })  : super(const EditProfileInitial()) {
     on<EditProfileInitialized>(_onEditProfileInitialized);
     on<EditProfileLoadRequested>(_onEditProfileLoadRequested);
     on<EditProfileNameChanged>(_onEditProfileNameChanged);
@@ -243,14 +240,6 @@ class EditProfileBloc extends Bloc<EditProfileEvent, EditProfileState> {
       };
 
       await _syncService.publishProfileUpdate(profileContent: profile);
-
-      final currentUserHex = _authService.currentUserPubkeyHex;
-      if (currentUserHex != null) {
-        final profileData = Map<String, String>.from(
-          profile.map((k, v) => MapEntry(k, v.toString())),
-        );
-        await _profileRepository.saveProfile(currentUserHex, profileData);
-      }
 
       emit(EditProfileSaveSuccess(user: profile));
     } catch (e) {

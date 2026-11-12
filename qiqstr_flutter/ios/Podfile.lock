@@ -1,5 +1,5 @@
 PODS:
-  - breez_sdk_spark_flutter (0.17.0):
+  - breez_sdk_spark_flutter (0.26.1):
     - Flutter
   - Flutter (1.0.0)
   - flutter_secure_storage (6.0.0):
@@ -29,12 +29,12 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/rust_lib_qiqstr/ios"
 
 SPEC CHECKSUMS:
-  breez_sdk_spark_flutter: 340309418c394d3a9209e07a8b2e38b31843ade9
+  breez_sdk_spark_flutter: 7ede2cd0dce79dfb2af1502a65f725938517d252
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
   gallery_saver_plus: 61c8a831d5975e2bf57f87bcd64379dcc7d29ff2
   rust_lib_qiqstr: 75e208e74cb72467266768a0afd003c04563d188
 
-PODFILE CHECKSUM: 45d3856f3db80f7d72f27a712912db8766860d37
+PODFILE CHECKSUM: 137cc6a653a1c33a2fb9de1597a99e564fdfec1c
 
 COCOAPODS: 1.16.2

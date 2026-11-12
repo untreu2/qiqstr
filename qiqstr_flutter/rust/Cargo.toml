@@ -10,8 +10,8 @@ crate-type = ["cdylib", "staticlib"]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(frb_expand)'] }
 
 [dependencies]
-flutter_rust_bridge = "=2.11.1"
-nostr = { version = "0.44", default-features = false, features = ["std", "nip04", "nip06", "nip44", "nip47", "nip59"] }
+flutter_rust_bridge = "=2.13.0"
+nostr = { version = "0.44.8", default-features = false, features = ["std", "nip04", "nip06", "nip44", "nip47", "nip59"] }
 nostr-sdk = { version = "0.44", default-features = false, features = ["nip06", "nip44", "nip59"] }
 nostr-database = "0.44"
 nostr-lmdb = "0.44"
@@ -29,6 +29,6 @@ rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
 regex = "1"
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 cdk = { version = "0.16", default-features = false, features = ["wallet"] }
 cdk-sqlite = { version = "0.16", default-features = false, features = ["wallet"] }

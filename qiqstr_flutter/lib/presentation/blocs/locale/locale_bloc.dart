@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'locale_event.dart';
@@ -13,7 +13,9 @@ class LocaleBloc extends Bloc<LocaleEvent, LocaleState> {
   }
 
   Future<void> _onInitialized(
-      LocaleInitialized event, Emitter<LocaleState> emit) async {
+    LocaleInitialized event,
+    Emitter<LocaleState> emit,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final localeCode = prefs.getString(_localeKey);
 
@@ -23,7 +25,9 @@ class LocaleBloc extends Bloc<LocaleEvent, LocaleState> {
   }
 
   Future<void> _onLocaleChanged(
-      LocaleChanged event, Emitter<LocaleState> emit) async {
+    LocaleChanged event,
+    Emitter<LocaleState> emit,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_localeKey, event.locale.languageCode);
     emit(LocaleState(locale: event.locale));

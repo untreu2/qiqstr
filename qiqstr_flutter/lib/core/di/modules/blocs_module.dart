@@ -1,4 +1,7 @@
 import '../app_di.dart';
+import '../../../presentation/blocs/welcome/welcome_bloc.dart';
+import '../../../presentation/blocs/theme/theme_bloc.dart';
+import '../../../presentation/blocs/locale/locale_bloc.dart';
 import '../../../presentation/blocs/auth/auth_bloc.dart';
 import '../../../presentation/blocs/feed/feed_bloc.dart';
 import '../../../presentation/blocs/profile/profile_bloc.dart';
@@ -41,10 +44,15 @@ import '../../../data/services/vertex_search_service.dart';
 class BlocsModule extends DIModule {
   @override
   Future<void> register() async {
-    AppDI.registerFactory<AuthBloc>(() => AuthBloc(
-          authService: AppDI.get<AuthService>(),
-          validationService: AppDI.get<ValidationService>(),
-        ));
+    AppDI.registerFactory<WelcomeBloc>(WelcomeBloc.new);
+    AppDI.registerFactory<ThemeBloc>(ThemeBloc.new);
+    AppDI.registerFactory<LocaleBloc>(LocaleBloc.new);
+    AppDI.registerFactory<AuthBloc>(
+      () => AuthBloc(
+        authService: AppDI.get<AuthService>(),
+        validationService: AppDI.get<ValidationService>(),
+      ),
+    );
 
     AppDI.registerLazySingleton<FeedBloc>(
       () => FeedBloc(
@@ -57,20 +65,24 @@ class BlocsModule extends DIModule {
       dispose: (bloc) => bloc.close(),
     );
 
-    AppDI.registerFactory<ProfileBloc>(() => ProfileBloc(
-          feedRepository: AppDI.get<FeedRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          followingRepository: AppDI.get<FollowingRepository>(),
-          articleRepository: AppDI.get<ArticleRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<ProfileBloc>(
+      () => ProfileBloc(
+        feedRepository: AppDI.get<FeedRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        followingRepository: AppDI.get<FollowingRepository>(),
+        articleRepository: AppDI.get<ArticleRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
-    AppDI.registerFactory<NoteBloc>(() => NoteBloc(
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<NoteBloc>(
+      () => NoteBloc(
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
     AppDI.registerLazySingleton<DmBloc>(
       () => DmBloc(
@@ -83,11 +95,13 @@ class BlocsModule extends DIModule {
       dispose: (bloc) => bloc.close(),
     );
 
-    AppDI.registerFactory<NotificationBloc>(() => NotificationBloc(
-          notificationRepository: AppDI.get<NotificationRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<NotificationBloc>(
+      () => NotificationBloc(
+        notificationRepository: AppDI.get<NotificationRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
     AppDI.registerLazySingleton<WalletBloc>(
       () => WalletBloc(
@@ -100,14 +114,16 @@ class BlocsModule extends DIModule {
       dispose: (bloc) => bloc.close(),
     );
 
-    AppDI.registerFactory<ThreadBloc>(() => ThreadBloc(
-          feedRepository: AppDI.get<FeedRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-          muteService: EncryptedMuteService.instance,
-          interactionService: InteractionService.instance,
-        ));
+    AppDI.registerFactory<ThreadBloc>(
+      () => ThreadBloc(
+        feedRepository: AppDI.get<FeedRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+        muteService: EncryptedMuteService.instance,
+        interactionService: InteractionService.instance,
+      ),
+    );
 
     AppDI.registerLazySingleton<NotificationIndicatorBloc>(
       () => NotificationIndicatorBloc(
@@ -136,62 +152,80 @@ class BlocsModule extends DIModule {
       dispose: (bloc) => bloc.close(),
     );
 
-    AppDI.registerFactory<EditProfileBloc>(() => EditProfileBloc(
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<EditProfileBloc>(
+      () => EditProfileBloc(
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
-    AppDI.registerFactory<FollowingBloc>(() => FollowingBloc(
-          followingRepository: AppDI.get<FollowingRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<FollowingBloc>(
+      () => FollowingBloc(
+        followingRepository: AppDI.get<FollowingRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
-    AppDI.registerFactory<SuggestedFollowsBloc>(() => SuggestedFollowsBloc(
-          followingRepository: AppDI.get<FollowingRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<SuggestedFollowsBloc>(
+      () => SuggestedFollowsBloc(
+        followingRepository: AppDI.get<FollowingRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
-    AppDI.registerFactory<MutedBloc>(() => MutedBloc(
-          followingRepository: AppDI.get<FollowingRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<MutedBloc>(
+      () => MutedBloc(
+        followingRepository: AppDI.get<FollowingRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
-    AppDI.registerFactory<BookmarkBloc>(() => BookmarkBloc(
-          feedRepository: AppDI.get<FeedRepository>(),
-          syncService: AppDI.get<SyncService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<BookmarkBloc>(
+      () => BookmarkBloc(
+        feedRepository: AppDI.get<FeedRepository>(),
+        syncService: AppDI.get<SyncService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
-    AppDI.registerFactory<UserSearchBloc>(() => UserSearchBloc(
-          profileRepository: AppDI.get<ProfileRepository>(),
-          authService: AppDI.get<AuthService>(),
-          syncService: AppDI.get<SyncService>(),
-          vertexSearchService: AppDI.get<VertexSearchService>(),
-        ));
+    AppDI.registerFactory<UserSearchBloc>(
+      () => UserSearchBloc(
+        profileRepository: AppDI.get<ProfileRepository>(),
+        authService: AppDI.get<AuthService>(),
+        syncService: AppDI.get<SyncService>(),
+        vertexSearchService: AppDI.get<VertexSearchService>(),
+      ),
+    );
 
-    AppDI.registerFactory<NoteContentBloc>(() => NoteContentBloc(
-          profileRepository: AppDI.get<ProfileRepository>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<NoteContentBloc>(
+      () => NoteContentBloc(
+        profileRepository: AppDI.get<ProfileRepository>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
 
-    AppDI.registerFactory<ArticleQuoteWidgetBloc>(() => ArticleQuoteWidgetBloc(
-          articleRepository: AppDI.get<ArticleRepository>(),
-          syncService: AppDI.get<SyncService>(),
-        ));
+    AppDI.registerFactory<ArticleQuoteWidgetBloc>(
+      () => ArticleQuoteWidgetBloc(
+        articleRepository: AppDI.get<ArticleRepository>(),
+        syncService: AppDI.get<SyncService>(),
+      ),
+    );
 
-    AppDI.registerFactory<ArticleBloc>(() => ArticleBloc(
-          articleRepository: AppDI.get<ArticleRepository>(),
-          profileRepository: AppDI.get<ProfileRepository>(),
-          followingRepository: AppDI.get<FollowingRepository>(),
-          syncService: AppDI.get<SyncService>(),
-        ));
+    AppDI.registerFactory<ArticleBloc>(
+      () => ArticleBloc(
+        articleRepository: AppDI.get<ArticleRepository>(),
+        profileRepository: AppDI.get<ProfileRepository>(),
+        followingRepository: AppDI.get<FollowingRepository>(),
+        syncService: AppDI.get<SyncService>(),
+      ),
+    );
 
     AppDI.registerLazySingleton<FollowSetBloc>(
       () => FollowSetBloc(
@@ -203,9 +237,11 @@ class BlocsModule extends DIModule {
       dispose: (bloc) => bloc.close(),
     );
 
-    AppDI.registerFactory<OnboardingSparkBloc>(() => OnboardingSparkBloc(
-          sparkService: AppDI.get<SparkService>(),
-          authService: AppDI.get<AuthService>(),
-        ));
+    AppDI.registerFactory<OnboardingSparkBloc>(
+      () => OnboardingSparkBloc(
+        sparkService: AppDI.get<SparkService>(),
+        authService: AppDI.get<AuthService>(),
+      ),
+    );
   }
 }

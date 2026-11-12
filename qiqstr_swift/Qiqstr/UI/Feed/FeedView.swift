@@ -7,6 +7,7 @@ struct FeedView: View {
     @State private var store = NoteInteractionStore.shared
     @State private var hashtags = HashtagFollowService.shared
     @State private var isManagingTopics = false
+    @State private var explore = ExploreService.shared
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -36,6 +37,7 @@ struct FeedView: View {
         .onChange(of: session.mutedWords) { model.refilter() }
         .onChange(of: store.deletedIds) { model.refilter() }
         .onChange(of: hashtags.tags) { model.topicsChanged() }
+        .onChange(of: explore.pinned) { model.pinnedFeedsChanged(explore.pinned) }
         .sheet(isPresented: $isManagingTopics) {
             TopicsManagerView { model.select(.topic($0)) }
         }
@@ -51,6 +53,7 @@ struct FeedView: View {
     @ViewBuilder
     private var feedMenu: some View {
         Picker(L("feedFeeds"), selection: Binding(get: { model.source }, set: { model.select($0) })) {
+            Label(L("feedExplore"), systemImage: "safari").tag(FeedSource.explore)
             Label(L("all"), systemImage: "person.2").tag(FeedSource.following)
             ForEach(model.lists) { set in
                 Label(set.title, systemImage: "list.bullet").tag(FeedSource.list(set))
@@ -59,6 +62,18 @@ struct FeedView: View {
         .accessibilityIdentifier("feed-selector")
         Button(L("feedAddFeed"), systemImage: "plus") { Router.shared.push(.followSets) }
             .accessibilityIdentifier("feed-add-list")
+        Section(L("exploreFeeds")) {
+            if !explore.pinnedFeeds.isEmpty {
+                Picker(L("exploreFeeds"), selection: Binding(get: { model.source }, set: { model.select($0) })) {
+                    ForEach(explore.pinnedFeeds) { feed in
+                        Label(feed.name, systemImage: "sparkles.rectangle.stack").tag(FeedSource.discover(feed))
+                    }
+                }
+                .accessibilityIdentifier("feed-pinned-feeds")
+            }
+            Button(L("exploreDiscoverFeeds"), systemImage: "square.grid.2x2") { Router.shared.push(.discoverFeeds) }
+                .accessibilityIdentifier("feed-discover-feeds")
+        }
         Section(L("feedTopics")) {
             if !hashtags.tags.isEmpty {
                 Picker(L("feedTopics"), selection: Binding(get: { model.source }, set: { model.select($0) })) {
@@ -76,7 +91,7 @@ struct FeedView: View {
             Button(L("feedManageTopics"), systemImage: "number") { isManagingTopics = true }
                 .accessibilityIdentifier("feed-manage-topics")
         }
-        if !model.source.isTopicFeed {
+        if !model.source.isTopicFeed && !model.source.isCurated {
             Section(L("sortBy")) {
                 Picker(L("sortBy"), selection: $model.sort) {
                     ForEach(FeedSortMode.allCases) { mode in
@@ -141,12 +156,12 @@ struct FeedView: View {
                 EmptyStateView(systemImage: "list.bullet.rectangle", title: L("noNotesYet"), message: nil, actionTitle: L("refresh")) {
                     Task { await model.refresh() }
                 }
-            } else if model.source.isTopicFeed {
+            } else if model.source.isTopicFeed || model.source.isCurated {
                 EmptyStateView(systemImage: "number", title: L("noNotesYet"), message: nil, actionTitle: L("refresh")) {
                     Task { await model.refresh() }
                 }
             } else {
-                FeedEmptyState { Task { await model.refresh() } }
+                FeedEmptyState(onExplore: { model.select(.explore) }) { Task { await model.refresh() } }
             }
         }
     }
@@ -249,6 +264,7 @@ struct FeedSkeletonRow: View {
 }
 
 struct FeedEmptyState: View {
+    var onExplore: () -> Void
     var onRefresh: () -> Void
 
     var body: some View {
@@ -263,7 +279,7 @@ struct FeedEmptyState: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .accessibilityIdentifier("feed-empty-suggested")
-            Button(L("feedExplore"), systemImage: "safari") { Router.shared.push(.explore) }
+            Button(L("feedExplore"), systemImage: "safari", action: onExplore)
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
                 .accessibilityIdentifier("feed-empty-explore")

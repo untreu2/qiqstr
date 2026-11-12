@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:equatable/equatable.dart';
+import 'dart:ui';
+import '../../../core/bloc/base/base_event.dart';
 
-abstract class LocaleEvent extends Equatable {
+abstract class LocaleEvent extends BaseEvent {
   const LocaleEvent();
 
   @override

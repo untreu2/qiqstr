@@ -63,20 +63,15 @@ class _SettingsPageState extends State<SettingsPage> {
                     slivers: [
                       SliverToBoxAdapter(
                         child: SizedBox(
-                            height: MediaQuery.of(context).padding.top + 60),
+                          height: MediaQuery.of(context).padding.top + 60,
+                        ),
                       ),
-                      SliverToBoxAdapter(
-                        child: _buildHeader(context, l10n),
-                      ),
-                      SliverToBoxAdapter(
-                        child: const SizedBox(height: 16),
-                      ),
+                      SliverToBoxAdapter(child: _buildHeader(context, l10n)),
+                      SliverToBoxAdapter(child: const SizedBox(height: 16)),
                       SliverToBoxAdapter(
                         child: _buildSettingsSection(context, l10n),
                       ),
-                      SliverToBoxAdapter(
-                        child: const SizedBox(height: 150),
-                      ),
+                      SliverToBoxAdapter(child: const SizedBox(height: 150)),
                     ],
                   ),
                   TopActionBarWidget(
@@ -119,7 +114,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildLanguageButton(
-      BuildContext context, AppLocalizations l10n, LocaleState localeState) {
+    BuildContext context,
+    AppLocalizations l10n,
+    LocaleState localeState,
+  ) {
     return Positioned(
       top: MediaQuery.of(context).padding.top + 14,
       right: 16,
@@ -233,18 +231,16 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Row(
           children: [
             if (icon != null)
-              PhosphorIcon(
-                icon,
-                size: 22,
-                color: context.colors.textPrimary,
-              ),
+              PhosphorIcon(icon, size: 22, color: context.colors.textPrimary),
             const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                color: context.colors.textPrimary,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: context.colors.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

@@ -9,11 +9,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final ValidationService _validationService;
 
   AuthBloc({
-    required AuthService authService,
-    required ValidationService validationService,
-  })  : _authService = authService,
-        _validationService = validationService,
-        super(const AuthInitial()) {
+    required this._authService,
+    required this._validationService,
+  })  : super(const AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<LoginRequested>(_onLoginRequested);
     on<CreateAccountRequested>(_onCreateAccountRequested);
@@ -103,7 +101,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(currentInputState.copyWith(
         nsecInput: nsec,
         isValid: false,
-        validationError: null,
+        clearValidationError: true,
       ));
       return;
     }
@@ -116,6 +114,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       nsecInput: nsec,
       isValid: isValid,
       validationError: error,
+      clearValidationError: isValid,
     ));
   }
 

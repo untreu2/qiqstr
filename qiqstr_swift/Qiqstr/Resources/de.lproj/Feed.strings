@@ -76,3 +76,6 @@
 "feedTopicInvalid" = "Verwende Buchstaben, Zahlen, Bindestriche oder Unterstriche.";
 "feedTopicsUnavailable" = "Deine Themen konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.";
 "feedTopicPostsLastDay" = "{count, plural, =1{1 Beitrag in den letzten 24 Stunden} other{# Beiträge in den letzten 24 Stunden}}";
+"reposted" = "Geteilt";
+"liked" = "Gefällt dir";
+"reactWithEmoji" = "Mit Emoji reagieren";

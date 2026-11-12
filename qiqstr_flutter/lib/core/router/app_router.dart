@@ -53,7 +53,10 @@ class AppRouter {
     return '';
   }
 
-  static Widget _buildNoteStatisticsPage(BuildContext context, GoRouterState state) {
+  static Widget _buildNoteStatisticsPage(
+    BuildContext context,
+    GoRouterState state,
+  ) {
     final noteId = _extractNoteId(state);
     if (noteId.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,7 +82,9 @@ class AppRouter {
   static String _resolveProfileHex(GoRouterState state) {
     final pubkeyParam = state.uri.queryParameters['pubkey'] ?? '';
     final npubParam = state.uri.queryParameters['npub'] ?? '';
-    final fromPubkey = _normalizeToHex(pubkeyParam.isNotEmpty ? pubkeyParam : null);
+    final fromPubkey = _normalizeToHex(
+      pubkeyParam.isNotEmpty ? pubkeyParam : null,
+    );
     if (fromPubkey.isNotEmpty && _isValidHexId(fromPubkey)) return fromPubkey;
     if (npubParam.isNotEmpty) return _normalizeToHex(npubParam);
     return fromPubkey;
@@ -88,8 +93,7 @@ class AppRouter {
   static String _resolveFollowingHex(GoRouterState state) {
     final pubkeyParam = state.uri.queryParameters['pubkey'] ?? '';
     final npubParam = state.uri.queryParameters['npub'] ?? '';
-    String pubkeyHex =
-        pubkeyParam.isNotEmpty ? pubkeyParam : npubParam;
+    String pubkeyHex = pubkeyParam.isNotEmpty ? pubkeyParam : npubParam;
     if (pubkeyHex.isEmpty && state.extra is Map<String, dynamic>) {
       pubkeyHex =
           (state.extra as Map<String, dynamic>)['pubkey'] as String? ?? '';
@@ -137,9 +141,7 @@ class AppRouter {
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
-          final location = state.uri.toString();
-          final uri = Uri.parse(location);
-          final npub = uri.queryParameters['npub'] ?? '';
+          final npub = AppDI.get<AuthService>().currentUserNpub ?? '';
           return HomeNavigator(
             key: ValueKey('home_$npub'),
             npub: npub,
@@ -155,7 +157,10 @@ class AppRouter {
                 builder: (context, state) {
                   final location = state.uri.toString();
                   final uri = Uri.parse(location);
-                  final userHex = _normalizeToHex(uri.queryParameters['npub']);
+                  final userHex = _normalizeToHex(
+                    uri.queryParameters['npub'] ??
+                        AppDI.get<AuthService>().currentUserNpub,
+                  );
                   final hashtag = uri.queryParameters['hashtag'];
                   return FeedPage(
                     key: ValueKey('feed_$userHex'),
@@ -247,7 +252,8 @@ class AppRouter {
                     name: 'dm-tab-chat',
                     builder: (context, state) {
                       final pubkeyHex = _normalizeToHex(
-                          state.uri.queryParameters['pubkey'] ?? '');
+                        state.uri.queryParameters['pubkey'] ?? '',
+                      );
                       return DmChatPage(pubkeyHex: pubkeyHex);
                     },
                   ),
@@ -281,8 +287,7 @@ class AppRouter {
                     path: 'quotes',
                     name: 'dm-quotes',
                     builder: (context, state) {
-                      final noteId =
-                          state.uri.queryParameters['noteId'] ?? '';
+                      final noteId = state.uri.queryParameters['noteId'] ?? '';
                       return QuotesPage(noteId: noteId);
                     },
                   ),
@@ -335,8 +340,7 @@ class AppRouter {
                     path: 'quotes',
                     name: 'wallet-quotes',
                     builder: (context, state) {
-                      final noteId =
-                          state.uri.queryParameters['noteId'] ?? '';
+                      final noteId = state.uri.queryParameters['noteId'] ?? '';
                       return QuotesPage(noteId: noteId);
                     },
                   ),
@@ -413,10 +417,7 @@ class AppRouter {
         builder: (context, state) {
           final chain = state.pathParameters['chain'] ?? '';
           final initialNoteData = state.extra as Map<String, dynamic>?;
-          return ThreadPage(
-            chain: chain,
-            initialNoteData: initialNoteData,
-          );
+          return ThreadPage(chain: chain, initialNoteData: initialNoteData);
         },
       ),
       GoRoute(
@@ -541,7 +542,9 @@ class AppRouter {
   );
 
   static Future<String?> _handleRedirect(
-      BuildContext context, GoRouterState state) async {
+    BuildContext context,
+    GoRouterState state,
+  ) async {
     final authService = AppDI.get<AuthService>();
 
     final cachedNpub = authService.currentUserNpub;
@@ -554,10 +557,10 @@ class AppRouter {
     final isProfileSetupRoute = state.matchedLocation == '/profile-setup';
     final isSuggestedFollowsRoute =
         state.matchedLocation == '/suggested-follows';
-    final isOnboardingSparkRoute =
-        state.matchedLocation == '/onboarding-spark';
+    final isOnboardingSparkRoute = state.matchedLocation == '/onboarding-spark';
 
-    final isAuthFlow = isWelcomeRoute ||
+    final isAuthFlow =
+        isWelcomeRoute ||
         isLoginRoute ||
         isSignupRoute ||
         isKeysInfoRoute ||

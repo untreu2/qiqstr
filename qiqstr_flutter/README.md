@@ -18,21 +18,20 @@
 qiqstr is a mobile client for [Nostr](https://nostr.com), the decentralized, open, and
 censorship-resistant social protocol. It lets you publish notes and articles, follow people,
 exchange end-to-end encrypted direct messages, and send or receive Bitcoin Lightning payments —
-all without accounts, servers, or middlemen. Your identity is a cryptographic key pair that
-never leaves your device.
+without creating an account with a central qiqstr server. Your private identity key is stored
+locally and signs events; your public key identifies those events on relays.
 
 Under the hood, qiqstr pairs a [Flutter](https://flutter.dev) UI with a [Rust](https://www.rust-lang.org)
-core: every cryptographic operation, relay connection, and database access runs in native Rust
-through [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge), giving you a smooth,
-fast experience with a small, auditable trusted base.
+core: Nostr signing, encryption, relay connections, and event storage run in native Rust
+through [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge).
 
 ## Features
 
 - **Full social client** — publish and read text notes, long-form articles (NIP-23), threads, reposts, reactions, and quotes.
 - **Encrypted direct messages** — private DMs using NIP-17 gift-wrapped messages (NIP-44 / NIP-59).
-- **Built-in Bitcoin wallet** — send and receive Lightning payments and zaps over Nostr Wallet Connect (NIP-47), with optional one-tap onboarding via [Coinos](https://coinos.io).
-- **You own your identity** — keys are generated on-device and stored in OS-backed secure storage; they never reach the developer or any relay.
-- **Self-custodial by design** — no central server, no analytics, no profiling.
+- **Built-in Bitcoin wallet** — send and receive Lightning payments and zaps over Nostr Wallet Connect (NIP-47), with built-in wallet onboarding through the Breez Spark SDK and Cashu token support.
+- **You own your identity** — private identity keys are generated on-device and stored in OS-backed secure storage. Relays receive signed events and public keys.
+- **Local identity and wallet keys** — identity keys and Spark recovery keys are stored on-device. Connected NWC wallets and Cashu mints have their own custody and service models.
 - **Fast local data** — events are stored and synced locally in an embedded LMDB database, with efficient Negentropy syncing (NIP-77).
 - **Localized** — available in English, Turkish, and German.
 
@@ -108,14 +107,14 @@ fast experience with a small, auditable trusted base.
 | Native layer | Rust via flutter_rust_bridge |
 | Nostr protocol | nostr-sdk 0.44 (Rust) |
 | Local database | LMDB via nostr-lmdb |
-| Wallet | Nostr Wallet Connect + Cashu (cdk) |
+| Wallet | Breez Spark SDK + Nostr Wallet Connect + Cashu (cdk) |
 | Secure storage | flutter_secure_storage |
 | Routing | go_router |
 | Dependency injection | get_it |
 
 ## Architecture
 
-qiqstr follows a layered architecture with a strict, one-directional dependency flow:
+The required dependency direction for new code is:
 
 ```
 UI -> Presentation -> Data -> Domain
@@ -124,7 +123,10 @@ UI -> Presentation -> Data -> Domain
 - **Domain** — entities and mappers, with no framework imports.
 - **Data** — repositories, services, and sync logic.
 - **Presentation** — BLoCs with their events and states.
-- **UI** — screens and widgets, with no business logic.
+- **UI** — screens and widgets, with business logic delegated to BLoCs.
+
+Existing screens still contain layering and state-management violations. See the
+[review report](docs/FIVE_PASS_REVIEW.md) for the remaining migration work.
 
 All cryptographic operations, event signing, relay communication, NIP-44 encryption,
 NIP-17 gift wrapping, NIP-19 encoding, and database access run in Rust. The Dart side
@@ -134,13 +136,13 @@ interacts exclusively through auto-generated bridge code.
 
 ### Prerequisites
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (Dart `>=3.5.4`)
-- [Rust toolchain](https://www.rust-lang.org/tools/install)
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) `>=3.44.0` (Dart `>=3.12.0`); verified with Flutter 3.44.4.
+- [Rust toolchain](https://www.rust-lang.org/tools/install); verified with Rust 1.96.0.
 - [`flutter_rust_bridge_codegen`](https://github.com/fzyzcjy/flutter_rust_bridge) CLI:
   ```sh
-  cargo install flutter_rust_bridge_codegen
+  cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
   ```
-- An Android or iOS device/emulator and the matching platform toolchain (Android SDK / Xcode).
+- An Android or iOS device/emulator and the matching platform toolchain (Android SDK / Xcode). iOS 15 or later is required.
 
 ### Build and run
 
@@ -167,20 +169,100 @@ flutter run --dart-define-from-file=build_config.json
 > compile time and is excluded from version control. Use the same
 > `--dart-define-from-file=build_config.json` option for release builds.
 
+## Release configuration
+
+Breez Spark Flutter 0.26.1 and `flutter_rust_bridge` 2.13.0 are pinned together. Upgrade the
+SDK, Rust crate, Dart package, and generator as one migration, then verify wallet recovery
+and payments.
+Use the committed Dart and Rust lockfiles to retain tested dependency resolutions.
+CI pins the host Rust toolchain; Cargokit currently uses the `stable` toolchain for both
+the app bridge and Breez mobile native builds, so their compiler version is not pinned
+independently of the build environment.
+
+Android releases require `android/key.properties` with `storeFile`, `storePassword`,
+`keyAlias`, and `keyPassword`. Release builds no longer fall back to a debug signing key.
+Verify the application ID and signing identity before publishing; the current Android ID
+is `com.example.qiqstr`. An update to an already published app must retain its existing
+application ID and signing identity and use a higher build number. Keep signing files
+and `build_config.json` out of version control.
+
+For an Android ARM64 release build, retain the resolved lockfiles and allow Flutter to
+regenerate release-specific plugin registration:
+
+```sh
+flutter pub get --enforce-lockfile
+release_lock_checksums="$(mktemp)"
+shasum -a 256 pubspec.lock rust/Cargo.lock ios/Podfile.lock > "$release_lock_checksums"
+flutter build apk --release --target-platform android-arm64 \
+  --dart-define-from-file=build_config.json
+shasum -a 256 -c "$release_lock_checksums"
+rm "$release_lock_checksums"
+```
+
+Require the build and checksum checks to succeed. Avoid `--no-pub` for this release
+command after running tests: Flutter 3.44.4 can otherwise retain test-only plugin
+registration and fail compilation. See
+[Flutter issue #163774](https://github.com/flutter/flutter/issues/163774).
+Without release signing configuration, the resulting APK is unsigned.
+
+Android cloud backup and device transfer are disabled for app data containing wallet
+state and private messages. Back up identity and wallet recovery keys before changing
+devices. User-added certificate authorities are trusted only by debug builds.
+Cashu has separate local seed and proof storage; identity and Spark recovery backups do
+not restore it. Cashu recovery/export remains a release blocker for wallets holding funds.
+
 ## Usage
 
 1. **Create or import an identity.** On first launch, generate a new key pair or import an
    existing private key (`nsec`) or mnemonic seed phrase (NIP-06). Your private key is stored
-   in your device's secure storage and never leaves it.
+   in your device's secure storage and used locally to sign events.
 2. **Explore the feed.** Browse notes from people you follow, discover content, and read
    long-form articles.
 3. **Interact.** Reply, react, repost, and quote. Send end-to-end encrypted direct messages.
-4. **Connect a wallet.** Link any NWC-compatible wallet, or onboard instantly with Coinos, to
+4. **Connect a wallet.** Link any NWC-compatible wallet, or set up the built-in Spark wallet, to
    send and receive Lightning payments and zap content you enjoy.
 
-> Bitcoin and Lightning transactions are irreversible, and qiqstr is self-custodial. **Back up
-> your private key** — if you lose it, your identity cannot be recovered. See [TERMS.md](TERMS.md)
+> **Back up your identity and wallet recovery keys separately.** The Nostr seed phrase
+> restores your identity; Spark uses a separate recovery key. Losing either can prevent recovery. See [TERMS.md](TERMS.md)
 > for the full privacy policy and terms of use.
+
+## Verification
+
+Run `./tool/verify.sh` on macOS or Linux to verify the dependency lockfile, Rust formatting,
+strict Clippy checks, and Rust tests, build the native library, run the Dart analyzer, and
+execute the Dart, native integration, and widget tests. CI runs the same checks and builds
+the iOS simulator app and an unsigned iOS device release. An independent Android job
+builds an unsigned ARM64 release APK and checks
+16 KB ZIP and native-library ELF LOAD alignment. Host tests load
+`rust/target/debug/librust_lib_qiqstr.dylib` on macOS or the `.so` on Linux. Set
+`QIQSTR_NATIVE_LIBRARY` to use another build path.
+
+Run the separate dependency security gate with:
+
+```sh
+cargo install cargo-audit --version 0.22.2 --locked
+./tool/audit_dependencies.sh
+```
+
+The independent CI security job checks both the app's Rust lockfile and Breez's bundled
+native lockfile. It currently fails on 31 vulnerability advisories in the Breez lockfile;
+these are documented release blockers. Passing tests alone does not clear this gate.
+
+Pass a simulator/device ID to include mobile integration tests:
+
+```sh
+flutter devices
+./tool/verify.sh <device-id>
+```
+
+The native suite uses generated test identities and temporary LMDB databases. Its NWC
+relay runs on loopback. Onboarding tests mock secure storage; a separate device test uses
+the real secure-storage plugin with isolated temporary keys. The real-startup test
+redirects filesystem paths to a temporary directory. Startup checks connect to the default
+public relays; tests do not publish public content or send real payments.
+
+See [the five-pass review](docs/FIVE_PASS_REVIEW.md) for findings, validation, and remaining
+coverage limits.
 
 ## Contributing
 
@@ -191,8 +273,7 @@ Contributions are welcome! To get started:
    architecture, BLoC patterns, and code-style rules.
 3. Run the analyzer and tests, and fix all lint warnings before opening a pull request:
    ```sh
-   flutter analyze
-   flutter test
+   ./tool/verify.sh
    ```
 4. Keep the layering intact (UI must never import from `data/` or `domain/` directly) and never
    edit generated files under `lib/src/rust/`, `lib/l10n/app_localizations*.dart`, or

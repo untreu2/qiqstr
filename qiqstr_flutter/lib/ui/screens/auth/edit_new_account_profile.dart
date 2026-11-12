@@ -167,12 +167,12 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                         width: screenWidth,
                         height: bannerHeight,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
+                        placeholder: (_, _) => Container(
                           height: bannerHeight,
                           width: screenWidth,
                           color: context.colors.grey700,
                         ),
-                        errorWidget: (_, __, ___) => Container(
+                        errorWidget: (_, _, _) => Container(
                           height: bannerHeight,
                           width: screenWidth,
                           color: context.colors.background,

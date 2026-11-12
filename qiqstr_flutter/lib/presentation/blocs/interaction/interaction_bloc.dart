@@ -47,17 +47,14 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       DateTime.now().difference(_optimisticZappedAt!) < _optimisticTtl;
 
   InteractionBloc({
-    required SyncService syncService,
-    required FeedRepository feedRepository,
-    required InteractionRepository interactionRepository,
+    required this._syncService,
+    required this._feedRepository,
+    required this._interactionRepository,
     required this.noteId,
     required this.currentUserHex,
     this.note,
     InteractionService? interactionService,
-  })  : _syncService = syncService,
-        _feedRepository = feedRepository,
-        _interactionRepository = interactionRepository,
-        _interactionService = interactionService ?? InteractionService.instance,
+  })  : _interactionService = interactionService ?? InteractionService.instance,
         super(const InteractionInitial()) {
     on<InteractionInitialized>(_onInitialized, transformer: restartable());
     on<InteractionNoteUpdated>(_onNoteUpdated);
@@ -431,7 +428,9 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       InteractionZapStarted event, Emitter<InteractionState> emit) {
     final currentState =
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
-    if (currentState == null) return;
+    if (currentState == null || currentState.zapProcessing || event.amount <= 0) {
+      return;
+    }
 
     _optimisticZappedAt = DateTime.now();
     _zapAmountBeforePending = currentState.zapAmount;
@@ -463,7 +462,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
       InteractionZapFailed event, Emitter<InteractionState> emit) {
     final currentState =
         state is InteractionLoaded ? (state as InteractionLoaded) : null;
-    if (currentState == null) return;
+    if (currentState == null || !currentState.zapProcessing) return;
 
     _optimisticZappedAt = null;
     emit(currentState.copyWith(

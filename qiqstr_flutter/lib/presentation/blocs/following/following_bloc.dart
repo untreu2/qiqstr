@@ -19,15 +19,11 @@ class FollowingBloc extends Bloc<FollowingEvent, FollowingState> {
   int _generation = 0;
 
   FollowingBloc({
-    required FollowingRepository followingRepository,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _followingRepository = followingRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const FollowingInitial()) {
+    required this._followingRepository,
+    required this._profileRepository,
+    required this._syncService,
+    required this._authService,
+  })  : super(const FollowingInitial()) {
     on<FollowingLoadRequested>(
       _onFollowingLoadRequested,
       transformer: restartable(),

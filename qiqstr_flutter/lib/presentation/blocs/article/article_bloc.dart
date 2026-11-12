@@ -41,19 +41,12 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   int _generation = 0;
 
   ArticleBloc({
-    required ArticleRepository articleRepository,
-    required ProfileRepository profileRepository,
-    required FollowingRepository followingRepository,
-    required SyncService syncService,
-  })  : _articleRepository = articleRepository,
-        _profileRepository = profileRepository,
-        _followingRepository = followingRepository,
-        _syncService = syncService,
-        super(const ArticleInitial()) {
-    on<ArticleInitialized>(
-      _onArticleInitialized,
-      transformer: restartable(),
-    );
+    required this._articleRepository,
+    required this._profileRepository,
+    required this._followingRepository,
+    required this._syncService,
+  }) : super(const ArticleInitial()) {
+    on<ArticleInitialized>(_onArticleInitialized, transformer: restartable());
     on<ArticleRefreshed>(_onArticleRefreshed, transformer: droppable());
     on<ArticleLoadMoreRequested>(
       _onArticleLoadMoreRequested,
@@ -78,6 +71,7 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     emit(const ArticleLoading());
 
     final following = await _followingRepository.getFollowing(_currentUserHex);
+    if (isClosed || generation != _generation || emit.isDone) return;
     _followingList = {
       if (_currentUserHex.isNotEmpty) _currentUserHex,
       ...?following,
@@ -97,13 +91,15 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
         return bTime.compareTo(aTime);
       });
       if (articleMaps.isNotEmpty) {
-        emit(ArticleLoaded(
-          articles: articleMaps,
-          filteredArticles: articleMaps,
-          profiles: const {},
-          currentUserHex: _currentUserHex,
-          canLoadMore: articleMaps.length >= _pageSize,
-        ));
+        emit(
+          ArticleLoaded(
+            articles: articleMaps,
+            filteredArticles: articleMaps,
+            profiles: const {},
+            currentUserHex: _currentUserHex,
+            canLoadMore: articleMaps.length >= _pageSize,
+          ),
+        );
         _loadAuthorProfilesInBackground(articleMaps, generation);
       }
     }
@@ -139,24 +135,28 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
       _articlesSubscription = _articleRepository
           .watchArticles(limit: _pageSize, authors: _followingList)
           .map((articles) => articles.map((a) => a.toMap()).toList())
-          .listen((maps) {
-        if (isClosed || generation != _generation) return;
+          .listen(
+            (maps) {
+              if (isClosed || generation != _generation) return;
 
-        final articleMaps = maps;
+              final articleMaps = maps;
 
-        articleMaps.sort((a, b) {
-          final aTime = a['created_at'] as int? ?? 0;
-          final bTime = b['created_at'] as int? ?? 0;
-          return bTime.compareTo(aTime);
-        });
+              articleMaps.sort((a, b) {
+                final aTime = a['created_at'] as int? ?? 0;
+                final bTime = b['created_at'] as int? ?? 0;
+                return bTime.compareTo(aTime);
+              });
 
-        add(_InternalArticlesUpdate(articleMaps, generation));
-        _loadAuthorProfilesInBackground(articleMaps, generation);
-      }, onError: (_) {
-        Future.delayed(const Duration(seconds: 2), subscribe);
-      }, onDone: () {
-        Future.delayed(const Duration(seconds: 2), subscribe);
-      });
+              add(_InternalArticlesUpdate(articleMaps, generation));
+              _loadAuthorProfilesInBackground(articleMaps, generation);
+            },
+            onError: (_) {
+              Future.delayed(const Duration(seconds: 2), subscribe);
+            },
+            onDone: () {
+              Future.delayed(const Duration(seconds: 2), subscribe);
+            },
+          );
     }
 
     subscribe();
@@ -204,35 +204,50 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
         : event.articles;
 
     if (articles.isEmpty) {
-      if (state is ArticleLoaded) return;
-      if (!_initialSyncDone) return;
-      emit(const ArticleEmpty());
+      if (currentState is ArticleLoaded) {
+        emit(
+          currentState.copyWith(
+            articles: const [],
+            filteredArticles: const [],
+            canLoadMore: false,
+            isLoadingMore: false,
+          ),
+        );
+      } else if (_initialSyncDone) {
+        emit(const ArticleEmpty());
+      }
       return;
     }
 
     final currentProfiles = currentState is ArticleLoaded
         ? currentState.profiles
         : <String, Map<String, dynamic>>{};
-    final searchQuery =
-        currentState is ArticleLoaded ? currentState.searchQuery : '';
+    final searchQuery = currentState is ArticleLoaded
+        ? currentState.searchQuery
+        : '';
 
-    final articlesWithAuthors =
-        _enrichArticlesWithProfiles(articles, currentProfiles);
+    final articlesWithAuthors = _enrichArticlesWithProfiles(
+      articles,
+      currentProfiles,
+    );
     final filteredArticles = _filterArticles(articlesWithAuthors, searchQuery);
 
-    emit(ArticleLoaded(
-      articles: articlesWithAuthors,
-      filteredArticles: filteredArticles,
-      profiles: currentProfiles,
-      currentUserHex: _currentUserHex,
-      canLoadMore: currentState is ArticleLoaded &&
-              currentState.articles.length > event.articles.length
-          ? currentState.canLoadMore
-          : event.articles.length >= _pageSize,
-      isLoadingMore:
-          currentState is ArticleLoaded && currentState.isLoadingMore,
-      searchQuery: searchQuery,
-    ));
+    emit(
+      ArticleLoaded(
+        articles: articlesWithAuthors,
+        filteredArticles: filteredArticles,
+        profiles: currentProfiles,
+        currentUserHex: _currentUserHex,
+        canLoadMore:
+            currentState is ArticleLoaded &&
+                currentState.articles.length > event.articles.length
+            ? currentState.canLoadMore
+            : event.articles.length >= _pageSize,
+        isLoadingMore:
+            currentState is ArticleLoaded && currentState.isLoadingMore,
+        searchQuery: searchQuery,
+      ),
+    );
   }
 
   List<Map<String, dynamic>> _reconcileWatchedPage(
@@ -270,22 +285,27 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
     final currentState = state;
     if (currentState is! ArticleLoaded) return;
 
-    final updatedProfiles =
-        Map<String, Map<String, dynamic>>.from(currentState.profiles);
+    final updatedProfiles = Map<String, Map<String, dynamic>>.from(
+      currentState.profiles,
+    );
     updatedProfiles.addAll(event.profiles);
 
     final articlesWithAuthors = _enrichArticlesWithProfiles(
       currentState.articles,
       updatedProfiles,
     );
-    final filteredArticles =
-        _filterArticles(articlesWithAuthors, currentState.searchQuery);
+    final filteredArticles = _filterArticles(
+      articlesWithAuthors,
+      currentState.searchQuery,
+    );
 
-    emit(currentState.copyWith(
-      articles: articlesWithAuthors,
-      filteredArticles: filteredArticles,
-      profiles: updatedProfiles,
-    ));
+    emit(
+      currentState.copyWith(
+        articles: articlesWithAuthors,
+        filteredArticles: filteredArticles,
+        profiles: updatedProfiles,
+      ),
+    );
   }
 
   List<Map<String, dynamic>> _enrichArticlesWithProfiles(
@@ -312,6 +332,7 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   ) async {
     final generation = _generation;
     final following = await _followingRepository.getFollowing(_currentUserHex);
+    if (isClosed || generation != _generation || emit.isDone) return;
     _followingList = {
       if (_currentUserHex.isNotEmpty) _currentUserHex,
       ...?following,
@@ -369,7 +390,7 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
         if (uniqueNewArticles.isNotEmpty) {
           final updatedArticles = [
             ...latestState.articles,
-            ...uniqueNewArticles
+            ...uniqueNewArticles,
           ];
           updatedArticles.sort((a, b) {
             final aTime = a['created_at'] as int? ?? 0;
@@ -381,15 +402,19 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
             updatedArticles,
             latestState.profiles,
           );
-          final filteredArticles =
-              _filterArticles(enriched, latestState.searchQuery);
+          final filteredArticles = _filterArticles(
+            enriched,
+            latestState.searchQuery,
+          );
 
-          emit(latestState.copyWith(
-            articles: enriched,
-            filteredArticles: filteredArticles,
-            isLoadingMore: false,
-            canLoadMore: moreArticleMaps.length >= _pageSize + currentCount,
-          ));
+          emit(
+            latestState.copyWith(
+              articles: enriched,
+              filteredArticles: filteredArticles,
+              isLoadingMore: false,
+              canLoadMore: moreArticleMaps.length >= _pageSize + currentCount,
+            ),
+          );
 
           _loadAuthorProfilesInBackground(uniqueNewArticles, generation);
           return;
@@ -415,14 +440,18 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
 
     final filteredArticles = _filterArticles(currentState.articles, query);
 
-    emit(currentState.copyWith(
-      searchQuery: query,
-      filteredArticles: filteredArticles,
-    ));
+    emit(
+      currentState.copyWith(
+        searchQuery: query,
+        filteredArticles: filteredArticles,
+      ),
+    );
   }
 
   List<Map<String, dynamic>> _filterArticles(
-      List<Map<String, dynamic>> articles, String query) {
+    List<Map<String, dynamic>> articles,
+    String query,
+  ) {
     if (query.isEmpty) {
       return articles;
     }
@@ -450,25 +479,33 @@ class ArticleBloc extends Bloc<ArticleEvent, ArticleState> {
   ) {
     if (state is ArticleLoaded) {
       final currentState = state as ArticleLoaded;
-      final updatedProfiles =
-          Map<String, Map<String, dynamic>>.from(currentState.profiles);
+      final updatedProfiles = Map<String, Map<String, dynamic>>.from(
+        currentState.profiles,
+      );
       final existingProfile = updatedProfiles[event.userId];
-      final existingImage = existingProfile?['picture'] as String? ??
+      final existingImage =
+          existingProfile?['picture'] as String? ??
           existingProfile?['picture'] as String? ??
           '';
       if (!updatedProfiles.containsKey(event.userId) || existingImage.isEmpty) {
         updatedProfiles[event.userId] = event.user;
 
-        final enriched =
-            _enrichArticlesWithProfiles(currentState.articles, updatedProfiles);
-        final filteredArticles =
-            _filterArticles(enriched, currentState.searchQuery);
+        final enriched = _enrichArticlesWithProfiles(
+          currentState.articles,
+          updatedProfiles,
+        );
+        final filteredArticles = _filterArticles(
+          enriched,
+          currentState.searchQuery,
+        );
 
-        emit(currentState.copyWith(
-          articles: enriched,
-          filteredArticles: filteredArticles,
-          profiles: updatedProfiles,
-        ));
+        emit(
+          currentState.copyWith(
+            articles: enriched,
+            filteredArticles: filteredArticles,
+            profiles: updatedProfiles,
+          ),
+        );
       }
     }
   }

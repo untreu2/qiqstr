@@ -321,8 +321,8 @@ class _FullScreenRoute extends PageRouteBuilder {
           barrierColor: Colors.transparent,
           transitionDuration: const Duration(milliseconds: 260),
           reverseTransitionDuration: const Duration(milliseconds: 200),
-          pageBuilder: (_, __, ___) => child,
-          transitionsBuilder: (_, animation, __, child) {
+          pageBuilder: (_, _, _) => child,
+          transitionsBuilder: (_, animation, _, child) {
             final fade = CurvedAnimation(
               parent: animation,
               curve: Curves.easeOut,

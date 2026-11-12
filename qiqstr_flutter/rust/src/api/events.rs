@@ -66,9 +66,18 @@ pub fn create_repost_event(
     private_key_hex: String,
     relay_url: String,
 ) -> Result<String> {
+    let note_id = EventId::parse(&note_id)?;
+    let note_author = PublicKey::parse(&note_author)?;
+    let original = Event::from_json(&content).ok().filter(|event| {
+        event.id == note_id
+            && event.pubkey == note_author
+            && event.kind == Kind::TextNote
+            && event.verify().is_ok()
+    });
+    let content = original.map(|event| event.as_json()).unwrap_or_default();
     let tags = vec![
-        vec!["e".into(), note_id, relay_url],
-        vec!["p".into(), note_author],
+        vec!["e".into(), note_id.to_hex(), relay_url],
+        vec!["p".into(), note_author.to_hex()],
     ];
     create_signed_event(6, content, tags, private_key_hex)
 }
@@ -186,4 +195,37 @@ pub fn create_relay_list_event_with_markers(
         })
         .collect();
     create_signed_event(10002, String::new(), tags, private_key_hex)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reposts_embed_only_the_matching_verified_original_event() {
+        let author = Keys::generate();
+        let original = EventBuilder::text_note("original")
+            .sign_with_keys(&author)
+            .unwrap();
+        let reposter = Keys::generate();
+        for (content, embedded) in [
+            (original.as_json(), true),
+            ("{\"content\":\"hydrated note\"}".to_string(), false),
+        ] {
+            let repost = create_repost_event(
+                original.id.to_hex(),
+                author.public_key().to_hex(),
+                content,
+                reposter.secret_key().to_secret_hex(),
+                "wss://relay.example".into(),
+            )
+            .unwrap();
+            let repost = Event::from_json(repost).unwrap();
+            repost.verify().unwrap();
+            assert_eq!(!repost.content.is_empty(), embedded);
+            if embedded {
+                assert_eq!(Event::from_json(&repost.content).unwrap(), original);
+            }
+        }
+    }
 }

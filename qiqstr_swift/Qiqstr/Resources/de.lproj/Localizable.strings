@@ -671,3 +671,4 @@
 "cashuMeltAllConfirm" = "{amount} Sats an Ihre Lightning-Adresse senden?";
 "mediaUploadFailed" = "Medien konnten nicht hochgeladen werden. Bitte versuchen Sie es erneut.";
 "cashuMeltAllSuccess" = "{amount} Sats an Lightning gesendet";
+"close" = "Schließen";

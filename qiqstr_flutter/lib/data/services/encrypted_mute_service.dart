@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import '../../src/rust/api/nip17.dart' as nip17;
 import '../../src/rust/api/events.dart' as rust_events;
@@ -15,10 +16,13 @@ class EncryptedMuteService {
   List<String> _mutedWords = [];
   RegExp? _mutedWordsRegex;
   bool _initialized = false;
+  int _loadGeneration = 0;
+  int _sessionGeneration = 0;
 
   List<String> get mutedPubkeys => List.unmodifiable(_mutedPubkeys);
   List<String> get mutedWords => List.unmodifiable(_mutedWords);
   bool get isInitialized => _initialized;
+  int get sessionGeneration => _sessionGeneration;
 
   bool isUserMuted(String pubkey) => _mutedPubkeySet.contains(pubkey);
 
@@ -34,8 +38,9 @@ class EncryptedMuteService {
       _mutedWordsRegex = null;
       return;
     }
-    final pattern =
-        _mutedWords.map((w) => RegExp.escape(w.toLowerCase())).join('|');
+    final pattern = _mutedWords
+        .map((w) => RegExp.escape(w.toLowerCase()))
+        .join('|');
     _mutedWordsRegex = RegExp(pattern);
   }
 
@@ -66,10 +71,13 @@ class EncryptedMuteService {
     required String userPubkeyHex,
     required String privateKeyHex,
   }) async {
+    final generation = ++_loadGeneration;
     try {
-      final content =
-          await rust_db.dbGetMuteListContent(pubkeyHex: userPubkeyHex);
+      final content = await rust_db.dbGetMuteListContent(
+        pubkeyHex: userPubkeyHex,
+      );
 
+      if (generation != _loadGeneration) return;
       if (content == null) {
         _mutedPubkeys = [];
         _mutedPubkeySet = {};
@@ -84,8 +92,11 @@ class EncryptedMuteService {
           'kinds': [10000],
           'authors': [userPubkeyHex],
         });
-        final eventsJson =
-            await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
+        final eventsJson = await rust_db.dbQueryEvents(
+          filterJson: filterJson,
+          limit: 1,
+        );
+        if (generation != _loadGeneration) return;
         final events = jsonDecode(eventsJson) as List<dynamic>;
         if (events.isNotEmpty) {
           _extractFromPublicTags(events.first as Map<String, dynamic>);
@@ -103,8 +114,11 @@ class EncryptedMuteService {
             'kinds': [10000],
             'authors': [userPubkeyHex],
           });
-          final eventsJson =
-              await rust_db.dbQueryEvents(filterJson: filterJson, limit: 1);
+          final eventsJson = await rust_db.dbQueryEvents(
+            filterJson: filterJson,
+            limit: 1,
+          );
+          if (generation != _loadGeneration) return;
           final events = jsonDecode(eventsJson) as List<dynamic>;
           if (events.isNotEmpty) {
             _extractFromPublicTags(events.first as Map<String, dynamic>);
@@ -116,27 +130,42 @@ class EncryptedMuteService {
       _initialized = true;
       _syncToRust();
     } catch (_) {
+      if (generation != _loadGeneration) return;
       _initialized = true;
     }
   }
 
   void _syncToRust() {
-    rust_db.setActiveMuteList(
-      mutedPubkeys: List.unmodifiable(_mutedPubkeys),
-      mutedWords: List.unmodifiable(_mutedWords),
-    );
+    _rebuildMutedWordsRegex();
+    try {
+      unawaited(
+        rust_db
+            .setActiveMuteList(
+              mutedPubkeys: List.unmodifiable(_mutedPubkeys),
+              mutedWords: List.unmodifiable(_mutedWords),
+            )
+            .catchError((_) {}),
+      );
+    } catch (_) {}
   }
 
   void _extractFromPublicTags(Map<String, dynamic> event) {
     final tags = event['tags'] as List<dynamic>? ?? [];
     _mutedPubkeys = tags
-        .where((tag) =>
-            tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1)
+        .where(
+          (tag) =>
+              tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1,
+        )
         .map((tag) => (tag as List)[1] as String)
         .toList();
     _mutedWords = tags
-        .where((tag) =>
-            tag is List && tag.isNotEmpty && tag[0] == 'word' && tag.length > 1)
+        .where(
+          (tag) =>
+              tag is List &&
+              tag.isNotEmpty &&
+              tag[0] == 'word' &&
+              tag.length > 1,
+        )
         .map((tag) => ((tag as List)[1] as String).toLowerCase())
         .toList();
   }
@@ -144,13 +173,20 @@ class EncryptedMuteService {
   void _extractFromPrivateTags(String decryptedJson) {
     final privateTags = jsonDecode(decryptedJson) as List<dynamic>;
     _mutedPubkeys = privateTags
-        .where((tag) =>
-            tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1)
+        .where(
+          (tag) =>
+              tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1,
+        )
         .map((tag) => (tag as List)[1] as String)
         .toList();
     _mutedWords = privateTags
-        .where((tag) =>
-            tag is List && tag.isNotEmpty && tag[0] == 'word' && tag.length > 1)
+        .where(
+          (tag) =>
+              tag is List &&
+              tag.isNotEmpty &&
+              tag[0] == 'word' &&
+              tag.length > 1,
+        )
         .map((tag) => ((tag as List)[1] as String).toLowerCase())
         .toList();
   }
@@ -193,30 +229,31 @@ class EncryptedMuteService {
   void addMutedPubkey(String pubkey) {
     if (_mutedPubkeySet.add(pubkey)) {
       _mutedPubkeys = [..._mutedPubkeys, pubkey];
+      _syncToRust();
     }
   }
 
   void removeMutedPubkey(String pubkey) {
     _mutedPubkeys = _mutedPubkeys.where((p) => p != pubkey).toList();
     _mutedPubkeySet = _mutedPubkeys.toSet();
+    _syncToRust();
   }
 
   void addMutedWord(String word) {
     final trimmed = word.trim().toLowerCase();
     if (trimmed.isNotEmpty && !_mutedWords.contains(trimmed)) {
       _mutedWords = [..._mutedWords, trimmed];
+      _syncToRust();
     }
   }
 
   void removeMutedWord(String word) {
     final trimmed = word.trim().toLowerCase();
     _mutedWords = _mutedWords.where((w) => w != trimmed).toList();
+    _syncToRust();
   }
 
-  void updateCache({
-    List<String>? pubkeys,
-    List<String>? words,
-  }) {
+  void updateCache({List<String>? pubkeys, List<String>? words}) {
     if (pubkeys != null) {
       _mutedPubkeys = List.from(pubkeys);
       _mutedPubkeySet = _mutedPubkeys.toSet();
@@ -227,9 +264,13 @@ class EncryptedMuteService {
   }
 
   void clear() {
+    _sessionGeneration++;
+    _loadGeneration++;
+    _mutedWordsRegex = null;
     _mutedPubkeys = [];
     _mutedPubkeySet = {};
     _mutedWords = [];
     _initialized = false;
+    _syncToRust();
   }
 }

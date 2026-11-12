@@ -59,10 +59,10 @@ struct SidebarView: View {
             List {
                 Section { header }
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 8, trailing: 20))
+                    .listRowInsets(EdgeInsets(top: 20, leading: 20, bottom: 4, trailing: 16))
                 Section {
                     row(L("profile"), systemImage: "person", identifier: "sidebar-profile") { open(.profile(me)) }
-                    row(L("reads"), systemImage: "doc.text", identifier: "sidebar-reads") { open(.explore) }
+                    row(L("reads"), systemImage: "doc.text", identifier: "sidebar-reads") { open(.reads) }
                     row(L("liveTitle"), systemImage: "dot.radiowaves.left.and.right", identifier: "sidebar-live") { open(.liveStreams) }
                     row(L("listsTitle"), systemImage: "list.bullet", identifier: "sidebar-lists") { open(.followSets) }
                     row(L("bookmarks"), systemImage: "bookmark", identifier: "sidebar-bookmarks") { open(.bookmarks) }
@@ -86,14 +86,10 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .listSectionSpacing(.compact)
+            .contentMargins(.top, 0, for: .scrollContent)
             .refreshable { await model.refresh() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .close) { router.showSidebar = false }
-                        .accessibilityIdentifier("sidebar-close")
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -134,10 +130,12 @@ struct SidebarView: View {
                     }
                     Spacer(minLength: 0)
                 }
+                .padding(.trailing, 52)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("sidebar-header")
+            .overlay(alignment: .topTrailing) { closeButton }
             .contextMenu {
                 if let npub = session.npub {
                     Button {
@@ -154,6 +152,20 @@ struct SidebarView: View {
                 Spacer(minLength: 0)
             }
         }
+    }
+
+    private var closeButton: some View {
+        Button {
+            router.showSidebar = false
+        } label: {
+            Image(systemName: "xmark")
+                .font(.body.weight(.semibold))
+                .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(L("close"))
+        .accessibilityIdentifier("sidebar-close")
     }
 
     private func countButton(_ value: Int?, label: String, identifier: String, action: @escaping () -> Void) -> some View {

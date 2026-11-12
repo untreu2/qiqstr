@@ -16,16 +16,12 @@ class NoteStatisticsBloc
   final String noteId;
 
   NoteStatisticsBloc({
-    required InteractionRepository interactionRepository,
-    required ProfileRepository profileRepository,
-    required AuthService authService,
-    required SyncService syncService,
+    required this._interactionRepository,
+    required this._profileRepository,
+    required this._authService,
+    required this._syncService,
     required this.noteId,
-  })  : _interactionRepository = interactionRepository,
-        _profileRepository = profileRepository,
-        _authService = authService,
-        _syncService = syncService,
-        super(const NoteStatisticsInitial()) {
+  })  : super(const NoteStatisticsInitial()) {
     on<NoteStatisticsInitialized>(
       _onNoteStatisticsInitialized,
       transformer: droppable(),

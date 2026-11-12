@@ -149,7 +149,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                         ),
                       ),
                     ),
-                    errorWidget: (_, __, ___) {
+                    errorWidget: (_, _, _) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (mounted) {
                           setState(() {

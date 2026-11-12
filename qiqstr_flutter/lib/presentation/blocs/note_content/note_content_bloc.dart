@@ -14,13 +14,10 @@ class NoteContentBloc extends Bloc<NoteContentEvent, NoteContentState> {
   int _generation = 0;
 
   NoteContentBloc({
-    required ProfileRepository profileRepository,
-    required AuthService authService,
-    SyncService? syncService,
-  })  : _profileRepository = profileRepository,
-        _authService = authService,
-        _syncService = syncService,
-        super(const NoteContentInitial()) {
+    required this._profileRepository,
+    required this._authService,
+    this._syncService,
+  })  : super(const NoteContentInitial()) {
     on<NoteContentInitialized>(
       _onNoteContentInitialized,
       transformer: restartable(),

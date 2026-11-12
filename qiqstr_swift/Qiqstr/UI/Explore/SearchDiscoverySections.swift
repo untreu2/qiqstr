@@ -2,12 +2,16 @@ import SwiftUI
 
 struct SearchDiscoverySections: View {
     let model: SearchViewModel
+    var showsHashtags = true
+    var showsRecents = true
+    var showsLive = true
+    var showsPeople = true
 
     var body: some View {
-        if !model.recents.isEmpty { recentSection }
-        if !model.trendingHashtags.isEmpty { hashtagSection }
-        LiveNowSection()
-        if !model.suggestions.isEmpty { peopleSection }
+        if showsRecents, !model.recents.isEmpty { recentSection }
+        if showsHashtags, !model.trendingHashtags.isEmpty { hashtagSection }
+        if showsLive { LiveNowSection() }
+        if showsPeople, !model.suggestions.isEmpty { peopleSection }
         trendingSection
     }
 

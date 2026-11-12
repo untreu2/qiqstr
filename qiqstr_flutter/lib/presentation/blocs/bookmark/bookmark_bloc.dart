@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/repositories/feed_repository.dart';
 import '../../../data/sync/sync_service.dart';
@@ -14,17 +15,43 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
   final AuthService _authService;
 
   BookmarkBloc({
-    required FeedRepository feedRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _feedRepository = feedRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const BookmarkInitial()) {
-    on<BookmarkLoadRequested>(_onLoadRequested);
-    on<BookmarkAdded>(_onBookmarkAdded);
-    on<BookmarkRemoved>(_onBookmarkRemoved);
-    on<BookmarkRefreshed>(_onBookmarkRefreshed);
+    required this._feedRepository,
+    required this._syncService,
+    required this._authService,
+  }) : super(const BookmarkInitial()) {
+    on<BookmarkEvent>(_onEvent, transformer: sequential());
+  }
+
+  bool _isCurrentSession(int generation, String? userHex) =>
+      generation == EncryptedBookmarkService.instance.sessionGeneration &&
+      userHex == _authService.currentUserPubkeyHex;
+
+  Future<void> _onEvent(
+    BookmarkEvent event,
+    Emitter<BookmarkState> emit,
+  ) async {
+    final sessionGeneration =
+        EncryptedBookmarkService.instance.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
+    try {
+      switch (event) {
+        case BookmarkLoadRequested():
+          await _onLoadRequested(event, emit);
+        case BookmarkAdded():
+          await _onBookmarkAdded(event, emit);
+        case BookmarkRemoved():
+          await _onBookmarkRemoved(event, emit);
+        case BookmarkRefreshed():
+          await _onBookmarkRefreshed(event, emit);
+      }
+    } catch (error) {
+      if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+      final currentState = state;
+      emit(BookmarkError(error.toString()));
+      if (currentState is BookmarkLoaded) {
+        emit(currentState);
+      }
+    }
   }
 
   Future<void> _onLoadRequested(
@@ -51,38 +78,48 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
     }
 
     if (bookmarkService.bookmarkedEventIds.isNotEmpty) {
-      final notes =
-          await _fetchBookmarkedNotes(bookmarkService.bookmarkedEventIds);
-      emit(BookmarkLoaded(
-        bookmarkedNotes: notes,
-        removingStates: {},
-        isSyncing: true,
-      ));
+      final notes = await _fetchBookmarkedNotes(
+        bookmarkService.bookmarkedEventIds,
+      );
+      emit(
+        BookmarkLoaded(
+          bookmarkedNotes: notes,
+          removingStates: {},
+          isSyncing: true,
+        ),
+      );
     } else {
-      emit(const BookmarkLoaded(
-        bookmarkedNotes: [],
-        removingStates: {},
-        isSyncing: true,
-      ));
+      emit(
+        const BookmarkLoaded(
+          bookmarkedNotes: [],
+          removingStates: {},
+          isSyncing: true,
+        ),
+      );
     }
 
     try {
       await _syncService.syncBookmarkList(currentUserHex);
       if (bookmarkService.bookmarkedEventIds.isNotEmpty) {
-        final notes =
-            await _fetchBookmarkedNotes(bookmarkService.bookmarkedEventIds);
+        final notes = await _fetchBookmarkedNotes(
+          bookmarkService.bookmarkedEventIds,
+        );
         if (state is BookmarkLoaded) {
           final currentState = state as BookmarkLoaded;
-          emit(BookmarkLoaded(
-            bookmarkedNotes: notes,
-            removingStates: currentState.removingStates,
-            isSyncing: false,
-          ));
+          emit(
+            BookmarkLoaded(
+              bookmarkedNotes: notes,
+              removingStates: currentState.removingStates,
+              isSyncing: false,
+            ),
+          );
         }
       } else {
         if (state is BookmarkLoaded) {
           final currentState = state as BookmarkLoaded;
-          emit(currentState.copyWith(isSyncing: false));
+          emit(
+            currentState.copyWith(bookmarkedNotes: const [], isSyncing: false),
+          );
         }
       }
     } catch (_) {
@@ -94,11 +131,13 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchBookmarkedNotes(
-      List<String> eventIds) async {
-    final validNotes = await _feedRepository.getNotesByIds(eventIds);
+    List<String> eventIds,
+  ) async {
+    final validNotes = [...await _feedRepository.getNotesByIds(eventIds)];
 
-    final foundIds =
-        validNotes.map((n) => n.toMap()['id'] as String? ?? '').toSet();
+    final foundIds = validNotes
+        .map((n) => n.toMap()['id'] as String? ?? '')
+        .toSet();
     final missingIds = eventIds.where((id) => !foundIds.contains(id)).toList();
 
     if (missingIds.isNotEmpty) {
@@ -133,27 +172,39 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
     BookmarkAdded event,
     Emitter<BookmarkState> emit,
   ) async {
-    final bookmarkService = EncryptedBookmarkService.instance;
-    bookmarkService.addBookmark(event.eventId);
-
-    if (state is BookmarkLoaded) {
-      final currentState = state as BookmarkLoaded;
-      final notes = await _feedRepository.getNotesByIds([event.eventId]);
-      if (notes.isNotEmpty) {
-        emit(currentState.copyWith(
-          bookmarkedNotes: [
-            notes.first.toMap(),
-            ...currentState.bookmarkedNotes
-          ],
-        ));
-      }
-    }
-
+    final service = EncryptedBookmarkService.instance;
+    final sessionGeneration = service.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
+    if (service.isBookmarked(event.eventId)) return;
+    final previousIds = service.bookmarkedEventIds;
+    service.addBookmark(event.eventId);
     try {
       await _syncService.publishBookmark(
-        bookmarkedEventIds: bookmarkService.bookmarkedEventIds,
+        bookmarkedEventIds: service.bookmarkedEventIds,
       );
-    } catch (_) {}
+    } catch (_) {
+      if (!_isCurrentSession(sessionGeneration, userHex)) return;
+      service.updateCache(eventIds: previousIds);
+      rethrow;
+    }
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+    if (state is BookmarkLoaded) {
+      final notes = await _feedRepository.getNotesByIds([event.eventId]);
+      if (!_isCurrentSession(sessionGeneration, userHex)) return;
+      if (notes.isNotEmpty && !emit.isDone && state is BookmarkLoaded) {
+        final current = state as BookmarkLoaded;
+        emit(
+          current.copyWith(
+            bookmarkedNotes: [
+              notes.first.toMap(),
+              ...current.bookmarkedNotes.where(
+                (note) => note['id'] != event.eventId,
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _onBookmarkRemoved(
@@ -162,35 +213,35 @@ class BookmarkBloc extends Bloc<BookmarkEvent, BookmarkState> {
   ) async {
     final currentState = state;
     if (currentState is! BookmarkLoaded) return;
-
-    final removingStates = Map<String, bool>.from(currentState.removingStates);
-    if (removingStates[event.eventId] == true) return;
-
-    removingStates[event.eventId] = true;
-    emit(currentState.copyWith(removingStates: removingStates));
-
+    final service = EncryptedBookmarkService.instance;
+    final sessionGeneration = service.sessionGeneration;
+    final userHex = _authService.currentUserPubkeyHex;
+    final previousIds = service.bookmarkedEventIds;
+    emit(
+      currentState.copyWith(
+        removingStates: {...currentState.removingStates, event.eventId: true},
+      ),
+    );
+    service.removeBookmark(event.eventId);
     try {
-      final bookmarkService = EncryptedBookmarkService.instance;
-      bookmarkService.removeBookmark(event.eventId);
-
       await _syncService.publishBookmark(
-        bookmarkedEventIds: bookmarkService.bookmarkedEventIds,
+        bookmarkedEventIds: service.bookmarkedEventIds,
       );
-
-      final updatedNotes = currentState.bookmarkedNotes.where((n) {
-        final noteId = n['id'] as String? ?? '';
-        return noteId != event.eventId;
-      }).toList();
-
-      removingStates.remove(event.eventId);
-      emit(BookmarkLoaded(
-        bookmarkedNotes: updatedNotes,
-        removingStates: removingStates,
-      ));
     } catch (_) {
-      removingStates.remove(event.eventId);
-      emit(currentState.copyWith(removingStates: removingStates));
+      if (!_isCurrentSession(sessionGeneration, userHex)) return;
+      service.updateCache(eventIds: previousIds);
+      if (!emit.isDone) emit(currentState);
+      rethrow;
     }
+    if (emit.isDone || !_isCurrentSession(sessionGeneration, userHex)) return;
+    emit(
+      currentState.copyWith(
+        bookmarkedNotes: currentState.bookmarkedNotes
+            .where((note) => note['id'] != event.eventId)
+            .toList(),
+        removingStates: {...currentState.removingStates}..remove(event.eventId),
+      ),
+    );
   }
 
   Future<void> _onBookmarkRefreshed(

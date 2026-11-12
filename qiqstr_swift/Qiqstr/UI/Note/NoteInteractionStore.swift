@@ -8,6 +8,7 @@ final class NoteCountsModel {
     var counts: InteractionCounts
     var isReacting = false
     var isReposting = false
+    var myReaction: String?
     @ObservationIgnored var lastUserAction: Date?
 
     init(noteId: String, counts: InteractionCounts) {
@@ -139,17 +140,30 @@ final class NoteInteractionStore {
         model.isReacting = true
         defer { model.isReacting = false }
         let wasReacted = model.counts.hasReacted
+        let previousReaction = model.myReaction
         model.lastUserAction = Date()
         model.counts.hasReacted = !wasReacted
+        model.myReaction = wasReacted ? nil : content
         model.counts.reactions = max(0, model.counts.reactions + (wasReacted ? -1 : 1))
         do {
             if wasReacted { try await service.unreact(note) } else { try await service.react(to: note, content: content) }
         } catch {
             model.counts.hasReacted = wasReacted
+            model.myReaction = previousReaction
             model.counts.reactions = max(0, model.counts.reactions + (wasReacted ? 1 : -1))
             model.lastUserAction = nil
             ToastCenter.shared.error(error)
         }
+    }
+
+    func react(_ note: Note, with content: String) async {
+        let model = model(for: note)
+        if model.counts.hasReacted {
+            guard model.myReaction != content else { return }
+            await toggleReaction(note)
+            guard !model.counts.hasReacted else { return }
+        }
+        await toggleReaction(note, content: content)
     }
 
     func toggleRepost(_ note: Note) async {

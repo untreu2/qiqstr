@@ -13,11 +13,9 @@ class ArticleQuoteWidgetBloc
   final SyncService _syncService;
 
   ArticleQuoteWidgetBloc({
-    required ArticleRepository articleRepository,
-    required SyncService syncService,
-  })  : _articleRepository = articleRepository,
-        _syncService = syncService,
-        super(const ArticleQuoteWidgetInitial()) {
+    required this._articleRepository,
+    required this._syncService,
+  })  : super(const ArticleQuoteWidgetInitial()) {
     on<ArticleQuoteWidgetLoadRequested>(
       _onLoadRequested,
       transformer: restartable(),

@@ -47,17 +47,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
   static const int _interactionSyncMaxBatch = 60;
 
   FeedBloc({
-    required FeedRepository feedRepository,
-    required FollowingRepository followingRepository,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required FollowSetService followSetService,
-  })  : _feedRepository = feedRepository,
-        _followingRepository = followingRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        _followSetService = followSetService,
-        super(const FeedInitial()) {
+    required this._feedRepository,
+    required this._followingRepository,
+    required this._profileRepository,
+    required this._syncService,
+    required this._followSetService,
+  })  : super(const FeedInitial()) {
     on<feed_event.FeedInitialized>(
       _onFeedInitialized,
       transformer: restartable(),
@@ -100,6 +95,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     }
 
     _currentUserHex = event.userHex;
+    _currentUserProfile = null;
     _currentSortMode = FeedSortMode.latest;
     _currentHashtag = event.hashtag;
     _activeListId = null;
@@ -551,7 +547,12 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
 
     final currentState = state;
     final FeedLoaded baseState = currentState is FeedLoaded
-        ? currentState.copyWith(isSyncing: true, pendingNotesCount: 0)
+        ? currentState.copyWith(
+            isSyncing: true,
+            isLoadingMore: false,
+            canLoadMore: true,
+            pendingNotesCount: 0,
+          )
         : FeedLoaded(
             notes: const [],
             profiles: _withCurrentUserProfile(const {}),
@@ -625,7 +626,7 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           limit: newLimit,
         );
       } else if (currentState.activeListId != null) {
-        final listPubkeys =
+        final listPubkeys = _activeListPubkeys ??
             _followSetService.pubkeysForList(currentState.activeListId!);
         if (listPubkeys == null || listPubkeys.isEmpty) {
           emit(currentState.copyWith(isLoadingMore: false));
@@ -713,11 +714,16 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
     _currentSortMode = event.mode;
     _resetAccumulators();
     _acceptNextUpdate = true;
-    emit(currentState.copyWith(sortMode: event.mode));
+    emit(currentState.copyWith(
+      sortMode: event.mode,
+      isLoadingMore: false,
+      canLoadMore: true,
+      isSyncing: false,
+    ));
     if (currentState.hashtag != null) {
       _watchHashtagFeed(currentState.hashtag!);
     } else if (currentState.activeListId != null) {
-      final pubkeys =
+      final pubkeys = _activeListPubkeys ??
           _followSetService.pubkeysForList(currentState.activeListId!);
       if (pubkeys != null && pubkeys.isNotEmpty) {
         _watchListFeed(pubkeys);
@@ -747,6 +753,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
           hashtag: event.hashtag,
           notes: const [],
           isSyncing: true,
+          isLoadingMore: false,
+          canLoadMore: true,
           pendingNotesCount: 0,
           clearActiveList: true));
       _watchHashtagFeed(event.hashtag!);
@@ -755,6 +763,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(
           notes: const [],
           isSyncing: true,
+          isLoadingMore: false,
+          canLoadMore: true,
           pendingNotesCount: 0,
           clearHashtag: true,
           clearActiveList: true));
@@ -916,6 +926,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(
         notes: const [],
         isSyncing: true,
+        isLoadingMore: false,
+        canLoadMore: true,
         pendingNotesCount: 0,
         clearHashtag: true,
         clearActiveList: true,
@@ -927,6 +939,8 @@ class FeedBloc extends Bloc<feed_event.FeedEvent, FeedState> {
       emit(currentState.copyWith(
         notes: const [],
         isSyncing: true,
+        isLoadingMore: false,
+        canLoadMore: true,
         pendingNotesCount: 0,
         activeListId: event.listId,
         activeListTitle: event.listTitle,

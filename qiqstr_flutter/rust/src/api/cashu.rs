@@ -1,116 +1,158 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
+use cdk::cdk_database::WalletDatabase;
 use cdk::nuts::{CurrencyUnit, PaymentMethod, Token};
 use cdk::wallet::{ReceiveOptions, Wallet};
 use cdk_sqlite::wallet::WalletSqliteDatabase;
 use flutter_rust_bridge::frb;
 use rand::RngCore;
-use tokio::sync::{Mutex, OnceCell};
+use tokio::sync::Mutex;
 
 use crate::api::relay::db_path_state;
 
-static WALLET_STORE: OnceCell<Mutex<WalletStore>> = OnceCell::const_new();
+static WALLET_STORE: Mutex<Option<(PathBuf, Arc<Mutex<WalletStore>>)>> = Mutex::const_new(None);
 
 struct WalletStore {
-    db_path: PathBuf,
+    database: Arc<WalletSqliteDatabase>,
     wallets: HashMap<String, Arc<Wallet>>,
     seed: [u8; 64],
 }
 
 impl WalletStore {
-    fn new(db_path: PathBuf) -> Self {
-        let seed = Self::load_or_create_seed(&db_path);
-        Self { db_path, wallets: HashMap::new(), seed }
+    async fn new(db_path: PathBuf) -> Result<Self> {
+        let seed = Self::load_or_create_seed(&db_path)?;
+        let database = Arc::new(
+            WalletSqliteDatabase::new(db_path)
+                .await
+                .context("Failed to open Cashu database")?,
+        );
+        let mut store = Self {
+            database,
+            wallets: HashMap::new(),
+            seed,
+        };
+        for mint in store.database.get_mints().await?.into_keys() {
+            store.insert_wallet(&mint.to_string())?;
+        }
+        Ok(store)
     }
 
-    fn seed_path(db_path: &PathBuf) -> PathBuf {
+    fn seed_path(db_path: &Path) -> PathBuf {
         db_path
             .parent()
-            .unwrap_or_else(|| std::path::Path::new("."))
+            .unwrap_or_else(|| Path::new("."))
             .join("cashu_seed.bin")
     }
 
-    fn load_or_create_seed(db_path: &PathBuf) -> [u8; 64] {
+    fn load_or_create_seed(db_path: &Path) -> Result<[u8; 64]> {
         let path = Self::seed_path(db_path);
-        if let Ok(bytes) = std::fs::read(&path) {
-            if bytes.len() == 64 {
-                let mut seed = [0u8; 64];
-                seed.copy_from_slice(&bytes);
-                return seed;
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                return bytes.try_into().map_err(|_| {
+                    anyhow!(
+                        "Cashu seed is corrupt; restore the original seed before using the wallet"
+                    )
+                })
             }
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context("Failed to read Cashu seed"),
+        }
+        if db_path.try_exists()? {
+            return Err(anyhow!(
+                "Cashu seed is missing for an existing wallet; restore the original seed"
+            ));
         }
         let mut seed = [0u8; 64];
         rand::thread_rng().fill_bytes(&mut seed);
-        let _ = std::fs::write(&path, &seed);
-        seed
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&path).context("Failed to create Cashu seed")?;
+        if let Err(error) = file.write_all(&seed).and_then(|_| file.sync_all()) {
+            let _ = std::fs::remove_file(&path);
+            return Err(error).context("Failed to persist Cashu seed");
+        }
+        Ok(seed)
+    }
+
+    fn insert_wallet(&mut self, mint_url: &str) -> Result<Arc<Wallet>> {
+        let wallet = Arc::new(
+            Wallet::new(
+                mint_url,
+                CurrencyUnit::Sat,
+                self.database.clone(),
+                self.seed,
+                None,
+            )
+            .context("Failed to create Cashu wallet")?,
+        );
+        self.wallets.insert(mint_url.to_string(), wallet.clone());
+        Ok(wallet)
     }
 
     async fn wallet_for(&mut self, mint_url: &str) -> Result<Arc<Wallet>> {
-        if let Some(w) = self.wallets.get(mint_url) {
-            return Ok(w.clone());
-        }
-
-        let db = WalletSqliteDatabase::new(self.db_path.clone())
-            .await
-            .map_err(|e| anyhow!("Failed to open cashu db: {}", e))?;
-
-        let wallet = Wallet::new(
-            mint_url,
-            CurrencyUnit::Sat,
-            Arc::new(db),
-            self.seed,
-            None,
-        )
-        .map_err(|e| anyhow!("Failed to create wallet: {}", e))?;
-
+        let wallet = match self.wallets.get(mint_url) {
+            Some(wallet) => wallet.clone(),
+            None => {
+                self.database.add_mint(mint_url.parse()?, None).await?;
+                self.insert_wallet(mint_url)?
+            }
+        };
         wallet
             .recover_incomplete_sagas()
             .await
-            .map_err(|e| anyhow!("Saga recovery failed: {}", e))?;
-
-        let wallet = Arc::new(wallet);
-        self.wallets.insert(mint_url.to_string(), wallet.clone());
+            .context("Cashu recovery failed")?;
         Ok(wallet)
     }
 }
 
-async fn store() -> Result<&'static Mutex<WalletStore>> {
-    WALLET_STORE
-        .get_or_try_init(|| async {
-            let db_path = {
-                let lock = db_path_state().read().await;
-                lock.as_ref()
-                    .map(|p| {
-                        PathBuf::from(p)
-                            .parent()
-                            .unwrap_or_else(|| std::path::Path::new("."))
-                            .join("cashu_wallet.sqlite")
-                    })
-                    .unwrap_or_else(|| {
-                        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-                        PathBuf::from(home).join(".cashu_wallet.sqlite")
-                    })
-            };
-            Ok::<_, anyhow::Error>(Mutex::new(WalletStore::new(db_path)))
-        })
+async fn store() -> Result<Arc<Mutex<WalletStore>>> {
+    let db_path = db_path_state()
+        .read()
         .await
+        .as_ref()
+        .map(|path| {
+            PathBuf::from(path)
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("cashu_wallet.sqlite")
+        })
+        .ok_or_else(|| anyhow!("Initialize persistent app storage before using Cashu"))?;
+    let mut guard = WALLET_STORE.lock().await;
+    if let Some((current_path, store)) = guard.as_ref() {
+        if current_path == &db_path {
+            return Ok(store.clone());
+        }
+    }
+    let store = Arc::new(Mutex::new(WalletStore::new(db_path.clone()).await?));
+    *guard = Some((db_path, store.clone()));
+    Ok(store)
+}
+
+fn parse_sat_token(token: &str) -> Result<Token> {
+    let parsed = Token::from_str(token.trim()).context("Invalid token")?;
+    if parsed.unit().unwrap_or(CurrencyUnit::Sat) != CurrencyUnit::Sat {
+        return Err(anyhow!("Only sat-denominated Cashu tokens are supported"));
+    }
+    parsed.value().context("Invalid token amount")?;
+    Ok(parsed)
 }
 
 /// Receives a Cashu token and melts it to the given Lightning target.
-/// Fee-aware: starts with fee offset of 1 sat, increments by 1, max 5 attempts.
 ///
 /// Returns JSON `{ "amount_sats": u64 }`
-pub async fn cashu_receive_and_melt(
-    token: String,
-    lightning_target: String,
-) -> Result<String> {
+pub async fn cashu_receive_and_melt(token: String, lightning_target: String) -> Result<String> {
     let token_str = token.trim();
-    let parsed =
-        Token::from_str(token_str).map_err(|e| anyhow!("Invalid token: {}", e))?;
+    let parsed = parse_sat_token(token_str)?;
 
     let mint_url = parsed
         .mint_url()
@@ -161,14 +203,25 @@ pub async fn cashu_melt_all(lightning_target: String) -> Result<String> {
     let mut last_error: Option<String> = None;
 
     for (mint_url, wallet) in &wallets {
-        let balance = wallet.total_balance().await.map(u64::from).unwrap_or(0);
+        if let Err(error) = wallet.recover_incomplete_sagas().await {
+            last_error = Some(format!("{}: recovery failed: {}", mint_url, error));
+            continue;
+        }
+        let balance = u64::from(
+            wallet
+                .total_balance()
+                .await
+                .context("Failed to get Cashu balance")?,
+        );
         if balance == 0 {
             continue;
         }
 
         match melt_with_retry(wallet, ln, balance).await {
             Ok(melted) => {
-                total_melted += melted;
+                total_melted = total_melted
+                    .checked_add(melted)
+                    .ok_or_else(|| anyhow!("Total Cashu amount overflow"))?;
                 mints.push(serde_json::json!({ "mint_url": mint_url, "sats": melted }));
             }
             Err(e) => {
@@ -187,30 +240,28 @@ pub async fn cashu_melt_all(lightning_target: String) -> Result<String> {
     Ok(serde_json::json!({
         "total_sats": total_melted,
         "mints": mints,
+        "error": last_error,
     })
     .to_string())
 }
 
-/// Fee-aware melt with retry.
-/// 1. Try send_sats = available_sats - 1 (minimum fee offset).
-/// 2. On InsufficientFunds, increment fee by 1 and retry.
-/// Max 5 attempts (fee offsets: 1, 2, 3, 4, 5).
-async fn melt_with_retry(
-    wallet: &Wallet,
-    ln_target: &str,
-    available_sats: u64,
-) -> Result<u64> {
+async fn melt_with_retry(wallet: &Wallet, ln_target: &str, available_sats: u64) -> Result<u64> {
     if available_sats == 0 {
         return Err(anyhow!("Balance is zero"));
     }
 
-    for extra_fee in 1u64..=5 {
+    let mut extra_fee = 1u64;
+    for _ in 0..5 {
         let send_sats = match available_sats.checked_sub(extra_fee) {
             Some(s) if s > 0 => s,
             _ => return Err(anyhow!("Amount too small to cover fees")),
         };
 
-        let amount_msat = cdk::Amount::from(send_sats * 1000);
+        let amount_msat = cdk::Amount::from(
+            send_sats
+                .checked_mul(1000)
+                .ok_or_else(|| anyhow!("Amount is too large"))?,
+        );
 
         let quote = match get_quote(wallet, ln_target, amount_msat).await {
             Ok(q) => q,
@@ -220,6 +271,7 @@ async fn melt_with_retry(
                     || msg.contains("amount")
                     || msg.contains("too small")
                 {
+                    extra_fee += 1;
                     continue;
                 }
                 return Err(e);
@@ -228,15 +280,18 @@ async fn melt_with_retry(
 
         match wallet.prepare_melt(&quote.id, HashMap::new()).await {
             Ok(prepared) => {
-                prepared
-                    .confirm()
-                    .await
-                    .map_err(|e| anyhow!("Melt confirm failed: {}", e))?;
-                return Ok(send_sats);
+                let finalized = prepared.confirm().await.context("Melt confirm failed")?;
+                return Ok(u64::from(finalized.amount()));
             }
             Err(e) => {
                 let msg = e.to_string().to_lowercase();
                 if msg.contains("insufficient") || msg.contains("not enough") {
+                    if !ln_target.contains('@') {
+                        return Err(anyhow!("Insufficient funds for the invoice and its fees"));
+                    }
+                    extra_fee = extra_fee
+                        .saturating_add(1)
+                        .max(u64::from(quote.fee_reserve));
                     continue;
                 }
                 return Err(anyhow!("prepare_melt failed: {}", e));
@@ -270,15 +325,14 @@ async fn get_quote(
 /// Returns JSON `{ "mint_url": String, "amount_sats": u64 }`
 #[frb(sync)]
 pub fn cashu_decode_token(token: String) -> Result<String> {
-    let parsed =
-        Token::from_str(token.trim()).map_err(|e| anyhow!("Invalid token: {}", e))?;
+    let parsed = parse_sat_token(&token)?;
 
     let mint_url = parsed
         .mint_url()
         .map_err(|e| anyhow!("Could not extract mint URL: {}", e))?
         .to_string();
 
-    let amount_sats = parsed.value().map(u64::from).unwrap_or(0);
+    let amount_sats = u64::from(parsed.value()?);
 
     Ok(serde_json::json!({
         "mint_url": mint_url,
@@ -304,10 +358,118 @@ pub async fn cashu_get_balance() -> Result<String> {
     let mut mints = Vec::new();
 
     for (mint_url, wallet) in wallets {
-        let balance = wallet.total_balance().await.map(u64::from).unwrap_or(0);
-        total += balance;
+        let balance = u64::from(
+            wallet
+                .total_balance()
+                .await
+                .context("Failed to get Cashu balance")?,
+        );
+        total = total
+            .checked_add(balance)
+            .ok_or_else(|| anyhow!("Total Cashu balance overflow"))?;
         mints.push(serde_json::json!({ "mint_url": mint_url, "sats": balance }));
     }
 
     Ok(serde_json::json!({ "total_sats": total, "mints": mints }).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!("qiqstr-cashu-{}", rand::random::<u64>()));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+
+        fn database(&self) -> PathBuf {
+            self.0.join("cashu_wallet.sqlite")
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn seed_survives_reopening() {
+        let directory = TestDirectory::new();
+        let first = WalletStore::load_or_create_seed(&directory.database()).unwrap();
+        assert_eq!(
+            WalletStore::load_or_create_seed(&directory.database()).unwrap(),
+            first
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata =
+                std::fs::metadata(WalletStore::seed_path(&directory.database())).unwrap();
+            assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+        }
+    }
+
+    #[test]
+    fn corrupt_seed_is_preserved_and_rejected() {
+        let directory = TestDirectory::new();
+        let seed = WalletStore::seed_path(&directory.database());
+        std::fs::write(&seed, [1, 2, 3]).unwrap();
+        assert!(WalletStore::load_or_create_seed(&directory.database()).is_err());
+        assert_eq!(std::fs::read(seed).unwrap(), [1, 2, 3]);
+    }
+
+    #[test]
+    fn missing_seed_for_existing_wallet_is_rejected() {
+        let directory = TestDirectory::new();
+        std::fs::write(directory.database(), []).unwrap();
+        assert!(WalletStore::load_or_create_seed(&directory.database()).is_err());
+        assert!(!WalletStore::seed_path(&directory.database()).exists());
+    }
+
+    #[test]
+    fn seed_storage_failure_is_not_ignored() {
+        let directory = TestDirectory::new();
+        assert!(
+            WalletStore::load_or_create_seed(&directory.0.join("missing/wallet.sqlite")).is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn persisted_mints_are_loaded_without_network_after_restart() {
+        let directory = TestDirectory::new();
+        let store = WalletStore::new(directory.database()).await.unwrap();
+        store
+            .database
+            .add_mint("https://mint.example".parse().unwrap(), None)
+            .await
+            .unwrap();
+        drop(store);
+        let reopened = WalletStore::new(directory.database()).await.unwrap();
+        assert!(reopened.wallets.contains_key("https://mint.example"));
+        assert_eq!(
+            u64::from(
+                reopened.wallets["https://mint.example"]
+                    .total_balance()
+                    .await
+                    .unwrap()
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn tokens_in_other_units_are_rejected() {
+        let token = Token::new(
+            "https://mint.example".parse().unwrap(),
+            vec![],
+            None,
+            CurrencyUnit::Msat,
+        );
+        assert!(parse_sat_token(&token.to_string()).is_err());
+    }
 }

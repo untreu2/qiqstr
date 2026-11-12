@@ -128,7 +128,7 @@ class _NotificationPageState extends State<NotificationPage> {
                   }
                   return _buildEndOfListIndicator(context);
                 },
-                separatorBuilder: (_, __) => const ListSeparatorWidget(),
+                separatorBuilder: (_, _) => const ListSeparatorWidget(),
               ),
             ),
           ],

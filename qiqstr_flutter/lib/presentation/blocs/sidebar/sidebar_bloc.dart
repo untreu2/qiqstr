@@ -21,15 +21,11 @@ class SidebarBloc extends Bloc<SidebarEvent, SidebarState> {
   Timer? _followingPollTimer;
 
   SidebarBloc({
-    required FollowingRepository followingRepository,
-    required ProfileRepository profileRepository,
-    required SyncService syncService,
-    required AuthService authService,
-  })  : _followingRepository = followingRepository,
-        _profileRepository = profileRepository,
-        _syncService = syncService,
-        _authService = authService,
-        super(const SidebarInitial()) {
+    required this._followingRepository,
+    required this._profileRepository,
+    required this._syncService,
+    required this._authService,
+  })  : super(const SidebarInitial()) {
     on<SidebarInitialized>(_onSidebarInitialized);
     on<SidebarRefreshed>(_onSidebarRefreshed);
     on<_SidebarProfileUpdated>(_onSidebarProfileUpdated);
