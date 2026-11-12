@@ -51,7 +51,7 @@ struct DMConversationsView: View {
             .overlay {
                 if model.visibleConversations.isEmpty, model.isSearching {
                     if let pubkey = model.searchedPubkey {
-                        EmptyStateView(systemImage: "bubble.left.and.text.bubble.right", title: L("noResultsFound"), actionTitle: L("dmStartChat")) {
+                        EmptyStateView(systemImage: "bubble.left.and.text.bubble.right", title: L("noResultsFound"), message: L("dmSearchNewPerson"), actionTitle: L("dmStartChat")) {
                             model.query = ""
                             Router.shared.push(.dmChat(pubkey))
                         }
@@ -211,11 +211,26 @@ private struct DMNoticeLabelStyle: LabelStyle {
 }
 
 struct DMConversationRow: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let conversation: DMConversation
     @State private var cache = ProfileCache.shared
 
     private var profile: Profile? { cache.profile(conversation.peer) }
     private var name: String { profile?.bestName ?? Profile.shortNpub(conversation.peer) }
+
+    private var nameText: some View {
+        Text(name)
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+    }
+
+    private var timeText: some View {
+        Text(DMFormat.listTime(conversation.timestamp))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -233,16 +248,15 @@ struct DMConversationRow: View {
             .padding(.top, 20)
             ProfileAvatar(pubkey: conversation.peer, size: 52)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(name)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(DMFormat.listTime(conversation.timestamp))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                if typeSize.isAccessibilitySize {
+                    nameText
+                    timeText
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        nameText
+                        Spacer(minLength: 4)
+                        timeText
+                    }
                 }
                 preview
                     .font(.subheadline)

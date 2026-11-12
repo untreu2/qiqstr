@@ -172,12 +172,17 @@ struct KeysBackupSheet: View {
                 .onSubmit(encrypt)
                 .accessibilityIdentifier("keys-backup-confirm")
             if !model.password.isEmpty {
-                HStack {
+                HStack(spacing: 6) {
                     Text(L("keysBackupStrength"))
+                        .lineLimit(1)
                     Spacer(minLength: 8)
-                    Label(model.strength.title, systemImage: model.strength.systemImage)
-                        .foregroundStyle(model.strength.tint)
-                        .fixedSize()
+                    Group {
+                        Image(systemName: model.strength.systemImage)
+                        Text(model.strength.title)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    }
+                    .foregroundStyle(model.strength.tint)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("keys-backup-strength")

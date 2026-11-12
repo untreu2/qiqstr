@@ -62,6 +62,7 @@ struct HighlightComposerSheet: View {
                     } else {
                         Button(L("highlightAction"), systemImage: "highlighter") { confirming = true }
                             .buttonStyle(.glassProminent)
+                            .foregroundStyle(AppColors.background)
                             .disabled(quote.isEmpty)
                             .accessibilityIdentifier("highlight-publish")
                     }

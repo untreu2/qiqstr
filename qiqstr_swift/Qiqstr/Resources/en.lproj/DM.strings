@@ -46,3 +46,4 @@
 "dmTabRequests" = "Requests";
 "dmRequestsEmptyTitle" = "No message requests";
 "dmRequestsEmptyMessage" = "Messages from people you don't follow and haven't replied to appear here.";
+"dmSearchNewPerson" = "You haven't messaged this person yet.";

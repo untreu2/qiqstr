@@ -8,6 +8,8 @@ struct LivePill: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(.red, in: Capsule())
+            .lineLimit(1)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
             .accessibilityLabel(L("liveNow"))
     }
 }
@@ -20,6 +22,8 @@ struct LiveReplayPill: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(.black.opacity(0.6), in: Capsule())
+            .lineLimit(1)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 }
 
@@ -33,6 +37,8 @@ struct LiveViewerCount: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(.black.opacity(0.55), in: Capsule())
+            .lineLimit(1)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 }
 

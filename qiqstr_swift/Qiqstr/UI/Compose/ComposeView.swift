@@ -201,6 +201,8 @@ struct ComposeEditor: View {
                 Text("\(model.text.count)")
                     .font(.footnote)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("compose-count")

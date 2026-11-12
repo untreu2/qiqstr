@@ -182,6 +182,7 @@ struct InteractionLabel: View {
     var isPulsing = false
     var floatingText: String? = nil
     var floatingTick = 0
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var color: Color { tint ?? .secondary }
 
@@ -194,7 +195,7 @@ struct InteractionLabel: View {
                         FloatingDelta(text: floatingText, color: color, trigger: floatingTick)
                     }
                 }
-            if count > 0 {
+            if count > 0, !typeSize.isAccessibilitySize {
                 Text(Sats.compact(count))
                     .font((compact ? Font.caption : Font.footnote).monospacedDigit().weight(tint == nil ? .regular : .semibold))
                     .foregroundStyle(color)

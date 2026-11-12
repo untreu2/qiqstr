@@ -293,19 +293,25 @@ struct WalletDashboard: View {
 
     private var actions: some View {
         GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) {
-                action(L("receive"), "arrow.down.left", id: "wallet-receive") { model.receive() }
-                action(L("send"), "arrow.up.right", id: "wallet-send") { model.sheet = .send(nil) }
-                action(L("walletScan"), "qrcode.viewfinder", id: "wallet-scan") { model.showScanner = true }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { actionButtons }
+                VStack(spacing: 12) { actionButtons }
             }
         }
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        action(L("receive"), "arrow.down.left", id: "wallet-receive") { model.receive() }
+        action(L("send"), "arrow.up.right", id: "wallet-send") { model.sheet = .send(nil) }
+        action(L("walletScan"), "qrcode.viewfinder", id: "wallet-scan") { model.showScanner = true }
     }
 
     private func action(_ title: String, _ icon: String, id: String, perform: @escaping () -> Void) -> some View {
         Button(action: perform) {
             VStack(spacing: 6) {
                 Image(systemName: icon).font(.title3.weight(.semibold))
-                Text(title).font(.subheadline.weight(.semibold))
+                Text(title).font(.subheadline.weight(.semibold)).lineLimit(1)
             }
             .frame(maxWidth: .infinity, minHeight: 56)
         }
@@ -475,6 +481,8 @@ struct WalletBalanceCard: View {
         if wallet.balanceError != nil {
             Label(L("balanceUnavailable"), systemImage: "exclamationmark.triangle")
                 .font(.footnote)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(AppColors.error)
         } else if let name = wallet.lightningAddress ?? wallet.walletName {
             Label(name, systemImage: wallet.lightningAddress == nil ? "link" : "bolt")

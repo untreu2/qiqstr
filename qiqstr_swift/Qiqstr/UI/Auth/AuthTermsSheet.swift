@@ -49,6 +49,7 @@ struct AuthTermsSheet: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(L("authTermsAgreeShort"), action: onAccept)
                             .buttonStyle(.glassProminent)
+                            .foregroundStyle(AppColors.background)
                             .accessibilityIdentifier("terms-agree")
                     }
                 } else {

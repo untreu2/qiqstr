@@ -616,8 +616,8 @@
 "kindZap" = "Zap";
 "kindMuteList" = "Stummschaltliste";
 "kindRelayList" = "Relay-Liste";
-"kindList" = "Liste (Art {kind})";
-"kindUnknown" = "Art {kind}";
+"kindList" = "Liste (Kind {kind})";
+"kindUnknown" = "Kind {kind}";
 "scanningEventsFound" = "Scannt… {count} gefunden";
 "eventsOnRelays" = "{count} Ereignisse auf Relays";
 "broadcastProgress" = "{sent} / {total} gesendet";

@@ -110,3 +110,13 @@
 "kindKeyPackageRelays" = "Key package relays";
 "kindKeyPackage" = "Messaging key package";
 "keysBackupAuthenticateReason" = "Authenticate to create an encrypted backup of your key";
+"kindComment" = "Comment";
+"kindPoll" = "Poll";
+"kindPollVote" = "Poll vote";
+"kindHighlight" = "Highlight";
+"kindInterests" = "Interests";
+"kindMediaServers" = "Media servers";
+"kindFollowSet" = "Follow set";
+"kindListSet" = "List";
+"kindArticle" = "Article";
+"kindArticleDraft" = "Article draft";

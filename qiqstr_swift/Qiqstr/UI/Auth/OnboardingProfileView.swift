@@ -76,7 +76,7 @@ final class OnboardingProfileViewModel {
         defer { isSaving = false }
         let profile = Profile(
             pubkey: me,
-            name: name.authTrimmed.isEmpty ? "New User" : name.authTrimmed,
+            name: name.authTrimmed,
             about: about.authTrimmed,
             picture: picture.authTrimmed,
             banner: banner.authTrimmed,
@@ -154,6 +154,11 @@ struct OnboardingProfileView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) { OnboardingStepIndicator(current: 2) }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(L("done")) { focus = nil }
+                    .accessibilityIdentifier("onboarding-keyboard-done")
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: pictureItem) { _, item in

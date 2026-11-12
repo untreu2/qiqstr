@@ -46,3 +46,4 @@
 "dmTabRequests" = "Anfragen";
 "dmRequestsEmptyTitle" = "Keine Nachrichtenanfragen";
 "dmRequestsEmptyMessage" = "Nachrichten von Personen, denen du nicht folgst und denen du nicht geantwortet hast, erscheinen hier.";
+"dmSearchNewPerson" = "Du hast dieser Person noch nicht geschrieben.";

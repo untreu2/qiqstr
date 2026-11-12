@@ -146,10 +146,16 @@ struct SidebarView: View {
                     }
                 }
             }
-            HStack(spacing: 16) {
-                countButton(model.followingCount, label: L("followingCount"), identifier: "sidebar-following-count") { open(.followList(me, .following)) }
-                countButton(model.followerCount, label: L(model.followerCount == 1 ? "followerSingular" : "followers"), identifier: "sidebar-followers-count") { open(.followList(me, .followers)) }
-                Spacer(minLength: 0)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) {
+                    followingButton(me)
+                    followersButton(me)
+                    Spacer(minLength: 0)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    followingButton(me)
+                    followersButton(me)
+                }
             }
         }
     }
@@ -168,6 +174,14 @@ struct SidebarView: View {
         .accessibilityIdentifier("sidebar-close")
     }
 
+    private func followingButton(_ me: String) -> some View {
+        countButton(model.followingCount, label: L("followingCount"), identifier: "sidebar-following-count") { open(.followList(me, .following)) }
+    }
+
+    private func followersButton(_ me: String) -> some View {
+        countButton(model.followerCount, label: L(model.followerCount == 1 ? "followerSingular" : "followers"), identifier: "sidebar-followers-count") { open(.followList(me, .followers)) }
+    }
+
     private func countButton(_ value: Int?, label: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
@@ -181,8 +195,10 @@ struct SidebarView: View {
                 }
                 Text(label)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             .font(.subheadline)
+            .fixedSize()
         }
         .buttonStyle(.plain)
         .animation(.snappy, value: value)

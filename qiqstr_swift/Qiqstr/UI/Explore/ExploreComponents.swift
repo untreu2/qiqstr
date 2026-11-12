@@ -67,7 +67,7 @@ struct ExploreChipBar: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("explore-section-\(section.rawValue)")
         if selected {
-            button.buttonStyle(.glassProminent)
+            button.buttonStyle(.glassProminent).foregroundStyle(AppColors.background)
         } else {
             button.buttonStyle(.glass).foregroundStyle(.primary)
         }

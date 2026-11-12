@@ -16,6 +16,7 @@ struct DMInputBar: View {
                         .foregroundStyle(.primary)
                         .frame(width: 40, height: 40)
                         .background(AppColors.tile, in: Circle())
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(L("dmAttach"))
@@ -35,6 +36,7 @@ struct DMInputBar: View {
                         .foregroundStyle(AppColors.background)
                         .frame(width: 40, height: 40)
                         .background(AppColors.textPrimary, in: Circle())
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 }
                 .buttonStyle(.plain)
                 .disabled(!model.canSend)

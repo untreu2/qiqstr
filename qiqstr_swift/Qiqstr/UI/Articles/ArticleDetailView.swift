@@ -137,10 +137,14 @@ struct ReaderProgressBar: View {
             .opacity(tracker.restored ? 1 : 0)
             .animation(.easeOut(duration: 0.2), value: tracker.restored)
             .navigationSubtitle(timeLeft)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(L("articleReadingProgress"))
-            .accessibilityValue(L("articlePercentRead", ["percent": Int((progress * 100).rounded())]))
-            .accessibilityIdentifier("article-progress")
+            .accessibilityHidden(true)
+            .overlay {
+                Color.clear
+                    .accessibilityElement()
+                    .accessibilityLabel(L("articleReadingProgress"))
+                    .accessibilityValue(L("articlePercentRead", ["percent": Int((progress * 100).rounded())]))
+                    .accessibilityIdentifier("article-progress")
+            }
     }
 }
 

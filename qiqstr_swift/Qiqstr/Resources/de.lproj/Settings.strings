@@ -110,3 +110,13 @@
 "kindKeyPackageRelays" = "Schlüsselpaket-Relays";
 "kindKeyPackage" = "Nachrichten-Schlüsselpaket";
 "keysBackupAuthenticateReason" = "Authentifiziere dich, um ein verschlüsseltes Backup deines Schlüssels zu erstellen";
+"kindComment" = "Kommentar";
+"kindPoll" = "Umfrage";
+"kindPollVote" = "Umfragestimme";
+"kindHighlight" = "Markierung";
+"kindInterests" = "Interessen";
+"kindMediaServers" = "Medienserver";
+"kindFollowSet" = "Folge-Set";
+"kindListSet" = "Liste";
+"kindArticle" = "Artikel";
+"kindArticleDraft" = "Artikelentwurf";

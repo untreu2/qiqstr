@@ -134,6 +134,7 @@ struct NotificationPromptSheet: View {
                     Text(L("localNotifyPromptAllow")).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
+                .foregroundStyle(AppColors.background)
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .disabled(isRequesting)

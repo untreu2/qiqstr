@@ -63,7 +63,7 @@ struct NotificationsView: View {
                 if groups.isEmpty && hidden == 0 {
                     EmptyStateView(
                         systemImage: model.filter == .all ? "bell" : model.filter.symbol,
-                        title: model.filter == .all ? L("noNotificationsYet") : L("notificationsFilterEmpty", ["filter": model.filter.title]),
+                        title: model.filter == .all ? L("noNotificationsYet") : L("notificationsFilterEmpty", ["filter": AppLanguage.locale.language.languageCode == .german ? model.filter.title : model.filter.title.lowercased(with: AppLanguage.locale)]),
                         message: L("whenSomeoneInteractsWithYourPosts")
                     )
                         .listRowSeparator(.hidden)

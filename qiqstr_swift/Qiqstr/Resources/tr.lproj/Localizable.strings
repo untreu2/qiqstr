@@ -616,8 +616,8 @@
 "kindZap" = "Zap";
 "kindMuteList" = "Sessiz Listesi";
 "kindRelayList" = "Röle Listesi";
-"kindList" = "Liste (tür {kind})";
-"kindUnknown" = "Tür {kind}";
+"kindList" = "Liste (kind {kind})";
+"kindUnknown" = "Kind {kind}";
 "scanningEventsFound" = "Taranıyor… {count} bulundu";
 "eventsOnRelays" = "{count} etkinlik rölelerde";
 "broadcastProgress" = "{sent} / {total} gönderildi";

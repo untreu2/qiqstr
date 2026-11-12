@@ -98,7 +98,7 @@ struct SettingsView: View {
         let npub = session.npub ?? ""
         return NavigationLink(value: Route.profile(pubkey)) {
             HStack(spacing: 14) {
-                ProfileAvatar(pubkey: pubkey, size: avatarSize)
+                ProfileAvatar(pubkey: pubkey, size: min(avatarSize, 80))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile?.givenName ?? L("anonymous"))
                         .font(.title3.weight(.semibold))

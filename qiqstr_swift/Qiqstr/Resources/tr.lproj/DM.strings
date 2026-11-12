@@ -46,3 +46,4 @@
 "dmTabRequests" = "İstekler";
 "dmRequestsEmptyTitle" = "Mesaj isteği yok";
 "dmRequestsEmptyMessage" = "Takip etmediğin ve yanıt vermediğin kişilerden gelen mesajlar burada görünür.";
+"dmSearchNewPerson" = "Bu kişiye henüz mesaj göndermedin.";

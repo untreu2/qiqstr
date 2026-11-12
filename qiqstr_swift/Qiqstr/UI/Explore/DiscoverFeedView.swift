@@ -244,6 +244,7 @@ struct FollowPackView: View {
                             }
                         }
                         .buttonStyle(.glassProminent)
+                        .foregroundStyle(AppColors.background)
                         .buttonBorderShape(.capsule)
                         .disabled(remaining.isEmpty || isFollowing)
                         .accessibilityIdentifier("pack-follow-all")

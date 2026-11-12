@@ -122,7 +122,7 @@ struct ExploreView: View {
                     systemImage: "doc.richtext",
                     title: L("noArticlesYet"),
                     message: model.scope == .following ? L("longFormContentDescription") : nil,
-                    actionTitle: L("retry")
+                    actionTitle: L("refresh")
                 ) { Task { await model.refresh() } }
             } else if model.users.results.isEmpty, !model.users.isSearching {
                 EmptyStateView(systemImage: "magnifyingglass", title: L("noResultsFound"), message: L("trySearchingDifferentTerm"))

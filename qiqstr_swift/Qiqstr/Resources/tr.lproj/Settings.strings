@@ -110,3 +110,13 @@
 "kindKeyPackageRelays" = "Anahtar paketi röleleri";
 "kindKeyPackage" = "Mesajlaşma anahtar paketi";
 "keysBackupAuthenticateReason" = "Anahtarının şifreli yedeğini oluşturmak için kimliğini doğrula";
+"kindComment" = "Yorum";
+"kindPoll" = "Anket";
+"kindPollVote" = "Anket oyu";
+"kindHighlight" = "Vurgu";
+"kindInterests" = "İlgi alanları";
+"kindMediaServers" = "Medya sunucuları";
+"kindFollowSet" = "Takip seti";
+"kindListSet" = "Liste";
+"kindArticle" = "Makale";
+"kindArticleDraft" = "Makale taslağı";
