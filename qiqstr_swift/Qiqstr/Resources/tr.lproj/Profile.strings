@@ -12,8 +12,8 @@
 "profileAboutTooLong" = "Biyografi en fazla 1000 karakter olabilir";
 "profileInvalidNip05" = "NIP-05 ad@alanadi.com biçiminde olmalı";
 "profileInvalidLightningAddress" = "Lightning adresi ad@alanadi.com biçiminde olmalı";
-"profileInvalidWebsite" = "Geçerli bir web sitesi adresi girin";
-"profileInvalidImageUrl" = "https:// ile başlayan geçerli bir görsel bağlantısı girin";
+"profileInvalidWebsite" = "Geçerli bir web sitesi adresi gir";
+"profileInvalidImageUrl" = "https:// ile başlayan geçerli bir görsel bağlantısı gir";
 "profileSaved" = "Profil güncellendi";
 "profileSaveFailed" = "Profil kaydedilemedi: {message}";
 "profileDisplayName" = "Görünen ad";

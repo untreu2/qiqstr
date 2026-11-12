@@ -20,6 +20,7 @@ final class KeysSettingsModel {
     var isBackupPresented = false
     var showAdvanced = false
     var copyCount = 0
+    @ObservationIgnored private var authenticatedAt: Date?
 
     func load() {
         let account = Session.shared.account
@@ -59,11 +60,14 @@ final class KeysSettingsModel {
     }
 
     func requestBackup() async {
-        guard privateKeyHex != nil, await authenticate() else { return }
+        guard privateKeyHex != nil, await authenticate(reason: L("keysBackupAuthenticateReason")) else { return }
         isBackupPresented = true
     }
 
-    func hideAll() { revealed.removeAll() }
+    func hideAll() {
+        revealed.removeAll()
+        authenticatedAt = nil
+    }
 
     private func markCopied(_ id: String, label: String) {
         copied = id
@@ -77,7 +81,8 @@ final class KeysSettingsModel {
 
     func isCopied(_ id: String) -> Bool { copied == id }
 
-    private func authenticate() async -> Bool {
+    private func authenticate(reason: String = L("keysAuthenticateReason")) async -> Bool {
+        if let authenticatedAt, Date().timeIntervalSince(authenticatedAt) < 60 { return true }
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
@@ -85,7 +90,9 @@ final class KeysSettingsModel {
             return code == .passcodeNotSet || code == .biometryNotAvailable || code == .biometryNotEnrolled || error == nil
         }
         do {
-            return try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: L("keysAuthenticateReason"))
+            let ok = try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)
+            if ok { authenticatedAt = Date() }
+            return ok
         } catch {
             return false
         }
@@ -96,15 +103,12 @@ struct KeysSettingsView: View {
     @State private var model = KeysSettingsModel()
     @Environment(\.scenePhase) private var scenePhase
 
-    static func unhyphenated(_ key: String) -> String {
-        key.map(String.init).joined(separator: "\u{200B}")
-    }
-
     var body: some View {
         List {
             Section {
-                Text(model.npub.isEmpty ? L("loading") : Self.unhyphenated(model.npub))
+                Text(model.npub.isEmpty ? L("loading") : model.npub.unhyphenated)
                     .font(.body.monospaced())
+                    .accessibilityLabel(model.npub.isEmpty ? L("loading") : model.npub)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("keys-npub")
                 copyButton(copied: model.isCopied("npub"), identifier: "keys-copy-npub") { model.copyNpub() }
@@ -159,7 +163,7 @@ struct KeysSettingsView: View {
                 if model.showAdvanced {
                     if let nsec = model.nsec {
                         secretRows(.nsec) {
-                            Text(model.isRevealed(.nsec) ? Self.unhyphenated(nsec) : String(repeating: "\u{2022}", count: nsec.count))
+                            Text(model.isRevealed(.nsec) ? nsec.unhyphenated : String(repeating: "\u{2022}", count: nsec.count))
                                 .font(.body.monospaced())
                                 .foregroundStyle(model.isRevealed(.nsec) ? .primary : .secondary)
                                 .fixedSize(horizontal: false, vertical: true)

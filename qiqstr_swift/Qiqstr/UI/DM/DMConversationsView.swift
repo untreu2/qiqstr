@@ -50,7 +50,16 @@ struct DMConversationsView: View {
             .refreshable { await model.refresh() }
             .overlay {
                 if model.visibleConversations.isEmpty, model.isSearching {
-                    ContentUnavailableView.search(text: model.query)
+                    if let pubkey = model.searchedPubkey {
+                        EmptyStateView(systemImage: "bubble.left.and.text.bubble.right", title: L("noResultsFound"), actionTitle: L("dmStartChat")) {
+                            model.query = ""
+                            Router.shared.push(.dmChat(pubkey))
+                        }
+                        .accessibilityIdentifier("dm-search-start-chat")
+                    } else {
+                        EmptyStateView(systemImage: "magnifyingglass", title: L("noResultsFound"))
+                            .accessibilityIdentifier("dm-search-empty")
+                    }
                 } else if model.visibleConversations.isEmpty, model.filter == .requests {
                     EmptyStateView(
                         systemImage: "tray",

@@ -14,6 +14,8 @@ struct Profile: Identifiable, Hashable, Sendable {
 
     var id: String { pubkey }
 
+    var givenName: String? { displayName.nilIfEmpty ?? name.nilIfEmpty }
+
     var bestName: String {
         if !displayName.isEmpty { return displayName }
         if !name.isEmpty { return name }

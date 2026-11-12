@@ -12,24 +12,9 @@ enum TimeFormat {
             f.setLocalizedDateFormatFromTemplate(Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year) ? "MMMd" : "yMMMd")
             return f.string(from: date)
         }
-        let unit: NSCalendar.Unit = diff < 60 ? .second : diff < 3600 ? .minute : diff < 86400 ? .hour : .day
-        return durationFormatter(unit, locale: locale).string(from: TimeInterval(diff)) ?? ""
-    }
-
-    private static var durationFormatters: [String: DateComponentsFormatter] = [:]
-
-    private static func durationFormatter(_ unit: NSCalendar.Unit, locale: Locale) -> DateComponentsFormatter {
-        let key = "\(locale.identifier)-\(unit.rawValue)"
-        if let cached = durationFormatters[key] { return cached }
-        var calendar = Calendar.current
-        calendar.locale = locale
-        let f = DateComponentsFormatter()
-        f.calendar = calendar
-        f.unitsStyle = .abbreviated
-        f.maximumUnitCount = 1
-        f.allowedUnits = unit
-        durationFormatters[key] = f
-        return f
+        let unit: Duration.UnitsFormatStyle.Unit = diff < 60 ? .seconds : diff < 3600 ? .minutes : diff < 86400 ? .hours : .days
+        let width: Duration.UnitsFormatStyle.UnitWidth = locale.language.languageCode == .english ? .narrow : .abbreviated
+        return Duration.seconds(diff).formatted(.units(allowed: [unit], width: width, maximumUnitCount: 1, fractionalPart: .hide(rounded: .down)).locale(locale))
     }
 
     static func full(_ timestamp: Int) -> String {

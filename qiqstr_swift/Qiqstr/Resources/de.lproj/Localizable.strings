@@ -204,7 +204,7 @@
 "unmute" = "Entmuten";
 "addRelay" = "Hinzufügen";
 "areYouSureLogout" = "Bist du sicher, dass du dich abmelden möchtest?";
-"seedPhraseWarning" = "WENN SIE IHRE SEED-PHRASE NICHT GESPEICHERT HABEN, VERLIEREN SIE IHR KONTO FÜR IMMER.";
+"seedPhraseWarning" = "Wenn du deine Seed-Phrase nicht gespeichert hast, verlierst du dein Konto für immer.";
 "muteUser" = "{user} stummschalten?";
 "muteUserDescription" = "Du wirst keine Notizen von diesem Benutzer in deinem Feed sehen.";
 "unfollowUser" = "{user} entfolgen?";
@@ -346,7 +346,7 @@
 "postingYourNotePleaseWait" = "Deine Notiz wird gepostet, bitte warten";
 "failedToLoadNotifications" = "Benachrichtigungen konnten nicht geladen werden";
 "noNotificationsYet" = "Noch keine Benachrichtigungen";
-"whenSomeoneInteractsWithYourPosts" = "Wenn jemand mit deinen Beiträgen interagiert,\nsiehst du es hier";
+"whenSomeoneInteractsWithYourPosts" = "Wenn jemand mit deinen Beiträgen interagiert, siehst du es hier";
 "reactedToYourPost" = "hat auf deinen Beitrag reagiert";
 "repostedYourPost" = "hat deinen Beitrag geteilt";
 "repliedToYourPost" = "hat auf deinen Beitrag geantwortet";
@@ -377,7 +377,7 @@
 "gossipModelDisabledRestartApp" = "Gossip-Modell deaktiviert. App neu starten.";
 "errorTogglingGossipModel" = "Fehler beim Umschalten des Gossip-Modells";
 "errorSavingRelays" = "Fehler beim Speichern der Relays";
-"invalidRelayUrl" = "Ungültige Relay-URL. Muss mit ws:// oder wss:// beginnen";
+"invalidRelayUrl" = "Gib eine gültige Relay-Adresse ein, zum Beispiel wss://relay.example.com";
 "relayAlreadyExistsInCategory" = "Relay existiert bereits in dieser Kategorie";
 "errorAddingRelay" = "Fehler beim Hinzufügen des Relays";
 "fetchingYourEvents" = "Lade deine Ereignisse...";
@@ -421,7 +421,7 @@
 "manageYourRelayConnections" = "Verwalte deine Relay-Verbindungen und veröffentliche deine Relay-Liste.";
 "noInteractionsYet" = "Noch keine Interaktionen";
 "messages" = "Nachrichten";
-"yourDataOnRelaysDescription" = "Alles, was du auf Nostr teilst, ist ein Event. Sieh deine Event-Anzahl nach Art und sende sie erneut an Relays.";
+"yourDataOnRelaysDescription" = "Alles, was du auf Nostr teilst, ist ein Ereignis. Sieh deine Ereignisanzahl nach Art und sende sie erneut an Relays.";
 "startConversationBy" = "Starte eine Unterhaltung, indem du jemandem eine Nachricht sendest";
 "errorLoadingConversations" = "Fehler beim Laden der Unterhaltungen";
 "errorLoadingMessages" = "Fehler beim Laden der Nachrichten: {message}";
@@ -672,3 +672,4 @@
 "mediaUploadFailed" = "Medien konnten nicht hochgeladen werden. Bitte versuche es erneut.";
 "cashuMeltAllSuccess" = "{amount} Sats an Lightning gesendet";
 "close" = "Schließen";
+"notificationsFilterEmpty" = "Noch keine {filter}";

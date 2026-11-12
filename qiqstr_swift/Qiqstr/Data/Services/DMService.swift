@@ -308,7 +308,14 @@ final class DMService {
             loaded += JSON.array(raw).reversed().flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
         }
         guard generation == self.generation else { return }
-        apply(loaded)
+        let ordered = loaded.enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.createdAt != rhs.element.createdAt { return lhs.element.createdAt < rhs.element.createdAt }
+                if lhs.element.isMine != rhs.element.isMine { return lhs.element.isMine }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+        apply(ordered)
         for group in active.values {
             if let peer = group.peer(for: me), peerStatus[peer] != .ready { peerStatus[peer] = .ready }
         }

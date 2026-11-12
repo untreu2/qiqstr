@@ -31,7 +31,7 @@
 "feedAltBadge" = "ALT";
 "feedAltButton" = "Alt";
 "feedAltTextTitle" = "Alternatif metin";
-"feedAltTextPlaceholder" = "Bu görseli açıklayın";
+"feedAltTextPlaceholder" = "Bu görseli açıkla";
 "feedAltTextFooter" = "Alternatif metin, görselleri ekran okuyucu kullanan veya onları net göremeyen kişiler için açıklar.";
 "feedAddAltText" = "Alternatif metin ekle";
 "feedTranslate" = "Çevir";
@@ -59,10 +59,10 @@
 "feedPollVote" = "Oy ver";
 "feedPollVoteConfirm" = "“{option}” için oy verilsin mi?";
 "feedPollVoteConfirmMultiple" = "{count, plural, =1{1 seçenek için oy verilsin mi?} other{# seçenek için oy verilsin mi?}}";
-"feedPollYourVote" = "Oyunuz";
+"feedPollYourVote" = "Verdiğin oy";
 "feedPollShowResults" = "Sonuçları göster";
 "feedPollHideResults" = "Sonuçları gizle";
-"feedPollVoteFailed" = "Oyunuz gönderilemedi";
+"feedPollVoteFailed" = "Verdiğin oy gönderilemedi";
 "feedTopics" = "Konular";
 "feedAllTopics" = "Tüm konular";
 "feedFollowingPlusTopics" = "Takip edilen + konular";

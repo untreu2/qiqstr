@@ -142,14 +142,15 @@ struct OnboardingProfileView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(AppColors.background)
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: L("continueButton"), isLoading: model.isSaving, isEnabled: !model.isUploadingPicture && !model.isUploadingBanner) {
-                focus = nil
-                Task { if await model.save() { onDone() } }
+            if focus == nil {
+                PrimaryButton(title: L("continueButton"), isLoading: model.isSaving, isEnabled: !model.isUploadingPicture && !model.isUploadingBanner) {
+                    Task { if await model.save() { onDone() } }
+                }
+                .accessibilityIdentifier("onboarding-profile-continue")
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8)
+                .background(AppColors.background)
             }
-            .accessibilityIdentifier("onboarding-profile-continue")
-            .padding(.horizontal, 24)
-            .padding(.vertical, 8)
-            .background(AppColors.background)
         }
         .toolbar {
             ToolbarItem(placement: .principal) { OnboardingStepIndicator(current: 2) }

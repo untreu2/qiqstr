@@ -193,7 +193,7 @@ struct ReceiveView: View {
         } footer: {
             if let error = model.error {
                 Text(error).foregroundStyle(AppColors.error).accessibilityIdentifier("receive-error")
-            } else if model.qrContent == nil {
+            } else if model.qrContent == nil, model.amount == nil {
                 Text(L("enterAmountToGenerateInvoice"))
             }
         }

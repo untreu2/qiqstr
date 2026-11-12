@@ -172,10 +172,14 @@ struct KeysBackupSheet: View {
                 .onSubmit(encrypt)
                 .accessibilityIdentifier("keys-backup-confirm")
             if !model.password.isEmpty {
-                LabeledContent(L("keysBackupStrength")) {
+                HStack {
+                    Text(L("keysBackupStrength"))
+                    Spacer(minLength: 8)
                     Label(model.strength.title, systemImage: model.strength.systemImage)
                         .foregroundStyle(model.strength.tint)
+                        .fixedSize()
                 }
+                .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("keys-backup-strength")
             }
         } footer: {

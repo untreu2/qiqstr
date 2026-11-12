@@ -40,8 +40,7 @@ struct OnboardingFlowView: View {
                     case .profile:
                         OnboardingProfileView { path.append(.interests) }
                     case .interests:
-                        OnboardingInterestsView(onSkip: onFinish) { path.append(.follows($0)) }
-                            .navigationBarBackButtonHidden()
+                        OnboardingInterestsView(onSkip: { path.append(.follows([])) }) { path.append(.follows($0)) }
                     case .follows(let interests):
                         SuggestedFollowsView(interests: interests, onFinish: onFinish)
                     }

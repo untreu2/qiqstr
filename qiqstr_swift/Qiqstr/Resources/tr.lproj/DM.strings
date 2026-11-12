@@ -5,8 +5,8 @@
 "dmMarkAllRead" = "Tümünü okundu olarak işaretle";
 "dmMarkRead" = "Okundu olarak işaretle";
 "dmMarkUnread" = "Okunmadı olarak işaretle";
-"dmNotSignedIn" = "Oturum açmadınız";
-"dmPasteNpubHint" = "Herhangi birine mesaj göndermek için bir npub veya açık anahtar yapıştırın.";
+"dmNotSignedIn" = "Oturum açmadın";
+"dmPasteNpubHint" = "Herhangi birine mesaj göndermek için bir npub veya açık anahtar yapıştır.";
 "dmPhoto" = "Fotoğraf";
 "dmRecent" = "Son";
 "dmSendFailed" = "Mesaj gönderilemedi";

@@ -109,3 +109,4 @@
 "kindDMRelays" = "Mesaj röleleri";
 "kindKeyPackageRelays" = "Anahtar paketi röleleri";
 "kindKeyPackage" = "Mesajlaşma anahtar paketi";
+"keysBackupAuthenticateReason" = "Anahtarının şifreli yedeğini oluşturmak için kimliğini doğrula";

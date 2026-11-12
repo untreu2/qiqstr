@@ -74,6 +74,13 @@ struct SettingsView: View {
                 }
                 .disabled(isLoggingOut)
                 .accessibilityIdentifier("settings-logout")
+                .confirmationDialog(L("areYouSureLogout"), isPresented: $showLogout, titleVisibility: .visible) {
+                    Button(L("logout"), role: .destructive) { logout() }
+                        .accessibilityIdentifier("settings-logout-confirm")
+                    Button(L("cancel"), role: .cancel) {}
+                } message: {
+                    Text(L("seedPhraseWarning"))
+                }
             } footer: {
                 Text(L("settingsSubtitle"))
             }
@@ -81,13 +88,7 @@ struct SettingsView: View {
         .settingsListStyle()
         .navigationTitle(L("settings"))
         .navigationBarTitleDisplayMode(.large)
-        .confirmationDialog(L("areYouSureLogout"), isPresented: $showLogout, titleVisibility: .visible) {
-            Button(L("logout"), role: .destructive) { logout() }
-                .accessibilityIdentifier("settings-logout-confirm")
-            Button(L("cancel"), role: .cancel) {}
-        } message: {
-            Text(L("seedPhraseWarning"))
-        }
+        .contentMargins(.bottom, 72, for: .scrollContent)
         .sensoryFeedback(.success, trigger: copiedNpub)
         .accessibilityIdentifier("settings-list")
     }
@@ -99,7 +100,7 @@ struct SettingsView: View {
             HStack(spacing: 14) {
                 ProfileAvatar(pubkey: pubkey, size: avatarSize)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(profile?.bestName ?? Profile.shortNpub(pubkey))
+                    Text(profile?.givenName ?? L("anonymous"))
                         .font(.title3.weight(.semibold))
                         .lineLimit(1)
                     if let nip05 = profile?.nip05.nilIfEmpty {

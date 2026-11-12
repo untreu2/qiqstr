@@ -439,7 +439,7 @@ struct WalletBalanceCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.4)
                         .contentTransition(.numericText(value: Double(wallet.balanceSats ?? 0)))
-                        .redacted(reason: wallet.balanceSats == nil && !wallet.balanceHidden ? .placeholder : [])
+                        .redacted(reason: wallet.balanceSats == nil && !wallet.balanceHidden && !isUnavailable ? .placeholder : [])
                     Text(L("walletSats"))
                         .font(.title3.weight(.semibold))
                         .fontDesign(.rounded)
@@ -490,13 +490,17 @@ struct WalletBalanceCard: View {
         return prices.formatted(sats: sats).map { L("walletFiatEstimate", ["amount": $0]) }
     }
 
+    private var isUnavailable: Bool { wallet.balanceSats == nil && wallet.balanceError != nil }
+
     private var balanceText: String {
         if wallet.balanceHidden { return "••••••" }
+        if isUnavailable { return "—" }
         return Sats.format(wallet.balanceSats ?? 0)
     }
 
     private var accessibilityText: String {
         if wallet.balanceHidden { return L("walletBalanceHidden") }
+        if isUnavailable { return L("balanceUnavailable") }
         let sats = "\(balanceText) \(L("walletSats"))"
         guard let fiatText else { return sats }
         return "\(sats), \(fiatText)"

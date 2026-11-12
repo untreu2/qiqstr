@@ -61,7 +61,11 @@ struct NotificationsView: View {
         } else {
             List {
                 if groups.isEmpty && hidden == 0 {
-                    EmptyStateView(systemImage: "bell", title: L("noNotificationsYet"), message: L("whenSomeoneInteractsWithYourPosts"))
+                    EmptyStateView(
+                        systemImage: model.filter == .all ? "bell" : model.filter.symbol,
+                        title: model.filter == .all ? L("noNotificationsYet") : L("notificationsFilterEmpty", ["filter": model.filter.title]),
+                        message: L("whenSomeoneInteractsWithYourPosts")
+                    )
                         .listRowSeparator(.hidden)
                         .padding(.top, 40)
                 } else {

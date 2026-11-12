@@ -26,7 +26,7 @@
 "exploreOpenInBrowser" = "Tarayıcıda aç";
 "exploreOpenProfile" = "Profili aç";
 "explorePaste" = "Yapıştır";
-"exploreSearchHint" = "Ad veya NIP-05 ile arayın ya da bir npub, nprofile veya açık anahtar yapıştırın.";
+"exploreSearchHint" = "Ad veya NIP-05 ile ara ya da bir npub, nprofile veya açık anahtar yapıştır.";
 "exploreSearchPrompt" = "Makale ve kişi ara";
 "exploreSeeAll" = "Tümünü gör";
 "exploreSelected" = "Seçilenler";

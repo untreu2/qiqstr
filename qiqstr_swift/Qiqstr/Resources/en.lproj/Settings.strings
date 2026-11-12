@@ -109,3 +109,4 @@
 "kindDMRelays" = "Message relays";
 "kindKeyPackageRelays" = "Key package relays";
 "kindKeyPackage" = "Messaging key package";
+"keysBackupAuthenticateReason" = "Authenticate to create an encrypted backup of your key";

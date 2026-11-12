@@ -23,6 +23,11 @@ final class DMConversationsViewModel {
 
     var isSearching: Bool { !trimmedQuery.isEmpty }
 
+    var searchedPubkey: String? {
+        guard let hex = Nip19.pubkeyHex(from: query.trimmingCharacters(in: .whitespacesAndNewlines)), hex != service.currentPubkey else { return nil }
+        return hex
+    }
+
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
 
     var visibleConversations: [DMConversation] {

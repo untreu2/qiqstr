@@ -92,9 +92,9 @@ struct FeedView: View {
         }
         if !model.source.isTopicFeed && !model.source.isCurated {
             Section(L("sortBy")) {
-                Picker(L("sortBy"), selection: $model.sort) {
-                    ForEach(FeedSortMode.allCases) { mode in
-                        Label(mode.title, systemImage: mode.systemImage).tag(mode)
+                ForEach(FeedSortMode.allCases) { mode in
+                    Toggle(isOn: Binding(get: { model.sort == mode }, set: { if $0 { model.sort = mode } })) {
+                        Label(mode.title, systemImage: mode.systemImage)
                     }
                 }
             }

@@ -117,6 +117,11 @@ struct ComposeEditor: View {
         .onDisappear { model.finishSaving() }
     }
 
+    private var isQuote: Bool {
+        if case .quote = context { return true }
+        return false
+    }
+
     private var editor: some View {
         HStack(alignment: .top, spacing: 12) {
             if let me = session.pubkey { ProfileAvatar(pubkey: me, size: 40) }
@@ -133,7 +138,7 @@ struct ComposeEditor: View {
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .scrollDisabled(true)
-                    .frame(minHeight: model.attachments.isEmpty ? 140 : 72)
+                    .frame(minHeight: model.attachments.isEmpty && !isQuote ? 140 : 72)
                     .focused($focused)
                     .accessibilityLabel(L("composeYourNote"))
                     .accessibilityIdentifier("compose-text")

@@ -204,7 +204,7 @@
 "unmute" = "Unmute";
 "addRelay" = "Add relay";
 "areYouSureLogout" = "Are you sure you want to logout?";
-"seedPhraseWarning" = "IF YOU HAVEN'T SAVED YOUR SEED PHRASE, YOU WILL LOSE YOUR ACCOUNT FOREVER.";
+"seedPhraseWarning" = "If you haven't saved your seed phrase, you will lose your account forever.";
 "muteUser" = "Mute {user}?";
 "muteUserDescription" = "You will not see notes from this user in your feed.";
 "unfollowUser" = "Unfollow {user}?";
@@ -346,7 +346,7 @@
 "postingYourNotePleaseWait" = "Posting your note, please wait";
 "failedToLoadNotifications" = "Failed to load notifications";
 "noNotificationsYet" = "No notifications yet";
-"whenSomeoneInteractsWithYourPosts" = "When someone interacts with your posts,\nyou'll see it here";
+"whenSomeoneInteractsWithYourPosts" = "When someone interacts with your posts, you'll see it here";
 "reactedToYourPost" = "reacted to your post";
 "repostedYourPost" = "reposted your post";
 "repliedToYourPost" = "replied to your post";
@@ -377,7 +377,7 @@
 "gossipModelDisabledRestartApp" = "Gossip model disabled. Restart the app to apply.";
 "errorTogglingGossipModel" = "Error toggling gossip model";
 "errorSavingRelays" = "Error saving relays";
-"invalidRelayUrl" = "Invalid relay URL. Must start with ws:// or wss://";
+"invalidRelayUrl" = "Enter a valid relay address, for example wss://relay.example.com";
 "relayAlreadyExistsInCategory" = "Relay already exists in this category";
 "errorAddingRelay" = "Error adding relay";
 "fetchingYourEvents" = "Fetching your events...";
@@ -672,3 +672,4 @@
 "mediaUploadFailed" = "Media upload failed. Please try again.";
 "cashuMeltAllSuccess" = "Sent {amount} sats to Lightning";
 "close" = "Close";
+"notificationsFilterEmpty" = "No {filter} yet";

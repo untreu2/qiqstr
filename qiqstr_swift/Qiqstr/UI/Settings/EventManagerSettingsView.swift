@@ -25,6 +25,7 @@ final class EventManagerModel {
     var feedback = 0
 
     private var seen: Set<String> = []
+    private var replaceable: [String: Int] = [:]
     private var scanTask: Task<Void, Never>?
     private var broadcastTask: Task<Void, Never>?
 
@@ -38,6 +39,7 @@ final class EventManagerModel {
         events = []
         countsByKind = [:]
         seen = []
+        replaceable = [:]
         isScanning = true
         scanTask = Task {
             let stream = EventStream.make { sink in try await fetchAllEventsForAuthor(authorHex: me, sink: sink) }
@@ -45,6 +47,14 @@ final class EventManagerModel {
                 for try await raw in stream {
                     guard !Task.isCancelled else { break }
                     guard let event = JSON.object(raw), let id = event.str("id"), seen.insert(id).inserted else { continue }
+                    if let key = Self.replaceableKey(event) {
+                        if let index = replaceable[key] {
+                            let current = JSON.object(events[index])?.int("created_at") ?? 0
+                            if event.int("created_at") > current { events[index] = raw }
+                            continue
+                        }
+                        replaceable[key] = events.count
+                    }
                     events.append(raw)
                     countsByKind[event.int("kind"), default: 0] += 1
                 }
@@ -178,6 +188,14 @@ final class EventManagerModel {
         } catch {
             ToastCenter.shared.show(L("errorDeletingAccount", ["error": coreErrorMessage(error)]), style: .error)
         }
+    }
+
+    static func replaceableKey(_ event: JSONObject) -> String? {
+        let kind = event.int("kind")
+        if kind == 0 || kind == 3 || (10000..<20000).contains(kind) { return "\(kind)" }
+        guard (30000..<40000).contains(kind) else { return nil }
+        let d = event.tags().first { $0.first == "d" }.flatMap { $0.count > 1 ? $0[1] : nil } ?? ""
+        return "\(kind):\(d)"
     }
 
     static func kindName(_ kind: Int) -> String {
