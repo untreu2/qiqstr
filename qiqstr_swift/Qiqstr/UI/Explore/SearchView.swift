@@ -31,7 +31,7 @@ struct SearchView: View {
                 await explore.loadAll()
             }
             .fullScreenCover(item: $mediaSelection) { selection in
-                ProfileMediaPager(entries: explore.media, startIndex: selection.index)
+                ProfileMediaPager(entries: explore.visibleMedia, startIndex: selection.index)
             }
             .accessibilityIdentifier("search-list")
     }

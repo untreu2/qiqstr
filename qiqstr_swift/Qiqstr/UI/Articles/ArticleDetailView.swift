@@ -174,7 +174,9 @@ struct ArticleDetailView: View {
     @State private var showHighlights = false
     @State private var highlightDraft: HighlightDraft?
     @State private var scrollTarget: String?
+    @State private var reportTarget: ReportTarget?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .headline) private var authorAvatarSize: CGFloat = 40
 
     var body: some View {
@@ -216,6 +218,17 @@ struct ArticleDetailView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .reportSheet($reportTarget) { target in
+            if MuteService.shared.isMuted(target.pubkey) { dismiss() }
+        }
+    }
+
+    private func muteAuthor(_ article: Article) {
+        Task {
+            await Moderation.mute(article.pubkey)
+            ToastCenter.shared.show(L("feedUserMuted"), style: .success)
+            dismiss()
+        }
     }
 
     @ToolbarContentBuilder
@@ -254,6 +267,16 @@ struct ArticleDetailView: View {
                     }
                     Divider()
                     Button { Router.shared.push(.profile(article.pubkey)) } label: { Label(L("exploreViewAuthor"), systemImage: "person.crop.circle") }
+                    if article.pubkey != Session.shared.pubkey {
+                        Section {
+                            Button(L("feedMuteAuthor"), systemImage: "speaker.slash", role: .destructive) { muteAuthor(article) }
+                                .accessibilityIdentifier("article-mute-author")
+                            Button(L("report"), systemImage: "flag", role: .destructive) {
+                                reportTarget = ReportTarget(pubkey: article.pubkey, eventId: article.id, name: article.authorName)
+                            }
+                            .accessibilityIdentifier("article-report")
+                        }
+                    }
                 } label: {
                     Label(L("exploreMoreOptions"), systemImage: "ellipsis")
                 }

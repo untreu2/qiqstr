@@ -28,11 +28,20 @@ enum BackgroundRefresh {
 
     static func run() async {
         schedule()
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await refresh() }
+            group.addTask { try? await Task.sleep(for: .seconds(25)) }
+            await group.next()
+            group.cancelAll()
+        }
+    }
+
+    private static func refresh() async {
         let service = LocalNotificationService.shared
         guard service.isEnabled else { return }
         await launchSession()
         await service.refreshStatus()
-        guard service.isAuthorized, Session.shared.phase == .ready, let me = Session.shared.pubkey else { return }
+        guard !Task.isCancelled, service.isAuthorized, Session.shared.phase == .ready, let me = Session.shared.pubkey else { return }
         await service.checkForNewActivity(me: me)
     }
 }

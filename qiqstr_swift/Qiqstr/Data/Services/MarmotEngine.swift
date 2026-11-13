@@ -31,6 +31,7 @@ nonisolated struct MarmotGroup: Hashable, Sendable {
 }
 
 nonisolated struct MarmotOutcome: Sendable {
+    var eventId: String
     var type: String
     var groupId: String?
     var messageJSON: String?
@@ -38,9 +39,13 @@ nonisolated struct MarmotOutcome: Sendable {
     var evolutionEvent: String?
     var isNewWelcome: Bool
 
-    init(raw: String) {
-        let j = JSON.object(raw) ?? [:]
-        type = (j["type"] as? String) ?? "ignored"
+    var retry: [String]
+
+    init(eventId: String, raw: String?) {
+        let j = raw.flatMap { JSON.object($0) } ?? [:]
+        self.eventId = eventId
+        type = raw == nil ? "error" : (j["type"] as? String) ?? "ignored"
+        retry = j.strings("retry")
         groupId = j.str("groupId")
         messageJSON = (j["message"] as? JSONObject).map { JSON.string($0) }
         groupJSON = (j["group"] as? JSONObject).map { JSON.string($0) }
@@ -80,6 +85,13 @@ actor MarmotEngine {
             .appendingPathComponent("marmot", isDirectory: true)
     }
 
+    nonisolated static func excludeFromBackup(_ directory: URL) {
+        var url = directory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+    }
+
     private func serial<T: Sendable>(_ work: @escaping @Sendable () async throws -> T) async throws -> T {
         let previous = tail
         let task = Task { () async throws -> T in
@@ -90,10 +102,15 @@ actor MarmotEngine {
         return try await task.value
     }
 
+    func close() async {
+        _ = try? await serial { marmotClose() }
+    }
+
     func open(privateKey: String) async throws -> String {
         let directory = Self.storageDirectory
         return try await serial {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            Self.excludeFromBackup(directory)
             return try marmotOpen(dataDir: directory.path, privateKeyHex: privateKey)
         }
     }
@@ -103,8 +120,8 @@ actor MarmotEngine {
         return JSON.array(raw).compactMap(MarmotGroup.init(json:))
     }
 
-    func messages(groupId: String, limit: Int) async throws -> String {
-        try await serial { try marmotMessages(groupIdHex: groupId, limit: UInt32(limit)) }
+    func messages(groupId: String, limit: Int, offset: Int = 0) async throws -> String {
+        try await serial { try marmotMessagesPage(groupIdHex: groupId, limit: UInt32(limit), offset: UInt32(max(offset, 0))) }
     }
 
     func process(_ events: [String]) async -> [MarmotOutcome] {
@@ -114,10 +131,9 @@ actor MarmotEngine {
                 return (j.int("created_at"), id, raw)
             }
             .sorted { $0.0 == $1.0 ? $0.1 < $1.1 : $0.0 < $1.0 }
-            .map(\.2)
         guard !ordered.isEmpty else { return [] }
         return (try? await serial {
-            ordered.compactMap { raw in (try? marmotProcessEvent(eventJson: raw)).map(MarmotOutcome.init(raw:)) }
+            ordered.map { item in MarmotOutcome(eventId: item.1, raw: try? marmotProcessEvent(eventJson: item.2)) }
         }) ?? []
     }
 

@@ -13,7 +13,12 @@ actor ImagePipeline {
         return URLSession(configuration: config)
     }()
 
-    init() { cache.countLimit = 400 }
+    private static let maxDownloadBytes = 30 * 1024 * 1024
+
+    init() {
+        cache.countLimit = 400
+        cache.totalCostLimit = 160 * 1024 * 1024
+    }
 
 
     func image(for url: URL, maxPixel: CGFloat) async -> UIImage? {
@@ -21,27 +26,37 @@ actor ImagePipeline {
         if let hit = cache.object(forKey: key as NSString) { return hit }
         if let task = tasks[key] { return await task.value }
         let task = Task<UIImage?, Never> {
-            guard let (data, _) = try? await session.data(from: url) else { return nil }
+            guard let data = await download(url) else { return nil }
             return await Task.detached { ImagePipeline.downsample(data, maxPixel: maxPixel) }.value
         }
         tasks[key] = task
         let image = await task.value
         tasks[key] = nil
-        if let image { cache.setObject(image, forKey: key as NSString) }
+        if let image, let cg = image.cgImage { cache.setObject(image, forKey: key as NSString, cost: cg.bytesPerRow * cg.height) }
         return image
     }
 
+    private func download(_ url: URL) async -> Data? {
+        if let cached = session.configuration.urlCache?.cachedResponse(for: URLRequest(url: url))?.data { return cached }
+        guard let (file, response) = try? await session.download(from: url) else { return nil }
+        defer { try? FileManager.default.removeItem(at: file) }
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+        let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size > 0, size <= Self.maxDownloadBytes, let data = try? Data(contentsOf: file) else { return nil }
+        session.configuration.urlCache?.storeCachedResponse(CachedURLResponse(response: response, data: data), for: URLRequest(url: url))
+        return data
+    }
+
     nonisolated static func downsample(_ data: Data, maxPixel: CGFloat) -> UIImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return UIImage(data: data) }
-        let count = CGImageSourceGetCount(source)
-        if count > 1 { return UIImage(data: data) }
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              CGImageSourceGetCount(source) > 0 else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixel,
         ]
-        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return UIImage(data: data) }
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         return UIImage(cgImage: cg)
     }
 }

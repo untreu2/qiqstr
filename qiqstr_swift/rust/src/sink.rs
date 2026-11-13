@@ -6,6 +6,7 @@ pub trait EventSink: Send + Sync {
     fn on_item(&self, item: String) -> bool;
     fn on_error(&self, message: String);
     fn on_done(&self);
+    fn is_closed(&self) -> bool;
 }
 
 pub struct SinkClosed;
@@ -33,6 +34,10 @@ impl StreamSink<String> {
     pub fn add_error<E: std::fmt::Display>(&self, error: E) -> Result<(), SinkClosed> {
         self.inner.on_error(error.to_string());
         Ok(())
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.inner.is_closed()
     }
 
     pub fn done(&self) {

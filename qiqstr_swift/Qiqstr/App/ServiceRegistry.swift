@@ -20,8 +20,13 @@ enum ServiceRegistry {
             Router.shared.reset()
             LiveService.shared.reset()
             ReadOnlyGate.shared.reset()
+            ExploreSeenStore.shared.reset()
+            ExploreService.shared.reset()
+            ZapperDirectory.shared.reset()
         }
         SessionHooks.onBootstrap { pubkey in
+            NoteInteractionStore.shared.prepareForAccount()
+            ZapperDirectory.shared.prepare()
             async let follows: Void = FollowService.shared.load()
             async let mutes: Void = MuteService.shared.load()
             async let bookmarks: Void = BookmarkService.shared.load()
@@ -34,6 +39,7 @@ enum ServiceRegistry {
             Task { await WalletService.shared.load() }
             Task { await HashtagFollowService.shared.load() }
             Task { await WebOfTrustService.shared.load(for: pubkey) }
+            Task { await ZapperDirectory.shared.verify(pubkey) }
         }
     }
 }

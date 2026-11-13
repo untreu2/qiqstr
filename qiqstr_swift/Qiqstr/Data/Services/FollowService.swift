@@ -2,6 +2,12 @@ import Foundation
 import Observation
 import QiqstrCore
 
+enum FollowError: LocalizedError {
+    case listUnavailable
+    case listNotFound
+    var errorDescription: String? { L("followListUnavailable") }
+}
+
 @MainActor
 @Observable
 final class FollowService {
@@ -11,6 +17,8 @@ final class FollowService {
     private(set) var isLoaded = false
     private var generation = 0
     private var queue: Task<Void, Never>?
+    @ObservationIgnored private var verifiedAt: Date?
+    private let verificationWindow: TimeInterval = 60
 
     var count: Int { following.count }
 
@@ -23,6 +31,7 @@ final class FollowService {
         pending = []
         isLoaded = false
         queue = nil
+        verifiedAt = nil
     }
 
     func load() async {
@@ -44,33 +53,33 @@ final class FollowService {
         following = list
     }
 
-    func follow(_ pubkey: String) async throws {
-        try await mutate([pubkey]) { $0.insert(pubkey) }
+    func follow(_ pubkey: String, creatingList: Bool = false) async throws {
+        try await mutate([pubkey], creatingList: creatingList) { $0.insert(pubkey) }
     }
 
     func unfollow(_ pubkey: String) async throws {
-        try await mutate([pubkey]) { $0.remove(pubkey) }
+        try await mutate([pubkey], creatingList: false) { $0.remove(pubkey) }
     }
 
-    func follow(many pubkeys: [String]) async throws {
+    func follow(many pubkeys: [String], creatingList: Bool = false) async throws {
         let targets = Set(pubkeys.filter { !$0.isEmpty })
         guard !targets.isEmpty else { return }
-        try await mutate(targets) { $0.formUnion(targets) }
+        try await mutate(targets, creatingList: creatingList) { $0.formUnion(targets) }
     }
 
-    private func mutate(_ targets: Set<String>, _ change: @escaping (inout Set<String>) -> Void) async throws {
+    private func mutate(_ targets: Set<String>, creatingList: Bool, _ change: @escaping (inout Set<String>) -> Void) async throws {
         let previous = queue
         let task = Task { () throws -> Void in
             await previous?.value
-            try await self.apply(targets, change)
+            try await self.apply(targets, creatingList: creatingList, change)
         }
         queue = Task { _ = try? await task.value }
         try await task.value
     }
 
-    private func apply(_ targets: Set<String>, _ change: (inout Set<String>) -> Void) async throws {
+    private func apply(_ targets: Set<String>, creatingList: Bool, _ change: (inout Set<String>) -> Void) async throws {
         let key = try Session.shared.requireSigner()
-        guard let me = Session.shared.pubkey else { throw CoreError(L("privateKeyNotFound")) }
+        guard let me = Session.shared.pubkey?.lowercased() else { throw CoreError(L("privateKeyNotFound")) }
         let generation = self.generation
         let snapshot = following
         var optimistic = following
@@ -80,14 +89,16 @@ final class FollowService {
         pending.formUnion(targets)
         defer { if generation == self.generation { pending.subtract(targets) } }
         do {
-            var list = try await authoritativeList(me)
+            let base = try await latestContactList(me, creatingList: creatingList)
             guard generation == self.generation else { return }
+            let baseTags = try Self.tags(in: base)
+            var list = Self.pubkeys(in: baseTags)
             change(&list)
             list.remove(me)
-            let event = try createFollowEvent(followingPubkeys: list.sorted(), privateKeyHex: key)
+            let event = try createSignedEvent(kind: 3, content: (base?["content"] as? String) ?? "", tags: Self.mergedTags(baseTags, list: list), privateKeyHex: key)
             try await SyncService.shared.publish(event)
             guard generation == self.generation else { return }
-            try? await dbSaveFollowingList(pubkeyHex: me, followsHex: Array(list))
+            verifiedAt = Date()
             following = list
             DataBus.shared.feedChanged()
             Task { await SyncService.shared.syncFeed(force: true) }
@@ -97,18 +108,53 @@ final class FollowService {
         }
     }
 
-    private func authoritativeList(_ me: String) async throws -> Set<String> {
-        let local = await localList(me)
-        if !local.isEmpty { return local }
-        let events = await SyncService.shared.fetchEvents(["kinds": [3], "authors": [me], "limit": 1], timeout: 8)
-        if let latest = events.max(by: { $0.int("created_at") < $1.int("created_at") }) {
-            try? await dbSaveFollowingListFromEvent(eventJson: JSON.string(latest), selfPubkeyHex: me)
-            let fromEvent = Set(latest.tags().filter { $0.count > 1 && $0[0] == "p" }.map { $0[1] })
-            return fromEvent.union(await localList(me)).subtracting([me])
+    private func latestContactList(_ me: String, creatingList: Bool) async throws -> JSONObject? {
+        let filter: JSONObject = ["kinds": [3], "authors": [me], "limit": 1]
+        var candidates = JSON.array(try? await dbQueryEvents(filterJson: JSON.string(filter), limit: 1))
+        let isFresh = verifiedAt.map { Date().timeIntervalSince($0) < verificationWindow } ?? false
+        if !isFresh || candidates.isEmpty {
+            let remote = await SyncService.shared.fetchContactLists(of: me)
+            if remote.isEmpty {
+                if !candidates.isEmpty { throw FollowError.listUnavailable }
+            } else {
+                verifiedAt = Date()
+            }
+            candidates += remote
         }
-        let connected = (try? await getConnectedRelayCount()) ?? 0
-        if connected == 0 && !Session.shared.isNewAccount { throw CoreError(L("followListUnavailable")) }
-        return []
+        let newest = candidates
+            .filter { $0.int("kind") == 3 && $0.str("pubkey")?.lowercased() == me }
+            .max { ($0.int("created_at"), $0.str("id") ?? "") < ($1.int("created_at"), $1.str("id") ?? "") }
+        if let newest {
+            try? await dbSaveFollowingListFromEvent(eventJson: JSON.string(newest), selfPubkeyHex: me)
+            return newest
+        }
+        if ((try? await getConnectedRelayCount()) ?? 0) == 0 { throw FollowError.listUnavailable }
+        guard creatingList || Session.shared.isNewAccount || AccountStore.wasCreatedHere(me) else { throw FollowError.listNotFound }
+        return nil
+    }
+
+    private static func tags(in event: JSONObject?) throws -> [[String]] {
+        guard let event else { return [] }
+        guard let tags = event["tags"] as? [[String]] else { throw FollowError.listUnavailable }
+        return tags
+    }
+
+    private static func pubkeys(in tags: [[String]]) -> Set<String> {
+        Set(tags.filter { $0.count > 1 && $0[0] == "p" && !$0[1].isEmpty }.map { $0[1].lowercased() })
+    }
+
+    private static func mergedTags(_ base: [[String]], list: Set<String>) -> [[String]] {
+        var tags: [[String]] = []
+        var kept: Set<String> = []
+        for tag in base where !tag.isEmpty {
+            guard tag.count > 1, tag[0] == "p" else {
+                tags.append(tag)
+                continue
+            }
+            let pubkey = tag[1].lowercased()
+            if list.contains(pubkey), kept.insert(pubkey).inserted { tags.append(tag) }
+        }
+        return tags + list.subtracting(kept).sorted().map { ["p", $0] }
     }
 
     private func localList(_ me: String) async -> Set<String> {

@@ -64,6 +64,11 @@ final class SharedInbox {
 
     private func present(_ share: PendingShare) {
         delivered.insert(share.id)
+        guard Session.shared.canSign else {
+            if let dir = directory(for: share.id) { try? FileManager.default.removeItem(at: dir) }
+            ReadOnlyGate.shared.present()
+            return
+        }
         pending = share
         Self.defaults?.set(share.text, forKey: Self.prefillTextKey)
         Self.defaults?.set(share.imageURLs.map(\.path), forKey: Self.prefillImagesKey)

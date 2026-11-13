@@ -87,10 +87,12 @@ struct DMInputBar: View {
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .frame(width: 22, height: 22)
+                                .glassEffect(.regular.interactive(), in: .circle)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .padding(4)
+                        .offset(x: 7, y: -7)
                         .accessibilityLabel(L("removeThisMediaFile"))
                         .accessibilityIdentifier("dm-attachment-remove")
                     }

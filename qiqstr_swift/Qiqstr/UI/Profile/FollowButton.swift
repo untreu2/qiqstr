@@ -10,6 +10,7 @@ struct FollowButton: View {
     @State private var isWorking = false
     @State private var optimistic: Bool?
     @State private var confirmUnfollow = false
+    @State private var confirmNewList = false
     @State private var feedback = 0
 
     private var isFollowing: Bool { optimistic ?? follows.isFollowing(pubkey) }
@@ -20,7 +21,12 @@ struct FollowButton: View {
     }
 
     var body: some View {
-        if circular { circleBody } else { capsuleBody }
+        Group {
+            if circular { circleBody } else { capsuleBody }
+        }
+        .newFollowListConfirmation(isPresented: $confirmNewList) {
+            Task { await toggle(follow: true, creatingList: true) }
+        }
     }
 
     private var circleBody: some View {
@@ -77,7 +83,7 @@ struct FollowButton: View {
         }
     }
 
-    private func toggle(follow: Bool) async {
+    private func toggle(follow: Bool, creatingList: Bool = false) async {
         guard !isWorking else { return }
         isWorking = true
         optimistic = follow
@@ -87,10 +93,33 @@ struct FollowButton: View {
             optimistic = nil
         }
         do {
-            if follow { try await follows.follow(pubkey) } else { try await follows.unfollow(pubkey) }
+            if follow { try await follows.follow(pubkey, creatingList: creatingList) } else { try await follows.unfollow(pubkey) }
+        } catch FollowError.listNotFound {
+            confirmNewList = follow
         } catch {
             ToastCenter.shared.error(error)
         }
+    }
+}
+
+struct NewFollowListConfirmation: ViewModifier {
+    @Binding var isPresented: Bool
+    let create: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(L("followListMissingTitle"), isPresented: $isPresented) {
+            Button(L("followListCreateNew"), action: create)
+                .accessibilityIdentifier("follow-list-create-new")
+            Button(L("cancel"), role: .cancel) {}
+        } message: {
+            Text(L("followListMissingMessage"))
+        }
+    }
+}
+
+extension View {
+    func newFollowListConfirmation(isPresented: Binding<Bool>, create: @escaping () -> Void) -> some View {
+        modifier(NewFollowListConfirmation(isPresented: isPresented, create: create))
     }
 }
 

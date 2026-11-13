@@ -13,7 +13,7 @@ enum RecentSearchStore {
     @discardableResult
     static func add(_ term: String) -> [String] {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= 120 else { return load() }
+        guard !trimmed.isEmpty, trimmed.count <= 120, !SearchService.looksSecret(trimmed) else { return load() }
         var items = load().filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
         items.insert(trimmed, at: 0)
         items = Array(items.prefix(limit))

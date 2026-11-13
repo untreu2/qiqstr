@@ -83,3 +83,6 @@
 "walletZapCustom" = "Özel tutarla zap at";
 "walletZappedState" = "Zap atıldı";
 "walletQuickZapHint" = "{amount} sats zap atar. Tutar seçmek için basılı tut.";
+"walletPaymentPending" = "Cüzdanın bu ödemeyi henüz onaylamadı. Ödeme yine de gerçekleşebilir; tekrar denemeden önce cüzdanını kontrol et.";
+"zapInProgress" = "Bu not için bir zap zaten işleniyor.";
+"walletReplaceWarning" = "{wallet} bağlı. Yeni bir cüzdan bağlamak onun yerini alır.";

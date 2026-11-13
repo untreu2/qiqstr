@@ -38,3 +38,10 @@ enum DMFormat {
         return ("paperclip", L("dmAttachment"))
     }
 }
+
+extension DMMessage {
+    @MainActor
+    var spokenSender: String {
+        isMine ? L("dmYou") : ProfileCache.shared.profile(peer)?.bestName ?? Profile.shortNpub(peer)
+    }
+}

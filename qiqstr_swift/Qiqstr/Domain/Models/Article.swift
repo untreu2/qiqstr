@@ -1,6 +1,6 @@
 import Foundation
 
-struct Article: Identifiable, Hashable, Sendable {
+nonisolated struct Article: Identifiable, Hashable, Sendable {
     var id: String
     var pubkey: String
     var title: String
@@ -22,8 +22,9 @@ struct Article: Identifiable, Hashable, Sendable {
         image = j.str("image")
         summary = j.str("summary")
         dTag = j.str("dTag") ?? ""
-        publishedAt = j.int("publishedAt")
         createdAt = j.int("created_at")
+        let published = j.int("publishedAt")
+        publishedAt = (1...Int(Date().timeIntervalSince1970) + 86400 * 365).contains(published) ? published : createdAt
         hashtags = j.strings("hashtags")
         authorName = j.str("authorName")
         authorImage = j.str("authorImage")

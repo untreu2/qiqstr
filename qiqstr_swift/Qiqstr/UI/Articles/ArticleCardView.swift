@@ -112,6 +112,16 @@ struct ArticleMenuItems: View {
         if let url = article.shareURL {
             Button { Router.shared.sheet = .url(url) } label: { Label(L("exploreOpenInBrowser"), systemImage: "safari") }
         }
+        if article.pubkey != Session.shared.pubkey {
+            Section {
+                Button(L("feedMuteAuthor"), systemImage: "speaker.slash", role: .destructive) {
+                    Task {
+                        await Moderation.mute(article.pubkey)
+                        ToastCenter.shared.show(L("feedUserMuted"), style: .success)
+                    }
+                }
+            }
+        }
     }
 }
 

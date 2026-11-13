@@ -187,6 +187,11 @@ final class SearchViewModel {
             reset()
             return
         }
+        guard !SearchService.looksSecret(text) else {
+            reset()
+            ToastCenter.shared.show(L("searchSecretBlocked"), style: .error)
+            return
+        }
         if let url = SearchService.entityURL(from: text) {
             reset()
             open(url)

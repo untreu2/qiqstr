@@ -101,11 +101,16 @@ final class HashtagFollowService {
 
     private func commit(_ tag: String, _ follow: Bool, key: String, me: String, generation: Int) async throws {
         guard generation == self.generation else { return }
-        if !isLoaded || !hasAuthoritative || confirmed.isEmpty {
-            await fetchRemote(me, generation: generation)
-            guard generation == self.generation else { return }
-            guard hasAuthoritative else { throw CoreError(L("feedTopicsUnavailable")) }
+        let base = try await SyncService.shared.latestEditableEvent(kind: Self.kind, author: me)
+        guard generation == self.generation else { return }
+        if let base {
+            adopt(base)
+        } else {
+            confirmed = []
+            content = ""
+            extraTags = []
         }
+        hasAuthoritative = true
         var list = confirmed
         if follow {
             guard !list.contains(tag) else { return settle(tag, follow) }

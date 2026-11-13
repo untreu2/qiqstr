@@ -4,7 +4,8 @@ import SwiftUI
 enum TimeFormat {
     static func relative(_ timestamp: Int) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-        let diff = max(Int(Date().timeIntervalSince(date)), 0)
+        let seconds = Date().timeIntervalSince(date)
+        let diff = seconds.isFinite ? Int(min(max(seconds, 0), 86400 * 365 * 10_000)) : 0
         let locale = AppLanguage.locale
         guard diff < 86400 * 7 else {
             let f = DateFormatter()

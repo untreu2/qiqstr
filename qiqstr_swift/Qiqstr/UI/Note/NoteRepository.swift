@@ -58,12 +58,12 @@ enum NoteRepository {
     static func feed(authors: [String]?, limit: Int, sort: FeedSortMode) async -> [Note] {
         guard let me else { return [] }
         let raw = try? await dbGetHydratedFeedNotesSorted(userPubkeyHex: me, authorsHex: authors, limit: UInt32(limit), filterReplies: true, currentUserPubkeyHex: me, sortMode: sort.rawValue)
-        return Note.list(raw)
+        return await Note.parsed(raw)
     }
 
     static func hashtag(_ tag: String, limit: Int) async -> [Note] {
         let raw = try? await dbGetHydratedHashtagNotes(hashtag: tag.lowercased(), limit: UInt32(limit), mutedPubkeys: mutedPubkeys, mutedWords: mutedWords, currentUserPubkeyHex: me)
-        return Note.list(raw)
+        return await Note.parsed(raw)
     }
 
     static func note(_ id: String) async -> Note? {
@@ -75,7 +75,7 @@ enum NoteRepository {
     static func notes(_ ids: [String]) async -> [Note] {
         guard !ids.isEmpty else { return [] }
         let raw = try? await dbGetHydratedNotesByIds(eventIds: ids, mutedPubkeys: mutedPubkeys, mutedWords: mutedWords, currentUserPubkeyHex: me)
-        return Note.list(raw)
+        return await Note.parsed(raw)
     }
 
     static func ensureNote(_ id: String) async -> Note? {
@@ -124,7 +124,7 @@ enum NoteRepository {
 
     static func fetchOlder(authors: [String], until: Int) async -> Int {
         guard !authors.isEmpty, until > 0 else { return 0 }
-        let events = await SyncService.shared.fetchEvents(["authors": authors, "kinds": [1, 6], "until": until - 1, "limit": 100], timeout: 10)
+        let events = await SyncService.shared.fetchEvents(["authors": authors, "kinds": [1, 6], "until": until, "limit": 100], timeout: 10)
         if !events.isEmpty {
             _ = try? await dbSaveEvents(eventsJson: JSON.string(events))
             SyncService.shared.backgroundFollowUps(events)
@@ -134,7 +134,7 @@ enum NoteRepository {
 
     static func fetchOlderHashtag(_ tag: String, until: Int) async -> Int {
         guard until > 0 else { return 0 }
-        let events = await SyncService.shared.fetchEvents(["kinds": [1], "#t": [tag.lowercased()], "until": until - 1, "limit": 100], timeout: 10)
+        let events = await SyncService.shared.fetchEvents(["kinds": [1], "#t": [tag.lowercased()], "until": until, "limit": 100], timeout: 10)
         if !events.isEmpty {
             _ = try? await dbSaveEvents(eventsJson: JSON.string(events))
             SyncService.shared.backgroundFollowUps(events)

@@ -6,12 +6,13 @@ struct SettingsView: View {
     @State private var router = Router.shared
     @State private var notifications = LocalNotificationService.shared
     @State private var showLogout = false
+    @State private var showTerms = false
     @State private var isLoggingOut = false
     @State private var copiedNpub = 0
     @AppStorage("app_language") private var language: String?
     @ScaledMetric(relativeTo: .title3) private var avatarSize: CGFloat = 58
 
-    static let termsURL = URL(string: "https://github.com/untreu2/qiqstr/blob/master/TERMS.md")!
+    static let supportURL = URL(string: AuthTermsText.supportURL)!
     static let sourceURL = URL(string: "https://github.com/untreu2/qiqstr")!
 
     var body: some View {
@@ -52,10 +53,14 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings-switch-account")
             }
             Section {
-                Button { router.sheet = .url(Self.termsURL) } label: {
+                Button { showTerms = true } label: {
                     SettingsRowLabel(title: L("settingsTerms"), systemImage: "doc.text.fill", fill: AppColors.settingsTile)
                 }
                 .accessibilityIdentifier("settings-terms")
+                Button { router.sheet = .url(Self.supportURL) } label: {
+                    SettingsRowLabel(title: L("settingsContactSupport"), systemImage: "envelope.fill", fill: AppColors.settingsTile)
+                }
+                .accessibilityIdentifier("settings-contact")
                 Button { router.sheet = .url(Self.sourceURL) } label: {
                     SettingsRowLabel(title: L("settingsSourceCode"), systemImage: "chevron.left.forwardslash.chevron.right", fill: AppColors.settingsTile)
                 }
@@ -81,13 +86,22 @@ struct SettingsView: View {
                 } message: {
                     Text(L("seedPhraseWarning"))
                 }
-            } footer: {
-                Text(L("settingsSubtitle"))
+            }
+            if session.canSign {
+                Section {
+                    NavigationLink(value: Route.settingsPage(.eventManager)) {
+                        Text(L("deleteAccount")).foregroundStyle(.red)
+                    }
+                    .accessibilityIdentifier("settings-delete-account")
+                } footer: {
+                    Text(L("settingsDeleteAccountFooter"))
+                }
             }
         }
         .settingsListStyle()
         .navigationTitle(L("settings"))
         .navigationBarTitleDisplayMode(.large)
+        .sheet(isPresented: $showTerms) { AuthTermsSheet() }
         .contentMargins(.bottom, 72, for: .scrollContent)
         .sensoryFeedback(.success, trigger: copiedNpub)
         .accessibilityIdentifier("settings-list")

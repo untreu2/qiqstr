@@ -40,9 +40,17 @@ final class WalletViewModel {
     var transactionDays: [TransactionDay] { TransactionDay.group(visibleTransactions) }
 
     func consumeIncoming() {
-        guard let uri = wallet.incomingConnectURI else { return }
-        if case .connect = sheet { return }
-        sheet = .connect(wallet.consumeIncomingConnectURI() ?? uri)
+        guard sheet == nil else { return }
+        if wallet.incomingConnectURI != nil {
+            sheet = .connect(wallet.consumeIncomingConnectURI())
+        } else if wallet.incomingPaymentRequest != nil {
+            guard wallet.isConnected else {
+                _ = wallet.consumeIncomingPaymentRequest()
+                ToastCenter.shared.show(L("pleaseConnectWalletFirst"), style: .error)
+                return
+            }
+            sheet = .send(wallet.consumeIncomingPaymentRequest())
+        }
     }
 
     func receive() { Router.shared.push(.walletReceive) }
@@ -133,14 +141,22 @@ struct WalletView: View {
         .onChange(of: wallet.incomingConnectURI) { _, uri in
             if uri != nil { model.consumeIncoming() }
         }
+        .onChange(of: wallet.incomingPaymentRequest) { _, value in
+            if value != nil { model.consumeIncoming() }
+        }
+        .onChange(of: model.sheet == nil) { _, closed in
+            if closed { model.consumeIncoming() }
+        }
         .task { await BitcoinPriceService.shared.refreshIfNeeded() }
         .onChange(of: wallet.isConnected) { Router.shared.expandTabBar() }
     }
 
     private var menu: some View {
         Menu {
-            Button { model.sheet = .cashu(nil) } label: { Label(L("walletReceiveCashu"), systemImage: "banknote") }
-                .accessibilityIdentifier("wallet-menu-cashu")
+            if AppStorePolicy.allowsCashu {
+                Button { model.sheet = .cashu(nil) } label: { Label(L("walletReceiveCashu"), systemImage: "banknote") }
+                    .accessibilityIdentifier("wallet-menu-cashu")
+            }
             if wallet.cashuBalanceSats > 0 {
                 Button { model.showMeltConfirm = true } label: { Label(L("cashuMeltAll"), systemImage: "bolt") }
                     .disabled(wallet.isRedeemingCashu)
@@ -189,7 +205,7 @@ struct WalletOnboardingView: View {
                 feature("bolt", L("onboardingCoinosFeatureSend"))
                 feature("arrow.down.left", L("walletFeatureReceive"))
                 feature("heart", L("onboardingCoinosFeatureZap"))
-                feature("banknote", L("walletFeatureCashu"))
+                if AppStorePolicy.allowsCashu { feature("banknote", L("walletFeatureCashu")) }
             }
             Section {
                 Text(L("walletNwcHowTo"))

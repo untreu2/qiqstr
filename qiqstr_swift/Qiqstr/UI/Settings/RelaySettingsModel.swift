@@ -38,6 +38,7 @@ final class RelaySettingsModel {
     var pendingBroadcast: [String] = []
     var showBroadcastPrompt = false
     var feedback = 0
+    var publishChanges: (added: Int, removed: Int)?
 
     private var statusTask: Task<Void, Never>?
     private static let flagsKey = "relay_flags"
@@ -155,10 +156,25 @@ final class RelaySettingsModel {
         offerBroadcast(defaults.filter { !previous.contains(Self.normalize($0)) })
     }
 
-    func publish() async {
-        guard let key = Session.shared.privateKey else { ToastCenter.shared.show(L("privateKeyNotFound"), style: .error); return }
+    func publish(confirmed: Bool = false) async {
+        guard let key = Session.shared.privateKey, let me = Session.shared.pubkey else { ToastCenter.shared.show(L("privateKeyNotFound"), style: .error); return }
         isPublishing = true
         defer { isPublishing = false }
+        let base: JSONObject?
+        do {
+            base = try await SyncService.shared.latestEditableEvent(kind: 10002, author: me)
+        } catch ListError.cancelled {
+            return
+        } catch {
+            ToastCenter.shared.show("\(L("errorPublishingRelayList")): \(coreMessage(error))", style: .error)
+            return
+        }
+        let published = Set((base?.tags() ?? []).filter { $0.count > 1 && $0[0] == "r" }.map { Self.normalize($0[1]) })
+        let local = Set(relays.map(Self.normalize))
+        if !confirmed, base != nil, published != local {
+            publishChanges = (local.subtracting(published).count, published.subtracting(local).count)
+            return
+        }
         let configs: [String] = relays.compactMap { relay in
             let f = flags(for: relay)
             if f.read && f.write { return relay }
@@ -275,7 +291,7 @@ final class RelaySettingsModel {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard trimmed.hasPrefix("wss://") || trimmed.hasPrefix("ws://"),
               let components = URLComponents(string: trimmed), let host = components.host, !host.isEmpty else { return false }
-        return host.contains(".") || host == "localhost"
+        return (host.contains(".") || host == "localhost") && RelayConfig.isUsableRelayURL(url.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     static func canonicalInput(_ raw: String) -> String {

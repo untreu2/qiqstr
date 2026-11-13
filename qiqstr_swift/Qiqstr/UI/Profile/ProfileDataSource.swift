@@ -29,7 +29,7 @@ enum ProfileDataSource {
     }
 
     static func notes(_ pubkey: String, limit: Int, until: Int? = nil) async -> [Note] {
-        Note.list(try? await dbGetHydratedProfileNotes(
+        await Note.parsed(try? await dbGetHydratedProfileNotes(
             pubkeyHex: pubkey,
             limit: UInt32(limit),
             mutedPubkeys: mutedPubkeys(excluding: pubkey),
@@ -41,7 +41,7 @@ enum ProfileDataSource {
     }
 
     static func replies(_ pubkey: String, limit: Int, until: Int? = nil) async -> [Note] {
-        Note.list(try? await dbGetHydratedProfileReplies(
+        await Note.parsed(try? await dbGetHydratedProfileReplies(
             pubkeyHex: pubkey,
             limit: UInt32(limit),
             mutedPubkeys: mutedPubkeys(excluding: pubkey),
@@ -52,7 +52,7 @@ enum ProfileDataSource {
     }
 
     static func likes(_ pubkey: String, reactionLimit: Int) async -> [Note] {
-        Note.list(try? await dbGetHydratedReactionNotes(
+        await Note.parsed(try? await dbGetHydratedReactionNotes(
             pubkeyHex: pubkey,
             limit: UInt32(reactionLimit),
             mutedPubkeys: session.mutedPubkeys,
@@ -61,12 +61,12 @@ enum ProfileDataSource {
         ))
     }
 
-    static func notes(ids: [String]) async -> [Note] {
+    static func notes(ids: [String], owner: String? = nil) async -> [Note] {
         guard !ids.isEmpty else { return [] }
-        return Note.list(try? await dbGetHydratedNotesByIds(
+        return await Note.parsed(try? await dbGetHydratedNotesByIds(
             eventIds: ids,
-            mutedPubkeys: [],
-            mutedWords: [],
+            mutedPubkeys: session.mutedPubkeys.filter { $0 != owner },
+            mutedWords: session.mutedWords,
             currentUserPubkeyHex: session.pubkey
         ))
     }
@@ -113,7 +113,7 @@ enum ProfileDataSource {
 
     static func followerCount(_ pubkey: String) async -> Int? {
         guard let raw = try? await fetchFollowerCounts(pubkeyHexes: [pubkey]), let map = JSON.object(raw) else { return nil }
-        return (map[pubkey] as? NSNumber)?.intValue ?? 0
+        return (map[pubkey] as? NSNumber)?.intValue
     }
 
     static func followScore(target: String) async -> FollowScore? {

@@ -19,6 +19,9 @@
 "authThemeSystem" = "System";
 "authUploadNoUrl" = "Der Upload hat keine URL zurückgegeben.";
 "followListUnavailable" = "Deine Folgeliste konnte nicht von den Relays geladen werden. Prüfe deine Verbindung und versuche es erneut.";
+"followListMissingTitle" = "Keine Folgeliste gefunden";
+"followListMissingMessage" = "Für dieses Konto wurde keine bestehende Folgeliste gefunden. Wenn du in einer anderen Nostr-App bereits Personen folgst, brich ab und versuche es später erneut. Andernfalls kannst du eine neue Liste beginnen.";
+"followListCreateNew" = "Neue Liste beginnen";
 "authInterestsTitle" = "Wofür interessierst du dich?";
 "authInterestsSubtitle" = "Wähle ein paar Themen aus und wir finden Menschen, denen es sich zu folgen lohnt.";
 "authInterestBitcoin" = "Bitcoin";
@@ -73,3 +76,4 @@
 "invalidMnemonicError" = "Diese Wiederherstellungswörter sind ungültig. Prüfe Schreibweise und Reihenfolge.";
 "authAccountNotFound" = "Konto nicht gefunden.";
 "authKeyMismatch" = "Die gespeicherten Schlüssel dieses Kontos stimmen nicht überein. Melde dich erneut an.";
+"authKeyStorageFailed" = "Dein Schlüssel konnte nicht im sicheren Speicher dieses Geräts abgelegt werden, daher wurde nichts geändert. Bitte versuche es erneut.";

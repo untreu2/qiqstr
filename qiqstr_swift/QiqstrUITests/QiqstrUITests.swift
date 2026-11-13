@@ -60,6 +60,51 @@ final class QiqstrUITests: XCTestCase {
         attachScreenshot(app, name: "Wallet without provider recommendations")
     }
 
+    func testSettingsOffersAccountDeletionContactAndTerms() {
+        let app = signedInApp(contentSize: "UICTContentSizeCategoryL")
+        let notNow = app.buttons["Not now"]
+        if notNow.waitForExistence(timeout: 8) { notNow.tap() }
+        let profile = app.navigationBars.buttons["Profile"].firstMatch
+        XTCAssertExists(profile)
+        profile.tap()
+        let settings = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Settings")).firstMatch
+        XTCAssertExists(settings)
+        settings.tap()
+        let list = app.collectionViews["settings-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 10))
+        let delete = app.buttons["settings-delete-account"]
+        for _ in 0..<6 where !delete.isHittable { list.swipeUp() }
+        XCTAssertTrue(delete.isHittable, "Account deletion must be reachable from Settings.")
+        XCTAssertTrue(app.buttons["settings-contact"].exists, "A support contact must be reachable from Settings.")
+        XCTAssertTrue(app.buttons["settings-terms"].exists)
+        app.buttons["settings-terms"].tap()
+        XCTAssertTrue(app.staticTexts["qiqstr has zero tolerance for objectionable content and abusive users."].waitForExistence(timeout: 5) || app.otherElements["terms-sheet"].exists)
+    }
+
+    func testComposerRefusesToPublishAPrivateKey() {
+        let app = signedInApp(contentSize: "UICTContentSizeCategoryL")
+        let notNow = app.buttons["Not now"]
+        if notNow.waitForExistence(timeout: 8) { notNow.tap() }
+        let compose = app.buttons["feed-compose"]
+        XTCAssertExists(compose)
+        compose.tap()
+        let text = app.textViews["compose-text"]
+        XTCAssertExists(text)
+        text.tap()
+        text.typeText("my key nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5")
+        app.buttons["compose-post"].tap()
+        let toast = app.descendants(matching: .any)["toast"].firstMatch
+        XCTAssertTrue(toast.waitForExistence(timeout: 5), "The warning must be visible above the composer sheet.")
+        XCTAssertTrue(app.textViews["compose-text"].exists, "The composer must stay open with the text.")
+        app.buttons["compose-cancel"].tap()
+        let discard = app.buttons["compose-discard"].firstMatch
+        if discard.waitForExistence(timeout: 3) { discard.tap() }
+    }
+
+    private func XTCAssertExists(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(element.waitForExistence(timeout: 10), file: file, line: line)
+    }
+
     private func signedInApp(contentSize: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += [

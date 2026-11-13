@@ -4,6 +4,7 @@ import QiqstrCore
 final class SyncService {
     static let shared = SyncService()
     private var lastSync: [String: Date] = [:]
+    private var profileRequests: [String: Date] = [:]
     private var feedTask: Task<Void, Never>?
     private var notificationTask: Task<Void, Never>?
     private var realtimeGeneration = 0
@@ -30,7 +31,12 @@ final class SyncService {
         lastSync[key].map { Int($0.timeIntervalSince1970) - 60 }
     }
 
-    private func mark(_ key: String) { lastSync[key] = Date() }
+    private func mark(_ key: String) {
+        Task {
+            guard await hasConnectedRelays() else { return }
+            lastSync[key] = Date()
+        }
+    }
 
     func fetchEvents(_ filter: JSONObject, timeout: UInt32 = 10) async -> [JSONObject] {
         JSON.array(try? await QiqstrCore.fetchEvents(filterJson: JSON.string(filter), timeoutSecs: timeout))
@@ -169,12 +175,58 @@ final class SyncService {
     func syncFollowingList(_ pubkey: String, force: Bool = false) async {
         let key = "following_\(pubkey)"
         guard force || shouldSync(key) else { return }
-        let events = await fetchEvents(["kinds": [3], "authors": [pubkey], "limit": 1])
+        var events = await fetchEvents(["kinds": [3], "authors": [pubkey], "limit": 1])
+        if events.isEmpty { events = await fetchIndexedContactLists(of: pubkey) }
         if let event = events.max(by: { $0.int("created_at") < $1.int("created_at") }) {
-            try? await dbSaveFollowingListFromEvent(eventJson: JSON.string(event), selfPubkeyHex: session.pubkey ?? pubkey)
+            try? await dbSaveFollowingListFromEvent(eventJson: JSON.string(event), selfPubkeyHex: pubkey)
         }
         if pubkey == session.pubkey { bus.feedChanged() }
         mark(key)
+    }
+
+    func hasConnectedRelays() async -> Bool {
+        ((try? await getConnectedRelayCount()) ?? 0) > 0
+    }
+
+    func fetchContactLists(of pubkey: String) async -> [JSONObject] {
+        await fetchReplaceable(kind: 3, author: pubkey)
+    }
+
+    func latestEditableEvent(kind: Int, author pubkey: String, dTag: String? = nil, allowingNew: Bool = false) async throws -> JSONObject? {
+        var filter: JSONObject = ["kinds": [kind], "authors": [pubkey]]
+        if let dTag { filter["#d"] = [dTag] }
+        let cached = JSON.array(try? await dbQueryEvents(filterJson: JSON.string(filter), limit: 5))
+        let remote = await fetchReplaceable(kind: kind, author: pubkey, dTag: dTag)
+        let matches: (JSONObject) -> Bool = { event in
+            event.int("kind") == kind && event.str("pubkey")?.lowercased() == pubkey.lowercased()
+                && (dTag == nil || event.tags().contains { $0.count > 1 && $0[0] == "d" && $0[1] == dTag })
+        }
+        if remote.isEmpty {
+            if !cached.filter(matches).isEmpty { throw CoreError(L("noRelayConnection")) }
+            if ((try? await getConnectedRelayCount()) ?? 0) == 0 { throw CoreError(L("noRelayConnection")) }
+            if allowingNew || Session.shared.isNewAccount || AccountStore.wasCreatedHere(pubkey) { return nil }
+            guard await ListConfirmation.startNewList(kind: kind) else { throw ListError.cancelled }
+            return nil
+        }
+        let newest = (cached + remote).filter(matches)
+            .max { ($0.int("created_at"), $0.str("id") ?? "") < ($1.int("created_at"), $1.str("id") ?? "") }
+        if let newest { _ = try? await dbSaveEvents(eventsJson: JSON.string([newest])) }
+        return newest
+    }
+
+    func fetchReplaceable(kind: Int, author pubkey: String, dTag: String? = nil) async -> [JSONObject] {
+        var query: JSONObject = ["kinds": [kind], "authors": [pubkey], "limit": 1]
+        if let dTag { query["#d"] = [dTag] }
+        let filterJson = JSON.string(query)
+        let indexers = RelayConfig.indexerRelays
+        async let pooled = JSON.array(try? await QiqstrCore.fetchEvents(filterJson: filterJson, timeoutSecs: 6))
+        async let indexed = JSON.array(try? await fetchEventsFromRelays(filterJson: filterJson, relayUrls: indexers, timeoutSecs: 6))
+        return (await pooled + indexed).filter { $0.int("kind") == kind && $0.str("pubkey")?.lowercased() == pubkey.lowercased() }
+    }
+
+    private func fetchIndexedContactLists(of pubkey: String) async -> [JSONObject] {
+        let filter = JSON.string(["kinds": [3], "authors": [pubkey], "limit": 1] as JSONObject)
+        return JSON.array(try? await fetchEventsFromRelays(filterJson: filter, relayUrls: RelayConfig.indexerRelays, timeoutSecs: 6))
     }
 
     func syncHashtag(_ tag: String, force: Bool = false) async {
@@ -222,10 +274,14 @@ final class SyncService {
     }
 
     func fetchMissingProfiles(_ pubkeys: [String]) {
-        guard !pubkeys.isEmpty else { return }
-        let json = JSON.string(pubkeys.map { ["pubkey": $0] })
+        let now = Date()
+        if profileRequests.count > 5_000 { profileRequests = profileRequests.filter { now.timeIntervalSince($0.value) < 600 } }
+        let wanted = Array(Set(pubkeys.filter { !$0.isEmpty && profileRequests[$0].map { now.timeIntervalSince($0) >= 600 } ?? true }))
+        guard !wanted.isEmpty else { return }
+        for pubkey in wanted { profileRequests[pubkey] = now }
+        let json = JSON.string(wanted.map { ["pubkey": $0] })
         Task {
-            if (try? await fetchMissingProfilesForEvents(eventsJson: json)) != nil {
+            if let found = try? await fetchMissingProfilesForEvents(eventsJson: json), found > 0 {
                 bus.profileChanged()
                 bus.feedChanged()
             }
@@ -251,11 +307,18 @@ final class SyncService {
         guard let event = JSON.object(eventJson) else { throw CoreError("Invalid event") }
         if let me = session.pubkey, event.str("pubkey") != me { throw CoreError("Event signer does not match the active account") }
         let raw: String
-        if let relays { raw = try await sendEventTo(eventJson: eventJson, relayUrls: relays) } else { raw = try await sendEvent(eventJson: eventJson) }
+        do {
+            if let relays { raw = try await sendEventTo(eventJson: eventJson, relayUrls: relays) } else { raw = try await sendEvent(eventJson: eventJson) }
+        } catch {
+            if coreErrorMessage(error).contains("No relay accepted") || coreErrorMessage(error).contains("No publication relays") {
+                throw CoreError(L("publishNoRelayAccepted"))
+            }
+            throw error
+        }
         let result = JSON.object(raw) ?? [:]
         let success = (result["success"] as? [Any]) ?? []
         if success.isEmpty {
-            throw CoreError("No relay accepted the event\(result["failed"].map { ": \($0)" } ?? "")")
+            throw CoreError(L("publishNoRelayAccepted"))
         }
         _ = try? await dbSaveEvents(eventsJson: "[\(eventJson)]")
         bus.feedChanged(ids: [event.str("id") ?? ""])
@@ -317,7 +380,9 @@ final class SyncService {
                     let created = event.int("created_at")
                     if created > (notificationLastEventTs ?? 0) { notificationLastEventTs = created }
                     _ = try? await dbSaveEvents(eventsJson: "[\(raw)]")
-                    if let from = event.str("pubkey"), from != me { NotificationBadge.shared.markUnread(from: ProfileCache.shared.profile(from)?.bestName) }
+                    if let from = event.str("pubkey"), from != me, LocalNotificationService.shared.shouldBadge(event, me: me) {
+                        NotificationBadge.shared.markUnread(from: ProfileCache.shared.profile(from)?.bestName)
+                    }
                     LocalNotificationService.shared.handleRealtime(event, me: me)
                     bus.notificationsChanged()
                     fetchMissingProfiles([event.str("pubkey") ?? ""].filter { !$0.isEmpty })

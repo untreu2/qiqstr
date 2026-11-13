@@ -207,7 +207,10 @@ private struct ProfileMediaVideoPage: View {
         .onChange(of: isCurrent) { _, current in
             if current { player?.play() } else { player?.pause() }
         }
-        .onDisappear { player?.pause() }
+        .onDisappear {
+            player?.pause()
+            PlaybackAudio.release()
+        }
     }
 
     private func prepare() {

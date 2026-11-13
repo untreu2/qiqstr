@@ -121,6 +121,7 @@
 "pleaseConnectWalletFirst" = "Please connect your wallet first";
 "user" = "User";
 "errorLoadingUserProfile" = "Error loading user profile";
+"errorLoadingProfile" = "qiqstr could not start";
 "send" = "Send";
 "enterValidAmount" = "Enter a valid amount";
 "relaysFromYourFollows" = "Relays from your follows";
@@ -206,7 +207,7 @@
 "areYouSureLogout" = "Are you sure you want to logout?";
 "seedPhraseWarning" = "If you haven't saved your seed phrase, you will lose your account forever.";
 "muteUser" = "Mute {user}?";
-"muteUserDescription" = "You will not see notes from this user in your feed.";
+"muteUserDescription" = "You will no longer see this user’s notes, replies, messages or notifications.";
 "unfollowUser" = "Unfollow {user}?";
 "deleteThisPost" = "Delete this post?";
 "yes" = "Yes";
@@ -303,7 +304,7 @@
 "unblock" = "Unblock";
 "report" = "Report";
 "reportUser" = "Report {user}";
-"reportUserDescription" = "Select a reason for reporting this user. Your report will be published to relays.";
+"reportUserDescription" = "Select a reason. Your report is published to relays as a public flag, and this content is hidden for you right away.";
 "reportReasonSpam" = "Spam";
 "reportReasonNudity" = "Nudity";
 "reportReasonProfanity" = "Profanity";
@@ -312,6 +313,9 @@
 "reportReasonOther" = "Other";
 "reportSubmitted" = "Report submitted";
 "reportFailed" = "Failed to submit report";
+"reportHiddenOnly" = "Hidden on this device. The report could not be sent to relays.";
+"reportSentHidden" = "Report sent. This content is now hidden.";
+"reportAlsoMute" = "Also mute this user";
 "selectReportReason" = "Select a reason";
 "today" = "Today";
 "justNow" = "Just now";
@@ -531,7 +535,7 @@
 "onboardingCoinosConnect" = "Connect wallet";
 "onboardingCoinosFeatureSend" = "Send Bitcoin payments instantly via Lightning Network";
 "onboardingCoinosFeatureReceive" = "Receive Bitcoin with your own Lightning address";
-"onboardingCoinosFeatureZap" = "Send Bitcoin to your favorite posts and creators";
+"onboardingCoinosFeatureZap" = "Send sats to people you appreciate";
 "onboardingCoinosDisclaimer" = "Your wallet is self-custodial and powered by Spark. Your keys are stored securely on your device only. Back up your recovery phrase to keep access to your funds.";
 "onboardingCoinosAccept" = "I understand and agree";
 "onboardingCoinosConnected" = "Wallet ready";
@@ -543,7 +547,7 @@
 "onboardingSparkReady" = "Wallet set up successfully";
 "welcomeTitle" = "qiqstr";
 "welcomeSubtitle" = "A decentralized social network built on Nostr. Fully open source.";
-"welcomeFeatureDecentralized" = "No central servers, no CEOs. Nobody can ban you.";
+"welcomeFeatureDecentralized" = "No central servers. You choose the relays you use.";
 "welcomeFeatureKeys" = "Own your identity with your own keys.";
 "welcomeFeatureBitcoin" = "Message securely with end-to-end encryption.";
 "welcomeAlreadyHaveAccount" = "I already have an account";
@@ -597,7 +601,7 @@
 "exporting" = "Exporting…";
 "exportFailed" = "Export failed: {error}";
 "deleteAccountTitle" = "Delete account?";
-"deleteAccountConfirmation" = "This will send deletion requests for all your events and request all relays to delete your data. This action cannot be undone.";
+"deleteAccountConfirmation" = "This sends deletion requests for all your events, asks all relays to delete your data, and erases this account from this device. This action cannot be undone.";
 "noValidEventIds" = "No valid event IDs found";
 "deletionRequestSent" = "Deletion request sent for {count} events to {relays} relay";
 "deletionRequestSentPlural" = "Deletion request sent for {count} events to {relays} relays";
@@ -673,3 +677,6 @@
 "cashuMeltAllSuccess" = "Sent {amount} sats to Lightning";
 "close" = "Close";
 "notificationsFilterEmpty" = "No {filter} yet";
+"noRelayConnection" = "Not connected to any relay. Check your connection and try again.";
+"bookmarksUnreadable" = "Your saved bookmarks could not be read, so nothing was changed to avoid losing them.";
+"publishNoRelayAccepted" = "Couldn’t publish: no relay accepted it. Check your connection and relays, then try again.";

@@ -19,6 +19,9 @@
 "authThemeSystem" = "Sistem";
 "authUploadNoUrl" = "Yükleme bir URL döndürmedi.";
 "followListUnavailable" = "Takip listen rölelerden yüklenemedi. Bağlantını kontrol edip tekrar dene.";
+"followListMissingTitle" = "Takip listesi bulunamadı";
+"followListMissingMessage" = "Bu hesap için mevcut bir takip listesi bulamadık. Başka bir Nostr uygulamasında zaten birilerini takip ediyorsan iptal edip daha sonra tekrar dene. Aksi halde yeni bir liste başlatabilirsin.";
+"followListCreateNew" = "Yeni liste başlat";
 "authInterestsTitle" = "Nelerle ilgileniyorsun?";
 "authInterestsSubtitle" = "Birkaç konu seç, takip etmeye değer kişileri senin için bulalım.";
 "authInterestBitcoin" = "Bitcoin";
@@ -73,3 +76,4 @@
 "invalidMnemonicError" = "Bu kurtarma kelimeleri geçerli değil. Yazımı ve kelime sırasını kontrol et.";
 "authAccountNotFound" = "Hesap bulunamadı.";
 "authKeyMismatch" = "Bu hesabın kayıtlı anahtarları eşleşmiyor. Tekrar giriş yap.";
+"authKeyStorageFailed" = "Anahtarın bu cihazın güvenli deposuna kaydedilemedi, bu yüzden hiçbir şey değiştirilmedi. Lütfen tekrar dene.";

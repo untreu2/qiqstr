@@ -10,6 +10,13 @@ final class ExploreSeenStore {
     private var seen: [String: Double] = [:]
     private var saveTask: Task<Void, Never>?
 
+    func reset() {
+        saveTask?.cancel()
+        saveTask = nil
+        owner = nil
+        seen = [:]
+    }
+
     func snapshot() -> [String: Double] {
         load()
         return seen

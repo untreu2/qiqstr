@@ -67,6 +67,40 @@ final class ExploreService {
 
     func isLoading(_ key: String) -> Bool { loading.contains(key) }
 
+    var visibleMedia: [ProfileMediaEntry] {
+        let muted = Set(Session.shared.mutedPubkeys)
+        let hidden = NoteInteractionStore.shared.deletedIds
+        return media.filter { !hidden.contains($0.noteId) && !muted.contains($0.author ?? "") }
+    }
+
+    var visiblePeople: [RisingPerson] {
+        let muted = Set(Session.shared.mutedPubkeys)
+        return people.filter { !muted.contains($0.pubkey) }
+    }
+
+    var visibleZaps: [TopZap] {
+        let muted = Set(Session.shared.mutedPubkeys)
+        let hidden = NoteInteractionStore.shared.deletedIds
+        return zaps.filter { !muted.contains($0.sender) && !muted.contains($0.receiver) && !hidden.contains($0.noteId ?? "") }
+    }
+
+    func reset() {
+        feeds = []
+        people = []
+        zaps = []
+        topics = []
+        media = []
+        zapNotes = [:]
+        loading = []
+        failed = []
+        mediaExhausted = false
+        pinned = []
+        loadedAt = [:]
+        mediaCursor = nil
+        mediaIds = []
+        pinnedOwner = nil
+    }
+
     func loadAll(force: Bool = false) async {
         async let f: Void = loadFeeds(force: force)
         async let p: Void = loadPeople(force: force)
@@ -171,8 +205,9 @@ final class ExploreService {
         var order = PrimalCache.order(events)
         if order.isEmpty { order = Array(stats.keys) }
         let me = Session.shared.pubkey
+        let muted = Set(Session.shared.mutedPubkeys)
         let parsed = order.compactMap { pubkey -> RisingPerson? in
-            guard pubkey != me, let info = stats[pubkey] as? JSONObject else { return nil }
+            guard pubkey != me, !muted.contains(pubkey), let info = stats[pubkey] as? JSONObject else { return nil }
             let total = (followers[pubkey] as? NSNumber)?.intValue ?? info.int("count")
             return RisingPerson(pubkey: pubkey, increase: info.int("increase"), followers: total)
         }
@@ -188,8 +223,10 @@ final class ExploreService {
         let events = await PrimalCache.request("explore_zaps", args: ["limit": 30], timeout: 12)
         await Self.store(events)
         let receipts = Dictionary(events.filter { $0.int("kind") == 9735 }.compactMap { e in e.str("id").map { ($0, e) } }, uniquingKeysWith: { first, _ in first })
+        let muted = Set(Session.shared.mutedPubkeys)
         let parsed = PrimalCache.contents(events, kind: 10000129).compactMap { info -> TopZap? in
-            guard let id = info.str("zap_receipt_id"), let sender = info.str("sender"), let receiver = info.str("receiver") else { return nil }
+            guard let id = info.str("zap_receipt_id"), let sender = info.str("sender"), let receiver = info.str("receiver"),
+                  !muted.contains(sender), !muted.contains(receiver) else { return nil }
             var comment = ""
             if let receipt = receipts[id],
                let description = receipt.tags().first(where: { $0.count > 1 && $0[0] == "description" })?[1],
@@ -215,7 +252,7 @@ final class ExploreService {
         let counts = (PrimalCache.content(events, kind: 10000160) as? JSONObject) ?? [:]
         let parsed = counts.compactMap { key, value -> TrendingTopic? in
             let tag = key.lowercased()
-            guard SearchService.hashtag(from: tag) == tag, let count = (value as? NSNumber)?.intValue, count > 0 else { return nil }
+            guard SearchService.hashtag(from: tag) == tag, !Self.isAdultTag(tag), let count = (value as? NSNumber)?.intValue, count > 0 else { return nil }
             return TrendingTopic(tag: tag, count: count)
         }
         .sorted { $0.count == $1.count ? $0.tag < $1.tag : $0.count > $1.count }
@@ -259,7 +296,7 @@ final class ExploreService {
         var entries: [ProfileMediaEntry] = []
         for note in notes where !note.isRepost && !Self.isSensitive(note) {
             for item in NoteContentCache.content(for: note).media where seen.insert(item.url).inserted {
-                entries.append(ProfileMediaEntry(item: item, noteId: note.id))
+                entries.append(ProfileMediaEntry(item: item, noteId: note.id, author: note.pubkey))
             }
         }
         let cursor = PrimalCache.page(events).map(\.since).flatMap { $0 > 0 && $0 != until ? $0 : nil }
@@ -270,6 +307,10 @@ final class ExploreService {
         "nsfw", "nude", "nudes", "nudity", "naked", "porn", "porno", "adult", "18plus", "18", "xxx", "sexy", "sex",
         "boobs", "tits", "ass", "lewd", "hentai", "erotic", "erotica", "onlyfans", "nsfwart", "milf", "fetish", "lingerie",
     ]
+
+    static func isAdultTag(_ tag: String) -> Bool {
+        !WebOfTrustService.showsSensitiveContent && adultTags.contains(tag.lowercased())
+    }
 
     static func isSensitive(_ note: Note) -> Bool {
         if note.contentWarning != nil { return true }

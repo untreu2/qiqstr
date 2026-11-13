@@ -41,6 +41,7 @@ struct LiveChatList: View {
 struct LiveChatRow: View {
     let message: LiveChatMessage
     @State private var cache = ProfileCache.shared
+    @State private var reportTarget: ReportTarget?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -65,6 +66,21 @@ struct LiveChatRow: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
+        .contentShape(Rectangle())
+        .contextMenu {
+            if message.pubkey != Session.shared.pubkey {
+                Button(L("mute"), systemImage: "speaker.slash", role: .destructive) {
+                    Task {
+                        await Moderation.mute(message.pubkey)
+                        ToastCenter.shared.show(L("feedUserMuted"), style: .success)
+                    }
+                }
+                Button(L("report"), systemImage: "flag", role: .destructive) {
+                    reportTarget = ReportTarget(pubkey: message.pubkey, eventId: message.id)
+                }
+            }
+        }
+        .reportSheet($reportTarget)
     }
 }
 

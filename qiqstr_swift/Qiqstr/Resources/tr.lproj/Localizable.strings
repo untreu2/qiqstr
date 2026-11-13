@@ -121,6 +121,7 @@
 "pleaseConnectWalletFirst" = "Lütfen önce cüzdanını bağla";
 "user" = "Kullanıcı";
 "errorLoadingUserProfile" = "Kullanıcı profili yüklenirken hata";
+"errorLoadingProfile" = "qiqstr başlatılamadı";
 "send" = "Gönder";
 "enterValidAmount" = "Geçerli bir miktar gir";
 "relaysFromYourFollows" = "Takip ettiklerinden röleler";
@@ -206,7 +207,7 @@
 "areYouSureLogout" = "Çıkış yapmak istediğinden emin misin?";
 "seedPhraseWarning" = "Kurtarma kelimelerini kaydetmediysen hesabını sonsuza kadar kaybedeceksin.";
 "muteUser" = "{user} sessize alınsın mı?";
-"muteUserDescription" = "Bu kullanıcıdan gelen notları akışında görmeyeceksin.";
+"muteUserDescription" = "Bu kullanıcının notlarını, yanıtlarını, mesajlarını ve bildirimlerini artık görmeyeceksin.";
 "unfollowUser" = "{user} takibi bırakılsın mı?";
 "deleteThisPost" = "Bu gönderi silinsin mi?";
 "yes" = "Evet";
@@ -303,7 +304,7 @@
 "unblock" = "Engeli Kaldır";
 "report" = "Bildir";
 "reportUser" = "{user} bildirilsin mi?";
-"reportUserDescription" = "Bu kullanıcıyı bildirmek için bir neden seç. Bildirimin rölelere yayınlanacaktır.";
+"reportUserDescription" = "Bir neden seç. Bildirimin rölelerde herkese açık bir işaret olarak yayınlanır ve bu içerik senin için hemen gizlenir.";
 "reportReasonSpam" = "Spam";
 "reportReasonNudity" = "Müstehcenlik";
 "reportReasonProfanity" = "Hakaret";
@@ -312,6 +313,9 @@
 "reportReasonOther" = "Diğer";
 "reportSubmitted" = "Bildirim gönderildi";
 "reportFailed" = "Bildirim gönderilemedi";
+"reportHiddenOnly" = "Bu cihazda gizlendi. Bildirim rölelere gönderilemedi.";
+"reportSentHidden" = "Bildirim gönderildi. Bu içerik artık gizli.";
+"reportAlsoMute" = "Bu kullanıcıyı da sessize al";
 "selectReportReason" = "Bir neden seç";
 "today" = "Bugün";
 "justNow" = "Şimdi";
@@ -531,7 +535,7 @@
 "onboardingCoinosConnect" = "Cüzdanı Kur";
 "onboardingCoinosFeatureSend" = "Lightning ile anında Bitcoin ödemesi gönder";
 "onboardingCoinosFeatureReceive" = "Kendi Lightning adresinle Bitcoin al";
-"onboardingCoinosFeatureZap" = "En sevdiğin gönderilere ve içerik üreticilerine Bitcoin gönder";
+"onboardingCoinosFeatureZap" = "Takdir ettiğin kişilere sat gönder";
 "onboardingCoinosDisclaimer" = "Cüzdanın Spark tarafından desteklenen, kendi kendini saklayan bir cüzdandır. Anahtarların yalnızca cihazında güvenli şekilde saklanır. Fonlarına erişimi korumak için kurtarma ifadeni yedekle.";
 "onboardingCoinosAccept" = "Anladım ve kabul ediyorum";
 "onboardingCoinosConnected" = "Cüzdan hazır";
@@ -543,7 +547,7 @@
 "onboardingSparkReady" = "Cüzdan başarıyla kuruldu";
 "welcomeTitle" = "qiqstr";
 "welcomeSubtitle" = "Nostr üzerine kurulu merkeziyetsiz bir sosyal ağ. Tamamen açık kaynaklı.";
-"welcomeFeatureDecentralized" = "Merkezi sunucular yok, CEO'lar yok. Kimse seni banlayamaz.";
+"welcomeFeatureDecentralized" = "Merkezi sunucular yok. Kullandığın röleleri sen seçersin.";
 "welcomeFeatureKeys" = "Kendi anahtarlarınla kendi kimliğine sahip olursun.";
 "welcomeFeatureBitcoin" = "Uçtan uca şifreli ve güvenli şekilde mesajlaş.";
 "welcomeAlreadyHaveAccount" = "Zaten bir hesabım var";
@@ -597,7 +601,7 @@
 "exporting" = "Dışa aktarılıyor…";
 "exportFailed" = "Dışa aktarma başarısız: {error}";
 "deleteAccountTitle" = "Hesap Silinsin mi?";
-"deleteAccountConfirmation" = "Bu işlem tüm etkinliklerin için silme istekleri gönderecek ve tüm rölelerin verilerini silmesini talep edecek. Bu işlem geri alınamaz.";
+"deleteAccountConfirmation" = "Bu işlem tüm etkinliklerin için silme istekleri gönderir, tüm rölelerden verilerini silmelerini ister ve bu hesabı bu cihazdan siler. Bu işlem geri alınamaz.";
 "noValidEventIds" = "Geçerli etkinlik kimliği bulunamadı";
 "deletionRequestSent" = "{count} etkinlik için {relays} röleye silme isteği gönderildi";
 "deletionRequestSentPlural" = "{count} etkinlik için {relays} röleye silme isteği gönderildi";
@@ -673,3 +677,6 @@
 "cashuMeltAllSuccess" = "{amount} sat Lightning'e gönderildi";
 "close" = "Kapat";
 "notificationsFilterEmpty" = "Henüz {filter} yok";
+"noRelayConnection" = "Hiçbir röleye bağlı değilsin. Bağlantını kontrol edip tekrar dene.";
+"bookmarksUnreadable" = "Kayıtlı yer imlerin okunamadı; kaybolmamaları için hiçbir şey değiştirilmedi.";
+"publishNoRelayAccepted" = "Yayınlanamadı: hiçbir röle kabul etmedi. Bağlantını ve rölelerini kontrol edip tekrar dene.";

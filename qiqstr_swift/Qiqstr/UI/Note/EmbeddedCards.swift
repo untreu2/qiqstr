@@ -4,7 +4,7 @@ import SwiftUI
 enum NoteEmbeddedCache {
     static var notes: [String: Note] = [:]
     static var articles: [String: Article] = [:]
-    static var attempted: Set<String> = []
+    static var attempted: [String: Date] = [:]
 }
 
 struct NoteQuoteCard: View {
@@ -13,6 +13,8 @@ struct NoteQuoteCard: View {
     @State private var note: Note?
     @State private var failed = false
     @State private var cache = ProfileCache.shared
+    @State private var session = Session.shared
+    @State private var store = NoteInteractionStore.shared
 
     init(noteId: String, depth: Int = 0, preloaded: Note? = nil) {
         self.noteId = noteId
@@ -22,7 +24,9 @@ struct NoteQuoteCard: View {
 
     var body: some View {
         Group {
-            if let note {
+            if let note, isHidden(note) {
+                placeholder(L("noteHiddenMuted"))
+            } else if let note {
                 Button { Router.shared.push(.thread(note.id)) } label: { content(note) }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("note-quote-card")
@@ -39,15 +43,29 @@ struct NoteQuoteCard: View {
                 note = loaded
                 return
             }
-            guard !NoteEmbeddedCache.attempted.contains(noteId) else { failed = true; return }
-            NoteEmbeddedCache.attempted.insert(noteId)
+            if let last = NoteEmbeddedCache.attempted[noteId], Date().timeIntervalSince(last) < 60 {
+                try? await Task.sleep(for: .seconds(3))
+                if let loaded = NoteEmbeddedCache.notes[noteId] { note = loaded } else if !Task.isCancelled { failed = true }
+                return
+            }
+            NoteEmbeddedCache.attempted[noteId] = Date()
             if let loaded = await NoteRepository.ensureNote(noteId) {
                 NoteEmbeddedCache.notes[noteId] = loaded
                 note = loaded
+            } else if Task.isCancelled {
+                NoteEmbeddedCache.attempted[noteId] = nil
             } else {
                 failed = true
             }
         }
+    }
+
+    private func isHidden(_ note: Note) -> Bool {
+        if store.isDeleted(note.id) || session.mutedPubkeys.contains(note.pubkey) { return true }
+        let words = session.mutedWords
+        guard !words.isEmpty else { return false }
+        let content = note.content.lowercased()
+        return words.contains { !$0.isEmpty && content.contains($0) }
     }
 
     private func placeholder(_ text: String?) -> some View {

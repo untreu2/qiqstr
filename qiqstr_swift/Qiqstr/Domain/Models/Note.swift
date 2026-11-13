@@ -1,6 +1,6 @@
 import Foundation
 
-struct Note: Identifiable, Hashable, Sendable {
+nonisolated struct Note: Identifiable, Hashable, Sendable {
     var id: String
     var pubkey: String
     var content: String
@@ -56,6 +56,11 @@ struct Note: Identifiable, Hashable, Sendable {
         hasReacted = j.bool("hasReacted")
         hasReposted = j.bool("hasReposted")
         hasZapped = j.bool("hasZapped")
+    }
+
+    static func parsed(_ json: String?) async -> [Note] {
+        guard let json, !json.isEmpty else { return [] }
+        return await Task.detached(priority: .userInitiated) { list(json) }.value
     }
 
     static func list(_ json: String?) -> [Note] {

@@ -7,6 +7,8 @@ use mdk_core::messages::MessageProcessingResult;
 use mdk_core::prelude::*;
 use mdk_sqlite_storage::{EncryptionConfig, MdkSqliteStorage};
 use mdk_storage_traits::groups::Pagination;
+use mdk_storage_traits::messages::MessageStorage;
+use openmls::prelude::OpenMlsProvider;
 use nostr::nips::nip59;
 use nostr::prelude::*;
 use serde_json::{json, Value};
@@ -101,6 +103,29 @@ fn group_json(mdk: &MDK<MdkSqliteStorage>, group: &group_types::Group) -> Value 
 
 fn signed(keys: &Keys, builder: EventBuilder) -> Result<Event> {
     Ok(builder.sign_with_keys(keys)?)
+}
+
+fn rejected_groups(dir: &Path) -> std::collections::HashSet<String> {
+    std::fs::read_to_string(dir.join("rejected_groups"))
+        .map(|s| s.lines().map(|line| line.trim().to_string()).filter(|line| !line.is_empty()).collect())
+        .unwrap_or_default()
+}
+
+fn reject_group(dir: &Path, group_id: &str) {
+    let mut set = rejected_groups(dir);
+    if set.insert(group_id.to_string()) {
+        let mut list: Vec<String> = set.into_iter().collect();
+        list.sort();
+        let _ = std::fs::write(dir.join("rejected_groups"), list.join("\n"));
+    }
+}
+
+fn welcome_is_authentic(members: &std::collections::BTreeSet<PublicKey>, me: &PublicKey, sender: &PublicKey) -> bool {
+    if sender == me || !members.contains(me) || !members.contains(sender) {
+        return false;
+    }
+    let others: Vec<&PublicKey> = members.iter().filter(|member| *member != me).collect();
+    others.len() != 1 || others[0] == sender
 }
 
 fn key_package_slot(dir: &Path) -> Option<String> {
@@ -304,9 +329,17 @@ fn process_gift_wrap(m: &Marmot, event: &Event) -> Result<Value> {
     }
     let welcome = m.mdk.process_welcome(&event.id, &unwrapped.rumor)?;
     let group_id = hex::encode(welcome.mls_group_id.as_slice());
+    if rejected_groups(&m.dir).contains(&group_id) {
+        return Ok(json!({ "type": "ignored" }));
+    }
     let accepted = welcome.state == welcome_types::WelcomeState::Accepted;
     if !accepted && welcome.state == welcome_types::WelcomeState::Pending {
         m.mdk.accept_welcome(&welcome)?;
+    }
+    let members = m.mdk.get_members(&welcome.mls_group_id).unwrap_or_default();
+    if !welcome_is_authentic(&members, &m.keys.public_key(), &unwrapped.sender) {
+        reject_group(&m.dir, &group_id);
+        return Ok(json!({ "type": "ignored" }));
     }
     let group = m
         .mdk
@@ -323,6 +356,21 @@ fn process_gift_wrap(m: &Marmot, event: &Event) -> Result<Value> {
 
 fn process_group_message(m: &Marmot, event: &Event) -> Result<Value> {
     let result = m.mdk.process_message(event)?;
+    let rejected = rejected_groups(&m.dir);
+    let group_of = |id: &GroupId| rejected.contains(&hex::encode(id.as_slice()));
+    let is_rejected = match &result {
+        MessageProcessingResult::ApplicationMessage(message) => group_of(&message.mls_group_id),
+        MessageProcessingResult::Commit { mls_group_id }
+        | MessageProcessingResult::PendingProposal { mls_group_id }
+        | MessageProcessingResult::ExternalJoinProposal { mls_group_id }
+        | MessageProcessingResult::IgnoredProposal { mls_group_id, .. }
+        | MessageProcessingResult::Unprocessable { mls_group_id } => group_of(mls_group_id),
+        MessageProcessingResult::Proposal(update) => group_of(&update.mls_group_id),
+        _ => false,
+    };
+    if is_rejected {
+        return Ok(json!({ "type": "ignored" }));
+    }
     Ok(match result {
         MessageProcessingResult::ApplicationMessage(message) => json!({
             "type": "message",
@@ -332,6 +380,7 @@ fn process_group_message(m: &Marmot, event: &Event) -> Result<Value> {
         MessageProcessingResult::Commit { mls_group_id } => json!({
             "type": "commit",
             "groupId": hex::encode(mls_group_id.as_slice()),
+            "retry": retryable_after_commit(m, &mls_group_id),
         }),
         MessageProcessingResult::Proposal(update) => json!({
             "type": "proposal",
@@ -352,6 +401,17 @@ fn process_group_message(m: &Marmot, event: &Event) -> Result<Value> {
     })
 }
 
+fn retryable_after_commit(m: &Marmot, group_id: &GroupId) -> Vec<String> {
+    let storage = m.mdk.provider.storage();
+    storage
+        .find_failed_messages_for_retry(group_id)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|event_id| storage.mark_processed_message_retryable(event_id).is_ok())
+        .map(|event_id| event_id.to_hex())
+        .collect()
+}
+
 pub fn marmot_process_event(event_json: String) -> Result<String> {
     let event = Event::from_json(&event_json)?;
     event.verify()?;
@@ -367,10 +427,12 @@ pub fn marmot_process_event(event_json: String) -> Result<String> {
 
 pub fn marmot_groups() -> Result<String> {
     with_marmot(|m| {
+        let rejected = rejected_groups(&m.dir);
         let groups: Vec<Value> = m
             .mdk
             .get_groups()?
             .iter()
+            .filter(|group| !rejected.contains(&hex::encode(group.mls_group_id.as_slice())))
             .map(|group| group_json(&m.mdk, group))
             .collect();
         Ok(Value::Array(groups).to_string())
@@ -378,13 +440,17 @@ pub fn marmot_groups() -> Result<String> {
 }
 
 pub fn marmot_messages(group_id_hex: String, limit: u32) -> Result<String> {
+    marmot_messages_page(group_id_hex, limit, 0)
+}
+
+pub fn marmot_messages_page(group_id_hex: String, limit: u32, offset: u32) -> Result<String> {
     let group_id = parse_group_id(&group_id_hex)?;
     with_marmot(|m| {
         let messages: Vec<Value> = m
             .mdk
             .get_messages(
                 &group_id,
-                Some(Pagination::new(Some(limit.clamp(1, 1000) as usize), Some(0))),
+                Some(Pagination::new(Some(limit.clamp(1, 1000) as usize), Some(offset as usize))),
             )?
             .iter()
             .map(message_json)
@@ -470,6 +536,33 @@ pub fn marmot_decrypt_media(group_id_hex: String, imeta: Vec<String>, data: Vec<
 mod tests {
     use super::*;
 
+    #[test]
+    fn welcomes_must_come_from_the_claimed_peer() {
+        let me = Keys::generate().public_key();
+        let sender = Keys::generate().public_key();
+        let victim = Keys::generate().public_key();
+        let pair = |a: PublicKey, b: PublicKey| [a, b].into_iter().collect::<std::collections::BTreeSet<_>>();
+        assert!(welcome_is_authentic(&pair(me, sender), &me, &sender));
+        assert!(!welcome_is_authentic(&pair(me, victim), &me, &sender));
+        assert!(!welcome_is_authentic(&pair(sender, victim), &me, &sender));
+        assert!(!welcome_is_authentic(&pair(me, sender), &me, &me));
+        let group: std::collections::BTreeSet<_> = [me, sender, victim].into_iter().collect();
+        assert!(welcome_is_authentic(&group, &me, &sender));
+    }
+
+    #[test]
+    fn rejected_groups_persist() {
+        let dir = std::env::temp_dir().join(format!("qiqstr-rejected-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        reject_group(&dir, "aa");
+        reject_group(&dir, "bb");
+        reject_group(&dir, "aa");
+        let set = rejected_groups(&dir);
+        assert_eq!(set.len(), 2);
+        assert!(set.contains("aa") && set.contains("bb"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn temp_dir(name: &str) -> String {
         let dir = std::env::temp_dir().join(format!("qiqstr-marmot-{name}-{}", Keys::generate().public_key().to_hex()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -547,13 +640,22 @@ mod tests {
         assert_eq!(groups[0]["members"].as_array().unwrap().len(), 2);
 
         marmot_open(alice_dir, alice.secret_key().to_secret_hex()).unwrap();
+        let reply_event = reply["event"].as_str().unwrap().to_string();
+        let reply_id = Event::from_json(&reply_event).unwrap().id.to_hex();
+        let early = marmot_process_event(reply_event.clone())
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .unwrap_or(Value::Null);
+        assert_ne!(early["type"], "message");
         let processed: Value = serde_json::from_str(&marmot_process_event(commit).unwrap()).unwrap();
         assert_eq!(processed["type"], "commit");
-        let reply_received: Value =
-            serde_json::from_str(&marmot_process_event(reply["event"].as_str().unwrap().to_string()).unwrap()).unwrap();
+        assert!(processed["retry"].as_array().unwrap().iter().any(|id| id == &Value::String(reply_id.clone())));
+        let reply_received: Value = serde_json::from_str(&marmot_process_event(reply_event).unwrap()).unwrap();
         assert_eq!(reply_received["message"]["content"], "hi alice");
-        let history: Value = serde_json::from_str(&marmot_messages(group_id, 50).unwrap()).unwrap();
+        let history: Value = serde_json::from_str(&marmot_messages(group_id.clone(), 50).unwrap()).unwrap();
         assert_eq!(history.as_array().unwrap().len(), 3);
+        let older: Value = serde_json::from_str(&marmot_messages_page(group_id, 2, 2).unwrap()).unwrap();
+        assert_eq!(older.as_array().unwrap().len(), 1);
         marmot_close();
     }
 }

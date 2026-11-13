@@ -45,9 +45,13 @@ struct ProfileView: View {
                     ProfileHeaderView(model: model, topInset: topInset, bannerHeight: bannerHeight) { url in
                         viewerImage = ViewableImage(url: url)
                     } onIdentityPositionChange: { identityBottom = $0 }
-                    tabPicker
-                    tabContent
-                    footer
+                    if mutes.isMuted(pubkey) {
+                        mutedNotice
+                    } else {
+                        tabPicker
+                        tabContent
+                        footer
+                    }
                 }
                 .padding(.bottom, 24)
             }
@@ -103,6 +107,15 @@ struct ProfileView: View {
             guard model.hasLoadedNotes else { return }
             await model.reloadNotes()
         }
+    }
+
+    private var mutedNotice: some View {
+        EmptyStateView(systemImage: "speaker.slash", title: L("profileMutedTitle"), message: L("profileMutedMessage"), actionTitle: L("unmute")) {
+            Task { await ProfileModerationModifier.unmute(model) }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 32)
+        .accessibilityIdentifier("profile-muted-notice")
     }
 
     private var tabPicker: some View {
@@ -225,7 +238,7 @@ private struct PinnedNoteRow: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.subheadline.weight(.semibold))
-                            .frame(width: 32, height: 24)
+                            .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
                     .disabled(working)

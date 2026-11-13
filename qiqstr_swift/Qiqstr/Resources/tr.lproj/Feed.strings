@@ -81,3 +81,5 @@
 "reactWithEmoji" = "Emoji ile tepki ver";
 "videoFullScreen" = "Tam ekran";
 "videoPause" = "Videoyu duraklat";
+"noteHiddenMuted" = "Gizlenen not";
+"composeSecretBlocked" = "Bu gönderi bir özel anahtar, cüzdan sırrı veya kurtarma ifadesi içeriyor. Paylaşmadan önce kaldır: onu gören herkes hesabını veya paranı ele geçirebilir.";

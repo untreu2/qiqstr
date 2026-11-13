@@ -63,27 +63,11 @@ final class ShareModel {
         let datas = images.map(\.data)
         Task {
             let id = await Task.detached { try? ShareInbox.write(text: body, images: datas) }.value
-            guard let id else {
+            guard id != nil else {
                 phase = .failed
                 return
             }
-            openApp(shareID: id)
-        }
-    }
-
-    private func openApp(shareID: String) {
-        var components = URLComponents()
-        components.scheme = "qiqstr"
-        components.host = "compose"
-        components.queryItems = [URLQueryItem(name: "share", value: shareID)]
-        guard let url = components.url, let context else {
             phase = .handoff
-            return
-        }
-        context.open(url) { opened in
-            Task { @MainActor in
-                if opened { self.finish() } else { self.phase = .handoff }
-            }
         }
     }
 

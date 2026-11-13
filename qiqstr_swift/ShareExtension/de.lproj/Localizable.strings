@@ -1,10 +1,10 @@
 "shareTitle" = "Neuer Beitrag";
 "sharePlaceholder" = "Was beschäftigt dich?";
 "shareCancel" = "Abbrechen";
-"sharePost" = "Posten";
+"sharePost" = "In qiqstr sichern";
 "shareDone" = "Fertig";
 "shareSavedTitle" = "Bereit in qiqstr";
-"shareOpenAppMessage" = "Öffne qiqstr, um den Beitrag fertigzustellen.";
+"shareOpenAppMessage" = "Öffne qiqstr, um den Beitrag zu prüfen und zu veröffentlichen.";
 "shareFailedTitle" = "Beitrag konnte nicht gespeichert werden";
 "shareFailedMessage" = "Versuche es erneut aus der ursprünglichen App.";
 "shareRemoveImage" = "Bild entfernen";

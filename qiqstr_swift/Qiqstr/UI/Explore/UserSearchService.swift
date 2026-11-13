@@ -107,6 +107,11 @@ final class UserSearchModel {
             hasSearched = false
             return
         }
+        guard !SearchService.looksSecret(text) else {
+            results = []
+            ToastCenter.shared.show(L("searchSecretBlocked"), style: .error)
+            return
+        }
         isSearching = true
         task = Task { [weak self] in
             if debounce { try? await Task.sleep(for: .milliseconds(300)) }

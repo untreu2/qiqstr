@@ -38,14 +38,16 @@ struct PaymentsSettingsView: View {
                 Text(L("nwcDescription"))
             }
 
-            Section {
-                Toggle(isOn: $oneTapZap) {
-                    SettingsRowLabel(title: L("oneTapZap"), systemImage: "bolt.fill", tint: oneTapZap ? AppColors.zap : AppColors.textPrimary)
+            if AppStorePolicy.allowsContentZaps {
+                Section {
+                    Toggle(isOn: $oneTapZap) {
+                        SettingsRowLabel(title: L("oneTapZap"), systemImage: "bolt.fill", tint: oneTapZap ? AppColors.zap : AppColors.textPrimary)
+                    }
+                    .tint(AppColors.switchActive)
+                    .accessibilityIdentifier("payments-one-tap-zap")
+                } footer: {
+                    Text(L("oneTapZapDescription"))
                 }
-                .tint(AppColors.switchActive)
-                .accessibilityIdentifier("payments-one-tap-zap")
-            } footer: {
-                Text(L("oneTapZapDescription"))
             }
 
             Section {

@@ -10,6 +10,7 @@ final class SuggestedFollowsViewModel {
     private(set) var isProcessing = false
     private(set) var followedCount = 0
     private(set) var failureCount = 0
+    var confirmsNewList = false
     private(set) var deadlinePassed = false
     private var requestedProfiles: Set<String> = []
     private var didPreselectFallback = false
@@ -62,7 +63,7 @@ final class SuggestedFollowsViewModel {
         }
         packs = ranked + [fallbackPack]
         if ranked.isEmpty { preselectFallback() }
-        selected = selected.filter { !FollowService.shared.isFollowing($0) }
+        if !isProcessing, !confirmsNewList { selected = selected.filter { !FollowService.shared.isFollowing($0) } }
         loadProfiles(packs.flatMap { $0.members.prefix(5) })
         expanded.compactMap { id in packs.first { $0.id == id } }.forEach { loadProfiles($0.members) }
     }
@@ -138,17 +139,20 @@ final class SuggestedFollowsViewModel {
         }
     }
 
-    func followSelected() async -> Bool {
+    func followSelected(creatingList: Bool = false) async -> Bool {
         guard canContinue else { return false }
         isProcessing = true
         defer { isProcessing = false }
         let targets = Array(selected)
         do {
-            try await FollowService.shared.follow(many: targets)
+            try await FollowService.shared.follow(many: targets, creatingList: creatingList)
             followedCount += 1
             ToastCenter.shared.show(L("authFollowedPeople", ["count": targets.count]), style: .success)
             selected.removeAll()
             return true
+        } catch FollowError.listNotFound {
+            confirmsNewList = true
+            return false
         } catch {
             failureCount += 1
             ToastCenter.shared.error(error)
@@ -200,6 +204,14 @@ struct SuggestedFollowsView: View {
             .sensoryFeedback(.error, trigger: model.failureCount)
     }
 
+    private func followSelected(creatingList: Bool = false) {
+        Task {
+            if await model.followSelected(creatingList: creatingList) {
+                if let onFinish { onFinish() } else { dismiss() }
+            }
+        }
+    }
+
     private var list: some View {
         List {
             Section {
@@ -228,13 +240,12 @@ struct SuggestedFollowsView: View {
         .accessibilityIdentifier("suggested-list")
         .safeAreaInset(edge: .bottom) {
             PrimaryButton(title: continueTitle, isLoading: model.isProcessing, isEnabled: model.canContinue) {
-                Task {
-                    if await model.followSelected() {
-                        if let onFinish { onFinish() } else { dismiss() }
-                    }
-                }
+                followSelected()
             }
             .accessibilityIdentifier("suggested-continue")
+            .newFollowListConfirmation(isPresented: $model.confirmsNewList) {
+                followSelected(creatingList: true)
+            }
             .padding(.horizontal, 24)
             .padding(.vertical, 8)
             .background(.bar)

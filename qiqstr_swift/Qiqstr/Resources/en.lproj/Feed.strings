@@ -81,3 +81,5 @@
 "reactWithEmoji" = "React with emoji";
 "videoFullScreen" = "Full screen";
 "videoPause" = "Pause video";
+"noteHiddenMuted" = "Hidden note";
+"composeSecretBlocked" = "This post contains a private key, wallet secret or recovery phrase. Remove it before posting: anyone who sees it could take over your account or funds.";

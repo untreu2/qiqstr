@@ -73,8 +73,9 @@ final class NotificationsViewModel {
     var all: [NotificationItem] {
         let liveIds = Set(live.map(\.id))
         let merged = live + older.filter { !liveIds.contains($0.id) }
+        let hidden = NoteInteractionStore.shared.deletedIds
         return merged
-            .filter { $0.fromPubkey != me && $0.kind != .unknown }
+            .filter { $0.fromPubkey != me && $0.kind != .unknown && !hidden.contains($0.id) && !hidden.contains($0.targetNoteId ?? "") }
             .sorted { $0.createdAt > $1.createdAt }
     }
 
@@ -202,7 +203,10 @@ final class NotificationsViewModel {
             authors: authors,
             targetNoteId: items[0].targetNoteId,
             createdAt: items[0].createdAt,
-            totalZapAmount: items.reduce(0) { $0 + $1.zapAmount }
+            totalZapAmount: items.reduce(0) { total, item in
+                let sum = total.addingReportingOverflow(item.zapAmount)
+                return sum.overflow ? Int.max : sum.partialValue
+            }
         )
     }
 }

@@ -82,6 +82,7 @@ final class Router {
     var sheet: AppSheet?
     private(set) var isTabBarMinimizable = true
     @ObservationIgnored private var pendingLink: NostrLink?
+    @ObservationIgnored private var pendingAppURL: URL?
     @ObservationIgnored private var tabBarTask: Task<Void, Never>?
 
     func expandTabBar() {
@@ -119,10 +120,16 @@ final class Router {
     }
 
     func open(url: URL) {
+        if url.scheme?.lowercased() == "qiqstr", url.host()?.lowercased() != "nwc" {
+            openAppURL(url)
+            return
+        }
         if let link = NostrLink(url: url) ?? NostrLink(entity: url.absoluteString) {
             open(link)
-        } else if let scheme = url.scheme?.lowercased(), scheme != "nostr", scheme != "qiqstr" {
+        } else if let scheme = url.scheme?.lowercased(), !["nostr", "qiqstr", "lightning", "nostr+walletconnect", "nostrwalletconnect"].contains(scheme) {
             UIApplication.shared.open(url)
+        } else if url.scheme?.lowercased() == "lightning" {
+            _ = WalletService.shared.handleIncoming(url: url)
         }
     }
 
@@ -135,9 +142,35 @@ final class Router {
     }
 
     func openPendingLink() {
-        guard let link = pendingLink, Session.shared.phase == .ready else { return }
+        guard Session.shared.phase == .ready else { return }
+        if let url = pendingAppURL {
+            pendingAppURL = nil
+            openAppURL(url)
+        }
+        guard let link = pendingLink else { return }
         pendingLink = nil
         NostrLinkResolver.open(link, router: self)
+    }
+
+    private func openAppURL(_ url: URL) {
+        guard Session.shared.phase == .ready else {
+            pendingAppURL = url
+            return
+        }
+        switch url.host()?.lowercased() {
+        case "compose":
+            SharedInbox.shared.handle(url)
+        case "search":
+            selectedTab = .search
+        case "messages":
+            selectedTab = .dm
+        case "notifications":
+            selectedTab = .notifications
+            NotificationBadge.shared.markRead()
+            WidgetBridge.markRead()
+        default:
+            break
+        }
     }
 }
 

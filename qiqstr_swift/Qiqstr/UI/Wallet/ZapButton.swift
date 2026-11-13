@@ -62,7 +62,7 @@ struct ZapButton<Content: View>: View {
         }
         longPressAt = nil
         guard Router.shared.sheet == nil else { return }
-        guard zaps.prefersQuickZap else {
+        guard zaps.prefersQuickZap, ZapService.defaultAmount <= ZapService.quickZapLimit else {
             openSheet()
             return
         }
@@ -152,13 +152,15 @@ struct ZapRetryBanner: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 4)
-            Button(L("retry")) {
-                retryTick += 1
-                Task { await ZapService.shared.retry(failure) }
+            if !failure.mayHaveSettled {
+                Button(L("retry")) {
+                    retryTick += 1
+                    Task { await ZapService.shared.retry(failure) }
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .accessibilityIdentifier("zap-retry")
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.capsule)
-            .accessibilityIdentifier("zap-retry")
         }
         .padding(.leading, 18)
         .padding(.trailing, 10)

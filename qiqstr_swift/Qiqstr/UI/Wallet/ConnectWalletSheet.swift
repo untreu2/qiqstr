@@ -14,7 +14,7 @@ final class ConnectWalletModel {
 
     init(uri: String?) {
         self.uri = uri ?? ""
-        accepted = UserDefaults.standard.bool(forKey: WalletService.disclaimerAcceptedKey)
+        accepted = uri == nil && !WalletService.shared.isConnected && UserDefaults.standard.bool(forKey: WalletService.disclaimerAcceptedKey)
     }
 
     var clipboardHasContent: Bool {
@@ -103,6 +103,13 @@ struct ConnectWalletSheet: View {
                         Text(L("walletClipboardReady"))
                     } else {
                         Text(L("walletNwcConnectDescription"))
+                    }
+                }
+                if WalletService.shared.isConnected {
+                    Section {
+                        Label(L("walletReplaceWarning", ["wallet": WalletService.shared.walletName ?? WalletService.shared.lightningAddress ?? L("wallet")]), systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(AppColors.error)
+                            .accessibilityIdentifier("wallet-connect-replace-warning")
                     }
                 }
                 if !model.isValid {

@@ -46,27 +46,27 @@ struct ExploreHubSections: View {
             }
             .accessibilityIdentifier("explore-popular-feeds")
         }
-        if !explore.media.isEmpty {
+        if !explore.visibleMedia.isEmpty {
             Section {
-                ExploreMediaStrip(entries: Array(explore.media.prefix(12)), onOpen: onOpenMedia)
+                ExploreMediaStrip(entries: Array(explore.visibleMedia.prefix(12)), onOpen: onOpenMedia)
             } header: {
                 SearchSectionHeader(title: L("exploreTrendingMedia")) { onSelect(.media) }
             }
             .accessibilityIdentifier("explore-media-strip")
         }
-        if !explore.people.isEmpty {
+        if !explore.visiblePeople.isEmpty {
             Section {
                 ExploreCarousel {
-                    ForEach(explore.people.prefix(12)) { RisingPersonCard(person: $0) }
+                    ForEach(explore.visiblePeople.prefix(12)) { RisingPersonCard(person: $0) }
                 }
             } header: {
                 SearchSectionHeader(title: L("exploreRisingPeople")) { onSelect(.people) }
             }
             .accessibilityIdentifier("explore-rising-people")
         }
-        if !explore.zaps.isEmpty {
+        if !explore.visibleZaps.isEmpty {
             Section {
-                ForEach(explore.zaps.prefix(3)) { zap in
+                ForEach(explore.visibleZaps.prefix(3)) { zap in
                     TopZapRow(zap: zap, note: zap.noteId.flatMap { explore.zapNotes[$0] })
                 }
             } header: {
@@ -103,7 +103,7 @@ struct ExploreHubSections: View {
         } header: {
             SearchSectionHeader(title: L("exploreMore"))
         }
-        SearchDiscoverySections(model: model, showsHashtags: false, showsRecents: false, showsLive: false, showsPeople: explore.people.isEmpty)
+        SearchDiscoverySections(model: model, showsHashtags: false, showsRecents: false, showsLive: false, showsPeople: explore.visiblePeople.isEmpty)
     }
 
     private func exploreLinkText(_ title: String, _ subtitle: String) -> some View {
@@ -116,19 +116,19 @@ struct ExploreHubSections: View {
     @ViewBuilder
     private var people: some View {
         Section {
-            if explore.people.isEmpty {
+            if explore.visiblePeople.isEmpty {
                 if explore.isLoading("people") {
                     ExploreLoadingRows(count: 5, person: true)
                 } else {
                     retryRow(L("exploreUnavailable")) { await explore.loadPeople(force: true) }
                 }
             } else {
-                ForEach(explore.people.prefix(15)) { RisingPersonRow(person: $0) }
+                ForEach(explore.visiblePeople.prefix(15)) { RisingPersonRow(person: $0) }
             }
         } header: {
             SearchSectionHeader(title: L("exploreRisingPeople"))
         } footer: {
-            if !explore.people.isEmpty {
+            if !explore.visiblePeople.isEmpty {
                 Text(L("exploreRisingFooter")).font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -148,14 +148,14 @@ struct ExploreHubSections: View {
     @ViewBuilder
     private var zaps: some View {
         Section {
-            if explore.zaps.isEmpty {
+            if explore.visibleZaps.isEmpty {
                 if explore.isLoading("zaps") {
                     ExploreLoadingRows(count: 4)
                 } else {
                     retryRow(L("exploreUnavailable")) { await explore.loadZaps(force: true) }
                 }
             } else {
-                ForEach(explore.zaps) { zap in
+                ForEach(explore.visibleZaps) { zap in
                     TopZapRow(zap: zap, note: zap.noteId.flatMap { explore.zapNotes[$0] })
                 }
             }
@@ -278,7 +278,7 @@ struct ExploreMediaGrid: View {
 
     var body: some View {
         ScrollView {
-            if explore.media.isEmpty {
+            if explore.visibleMedia.isEmpty {
                 if explore.isLoading("media") {
                     ProgressView().padding(.top, 80)
                 } else {
@@ -288,7 +288,7 @@ struct ExploreMediaGrid: View {
                     .padding(.top, 60)
                 }
             } else {
-                ProfileMediaGrid(entries: explore.media, onOpen: onOpen)
+                ProfileMediaGrid(entries: explore.visibleMedia, onOpen: onOpen)
                     .accessibilityIdentifier("explore-media-grid")
                 if !explore.mediaExhausted {
                     ProgressView()

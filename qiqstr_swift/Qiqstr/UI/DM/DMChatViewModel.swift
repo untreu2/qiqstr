@@ -52,6 +52,13 @@ final class DMChatViewModel {
     var isLoading: Bool { !service.hasLoaded && messages.isEmpty }
     var isPreparingAttachment: Bool { attachments.contains { $0.state == .preparing } }
     var isPeerUnavailable: Bool { messages.isEmpty && service.status(for: peer) == .unavailable }
+    var isRequest: Bool { service.isRequest(peer) }
+    var canLoadOlder: Bool { !isSearching && service.canLoadOlder(peer) }
+    var isLoadingOlder: Bool { service.loadingOlder.contains(peer) }
+
+    func acceptRequest() { service.accept(peer) }
+
+    func loadOlder() async { await service.loadOlder(peer) }
 
     var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -145,16 +152,24 @@ final class DMChatViewModel {
     }
 
     func poll() async {
+        var delay = 8
+        var lastCount = messages.count
+        var lastSent = sentCount
         while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(8))
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             await service.refresh()
+            let changed = messages.count != lastCount || sentCount != lastSent
+            delay = changed ? 8 : min(delay * 2, 60)
+            lastCount = messages.count
+            lastSent = sentCount
         }
     }
 
     func refresh() async { await service.refresh() }
 
     func send() {
+        guard ReadOnlyGate.check() else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let files = attachments.compactMap(\.prepared)
         guard canSend else { return }
@@ -199,7 +214,10 @@ final class DMChatViewModel {
     func handlePicked() {
         let items = pickerItems
         pickerItems = []
-        for item in items { Task { await prepare(item) } }
+        guard ReadOnlyGate.check() else { return }
+        Task {
+            for item in items { await prepare(item) }
+        }
     }
 
     private func prepare(_ item: PhotosPickerItem) async {
@@ -209,8 +227,20 @@ final class DMChatViewModel {
         attachments.append(draftItem)
         let id = draftItem.id
         do {
-            guard let raw = try await item.loadTransferable(type: Data.self) else { throw DMChatError.unreadable }
-            let (data, mime, thumbnail) = await Self.normalize(raw, types: types, isVideo: isVideo)
+            let data: Data, mime: String, thumbnail: UIImage?
+            if isVideo {
+                guard let movie = try await item.loadTransferable(type: PickedMovie.self) else { throw DMChatError.unreadable }
+                defer { movie.discard() }
+                guard movie.size <= DMService.maxFileSize else { throw DMChatError.tooLarge }
+                let type = types.first { $0.conforms(to: .movie) }
+                mime = type?.preferredMIMEType ?? (type == .quickTimeMovie ? "video/quicktime" : "video/mp4")
+                guard let stripped = await MediaSanitizer.strippedVideo(at: movie.url, mime: mime) else { throw DMChatError.unreadable }
+                data = stripped
+                thumbnail = nil
+            } else {
+                guard let raw = try await item.loadTransferable(type: Data.self) else { throw DMChatError.unreadable }
+                (data, mime, thumbnail) = await Self.normalize(raw, types: types, isVideo: false)
+            }
             guard data.count <= DMService.maxFileSize else { throw DMChatError.tooLarge }
             draftItem.thumbnail = thumbnail
             update(id) { $0.thumbnail = thumbnail }
@@ -243,8 +273,8 @@ final class DMChatViewModel {
             let thumbnail = ImagePipeline.downsample(data, maxPixel: 240)
             let bytes = [UInt8](data.prefix(4))
             if bytes.starts(with: [0x47, 0x49, 0x46]) { return (data, "image/gif", thumbnail) }
-            if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return (data, "image/png", thumbnail) }
-            if bytes.starts(with: [0xFF, 0xD8, 0xFF]) { return (data, "image/jpeg", thumbnail) }
+            if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return (MediaSanitizer.strippedImage(data, mime: "image/png") ?? data, "image/png", thumbnail) }
+            if bytes.starts(with: [0xFF, 0xD8, 0xFF]) { return (MediaSanitizer.strippedImage(data, mime: "image/jpeg") ?? data, "image/jpeg", thumbnail) }
             if let image = ImagePipeline.downsample(data, maxPixel: 4096), let jpeg = image.jpegData(compressionQuality: 0.88) {
                 return (jpeg, "image/jpeg", thumbnail)
             }

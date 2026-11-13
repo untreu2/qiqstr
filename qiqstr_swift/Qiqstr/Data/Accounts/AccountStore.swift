@@ -13,7 +13,7 @@ struct StoredAccount: Codable, Hashable, Identifiable, Sendable {
 }
 
 enum AuthError: LocalizedError {
-    case invalidKey, invalidMnemonic, accountNotFound, keyMismatch, differentAccount, wrongPassword, passwordRequired
+    case invalidKey, invalidMnemonic, accountNotFound, keyMismatch, differentAccount, wrongPassword, passwordRequired, storageFailed
     case nip05NotFound(String)
     var errorDescription: String? {
         switch self {
@@ -24,6 +24,7 @@ enum AuthError: LocalizedError {
         case .differentAccount: L("addKeyMismatch")
         case .wrongPassword: L("authNcryptsecWrongPassword")
         case .passwordRequired: L("authNcryptsecPasswordRequired")
+        case .storageFailed: L("authKeyStorageFailed")
         case .nip05NotFound(let address): L("nip05NotFound", ["address": address])
         }
     }
@@ -44,9 +45,9 @@ final class AccountStore {
         return accounts.first { $0.npub == npub }
     }
 
-    private func save(_ list: [StoredAccount]) {
-        let data = (try? JSONEncoder().encode(list)) ?? Data("[]".utf8)
-        Keychain.set(String(decoding: data, as: UTF8.self), for: accountsKey)
+    private func save(_ list: [StoredAccount]) throws {
+        let data = try JSONEncoder().encode(list)
+        guard Keychain.set(String(decoding: data, as: UTF8.self), for: accountsKey) else { throw AuthError.storageFailed }
     }
 
     @discardableResult
@@ -58,7 +59,7 @@ final class AccountStore {
         let account = StoredAccount(npub: npub, privateKeyHex: privateKeyHex, mnemonic: mnemonic ?? existing?.mnemonic, pubkey: pub)
         list.removeAll { $0.npub == npub }
         list.append(account)
-        save(list)
+        try save(list)
         Keychain.set(npub, for: activeKey)
         return account
     }
@@ -74,7 +75,7 @@ final class AccountStore {
         }
         let account = StoredAccount(npub: npub, privateKeyHex: "", mnemonic: nil, pubkey: pub)
         list.append(account)
-        save(list)
+        try save(list)
         Keychain.set(npub, for: activeKey)
         return account
     }
@@ -107,8 +108,9 @@ final class AccountStore {
             return (key, phrase)
         }
         var hex = trimmed
-        if trimmed.hasPrefix("nsec1") {
-            guard let decoded = try? nip19Decode(bech32Str: trimmed) else { throw AuthError.invalidKey }
+        let bech = Nip19.stripScheme(trimmed).lowercased()
+        if bech.hasPrefix("nsec1") {
+            guard let decoded = try? nip19Decode(bech32Str: bech) else { throw AuthError.invalidKey }
             hex = decoded
         }
         guard hex.count == 64, hex.allSatisfy(\.isHexDigit), (try? getPublicKey(privateKeyHex: hex)) != nil else { throw AuthError.invalidKey }
@@ -130,8 +132,17 @@ final class AccountStore {
     func createAccount() throws -> StoredAccount {
         let phrase = try generateMnemonic()
         let key = try mnemonicToPrivateKey(mnemonic: phrase)
-        return try store(privateKeyHex: key, mnemonic: phrase)
+        let account = try store(privateKeyHex: key, mnemonic: phrase)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.createdHereKey(account.pubkeyHex))
+        return account
     }
+
+    static func wasCreatedHere(_ pubkeyHex: String) -> Bool {
+        let created = UserDefaults.standard.double(forKey: createdHereKey(pubkeyHex))
+        return created > 0 && Date().timeIntervalSince1970 - created < 86_400
+    }
+
+    private static func createdHereKey(_ pubkeyHex: String) -> String { "account_created_here_\(pubkeyHex.lowercased())" }
 
     func switchTo(npub: String) throws -> StoredAccount {
         guard let target = accounts.first(where: { $0.npub == npub }) else { throw AuthError.accountNotFound }
@@ -141,7 +152,7 @@ final class AccountStore {
     }
 
     func remove(npub: String) {
-        save(accounts.filter { $0.npub != npub })
+        try? save(accounts.filter { $0.npub != npub })
         if Keychain.get(activeKey) == npub {
             Keychain.set(accounts.first?.npub, for: activeKey)
         }

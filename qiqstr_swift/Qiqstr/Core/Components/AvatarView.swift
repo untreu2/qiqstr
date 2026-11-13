@@ -34,7 +34,7 @@ struct ProfileAvatar: View {
     }
 }
 
-extension String {
+nonisolated extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 
     var unhyphenated: String { map(String.init).joined(separator: "\u{200B}") }

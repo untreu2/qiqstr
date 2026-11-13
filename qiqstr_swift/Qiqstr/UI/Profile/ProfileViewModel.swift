@@ -10,6 +10,7 @@ enum ProfileTab: String, CaseIterable, Identifiable {
 struct ProfileMediaEntry: Identifiable, Hashable {
     var item: NoteMediaItem
     var noteId: String
+    var author: String? = nil
     var id: String { "\(noteId)|\(item.url)" }
     var url: String { item.url }
     var isVideo: Bool { item.isVideo }
@@ -92,7 +93,7 @@ final class ProfileViewModel {
         let own = (notes + replies).filter { !$0.isRepost && $0.pubkey == pubkey }.sorted { $0.createdAt > $1.createdAt }
         var seen = Set<String>()
         var result: [ProfileMediaEntry] = []
-        for note in own {
+        for note in own where note.contentWarning == nil || WebOfTrustService.showsSensitiveContent || SensitiveContentStore.shared.isRevealed(note.id) {
             for item in NoteContentCache.content(for: note).media where seen.insert(item.url).inserted {
                 result.append(ProfileMediaEntry(item: item, noteId: note.id))
             }
@@ -115,6 +116,7 @@ final class ProfileViewModel {
         async let badges: Void = loadBadges(remote: false)
         _ = await (notes, pinned, following, badges)
         Task { await syncAll(force: false) }
+        Task { await ZapperDirectory.shared.verify(pubkey) }
     }
 
     func refresh() async {
@@ -224,11 +226,11 @@ final class ProfileViewModel {
     private func applyPinned(_ ids: [String]) async {
         pinnedIds = ids
         guard !ids.isEmpty else { pinned = []; return }
-        var found = await ProfileDataSource.notes(ids: ids)
+        var found = await ProfileDataSource.notes(ids: ids, owner: pubkey)
         let missing = ids.filter { id in !found.contains { $0.id == id } && !requestedPinnedIds.contains(id) }
         if !missing.isEmpty {
             requestedPinnedIds.formUnion(missing)
-            if await ProfileDataSource.fetchMissingNotes(missing) { found = await ProfileDataSource.notes(ids: ids) }
+            if await ProfileDataSource.fetchMissingNotes(missing) { found = await ProfileDataSource.notes(ids: ids, owner: pubkey) }
         }
         guard pinnedIds == ids else { return }
         let order = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
@@ -281,6 +283,11 @@ final class ProfileViewModel {
         if loaded != badges { badges = loaded }
     }
 
+    private func fetchOlderFromRelays(before list: [Note]) async -> Bool {
+        let oldest = list.map(\.displayTimestamp).filter { $0 > 0 }.min() ?? TimeFormat.now
+        return await NoteRepository.fetchOlder(authors: [pubkey], until: oldest) > 0
+    }
+
     func loadMore() async {
         guard !isLoadingMore else { return }
         isLoadingMore = true
@@ -295,12 +302,14 @@ final class ProfileViewModel {
             notesLimit += page
             let previous = notes.count
             await reloadNotes()
+            if notes.count <= previous, await fetchOlderFromRelays(before: notes) { await reloadNotes() }
             if notes.count <= previous { canLoadMoreNotes = false }
         case .replies:
             guard canLoadMoreReplies else { return }
             repliesLimit += page
             let previous = replies.count
             await reloadNotes()
+            if replies.count <= previous, await fetchOlderFromRelays(before: replies) { await reloadNotes() }
             if replies.count <= previous { canLoadMoreReplies = false }
         case .likes:
             guard canLoadMoreLikes else { return }

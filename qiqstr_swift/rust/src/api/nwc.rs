@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use nostr::nips::nip47::{
-    ListTransactionsRequest, NostrWalletConnectURI, PayInvoiceRequest, Request, Response,
+    ListTransactionsRequest, LookupInvoiceRequest, NostrWalletConnectURI, PayInvoiceRequest,
+    Request, Response, TransactionState,
 };
 use nostr::prelude::*;
 use nostr_sdk::prelude::*;
@@ -99,6 +100,35 @@ pub async fn nwc_pay_invoice(nwc_uri: String, invoice: String) -> Result<String>
     )
 }
 
+pub async fn nwc_lookup_invoice(nwc_uri: String, invoice: String) -> Result<String> {
+    let request = LookupInvoiceRequest {
+        payment_hash: None,
+        invoice: Some(invoice),
+    };
+    let response = request_wallet(
+        &nwc_uri,
+        Request::lookup_invoice(request),
+        Duration::from_secs(20),
+    )
+    .await?;
+    let result = response.to_lookup_invoice()?;
+    let state = match result.state {
+        Some(TransactionState::Settled) => "settled",
+        Some(TransactionState::Failed) => "failed",
+        Some(TransactionState::Expired) => "expired",
+        Some(TransactionState::Pending) => "pending",
+        None if result.settled_at.is_some() || result.preimage.as_deref().is_some_and(|p| !p.is_empty()) => "settled",
+        None => "pending",
+    };
+    Ok(serde_json::json!({
+        "state": state,
+        "preimage": result.preimage,
+        "payment_hash": result.payment_hash,
+        "fees_paid": result.fees_paid,
+    })
+    .to_string())
+}
+
 pub async fn nwc_get_balance(nwc_uri: String) -> Result<String> {
     let response =
         request_wallet(&nwc_uri, Request::get_balance(), Duration::from_secs(30)).await?;
@@ -166,6 +196,7 @@ pub async fn nwc_list_transactions(
                 "fees_paid": tx.fees_paid / 1000,
                 "description": tx.description,
                 "invoice": tx.invoice,
+                "payment_hash": tx.payment_hash,
                 "created_at": tx.created_at.as_secs(),
             })
         })

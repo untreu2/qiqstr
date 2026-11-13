@@ -11,10 +11,16 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>qiqstr uses the camera to scan QR codes for keys, invoices and wallet connections.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>qiqstr needs access to your photos to attach media to notes and messages.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>qiqstr saves photos and videos you choose to keep to your photo library.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>qiqstr uses Face ID to protect access to your private keys.</string>
 	<key>CFBundleURLTypes</key>

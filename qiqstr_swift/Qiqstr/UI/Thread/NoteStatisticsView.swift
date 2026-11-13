@@ -30,7 +30,7 @@ final class NoteStatisticsViewModel {
     var reactions: [NoteInteractionDetail] { details.filter { $0.kind == .reaction } }
     var reposts: [NoteInteractionDetail] { details.filter { $0.kind == .repost }.sorted { $0.createdAt > $1.createdAt } }
     var zaps: [NoteInteractionDetail] { details.filter { $0.kind == .zap }.sorted { $0.zapAmount > $1.zapAmount } }
-    var totalZapped: Int { zaps.reduce(0) { $0 + $1.zapAmount } }
+    var totalZapped: Int { zaps.reduce(0) { total, item in let sum = total.addingReportingOverflow(min(max(0, item.zapAmount), SatsAmount.maximum)); return sum.overflow ? Int.max : sum.partialValue } }
 
     var reactionGroups: [NoteReactionGroup] {
         var map: [String: [NoteInteractionDetail]] = [:]

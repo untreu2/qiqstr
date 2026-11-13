@@ -91,8 +91,9 @@ final class InteractionService {
     func unreact(_ note: Note) async throws {
         let key = try signingKey()
         guard let me = Session.shared.pubkey else { return }
-        let filter = JSON.string(["kinds": [7], "authors": [me], "#e": [note.id]])
-        let ids = JSON.array(try await dbQueryEvents(filterJson: filter, limit: 20)).compactMap { $0.str("id") }
+        let ids = await ownEvents(kinds: [7], me: me, target: note.id) { event in
+            event.tags().last { $0.count > 1 && $0[0] == "e" }?[1] == note.id
+        }
         guard !ids.isEmpty else { throw CoreError(L("eventNotFound")) }
         try await publishDeletion(ids, key: key)
     }
@@ -108,8 +109,22 @@ final class InteractionService {
     func undoRepost(_ note: Note) async throws {
         let key = try signingKey()
         guard let me = Session.shared.pubkey else { return }
-        guard let repostId = try await dbFindUserRepostEventId(userPubkeyHex: me, noteId: note.id) else { throw CoreError(L("eventNotFound")) }
-        try await publishDeletion([repostId], key: key)
+        let ids = await ownEvents(kinds: [6, 16], me: me, target: note.id) { event in
+            event.tags().contains { $0.count > 1 && $0[0] == "e" && $0[1] == note.id }
+        }
+        guard !ids.isEmpty else { throw CoreError(L("eventNotFound")) }
+        try await publishDeletion(ids, key: key)
+    }
+
+    private func ownEvents(kinds: [Int], me: String, target: String, matching: (JSONObject) -> Bool) async -> [String] {
+        let filter: JSONObject = ["kinds": kinds, "authors": [me], "#e": [target], "limit": 20]
+        let local = JSON.array(try? await dbQueryEvents(filterJson: JSON.string(filter), limit: 20))
+        let remote = await sync.fetchEvents(filter, timeout: 6)
+        var seen = Set<String>()
+        return (local + remote)
+            .filter { $0.str("pubkey") == me && kinds.contains($0.int("kind")) && matching($0) }
+            .compactMap { $0.str("id") }
+            .filter { seen.insert($0).inserted }
     }
 
     func delete(_ note: Note) async throws {

@@ -7,6 +7,7 @@ struct OnboardingKeysView: View {
     @State private var revealNsec = false
     @State private var pendingCopy: PendingCopy?
     @State private var copyCount = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private struct PendingCopy: Identifiable {
         let label: String
@@ -65,7 +66,7 @@ struct OnboardingKeysView: View {
             sectionTitle(L("seedPhrase"), copyIdentifier: "onboarding-copy-seed") {
                 pendingCopy = PendingCopy(label: L("seedPhrase"), value: mnemonicWords.joined(separator: " "))
             }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : dynamicTypeSize >= .xxLarge ? 2 : 3), spacing: 10) {
                 ForEach(Array(mnemonicWords.enumerated()), id: \.offset) { index, word in
                     HStack(spacing: 6) {
                         Text("\(index + 1)")
@@ -75,8 +76,7 @@ struct OnboardingKeysView: View {
                         Text(word)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 10)

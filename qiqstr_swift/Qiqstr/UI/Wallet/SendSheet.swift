@@ -21,6 +21,8 @@ final class SendViewModel {
     private(set) var payError: String?
     private(set) var phase: Phase = .editing
     private(set) var failureTick = 0
+    private(set) var paymentMayHaveSettled = false
+    private var settledInput: String?
 
     var wallet: WalletService { WalletService.shared }
 
@@ -85,7 +87,7 @@ final class SendViewModel {
     }
 
     var canSubmit: Bool {
-        guard request != nil, phase == .editing, !isResolving, validationMessage == nil else { return false }
+        guard request != nil, phase == .editing, !isResolving, !paymentMayHaveSettled, validationMessage == nil else { return false }
         if case .cashu = request { return !wallet.isRedeemingCashu }
         if case .lightningAddress = request, lnurlParams == nil { return false }
         if case .lnurl = request, lnurlParams == nil { return false }
@@ -98,6 +100,11 @@ final class SendViewModel {
 
     func parse() async {
         let text = trimmedInput
+        if paymentMayHaveSettled {
+            if text == settledInput { return }
+            paymentMayHaveSettled = false
+            settledInput = nil
+        }
         payError = nil
         guard !text.isEmpty else {
             request = nil
@@ -165,6 +172,12 @@ final class SendViewModel {
             case .cashu: return
             }
             phase = .sent(amount: amount, fee: result.feesSats)
+        } catch WalletError.paymentPending {
+            phase = .editing
+            paymentMayHaveSettled = true
+            settledInput = trimmedInput
+            payError = L("walletPaymentPending")
+            failureTick += 1
         } catch {
             phase = .editing
             payError = "\(L("paymentFailed")): \(coreMessage(error))"
@@ -214,6 +227,7 @@ struct SendSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .cancel) { dismiss() }
+                        .disabled(model.phase == .paying)
                         .accessibilityLabel(L("cancel"))
                         .accessibilityIdentifier("send-cancel")
                 }

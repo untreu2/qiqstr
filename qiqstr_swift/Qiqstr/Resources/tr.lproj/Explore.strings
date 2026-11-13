@@ -150,3 +150,4 @@
 "exploreDiscoverFeeds" = "Akış keşfet";
 "explorePackFollowAllConfirm" = "{count, plural, =1{1 kişiyi takip et?} other{{count} kişiyi takip et?}}";
 "explorePackFollowed" = "Bu paketteki herkes takip edildi";
+"searchSecretBlocked" = "Bu bir özel anahtar veya kurtarma ifadesine benziyor, bu yüzden aranmadı ve kaydedilmedi. Asla paylaşma.";

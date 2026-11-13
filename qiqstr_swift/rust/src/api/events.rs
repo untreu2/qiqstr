@@ -21,6 +21,19 @@ pub fn create_signed_event(
     Ok(event.as_json())
 }
 
+pub fn zap_receipt_summary(event_json: String) -> Result<String> {
+    let event = Event::from_json(&event_json)?;
+    event.verify()?;
+    let sender = super::database::extract_zap_sender(&event)
+        .ok_or_else(|| anyhow::anyhow!("Zap request is missing or invalid"))?;
+    Ok(serde_json::json!({
+        "sender": sender,
+        "amount": super::database::extract_zap_amount_sats(&event),
+        "comment": super::database::extract_zap_comment(&event),
+    })
+    .to_string())
+}
+
 pub fn create_note_event(
     content: String,
     tags: Vec<Vec<String>>,

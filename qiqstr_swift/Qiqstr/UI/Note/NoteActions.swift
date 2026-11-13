@@ -9,7 +9,6 @@ final class NoteActionHandler {
     var pendingMute: Note?
     var reportTarget: Note?
     var translateTarget: Note?
-    var isWorking = false
 
     static func shareURL(_ note: Note) -> URL {
         let bech = Nip19.nevent(note.id, author: note.pubkey) ?? Nip19.note(note.id) ?? note.id
@@ -67,14 +66,8 @@ final class NoteActionHandler {
     func confirmMute(_ note: Note) {
         let pubkey = note.pubkey
         Task {
-            do {
-                try await MuteService.shared.mute(pubkey)
-                if !Session.shared.mutedPubkeys.contains(pubkey) { Session.shared.mutedPubkeys.append(pubkey) }
-                ToastCenter.shared.show(L("feedUserMuted"), style: .success)
-                DataBus.shared.feedChanged()
-            } catch {
-                ToastCenter.shared.error(error)
-            }
+            await Moderation.mute(pubkey)
+            ToastCenter.shared.show(L("feedUserMuted"), style: .success)
         }
     }
 
@@ -91,19 +84,6 @@ final class NoteActionHandler {
         }
     }
 
-    func report(_ note: Note, reason: NoteReportReason) {
-        isWorking = true
-        Task {
-            defer { isWorking = false }
-            do {
-                try await InteractionService.shared.report(pubkey: note.pubkey, noteId: note.id, reason: reason.rawValue)
-                reportTarget = nil
-                ToastCenter.shared.show(L("reportSubmitted"), style: .success)
-            } catch {
-                ToastCenter.shared.show(L("reportFailed"), style: .error)
-            }
-        }
-    }
 }
 
 struct NoteMenuItems: View {
@@ -165,7 +145,7 @@ struct NoteActionDialogs: ViewModifier {
             }
             .translationPresentation(isPresented: Binding(get: { actions.translateTarget != nil }, set: { if !$0 { actions.translateTarget = nil } }), text: actions.translateTarget.map(NoteLanguage.text(for:)) ?? "")
             .sheet(item: $actions.reportTarget) { note in
-                ReportNoteSheet(note: note, actions: actions)
+                ReportSheet(target: ReportTarget(note: note))
                     .presentationDetents([.medium, .large])
             }
     }
@@ -182,52 +162,4 @@ struct NoteActionDialogs: ViewModifier {
 
 extension View {
     func noteActionDialogs(_ actions: NoteActionHandler) -> some View { modifier(NoteActionDialogs(actions: actions)) }
-}
-
-struct ReportNoteSheet: View {
-    let note: Note
-    let actions: NoteActionHandler
-    @Environment(\.dismiss) private var dismiss
-    @State private var reason: NoteReportReason?
-    @State private var cache = ProfileCache.shared
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(NoteReportReason.allCases) { item in
-                        Button {
-                            reason = item
-                        } label: {
-                            HStack {
-                                Text(item.title).foregroundStyle(AppColors.textPrimary)
-                                Spacer()
-                                if reason == item { Image(systemName: "checkmark").foregroundStyle(AppColors.textPrimary).fontWeight(.semibold) }
-                            }
-                        }
-                        .accessibilityIdentifier("report-reason-\(item.rawValue)")
-                    }
-                } footer: {
-                    Text(L("reportUserDescription"))
-                }
-            }
-            .navigationTitle(L("reportUser", ["user": cache.profile(note.pubkey)?.bestName ?? note.authorName ?? Profile.shortNpub(note.pubkey)]))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("cancel"), systemImage: "xmark") { dismiss() }
-                        .accessibilityIdentifier("report-cancel")
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L("report")) {
-                        if let reason { actions.report(note, reason: reason) }
-                    }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
-                    .disabled(reason == nil || actions.isWorking)
-                    .accessibilityIdentifier("report-submit")
-                }
-            }
-        }
-    }
 }

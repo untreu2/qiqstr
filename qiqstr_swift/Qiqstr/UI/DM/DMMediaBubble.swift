@@ -54,6 +54,8 @@ struct DMMediaBubble<Menu: View>: View {
                     imageView(image)
                 }
                 .buttonStyle(PressableStyle())
+                .accessibilityLabel(L("dmSpokenPhoto", ["sender": message.spokenSender]))
+                .accessibilityAddTraits(.isImage)
                 .contextMenu {
                     Button {
                         onCopyImage(image)
@@ -79,6 +81,9 @@ struct DMMediaBubble<Menu: View>: View {
                     }
                 }
                 .buttonStyle(PressableStyle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L("dmSpokenVideo", ["sender": message.spokenSender]))
+                .accessibilityAddTraits(.isButton)
                 .contextMenu {
                     if let url { ShareLink(item: url) { Label(L("share"), systemImage: "square.and.arrow.up") } }
                     menu()
@@ -108,6 +113,10 @@ struct DMMediaBubble<Menu: View>: View {
                     .padding(.horizontal, 12)
                 }
                 .onTapGesture { Task { await load(force: true) } }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(L("dmRetryMediaHint"))
+                .accessibilityAction { Task { await load(force: true) } }
                 .contextMenu { menu() }
             }
         }

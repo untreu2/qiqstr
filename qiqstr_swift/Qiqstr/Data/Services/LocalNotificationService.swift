@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UIKit
+import QiqstrCore
 import UserNotifications
 import QiqstrCore
 
@@ -88,13 +89,11 @@ private struct ActivityItem {
         case 9735:
             kind = .zap
             target = eventTags.first?[1]
-            let request = JSON.object(tags.first { $0.count > 1 && $0[0] == "description" }?[1])
-            guard let request, let sender = request.str("pubkey") else { return nil }
+            guard let summary = JSON.object(try? zapReceiptSummary(eventJson: JSON.string(event))),
+                  let sender = summary.str("sender"), summary.int("amount") > 0 else { return nil }
             actor = sender
-            content = (request["content"] as? String) ?? ""
-            let invoice = tags.first { $0.count > 1 && $0[0] == "bolt11" }?[1]
-            let requested = (request.tags().first { $0.count > 1 && $0[0] == "amount" }?[1]).flatMap(Int.init) ?? 0
-            sats = invoice.flatMap { Bolt11.decode($0)?.amountSats } ?? requested / 1000
+            content = (summary["comment"] as? String) ?? ""
+            sats = summary.int("amount")
         default:
             return nil
         }
@@ -253,6 +252,14 @@ final class LocalNotificationService: NSObject {
     private func accepts(_ pubkey: String, muted: Set<String>) -> Bool {
         if muted.contains(pubkey) { return false }
         return !WebOfTrustService.filtersNotifications || WebOfTrustService.shared.isTrusted(pubkey)
+    }
+
+    func shouldBadge(_ event: JSONObject, me: String) -> Bool {
+        guard let item = ActivityItem(event: event, me: me), item.actor != me, accepts(item.actor, muted: mutedPubkeys) else { return false }
+        if NoteInteractionStore.shared.isDeleted(item.id) || item.target.map(NoteInteractionStore.shared.isDeleted) == true { return false }
+        guard item.kind == .reply || item.kind == .mention else { return true }
+        let text = item.content.lowercased()
+        return !mutedWords.contains(where: text.contains)
     }
 
     private func deliver(events: [JSONObject], me: String, since: Int) async {

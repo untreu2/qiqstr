@@ -53,7 +53,13 @@ final class PinnedNotesService {
     func toggle(_ noteId: String) async throws {
         let key = try Session.shared.requireSigner()
         guard let me = Session.shared.pubkey else { throw CoreError("Not signed in") }
-        if owner != me { _ = await cachedIds(for: me) }
+        if let base = try await SyncService.shared.latestEditableEvent(kind: Self.kind, author: me) {
+            adopt(base, owner: me)
+        } else if owner != me || latestCreatedAt == 0 {
+            owner = me
+            pinnedIds = []
+            extraTags = []
+        }
         let previous = pinnedIds
         let updated = previous.contains(noteId) ? previous.filter { $0 != noteId } : previous + [noteId]
         owner = me

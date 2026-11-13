@@ -30,7 +30,10 @@ enum MarkdownParser {
         return Array(Set(matches.compactMap { Range($0.range, in: text).flatMap { Nip19.pubkeyHex(from: String(text[$0])) } }))
     }
 
-    private static func parseBlocks(_ lines: [String]) -> [MarkdownBlock] {
+    private static let maxDepth = 8
+
+    private static func parseBlocks(_ lines: [String], depth: Int = 0) -> [MarkdownBlock] {
+        guard depth < maxDepth else { return paragraphBlocks(lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) }
         var blocks: [MarkdownBlock] = []
         var paragraph: [String] = []
         var i = 0
@@ -111,13 +114,13 @@ enum MarkdownParser {
                     }
                     i += 1
                 }
-                blocks.append(.quote(parseBlocks(inner)))
+                blocks.append(.quote(parseBlocks(inner, depth: depth + 1)))
                 continue
             }
 
             if let marker = listMarker(line), paragraph.isEmpty || !marker.ordered || marker.number == 1 {
                 flush()
-                let (list, next) = parseList(lines, from: i, marker: marker)
+                let (list, next) = parseList(lines, from: i, marker: marker, depth: depth)
                 blocks.append(list)
                 i = next
                 continue
@@ -192,7 +195,7 @@ enum MarkdownParser {
         return ListMarker(ordered: true, number: Int(digits) ?? 1, indent: indent, contentOffset: indent + digits.count + 1 + max(1, spaces), content: String(tail.drop(while: { $0 == " " })))
     }
 
-    private static func parseList(_ lines: [String], from start: Int, marker first: ListMarker) -> (MarkdownBlock, Int) {
+    private static func parseList(_ lines: [String], from start: Int, marker first: ListMarker, depth: Int) -> (MarkdownBlock, Int) {
         var items: [MarkdownListItem] = []
         var current: [String] = []
         var contentOffset = first.contentOffset
@@ -209,7 +212,7 @@ enum MarkdownParser {
                 if lower.hasPrefix("[ ] ") || lower == "[ ]" { checked = false; linesForItem[0] = String(head.dropFirst(3)).trimmingCharacters(in: .whitespaces) }
                 else if lower.hasPrefix("[x] ") || lower == "[x]" { checked = true; linesForItem[0] = String(head.dropFirst(3)).trimmingCharacters(in: .whitespaces) }
             }
-            items.append(MarkdownListItem(checked: checked, blocks: parseBlocks(linesForItem)))
+            items.append(MarkdownListItem(checked: checked, blocks: parseBlocks(linesForItem, depth: depth + 1)))
             current = []
         }
 

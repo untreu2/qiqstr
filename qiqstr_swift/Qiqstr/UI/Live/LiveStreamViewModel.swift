@@ -87,6 +87,12 @@ final class LiveStreamViewModel {
         Task { await ProfileCache.shared.load(Array(Set(fresh.map(\.pubkey)))) }
     }
 
+    func applyMutes() {
+        let muted = Set(Session.shared.mutedPubkeys)
+        let visible = messages.filter { !muted.contains($0.pubkey) }
+        if visible.count != messages.count { messages = visible }
+    }
+
     func refreshProfiles() async {
         await ProfileCache.shared.load(Array(Set(messages.map(\.pubkey) + [stream?.host].compactMap { $0 })), fetchMissing: false)
     }
@@ -120,6 +126,7 @@ final class LiveStreamViewModel {
 
     func stop() {
         player?.pause()
+        PlaybackAudio.release()
     }
 
     private func startPlayback() {
@@ -133,8 +140,7 @@ final class LiveStreamViewModel {
             player.play()
             return
         }
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        PlaybackAudio.prepare(muted: false)
         let next = AVPlayer(url: url)
         next.automaticallyWaitsToMinimizeStalling = true
         player?.pause()

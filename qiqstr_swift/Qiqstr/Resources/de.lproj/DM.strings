@@ -47,3 +47,17 @@
 "dmRequestsEmptyTitle" = "Keine Nachrichtenanfragen";
 "dmRequestsEmptyMessage" = "Nachrichten von Personen, denen du nicht folgst und denen du nicht geantwortet hast, erscheinen hier.";
 "dmSearchNewPerson" = "Du hast dieser Person noch nicht geschrieben.";
+"dmDeleteConversation" = "Unterhaltung löschen";
+"dmDeleteConversationMessage" = "Dadurch wird die Unterhaltung von diesem Gerät entfernt. Die andere Person behält ihre Kopie.";
+"dmBlockUser" = "{user} blockieren?";
+"dmBlockMessage" = "Du erhältst keine Nachrichten mehr von diesem Nutzer und siehst seine Notizen nicht mehr.";
+"dmUnblock" = "Blockierung aufheben";
+"dmUserBlocked" = "Nutzer blockiert";
+"dmLoadMedia" = "Tippen, um Medien zu laden";
+"dmLoadEarlier" = "Ältere Nachrichten laden";
+"dmRequestNotice" = "{name} möchte dir schreiben. Da du dieser Person nicht folgst, bleiben Fotos und Videos ausgeblendet, bis du annimmst. Sie erfährt nicht, dass du das gesehen hast.";
+"dmRequestAccept" = "Annehmen";
+"dmSpokenMessage" = "{sender}: {text}";
+"dmSpokenPhoto" = "Foto von {sender}";
+"dmSpokenVideo" = "Video von {sender}";
+"dmRetryMediaHint" = "Zum erneuten Laden doppeltippen";

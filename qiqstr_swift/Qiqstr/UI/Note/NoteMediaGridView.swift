@@ -371,6 +371,9 @@ struct NoteVideoView: View {
         .onDisappear {
             guard player?.isExternallyPresented != true else { return }
             player?.pause()
+            player?.replaceCurrentItem(with: nil)
+            if player != nil { PlaybackAudio.release() }
+            player = nil
             isPlaying = false
         }
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
@@ -408,6 +411,7 @@ struct NoteVideoView: View {
     private var muteButton: some View {
         controlButton(isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: isMuted ? L("unmute") : L("mute"), identifier: "note-media-video-mute") {
             isMuted.toggle()
+            PlaybackAudio.prepare(muted: isMuted)
             player?.isMuted = isMuted
         }
         .padding(10)
@@ -416,6 +420,7 @@ struct NoteVideoView: View {
     private var fullScreenButton: some View {
         controlButton("arrow.up.left.and.arrow.down.right", label: L("videoFullScreen"), identifier: "note-media-video-fullscreen") {
             guard let player else { return }
+            PlaybackAudio.prepare(muted: false)
             NoteFullScreenVideo.present(player) { syncFromPlayer() }
         }
         .padding(10)
@@ -428,9 +433,11 @@ struct NoteVideoView: View {
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 36, height: 36)
+                .glassEffect(.regular.tint(.black.opacity(0.35)).interactive(), in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.tint(.black.opacity(0.35)).interactive(), in: .circle)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
@@ -442,7 +449,7 @@ struct NoteVideoView: View {
             return
         }
         guard let u = URL(string: url) else { return }
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        PlaybackAudio.prepare(muted: isMuted)
         let p = AVPlayer(url: u)
         p.isMuted = isMuted
         player = p
@@ -476,7 +483,12 @@ struct NoteVideoPreview: Sendable {
 
 actor NoteVideoThumbnailCache {
     static let shared = NoteVideoThumbnailCache()
-    private var cache: [URL: UIImage] = [:]
+    private let cache: NSCache<NSURL, UIImage> = {
+        let cache = NSCache<NSURL, UIImage>()
+        cache.countLimit = 80
+        cache.totalCostLimit = 80 * 1024 * 1024
+        return cache
+    }()
     private var durations: [URL: Double] = [:]
     private var failed: Set<URL> = []
 
@@ -488,7 +500,7 @@ actor NoteVideoThumbnailCache {
     }
 
     func preview(for url: URL) async -> NoteVideoPreview {
-        if let hit = cache[url] { return NoteVideoPreview(thumbnail: hit, duration: durations[url]) }
+        if let hit = cache.object(forKey: url as NSURL) { return NoteVideoPreview(thumbnail: hit, duration: durations[url]) }
         if failed.contains(url) { return NoteVideoPreview(thumbnail: nil, duration: durations[url]) }
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
@@ -498,11 +510,13 @@ actor NoteVideoThumbnailCache {
         let cg = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
         if let value = await loadedDuration { durations[url] = value }
         guard let cg else {
+            if failed.count > 500 { failed.removeAll() }
             failed.insert(url)
             return NoteVideoPreview(thumbnail: nil, duration: durations[url])
         }
         let image = UIImage(cgImage: cg)
-        cache[url] = image
+        cache.setObject(image, forKey: url as NSURL, cost: cg.width * cg.height * 4)
+        if durations.count > 1000 { durations.removeAll() }
         return NoteVideoPreview(thumbnail: image, duration: durations[url])
     }
 

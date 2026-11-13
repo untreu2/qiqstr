@@ -10,8 +10,8 @@ struct TrendingSnapshot: Sendable {
 final class TrendingService {
     static let shared = TrendingService()
     static let ttl: TimeInterval = 600
-    private static let noteLimit = 40
-    private static let hashtagLimit = 16
+    nonisolated private static let noteLimit = 40
+    nonisolated private static let hashtagLimit = 16
     private static let fallbackRelays = ["wss://nostr.wine", "wss://relay.damus.io", "wss://relay.primal.net", "wss://nos.lol"]
 
     private var noteIds: [String] = []
@@ -73,7 +73,7 @@ final class TrendingService {
         if let inflightHashtags { return await inflightHashtags.value }
         let task = Task.detached { await Self.fetchTrendingHashtags() }
         inflightHashtags = task
-        let tags = await task.value
+        let tags = await task.value.filter { !ExploreService.isAdultTag($0) }
         inflightHashtags = nil
         if !tags.isEmpty {
             hashtags = tags
@@ -168,7 +168,7 @@ final class TrendingService {
     static func hashtags(from notes: [Note], limit: Int = 12) -> [String] {
         var counts: [String: Int] = [:]
         for note in notes {
-            for tag in Set(note.hashtags.map { $0.lowercased() }) where SearchService.hashtag(from: tag) == tag {
+            for tag in Set(note.hashtags.map { $0.lowercased() }) where SearchService.hashtag(from: tag) == tag && !ExploreService.isAdultTag(tag) {
                 counts[tag, default: 0] += 1
             }
         }

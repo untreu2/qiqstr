@@ -81,3 +81,5 @@
 "reactWithEmoji" = "Mit Emoji reagieren";
 "videoFullScreen" = "Vollbild";
 "videoPause" = "Video pausieren";
+"noteHiddenMuted" = "Ausgeblendete Notiz";
+"composeSecretBlocked" = "Dieser Beitrag enthält einen privaten Schlüssel, ein Wallet-Geheimnis oder eine Wiederherstellungsphrase. Entferne sie vor dem Posten: Wer sie sieht, kann dein Konto oder Guthaben übernehmen.";

@@ -114,19 +114,53 @@ impl WalletStore {
     }
 }
 
+static CASHU_ACCOUNT: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+pub fn cashu_set_account(pubkey_hex: String) -> Result<()> {
+    let pubkey = pubkey_hex.trim().to_lowercase();
+    if pubkey.len() != 64 || !pubkey.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(anyhow!("Invalid account for Cashu"));
+    }
+    *CASHU_ACCOUNT.write().map_err(|_| anyhow!("Cashu is unavailable"))? = Some(pubkey);
+    Ok(())
+}
+
+const LEGACY_FILES: [&str; 4] = [
+    "cashu_wallet.sqlite",
+    "cashu_wallet.sqlite-wal",
+    "cashu_wallet.sqlite-shm",
+    "cashu_seed.bin",
+];
+
+fn account_wallet_path(base: &Path, pubkey: &str) -> Result<PathBuf> {
+    let dir = base.join("cashu").join(pubkey);
+    std::fs::create_dir_all(&dir).context("Failed to create Cashu storage")?;
+    let target = dir.join("cashu_wallet.sqlite");
+    if !target.try_exists()? && !dir.join("cashu_seed.bin").try_exists()? {
+        for name in LEGACY_FILES {
+            let legacy = base.join(name);
+            if legacy.try_exists()? {
+                std::fs::rename(&legacy, dir.join(name)).context("Failed to move Cashu storage")?;
+            }
+        }
+    }
+    Ok(target)
+}
+
 async fn store() -> Result<Arc<Mutex<WalletStore>>> {
-    let db_path = db_path_state()
+    let base = db_path_state()
         .read()
         .await
         .as_ref()
-        .map(|path| {
-            PathBuf::from(path)
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .join("cashu_wallet.sqlite")
-        })
+        .map(|path| PathBuf::from(path).parent().unwrap_or_else(|| Path::new(".")).to_path_buf())
         .ok_or_else(|| anyhow!("Initialize persistent app storage before using Cashu"))?;
+    let account = CASHU_ACCOUNT
+        .read()
+        .map_err(|_| anyhow!("Cashu is unavailable"))?
+        .clone()
+        .ok_or_else(|| anyhow!("Sign in before using Cashu"))?;
     let mut guard = WALLET_STORE.lock().await;
+    let db_path = account_wallet_path(&base, &account)?;
     if let Some((current_path, store)) = guard.as_ref() {
         if current_path == &db_path {
             return Ok(store.clone());
@@ -393,6 +427,22 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn legacy_wallet_moves_to_the_first_account_only() {
+        let directory = TestDirectory::new();
+        std::fs::write(directory.0.join("cashu_wallet.sqlite"), b"db").unwrap();
+        std::fs::write(directory.0.join("cashu_seed.bin"), [7u8; 64]).unwrap();
+        let first = "a".repeat(64);
+        let second = "b".repeat(64);
+        let path = account_wallet_path(&directory.0, &first).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"db");
+        assert!(path.parent().unwrap().join("cashu_seed.bin").exists());
+        assert!(!directory.0.join("cashu_wallet.sqlite").exists());
+        let other = account_wallet_path(&directory.0, &second).unwrap();
+        assert!(!other.exists());
+        assert_ne!(path.parent(), other.parent());
     }
 
     #[test]

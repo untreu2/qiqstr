@@ -234,10 +234,12 @@ struct KeysSettingsView: View {
 struct SettingsSeedPhraseGrid: View {
     let phrase: String
     var masked = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let words = phrase.split(separator: " ").map(String.init)
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .leading), count: 3), alignment: .leading, spacing: 10) {
+        let columns = dynamicTypeSize.isAccessibilitySize ? 1 : dynamicTypeSize >= .xxLarge ? 2 : 3
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .leading), count: columns), alignment: .leading, spacing: 10) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 HStack(spacing: 6) {
                     Text("\(index + 1)")
@@ -247,8 +249,7 @@ struct SettingsSeedPhraseGrid: View {
                     Text(masked ? String(repeating: "\u{2022}", count: 5) : word)
                         .font(.body.monospaced())
                         .foregroundStyle(masked ? .secondary : .primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

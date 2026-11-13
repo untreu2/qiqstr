@@ -1,7 +1,7 @@
 import Foundation
 import QiqstrCore
 
-enum Nip19 {
+nonisolated enum Nip19 {
     static func npub(_ hex: String) -> String? { try? nip19EncodePubkey(pubkeyHex: hex) }
     static func nsec(_ hex: String) -> String? { try? nip19EncodePrivkey(privkeyHex: hex) }
     static func note(_ hex: String) -> String? { try? nip19EncodeNote(eventIdHex: hex) }

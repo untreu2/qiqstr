@@ -83,3 +83,6 @@
 "walletZapCustom" = "Zap a custom amount";
 "walletZappedState" = "Zapped";
 "walletQuickZapHint" = "Zaps {amount} sats. Touch and hold to choose an amount.";
+"walletPaymentPending" = "Your wallet has not confirmed this payment yet. It may still go through, so check your wallet before trying again.";
+"zapInProgress" = "A zap for this note is already in progress.";
+"walletReplaceWarning" = "{wallet} is connected. Connecting a new wallet replaces it.";

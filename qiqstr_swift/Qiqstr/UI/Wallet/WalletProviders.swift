@@ -11,7 +11,7 @@ struct WalletProvider: Identifiable, Hashable {
     var supportsOneTap: Bool { connectScheme != nil }
     var opensInBrowser: Bool { fallback.host()?.contains("apple.com") == false }
 
-    static let appIcon = "https://raw.githubusercontent.com/untreu2/qiqstr/master/assets/main_icon_uni.png"
+    static let appIcon = "https://raw.githubusercontent.com/untreu2/qiqstr/master/qiqstr_flutter/assets/main_icon_uni.png"
 
     static let all: [WalletProvider] = [
         WalletProvider(id: "primal", name: "Primal", detailKey: "walletProviderPrimal", systemImage: "bolt.circle", connectScheme: "nostrnwc+primal", fallback: URL(string: "https://apps.apple.com/app/id1673134518")!),

@@ -47,3 +47,5 @@
 "profileAddedToList" = "Added to {list}";
 "profileRemovedFromList" = "Removed from {list}";
 "profileNoMedia" = "No photos or videos yet";
+"profileMutedTitle" = "You muted this user";
+"profileMutedMessage" = "Their notes, replies and media are hidden.";

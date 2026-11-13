@@ -631,6 +631,8 @@ public protocol EventSink: AnyObject, Sendable {
     
     func onDone() 
     
+    func isClosed()  -> Bool
+    
 }
 open class EventSinkImpl: EventSink, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -710,6 +712,15 @@ open func onDone()  {try! rustCall() {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
+}
+    
+open func isClosed() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_method_eventsink_is_closed(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
     
 
@@ -804,6 +815,28 @@ fileprivate struct UniffiCallbackInterfaceEventSink {
 
             
             let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        isClosed: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeEventSink.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.isClosed(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
@@ -1412,6 +1445,13 @@ public func cashuReceiveAndMelt(token: String, lightningTarget: String)async thr
             liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeQiqError_lift
         )
+}
+public func cashuSetAccount(pubkeyHex: String)throws   {try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_cashu_set_account(
+        FfiConverterString.lower(pubkeyHex),uniffiCallStatus
+    )
+}
 }
 public func connectRelays()async throws   {
     return
@@ -3044,6 +3084,16 @@ public func marmotMessages(groupIdHex: String, limit: UInt32)throws  -> String  
     )
 })
 }
+public func marmotMessagesPage(groupIdHex: String, limit: UInt32, offset: UInt32)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_messages_page(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterUInt32.lower(limit),
+        FfiConverterUInt32.lower(offset),uniffiCallStatus
+    )
+})
+}
 public func marmotOpen(dataDir: String, privateKeyHex: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
@@ -3126,6 +3176,16 @@ public func ncryptsecEncrypt(privateKeyHex: String, password: String)throws  -> 
     uniffi_qiqstr_core_fn_func_ncryptsec_encrypt(
         FfiConverterString.lower(privateKeyHex),
         FfiConverterString.lower(password),uniffiCallStatus
+    )
+})
+}
+public func nip04Decrypt(payload: String, receiverSkHex: String, senderPkHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_nip04_decrypt(
+        FfiConverterString.lower(payload),
+        FfiConverterString.lower(receiverSkHex),
+        FfiConverterString.lower(senderPkHex),uniffiCallStatus
     )
 })
 }
@@ -3235,6 +3295,20 @@ public func nwcListTransactions(nwcUri: String, limit: UInt64?, offset: UInt64?)
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_qiqstr_core_fn_func_nwc_list_transactions(FfiConverterString.lower(nwcUri),FfiConverterOptionUInt64.lower(limit),FfiConverterOptionUInt64.lower(offset)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_qiqstr_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
+}
+public func nwcLookupInvoice(nwcUri: String, invoice: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_nwc_lookup_invoice(FfiConverterString.lower(nwcUri),FfiConverterString.lower(invoice)
                 )
             },
             pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
@@ -3377,6 +3451,13 @@ public func setActiveMuteList(mutedPubkeys: [String], mutedWords: [String])  {tr
     uniffi_qiqstr_core_fn_func_set_active_mute_list(
         FfiConverterSequenceString.lower(mutedPubkeys),
         FfiConverterSequenceString.lower(mutedWords),uniffiCallStatus
+    )
+}
+}
+public func setKnownZappers(zappersJson: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_set_known_zappers(
+        FfiConverterString.lower(zappersJson),uniffiCallStatus
     )
 }
 }
@@ -3575,6 +3656,14 @@ public func waitForReady(timeoutSecs: UInt32)async throws  -> UInt32  {
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
+public func zapReceiptSummary(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_zap_receipt_summary(
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -3619,6 +3708,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_cashu_receive_and_melt() != 51126) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_cashu_set_account() != 47618) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_connect_relays() != 38224) {
@@ -4011,6 +4103,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_marmot_messages() != 40748) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_marmot_messages_page() != 51114) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_marmot_open() != 61561) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4036,6 +4131,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_ncryptsec_encrypt() != 50890) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_nip04_decrypt() != 2871) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_nip19_decode() != 24629) {
@@ -4074,6 +4172,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_nwc_list_transactions() != 44215) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_nwc_lookup_invoice() != 40544) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_nwc_make_invoice() != 52066) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4105,6 +4206,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_set_active_mute_list() != 23487) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_set_known_zappers() != 11959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_sha256_hash() != 31698) {
@@ -4155,6 +4259,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_wait_for_ready() != 38432) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_zap_receipt_summary() != 24137) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_method_eventsink_on_item() != 34899) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4162,6 +4269,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_method_eventsink_on_done() != 36065) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_method_eventsink_is_closed() != 27418) {
         return InitializationResult.apiChecksumMismatch
     }
 

@@ -185,7 +185,7 @@ final class FollowSetService {
         upsert(set)
         DataBus.shared.listsChanged()
         do {
-            let published = try await enqueuePublish(set)
+            let published = try await enqueuePublish(set, previous: previous)
             guard current == generation else { return published }
             upsert(published)
             DataBus.shared.listsChanged()
@@ -198,26 +198,41 @@ final class FollowSetService {
         }
     }
 
-    private func enqueuePublish(_ set: FollowSet) async throws -> FollowSet {
+    private func enqueuePublish(_ set: FollowSet, previous: FollowSet?) async throws -> FollowSet {
         inflightPublishes += 1
         defer { inflightPublishes -= 1 }
-        let previous = publishChain
+        let chain = publishChain
         let task = Task<Result<FollowSet, Error>, Never> {
-            await previous?.value
-            do { return .success(try await self.publish(set)) } catch { return .failure(error) }
+            await chain?.value
+            do { return .success(try await self.publish(set, previous: previous)) } catch { return .failure(error) }
         }
         publishChain = Task { _ = await task.value }
         return try await task.value.get()
     }
 
-    private func publish(_ set: FollowSet) async throws -> FollowSet {
+    private func publish(_ set: FollowSet, previous: FollowSet?) async throws -> FollowSet {
         let sk = try Session.shared.requireSigner()
+        let base = try await SyncService.shared.latestEditableEvent(kind: 30000, author: set.pubkey, dTag: set.dTag, allowingNew: previous == nil)
+        let managed: Set<String> = ["d", "title", "description", "image", "p"]
+        let baseTags = base?.tags() ?? []
         var tags: [[String]] = [["d", set.dTag]]
         if !set.title.isEmpty { tags.append(["title", set.title]) }
         if !set.description.isEmpty { tags.append(["description", set.description]) }
         if !set.image.isEmpty { tags.append(["image", set.image]) }
-        tags.append(contentsOf: set.pubkeys.map { ["p", $0] })
-        let json = try createSignedEvent(kind: 30000, content: "", tags: tags, privateKeyHex: sk)
+        let remoteTags = baseTags.filter { $0.count > 1 && $0[0] == "p" }
+        let original = Dictionary(remoteTags.map { ($0[1], $0) }, uniquingKeysWith: { first, _ in first })
+        var members = set.pubkeys
+        if base != nil {
+            let before = Set(previous?.pubkeys ?? [])
+            let removed = before.subtracting(set.pubkeys)
+            let added = set.pubkeys.filter { !before.contains($0) }
+            var seen = Set<String>()
+            members = (remoteTags.map { $0[1] } + added).filter { !removed.contains($0) && seen.insert($0).inserted }
+        }
+        tags.append(contentsOf: members.map { original[$0] ?? ["p", $0] })
+        tags.append(contentsOf: baseTags.filter { !$0.isEmpty && !managed.contains($0[0]) })
+        let content = (base?["content"] as? String) ?? ""
+        let json = try createSignedEvent(kind: 30000, content: content, tags: tags, privateKeyHex: sk)
         let event = try await SyncService.shared.publish(json)
         setTombstone(set.id, at: nil)
         return FollowSet(event: event) ?? set

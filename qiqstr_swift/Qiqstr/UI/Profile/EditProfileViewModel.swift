@@ -48,24 +48,26 @@ struct ProfileDraft: Equatable {
         return d
     }
 
-    func merged(into base: JSONObject) -> JSONObject {
+    func merged(into base: JSONObject, changedFrom original: ProfileDraft) -> JSONObject {
         var m = base
         let d = trimmed
-        func put(_ key: String, _ value: String) {
+        let o = original.trimmed
+        func put(_ key: String, _ value: String, _ old: String) {
+            guard value != old else { return }
             if value.isEmpty { m.removeValue(forKey: key) } else { m[key] = value }
         }
-        put("name", d.name)
-        put("display_name", d.displayName)
-        if m["displayName"] != nil { put("displayName", d.displayName) }
-        if m["username"] != nil { put("username", d.name) }
-        put("about", d.about)
-        put("picture", d.picture)
-        if m["image"] != nil { put("image", d.picture) }
-        put("banner", d.banner)
-        put("nip05", d.nip05)
-        put("lud16", d.lud16)
-        put("website", d.website)
-        put("location", d.location)
+        put("name", d.name, o.name)
+        put("display_name", d.displayName, o.displayName)
+        if m["displayName"] != nil { put("displayName", d.displayName, o.displayName) }
+        if m["username"] != nil { put("username", d.name, o.name) }
+        put("about", d.about, o.about)
+        put("picture", d.picture, o.picture)
+        if m["image"] != nil { put("image", d.picture, o.picture) }
+        put("banner", d.banner, o.banner)
+        put("nip05", d.nip05, o.nip05)
+        put("lud16", d.lud16, o.lud16)
+        put("website", d.website, o.website)
+        put("location", d.location, o.location)
         return m
     }
 }
@@ -129,9 +131,16 @@ final class EditProfileViewModel {
         setUploading(target, true)
         defer { setUploading(target, false) }
         do {
-            guard let data = try await item.loadTransferable(type: Data.self) else { throw CoreError(L("errorSelectingMedia")) }
+            guard let raw = try await item.loadTransferable(type: Data.self) else { throw CoreError(L("errorSelectingMedia")) }
             let type = item.supportedContentTypes.first { $0.conforms(to: .image) }
-            let mime = type?.preferredMIMEType ?? "image/jpeg"
+            let maxPixel: CGFloat = target == .picture ? 1024 : 2048
+            let (data, mime) = await Task.detached(priority: .userInitiated) { () -> (Data, String) in
+                if type?.conforms(to: .gif) == true { return (raw, "image/gif") }
+                guard let image = ImagePipeline.downsample(raw, maxPixel: maxPixel), let jpeg = image.jpegData(compressionQuality: 0.88) else {
+                    return (raw, type?.preferredMIMEType ?? "image/jpeg")
+                }
+                return (jpeg, "image/jpeg")
+            }.value
             let url = try await MediaUploadService.shared.upload(data: data, mimeType: mime)
             guard !url.isEmpty else { throw CoreError(L("uploadFailed", ["message": ""])) }
             switch target {
@@ -154,8 +163,11 @@ final class EditProfileViewModel {
         guard canSave, let me = Session.shared.pubkey else { return false }
         isSaving = true
         defer { isSaving = false }
-        let content = draft.merged(into: metadata)
         do {
+            let base = try await SyncService.shared.latestEditableEvent(kind: 0, author: me, allowingNew: true)
+            let latest = base.flatMap { JSON.object($0["content"] as? String) } ?? [:]
+            if base != nil, latest.isEmpty { throw CoreError(L("noRelayConnection")) }
+            let content = draft.merged(into: latest, changedFrom: original)
             try await ProfileDataSource.publishMetadata(content)
             metadata = content
             original = draft.trimmed

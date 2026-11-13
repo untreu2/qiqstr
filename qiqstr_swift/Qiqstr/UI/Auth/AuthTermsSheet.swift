@@ -11,7 +11,7 @@ struct AuthTermsSheet: View {
         case divider
     }
 
-    private let blocks: [Block] = AuthTermsText.markdown
+    private let blocks: [Block] = AuthTermsText.localized
         .components(separatedBy: "\n")
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty }

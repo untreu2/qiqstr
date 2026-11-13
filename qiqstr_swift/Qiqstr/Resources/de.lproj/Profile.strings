@@ -47,3 +47,5 @@
 "profileAddedToList" = "Zu {list} hinzugefügt";
 "profileRemovedFromList" = "Aus {list} entfernt";
 "profileNoMedia" = "Noch keine Fotos oder Videos";
+"profileMutedTitle" = "Du hast diesen Nutzer stummgeschaltet";
+"profileMutedMessage" = "Notizen, Antworten und Medien dieses Nutzers sind ausgeblendet.";

@@ -41,7 +41,8 @@ struct NotificationsView: View {
                 guard !Task.isCancelled else { return }
                 await model.reload()
             }
-            .onAppear {
+            .onChange(of: router.selectedTab, initial: true) { _, tab in
+                guard tab == .notifications else { return }
                 model.markSeen()
                 NotificationBadge.shared.markRead()
             }

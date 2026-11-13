@@ -1,6 +1,6 @@
 import Foundation
 
-struct Profile: Identifiable, Hashable, Sendable {
+nonisolated struct Profile: Identifiable, Hashable, Sendable {
     var pubkey: String
     var name: String
     var displayName: String

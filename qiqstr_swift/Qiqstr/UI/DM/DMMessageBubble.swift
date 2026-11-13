@@ -50,19 +50,26 @@ struct DMMessageBubble: View {
     @ViewBuilder
     private var bubble: some View {
         if message.isFile {
-            DMMediaBubble(message: message, shape: bubbleShape, onCopyImage: onCopyImage, menu: { menuItems })
-                .opacity(message.state == .sending ? 0.7 : 1)
-        } else if let imageURL = soleImageURL {
-            RemoteImage(url: imageURL, maxPixel: 720, contentMode: .fill) {
-                ZStack {
-                    Rectangle().fill(AppColors.tile)
-                    ProgressView()
-                }
+            DMMediaGate(message: message, shape: bubbleShape) {
+                DMMediaBubble(message: message, shape: bubbleShape, onCopyImage: onCopyImage, menu: { menuItems })
+                    .opacity(message.state == .sending ? 0.7 : 1)
             }
-            .frame(width: 240, height: 240)
-            .clipShape(bubbleShape)
-            .contentShape(bubbleShape)
-            .contextMenu { menuItems }
+        } else if let imageURL = soleImageURL {
+            DMMediaGate(message: message, shape: bubbleShape) {
+                RemoteImage(url: imageURL, maxPixel: 720, contentMode: .fill) {
+                    ZStack {
+                        Rectangle().fill(AppColors.tile)
+                        ProgressView()
+                    }
+                }
+                .frame(width: 240, height: 240)
+                .clipShape(bubbleShape)
+                .contentShape(bubbleShape)
+                .contextMenu { menuItems }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L("dmSpokenPhoto", ["sender": message.spokenSender]))
+                .accessibilityAddTraits(.isImage)
+            }
         } else {
             Text(DMText.attributed(message.content, mine: mine, cache: cache, highlighting: searchQuery))
                 .font(.body)
@@ -75,6 +82,7 @@ struct DMMessageBubble: View {
                 .opacity(message.state == .sending ? 0.7 : 1)
                 .contentShape(.contextMenuPreview, bubbleShape)
                 .contextMenu { menuItems }
+                .accessibilityLabel(L("dmSpokenMessage", ["sender": message.spokenSender, "text": message.content]))
                 .environment(\.openURL, OpenURLAction { url in
                     Router.shared.open(url: url)
                     return .handled

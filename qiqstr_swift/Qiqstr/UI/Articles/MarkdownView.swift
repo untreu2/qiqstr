@@ -5,18 +5,29 @@ struct MarkdownView: View {
     var anchorPrefix: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                if let anchorPrefix {
-                    MarkdownBlockView(block: block).id("\(anchorPrefix)-\(index)")
-                } else {
-                    MarkdownBlockView(block: block)
+        Group {
+            if let anchorPrefix {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(blocks.indices.map { MarkdownAnchor(id: "\(anchorPrefix)-\($0)", index: $0) }) { anchor in
+                        MarkdownBlockView(block: blocks[anchor.index]).id(anchor.id)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                        MarkdownBlockView(block: block)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.openURL, OpenURLAction { url in MarkdownLinkHandler.open(url) })
     }
+}
+
+private struct MarkdownAnchor: Identifiable {
+    let id: String
+    let index: Int
 }
 
 struct MarkdownHighlighting {
@@ -48,8 +59,10 @@ enum MarkdownLinkHandler {
         case "http", "https":
             Router.shared.sheet = .url(url)
             return .handled
-        default:
+        case "mailto", "tel":
             return .systemAction
+        default:
+            return .discarded
         }
     }
 }

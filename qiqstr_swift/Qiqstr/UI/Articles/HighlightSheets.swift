@@ -142,6 +142,8 @@ struct HighlightsSheet: View {
     let onSelect: (ArticleHighlight) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var cache = ProfileCache.shared
+    @State private var reportTarget: ReportTarget?
+    @State private var session = Session.shared
 
     var body: some View {
         NavigationStack {
@@ -153,7 +155,7 @@ struct HighlightsSheet: View {
                         EmptyStateView(systemImage: "highlighter", title: L("highlightsEmpty"), message: L("highlightsEmptyHint"))
                     }
                 } else {
-                    List(highlights) { highlight in
+                    List(highlights.filter { !session.mutedPubkeys.contains($0.pubkey) }) { highlight in
                         Button {
                             dismiss()
                             onSelect(highlight)
@@ -167,12 +169,23 @@ struct HighlightsSheet: View {
                                 dismiss()
                                 Router.shared.push(.profile(highlight.pubkey))
                             }
+                            if highlight.pubkey != session.pubkey {
+                                Section {
+                                    Button(L("feedMuteAuthor"), systemImage: "speaker.slash", role: .destructive) {
+                                        Task { await Moderation.mute(highlight.pubkey) }
+                                    }
+                                    Button(L("report"), systemImage: "flag", role: .destructive) {
+                                        reportTarget = ReportTarget(pubkey: highlight.pubkey, eventId: highlight.id)
+                                    }
+                                }
+                            }
                         }
                         .accessibilityIdentifier("highlight-row-\(highlight.id)")
                     }
                     .listStyle(.insetGrouped)
                 }
             }
+            .reportSheet($reportTarget)
             .navigationTitle(L("highlightsTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

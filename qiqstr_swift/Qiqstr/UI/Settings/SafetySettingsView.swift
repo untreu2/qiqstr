@@ -49,16 +49,18 @@ struct SafetySettingsView: View {
             } footer: {
                 Text(L("safetyNetworkFooter"))
             }
-            Section {
-                Toggle(isOn: $showSensitive) {
-                    SettingsRowLabel(title: L("safetySensitiveContent"), systemImage: "eye.trianglebadge.exclamationmark")
+            if AppStorePolicy.allowsSensitiveContentToggle {
+                Section {
+                    Toggle(isOn: $showSensitive) {
+                        SettingsRowLabel(title: L("safetySensitiveContent"), systemImage: "eye.trianglebadge.exclamationmark")
+                    }
+                    .tint(AppColors.switchActive)
+                    .accessibilityIdentifier("safety-show-sensitive")
+                } header: {
+                    Text(L("safetyContent"))
+                } footer: {
+                    Text(L("safetySensitiveFooter"))
                 }
-                .tint(AppColors.switchActive)
-                .accessibilityIdentifier("safety-show-sensitive")
-            } header: {
-                Text(L("safetyContent"))
-            } footer: {
-                Text(L("safetySensitiveFooter"))
             }
         }
         .settingsListStyle()

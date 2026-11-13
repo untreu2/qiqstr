@@ -28,6 +28,11 @@ final class StreamSinkBridge: EventSink, @unchecked Sendable {
     func onDone() {
         continuation.finish()
     }
+
+    func isClosed() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return closed
+    }
 }
 
 enum EventStream {

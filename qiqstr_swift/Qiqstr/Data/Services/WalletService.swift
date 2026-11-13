@@ -15,8 +15,9 @@ struct WalletTransaction: Identifiable, Hashable, Sendable {
     var invoice: String?
     var createdAt: Int
     var method: String
+    var reportedPaymentHash: String?
 
-    var paymentHash: String? { invoice.flatMap { Bolt11.decode($0)?.paymentHash } }
+    var paymentHash: String? { reportedPaymentHash ?? invoice.flatMap { Bolt11.decode($0)?.paymentHash } }
 
     init(json j: JSONObject) {
         isIncoming = j.bool("isIncoming") || j.str("type") == "incoming"
@@ -26,7 +27,8 @@ struct WalletTransaction: Identifiable, Hashable, Sendable {
         invoice = j.str("invoice")
         createdAt = j.int("created_at")
         method = "lightning"
-        id = invoice ?? "\(createdAt)-\(amountSats)-\(isIncoming)-\(description ?? "")"
+        reportedPaymentHash = j.str("payment_hash")?.lowercased()
+        id = invoice ?? reportedPaymentHash ?? "\(createdAt)-\(amountSats)-\(isIncoming)-\(description ?? "")"
     }
 }
 
@@ -80,12 +82,33 @@ struct NWCWalletBackend: WalletBackend {
     }
 
     func payInvoice(_ invoice: String) async throws -> PaymentResult {
-        let json = JSON.object(try await nwcPayInvoice(nwcUri: uri, invoice: invoice)) ?? [:]
+        let raw: String
+        do {
+            raw = try await nwcPayInvoice(nwcUri: uri, invoice: invoice)
+        } catch {
+            guard coreErrorMessage(error).localizedCaseInsensitiveContains("timed out") else { throw error }
+            return try await settledResult(invoice)
+        }
+        let json = JSON.object(raw) ?? [:]
         return PaymentResult(preimage: json.str("preimage"), feesSats: json.int("fees_paid") / 1000)
     }
 
+    private func settledResult(_ invoice: String) async throws -> PaymentResult {
+        for attempt in 0..<2 {
+            if attempt > 0 { try? await Task.sleep(for: .seconds(5)) }
+            guard let json = JSON.object(try? await nwcLookupInvoice(nwcUri: uri, invoice: invoice)) else { continue }
+            switch json.str("state") {
+            case "settled": return PaymentResult(preimage: json.str("preimage"), feesSats: json.int("fees_paid") / 1000)
+            case "failed", "expired": throw WalletError.paymentFailed
+            default: continue
+            }
+        }
+        throw WalletError.paymentPending
+    }
+
     func makeInvoice(amountSats: Int, description: String?) async throws -> CreatedInvoice {
-        let raw = try await nwcMakeInvoice(nwcUri: uri, amountMsats: UInt64(amountSats) * 1000, description: description)
+        guard let amountMsat = SatsAmount.msat(amountSats) else { throw WalletError.invalidAmount }
+        let raw = try await nwcMakeInvoice(nwcUri: uri, amountMsats: UInt64(amountMsat), description: description)
         let json = JSON.object(raw) ?? [:]
         guard let invoice = json.str("invoice") else { throw WalletError.emptyInvoice }
         let decoded = Bolt11.decode(invoice)
@@ -120,6 +143,8 @@ enum WalletError: LocalizedError, Equatable {
     case resolveFailed
     case cashuTooSmall
     case nothingToMelt
+    case paymentPending
+    case paymentFailed
 
     var errorDescription: String? {
         switch self {
@@ -137,6 +162,8 @@ enum WalletError: LocalizedError, Equatable {
         case .resolveFailed: L("resolveAddressFailed")
         case .cashuTooSmall: L("walletCashuTooSmall")
         case .nothingToMelt: L("walletNothingToMelt")
+        case .paymentPending: L("walletPaymentPending")
+        case .paymentFailed: L("paymentFailed")
         }
     }
 }
@@ -163,6 +190,7 @@ final class WalletService {
     private(set) var isPaying = false
     private(set) var lastPaymentAt: Date?
     private(set) var incomingConnectURI: String?
+    private(set) var incomingPaymentRequest: String?
     var balanceHidden: Bool = UserDefaults.standard.bool(forKey: "wallet_balance_hidden") {
         didSet { UserDefaults.standard.set(balanceHidden, forKey: "wallet_balance_hidden") }
     }
@@ -173,7 +201,9 @@ final class WalletService {
     var lightningAddress: String? { backend?.lightningAddress }
     var walletName: String? { backend?.displayName }
 
-    private func storageKey(_ pubkey: String) -> String { "nwc_uri_\(pubkey)" }
+    static func credentialKey(_ pubkey: String) -> String { "nwc_uri_\(pubkey)" }
+
+    private func storageKey(_ pubkey: String) -> String { Self.credentialKey(pubkey) }
 
     func reset() {
         generation += 1
@@ -215,6 +245,13 @@ final class WalletService {
             deliverIncoming(raw)
             return true
         }
+        if url.scheme?.lowercased() == "lightning" {
+            let value = String(raw.dropFirst("lightning:".count)).trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+            guard !value.isEmpty else { return true }
+            incomingPaymentRequest = value.removingPercentEncoding ?? value
+            Router.shared.selectedTab = .wallet
+            return true
+        }
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
               comps.scheme?.lowercased() == Self.callbackScheme,
               comps.host?.lowercased() == Self.callbackHost else { return false }
@@ -230,6 +267,11 @@ final class WalletService {
     func consumeIncomingConnectURI() -> String? {
         defer { incomingConnectURI = nil }
         return incomingConnectURI
+    }
+
+    func consumeIncomingPaymentRequest() -> String? {
+        defer { incomingPaymentRequest = nil }
+        return incomingPaymentRequest
     }
 
     private func deliverIncoming(_ uri: String) {
@@ -255,6 +297,11 @@ final class WalletService {
         generation += 1
         self.backend = backend
         connectionState = .connected
+        isRefreshingBalance = false
+        isLoadingTransactions = false
+        canLoadMoreTransactions = false
+        balanceError = nil
+        transactionsError = nil
         balanceSats = nil
         transactions = []
         hasLoadedTransactions = false
@@ -328,8 +375,21 @@ final class WalletService {
         list.sorted { $0.createdAt > $1.createdAt }
     }
 
+    private func prepareCashu() throws {
+        guard let pubkey = Session.shared.pubkey else { throw WalletError.noAccount }
+        let directory = RelayConfig.databaseURL.deletingLastPathComponent()
+            .appendingPathComponent("cashu", isDirectory: true)
+            .appendingPathComponent(pubkey.lowercased(), isDirectory: true)
+        let protection: [FileAttributeKey: Any] = [.protectionKey: FileProtectionType.completeUnlessOpen]
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: protection)
+        try cashuSetAccount(pubkeyHex: pubkey)
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in [directory] + files { try? FileManager.default.setAttributes(protection, ofItemAtPath: file.path) }
+    }
+
     func refreshCashuBalance() async {
         let generation = generation
+        guard (try? prepareCashu()) != nil else { return }
         guard let json = JSON.object(try? await cashuGetBalance()) else { return }
         guard generation == self.generation else { return }
         cashuBalanceSats = json.int("total_sats")
@@ -355,8 +415,8 @@ final class WalletService {
     }
 
     func pay(params: LnurlPayParams, amountSats: Int?, comment: String?) async throws -> PaymentResult {
-        guard let amountSats, amountSats > 0 else { throw WalletError.invalidAmount }
-        let invoice = try await Lnurl.requestInvoice(params, amountMsat: Int64(amountSats) * 1000, comment: comment)
+        guard let amountSats, let amountMsat = SatsAmount.msat(amountSats) else { throw WalletError.invalidAmount }
+        let invoice = try await Lnurl.requestInvoice(params, amountMsat: amountMsat, comment: comment)
         return try await payBolt11(invoice)
     }
 
@@ -395,7 +455,8 @@ final class WalletService {
         let paid = page.contains { tx in
             guard tx.isIncoming else { return false }
             if let txInvoice = tx.invoice?.lowercased() { return txInvoice == target }
-            if let hash = invoice.paymentHash, let txHash = tx.paymentHash { return hash == txHash }
+            if let hash = invoice.paymentHash?.lowercased(), let txHash = tx.paymentHash?.lowercased() { return hash == txHash }
+            guard invoice.paymentHash == nil, tx.paymentHash == nil else { return false }
             return tx.amountSats == invoice.amountSats && tx.createdAt >= since
         }
         if paid {
@@ -415,6 +476,9 @@ final class WalletService {
         isRedeemingCashu = true
         defer { isRedeemingCashu = false }
         let token = info.token
+        try prepareCashu()
+        await refreshCashuBalance()
+        let balanceBefore = cashuBalanceSats
         do {
             let target = try await lightningTarget(forSats: info.amountSats, attempt: 0)
             let json = JSON.object(try await cashuReceiveAndMelt(token: token, lightningTarget: target)) ?? [:]
@@ -422,7 +486,7 @@ final class WalletService {
             return json.int("amount_sats")
         } catch {
             await refreshCashuBalance()
-            guard cashuBalanceSats > 0, lightningAddress == nil else { throw error }
+            guard cashuBalanceSats > balanceBefore, lightningAddress == nil else { throw error }
             let melted = try await meltCashuViaInvoices(startAttempt: 1)
             await afterCashuMelt()
             return melted
@@ -433,6 +497,7 @@ final class WalletService {
         guard isConnected else { throw WalletError.notConnected }
         isRedeemingCashu = true
         defer { isRedeemingCashu = false }
+        try prepareCashu()
         do {
             let melted: Int
             if let address = lightningAddress {
@@ -624,7 +689,7 @@ struct LnurlPayParams: Hashable, Sendable {
     var lnurl: String
     var domain: String
 
-    var minSats: Int { Int((minSendableMsat + 999) / 1000) }
+    var minSats: Int { Int(minSendableMsat / 1000 + (minSendableMsat % 1000 == 0 ? 0 : 1)) }
     var maxSats: Int { Int(maxSendableMsat / 1000) }
     var isFixedAmount: Bool { minSendableMsat == maxSendableMsat }
 }
@@ -677,10 +742,16 @@ enum Lnurl {
         }
         let metadata = JSON.any(json.str("metadata")) as? [[Any]] ?? []
         let description = metadata.first { ($0.first as? String) == "text/plain" }.flatMap { $0.count > 1 ? $0[1] as? String : nil }
+        let minSendable = int64(json["minSendable"]) ?? 1000
+        let maxSendable = int64(json["maxSendable"]) ?? 100_000_000_000
+        let cap = Int64(SatsAmount.maximum) * 1000
+        guard callback.scheme?.lowercased() == "https", minSendable >= 1, maxSendable >= minSendable, maxSendable <= cap else {
+            throw WalletError.resolveFailed
+        }
         return LnurlPayParams(
             callback: callback,
-            minSendableMsat: int64(json["minSendable"]) ?? 1000,
-            maxSendableMsat: int64(json["maxSendable"]) ?? 100_000_000_000,
+            minSendableMsat: minSendable,
+            maxSendableMsat: maxSendable,
             commentAllowed: json.int("commentAllowed"),
             allowsNostr: json.bool("allowsNostr"),
             nostrPubkey: json.str("nostrPubkey"),
@@ -710,7 +781,7 @@ enum Lnurl {
         guard let url = comps.url else { throw WalletError.resolveFailed }
         let json = try await fetchJSON(url)
         guard let pr = json.str("pr") else { throw WalletError.emptyInvoice }
-        if let decoded = Bolt11.decode(pr), let amount = decoded.amountMsat, amount != amountMsat {
+        if let decoded = Bolt11.decode(pr), decoded.amountMsat != amountMsat || decoded.isExpired {
             throw WalletError.invoiceAmountMismatch
         }
         return pr

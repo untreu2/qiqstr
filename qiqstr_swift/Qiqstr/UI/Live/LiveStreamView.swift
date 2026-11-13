@@ -4,6 +4,9 @@ import SwiftUI
 struct LiveStreamView: View {
     @State private var model: LiveStreamViewModel
     @State private var bus = DataBus.shared
+    @State private var session = Session.shared
+    @State private var reportTarget: ReportTarget?
+    @Environment(\.dismiss) private var dismiss
 
     init(coordinate: String) {
         _model = State(initialValue: LiveStreamViewModel(coordinate: coordinate))
@@ -24,13 +27,35 @@ struct LiveStreamView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            if let naddr = model.stream?.naddr {
+            if let stream = model.stream {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ShareLink(item: "nostr:\(naddr)") { Label(L("share"), systemImage: "square.and.arrow.up") }
-                        .accessibilityIdentifier("live-share")
+                    Menu {
+                        if let naddr = stream.naddr {
+                            ShareLink(item: "nostr:\(naddr)") { Label(L("share"), systemImage: "square.and.arrow.up") }
+                                .accessibilityIdentifier("live-share")
+                        }
+                        if stream.host != session.pubkey {
+                            Section {
+                                Button(L("mute"), systemImage: "speaker.slash", role: .destructive) { muteHost(stream) }
+                                    .accessibilityIdentifier("live-mute-host")
+                                Button(L("report"), systemImage: "flag", role: .destructive) {
+                                    reportTarget = ReportTarget(pubkey: stream.host, eventId: stream.eventId)
+                                }
+                                .accessibilityIdentifier("live-report")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel(L("profileMoreActions"))
+                    .accessibilityIdentifier("live-menu")
                 }
             }
         }
+        .reportSheet($reportTarget) { target in
+            if MuteService.shared.isMuted(target.pubkey) { dismiss() }
+        }
+        .onChange(of: session.mutedPubkeys) { model.applyMutes() }
         .task { await model.load() }
         .task { await model.refreshStreamPeriodically() }
         .task(id: model.stream?.coordinate) { await model.runChat() }
@@ -38,6 +63,14 @@ struct LiveStreamView: View {
         .onAppear { model.resume() }
         .onDisappear { model.stop() }
         .accessibilityIdentifier("live-stream")
+    }
+
+    private func muteHost(_ stream: LiveStream) {
+        Task {
+            await Moderation.mute(stream.host)
+            ToastCenter.shared.show(L("feedUserMuted"), style: .success)
+            dismiss()
+        }
     }
 
     private func content(_ stream: LiveStream) -> some View {

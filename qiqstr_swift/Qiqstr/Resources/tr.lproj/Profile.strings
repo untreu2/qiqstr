@@ -47,3 +47,5 @@
 "profileAddedToList" = "{list} listesine eklendi";
 "profileRemovedFromList" = "{list} listesinden çıkarıldı";
 "profileNoMedia" = "Henüz fotoğraf veya video yok";
+"profileMutedTitle" = "Bu kullanıcıyı sessize aldın";
+"profileMutedMessage" = "Notları, yanıtları ve medyası gizlendi.";

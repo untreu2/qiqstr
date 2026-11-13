@@ -5,10 +5,29 @@ enum MarkdownInline {
     private static let mention = try! NSRegularExpression(pattern: #"(?<![\w/\(\[=:])(?:nostr:)?((?:npub1|nprofile1|note1|nevent1|naddr1)[02-9ac-hj-np-z]{20,})"#)
     private static let bareURL = try! NSRegularExpression(pattern: #"(?<![\(<\[\"'=\w/])(https?://[^\s<>\)\]\"']+[^\s<>\)\]\"'.,;:!?])"#)
 
+    private final class Rendered {
+        let value: AttributedString
+        init(_ value: AttributedString) { self.value = value }
+    }
+
+    private static let rendered: NSCache<NSString, Rendered> = {
+        let cache = NSCache<NSString, Rendered>()
+        cache.countLimit = 2_000
+        return cache
+    }()
+
     static func attributed(_ text: String, name: (String) -> String?) -> AttributedString {
         let prepared = transformOutsideCode(text) { segment in
             autolink(linkMentions(segment, name: name))
         }
+        let key = prepared as NSString
+        if let hit = rendered.object(forKey: key) { return hit.value }
+        let result = render(prepared, original: text)
+        rendered.setObject(Rendered(result), forKey: key)
+        return result
+    }
+
+    private static func render(_ prepared: String, original text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(allowsExtendedAttributes: true, interpretedSyntax: .inlineOnlyPreservingWhitespace, failurePolicy: .returnPartiallyParsedIfPossible)
         var result = (try? AttributedString(markdown: prepared, options: options)) ?? AttributedString(text)
         for run in result.runs {

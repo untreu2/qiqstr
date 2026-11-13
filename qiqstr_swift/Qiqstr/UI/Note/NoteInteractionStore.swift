@@ -220,6 +220,16 @@ final class NoteInteractionStore {
 
     func isDeleted(_ noteId: String) -> Bool { deletedIds.contains(noteId) }
 
+    func hide(_ noteId: String, parent: String? = nil) {
+        guard !noteId.isEmpty else { return }
+        resetIfAccountChanged()
+        HiddenNotesStore.add(noteId, for: owner)
+        guard !deletedIds.contains(noteId) else { return }
+        markDeleted(noteId, parent: parent)
+    }
+
+    func prepareForAccount() { resetIfAccountChanged() }
+
     private func resetIfAccountChanged() {
         let me = Session.shared.pubkey
         guard me != owner else { return }
@@ -229,7 +239,8 @@ final class NoteInteractionStore {
         pendingLocal.removeAll()
         pendingRelay.removeAll()
         relayFetchedAt.removeAll()
-        if !deletedIds.isEmpty { deletedIds.removeAll() }
+        let hidden = HiddenNotesStore.ids(for: me)
+        if deletedIds != hidden { deletedIds = hidden }
     }
 
     private func evict() {

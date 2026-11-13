@@ -47,3 +47,17 @@
 "dmRequestsEmptyTitle" = "Mesaj isteği yok";
 "dmRequestsEmptyMessage" = "Takip etmediğin ve yanıt vermediğin kişilerden gelen mesajlar burada görünür.";
 "dmSearchNewPerson" = "Bu kişiye henüz mesaj göndermedin.";
+"dmDeleteConversation" = "Sohbeti sil";
+"dmDeleteConversationMessage" = "Bu işlem sohbeti bu cihazdan kaldırır. Karşı taraftaki kopya kalır.";
+"dmBlockUser" = "{user} engellensin mi?";
+"dmBlockMessage" = "Bu kullanıcıdan artık mesaj almayacak ve notlarını görmeyeceksin.";
+"dmUnblock" = "Engeli kaldır";
+"dmUserBlocked" = "Kullanıcı engellendi";
+"dmLoadMedia" = "Medyayı yüklemek için dokun";
+"dmLoadEarlier" = "Önceki mesajları yükle";
+"dmRequestNotice" = "{name} sana mesaj göndermek istiyor. Onu takip etmediğin için kabul edene kadar fotoğrafları ve videoları gizli kalır. Bunu gördüğünü bilmeyecek.";
+"dmRequestAccept" = "Kabul et";
+"dmSpokenMessage" = "{sender}: {text}";
+"dmSpokenPhoto" = "{sender} tarafından fotoğraf";
+"dmSpokenVideo" = "{sender} tarafından video";
+"dmRetryMediaHint" = "Yeniden yüklemeyi denemek için iki kez dokun";

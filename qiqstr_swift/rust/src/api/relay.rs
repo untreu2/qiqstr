@@ -157,7 +157,11 @@ pub async fn init_client(
     if let Some(ref path) = db_path {
         let lmdb = try_open_lmdb(path)?;
         let database = HybridDatabase::new(lmdb);
-        database.remove_invalid_replaceable_events().await?;
+        let marker = std::path::Path::new(path).join("replaceables_verified_v1");
+        if !marker.exists() {
+            database.remove_invalid_replaceable_events().await?;
+            let _ = std::fs::write(&marker, b"1");
+        }
         builder = builder.database(database);
     }
 
@@ -468,6 +472,19 @@ pub async fn stream_relay_status(sink: StreamSink<String>) -> Result<()> {
     Ok(())
 }
 
+fn is_public_secure_relay(url: &RelayUrl) -> bool {
+    let text = url.as_str().to_ascii_lowercase();
+    let Some(rest) = text.strip_prefix("wss://") else { return false };
+    let host = rest.split(['/', ':', '?']).next().unwrap_or("");
+    if host.is_empty() || host == "localhost" || host.ends_with(".local") || host.ends_with(".onion") || host.starts_with('[') {
+        return false;
+    }
+    if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
+        return !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified());
+    }
+    true
+}
+
 pub async fn discover_and_connect_outbox_relays(
     pubkeys_hex: Vec<String>,
     max_outbox_relays: usize,
@@ -567,11 +584,14 @@ pub async fn discover_and_connect_outbox_relays(
     let discovered_count = candidates.len() as u32;
     let mut added_count: u32 = 0;
 
+    let pooled: HashSet<RelayUrl> = client.relays().await.into_keys().collect();
     let parsed_candidates: Vec<_> = candidates
         .iter()
+        .filter(|(_, _, is_outbox, _)| *is_outbox)
         .filter_map(|(url, _, is_outbox, is_inbox)| {
             RelayUrl::parse(url.as_str())
                 .ok()
+                .filter(|relay_url| is_public_secure_relay(relay_url) && !pooled.contains(relay_url))
                 .map(|relay_url| (relay_url, *is_outbox, *is_inbox))
         })
         .collect();
@@ -587,13 +607,9 @@ pub async fn discover_and_connect_outbox_relays(
             let (ref relay_url, is_outbox, is_inbox) = parsed_candidates[i];
             let relays = client.relays().await;
             if let Some(relay) = relays.get(relay_url) {
-                let flags = relay.flags();
-                if is_outbox && !is_inbox {
-                    flags.remove(RelayServiceFlags::WRITE);
-                } else if is_inbox && !is_outbox {
-                    flags.remove(RelayServiceFlags::READ);
-                }
+                relay.flags().remove(RelayServiceFlags::WRITE);
             }
+            let _ = (is_outbox, is_inbox);
             added_count += 1;
         }
     }
@@ -1223,6 +1239,70 @@ pub async fn send_event(event_json: String) -> Result<String> {
     published_event_json(output)
 }
 
+struct TargetPool {
+    main: Client,
+    pooled: Vec<RelayUrl>,
+    extra: Option<(Client, Vec<RelayUrl>)>,
+}
+
+const MAX_TARGET_RELAYS: usize = 12;
+
+impl TargetPool {
+    async fn new(main: &Client, urls: &[RelayUrl]) -> TargetPool {
+        let existing: HashSet<RelayUrl> = main.relays().await.into_keys().collect();
+        let mut pooled = Vec::new();
+        let mut fresh = Vec::new();
+        for url in urls.iter().take(MAX_TARGET_RELAYS) {
+            if existing.contains(url) {
+                pooled.push(url.clone());
+            } else if url.as_str().starts_with("wss://") {
+                fresh.push(url.clone());
+            }
+        }
+        let extra = if fresh.is_empty() {
+            None
+        } else {
+            let temp = Client::default();
+            for url in &fresh {
+                let _ = temp.add_relay(url.as_str()).await;
+            }
+            temp.connect().await;
+            temp.wait_for_connection(Duration::from_secs(4)).await;
+            Some((temp, fresh))
+        };
+        TargetPool { main: main.clone(), pooled, extra }
+    }
+
+    async fn publish(&self, event: &Event) -> Result<Output<EventId>> {
+        let mut output = Output { val: event.id, success: HashSet::new(), failed: HashMap::new() };
+        if !self.pooled.is_empty() {
+            if let Ok(result) = publish_event(&self.main, event, Some(&self.pooled)).await {
+                output.success.extend(result.success);
+                output.failed.extend(result.failed);
+            }
+        }
+        if let Some((temp, urls)) = &self.extra {
+            if let Ok(result) = publish_event(temp, event, Some(urls)).await {
+                output.success.extend(result.success);
+                output.failed.extend(result.failed);
+            }
+        }
+        if output.success.is_empty() && output.failed.is_empty() {
+            return Err(anyhow!("No publication relays configured"));
+        }
+        if !output.success.is_empty() {
+            let _ = self.main.database().save_event(event).await;
+        }
+        Ok(output)
+    }
+
+    async fn close(self) {
+        if let Some((temp, _)) = self.extra {
+            temp.shutdown().await;
+        }
+    }
+}
+
 pub async fn send_event_to(event_json: String, relay_urls: Vec<String>) -> Result<String> {
     let client = get_client().await?;
     let event = Event::from_json(&event_json)?;
@@ -1231,12 +1311,10 @@ pub async fn send_event_to(event_json: String, relay_urls: Vec<String>) -> Resul
         .iter()
         .map(|url| RelayUrl::parse(url))
         .collect::<std::result::Result<_, _>>()?;
-    for url in &urls {
-        client.add_relay(url.as_str()).await?;
-    }
-    client.connect().await;
-    let output = publish_event(&client, &event, Some(&urls)).await?;
-    published_event_json(output)
+    let pool = TargetPool::new(&client, &urls).await;
+    let output = pool.publish(&event).await;
+    pool.close().await;
+    published_event_json(output?)
 }
 
 pub async fn broadcast_events(
@@ -1255,20 +1333,16 @@ pub async fn broadcast_events(
             .collect()
     });
 
-    if let Some(ref urls) = target_urls {
-        let add_futures: Vec<_> = urls
-            .iter()
-            .map(|url| client.add_relay(url.as_str()))
-            .collect();
-        futures::future::join_all(add_futures).await;
-        client.connect().await;
-    }
+    let pool = match target_urls {
+        Some(ref urls) => Some(TargetPool::new(&client, urls).await),
+        None => None,
+    };
 
     for event_val in &events {
         let event_str = event_val.to_string();
         if let Ok(event) = Event::from_json(&event_str) {
-            let send_result = if let Some(ref urls) = target_urls {
-                publish_event(&client, &event, Some(urls)).await
+            let send_result = if let Some(ref pool) = pool {
+                pool.publish(&event).await
             } else {
                 publish_event(&client, &event, None).await
             };
@@ -1283,6 +1357,10 @@ pub async fn broadcast_events(
                 }
             }
         }
+    }
+
+    if let Some(pool) = pool {
+        pool.close().await;
     }
 
     let result = serde_json::json!({
@@ -1309,14 +1387,10 @@ pub async fn stream_broadcast_events(
                 .collect()
         });
 
-        if let Some(ref urls) = target_urls {
-            let add_futures: Vec<_> = urls
-                .iter()
-                .map(|url| client.add_relay(url.as_str()))
-                .collect();
-            futures::future::join_all(add_futures).await;
-            client.connect().await;
-        }
+        let pool = match target_urls {
+            Some(ref urls) => Some(std::sync::Arc::new(TargetPool::new(&client, urls).await)),
+            None => None,
+        };
 
         let mut sent = 0u32;
         let mut failed = 0u32;
@@ -1328,14 +1402,14 @@ pub async fn stream_broadcast_events(
                 .iter()
                 .map(|event_val| {
                     let client = client.clone();
-                    let target_urls = target_urls.clone();
+                    let pool = pool.clone();
                     let event_str = event_val.to_string();
                     async move {
                         let Ok(event) = Event::from_json(&event_str) else {
                             return false;
                         };
-                        let result = if let Some(ref urls) = target_urls {
-                            publish_event(&client, &event, Some(urls)).await
+                        let result = if let Some(ref pool) = pool {
+                            pool.publish(&event).await
                         } else {
                             publish_event(&client, &event, None).await
                         };
@@ -1364,8 +1438,12 @@ pub async fn stream_broadcast_events(
                 "done": false,
             });
             if sink.add(progress.to_string()).is_err() {
-                return Ok(());
+                break;
             }
+        }
+
+        if let Some(pool) = pool.and_then(|pool| std::sync::Arc::try_unwrap(pool).ok()) {
+            pool.close().await;
         }
 
         let done = serde_json::json!({
@@ -1606,7 +1684,10 @@ pub async fn fetch_profile_events(
             return Ok(());
         }
 
-        const PAGE_SIZE: usize = 500;
+        const PAGE_SIZE: usize = 200;
+        let max_rounds = if since_timestamp > 0 { 10 } else { 2 };
+        let mut round = 0;
+        let sink_closed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let seen = std::sync::Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
 
         let relay_urls: Vec<RelayUrl> = {
@@ -1647,9 +1728,10 @@ pub async fn fetch_profile_events(
                     .collect()
             };
 
-            if active.is_empty() {
+            if active.is_empty() || round >= max_rounds || sink_closed.load(std::sync::atomic::Ordering::Relaxed) {
                 break;
             }
+            round += 1;
 
             let mut handles = Vec::new();
             for relay_url in active {
@@ -1659,6 +1741,7 @@ pub async fn fetch_profile_events(
                 let cursors = cursors.clone();
                 let exhausted = exhausted.clone();
                 let sink = sink.clone();
+                let sink_closed = sink_closed.clone();
 
                 handles.push(tokio::spawn(async move {
                     let key = relay_url.to_string();
@@ -1686,6 +1769,7 @@ pub async fn fetch_profile_events(
                         }
                     };
 
+                    let page_full = events.len() >= PAGE_SIZE;
                     let mut new_count = 0usize;
                     let mut oldest_ts: Option<u64> = None;
 
@@ -1714,11 +1798,12 @@ pub async fn fetch_profile_events(
                             Err(_) => continue,
                         };
                         if sink.add(json).is_err() {
+                            sink_closed.store(true, std::sync::atomic::Ordering::Relaxed);
                             return false;
                         }
                     }
 
-                    if new_count == 0 {
+                    if new_count == 0 || !page_full {
                         exhausted.lock().await.insert(key);
                     } else if let Some(oldest) = oldest_ts {
                         if oldest == 0 {
@@ -1759,8 +1844,18 @@ pub async fn subscribe_to_events(filter_json: String, sink: StreamSink<String>) 
             .await
             .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
 
+        let mut liveness = tokio::time::interval(Duration::from_secs(2));
         loop {
-            match notifications.recv().await {
+            let received = tokio::select! {
+                received = notifications.recv() => received,
+                _ = liveness.tick() => {
+                    if sink.is_closed() {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            match received {
                 Ok(notification) => {
                     if let RelayPoolNotification::Event {
                         subscription_id,
@@ -2806,15 +2901,16 @@ pub async fn fetch_missing_profiles_for_events(events_json: String) -> Result<u3
         return Ok(0);
     }
 
-    let fetched_count = missing.len() as u32;
+    let requested = missing.len();
     let profile_filter = Filter::new()
         .authors(missing)
         .kind(Kind::Metadata)
-        .limit(fetched_count as usize);
-    let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5))
-        .await;
+        .limit(requested);
+    let fetched = quick_fetch(&client, profile_filter, Duration::from_secs(5))
+        .await
+        .unwrap_or_default();
 
-    Ok(fetched_count)
+    Ok(fetched.len() as u32)
 }
 
 pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32> {

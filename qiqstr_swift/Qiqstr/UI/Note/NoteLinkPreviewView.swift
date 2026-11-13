@@ -16,6 +16,7 @@ actor NoteLinkPreviewService {
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 8
+        config.timeoutIntervalForResource = 12
         config.requestCachePolicy = .returnCacheDataElseLoad
         config.httpAdditionalHeaders = ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1", "Accept": "text/html"]
         return URLSession(configuration: config)
@@ -37,9 +38,21 @@ actor NoteLinkPreviewService {
 
     private func fetch(_ string: String) async -> NoteLinkMetadata? {
         guard let url = URL(string: string), url.scheme?.hasPrefix("http") == true else { return nil }
-        guard let (data, response) = try? await session.data(from: url) else { return nil }
-        if let mime = (response as? HTTPURLResponse)?.mimeType, !mime.contains("html") { return nil }
-        let html = String(decoding: data.prefix(400_000), as: UTF8.self)
+        guard let (bytes, response) = try? await session.bytes(from: url),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        if let mime = http.mimeType, !mime.contains("html") { bytes.task.cancel(); return nil }
+        var data = Data()
+        data.reserveCapacity(65_536)
+        do {
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count >= 400_000 { break }
+            }
+        } catch {
+            return nil
+        }
+        bytes.task.cancel()
+        let html = String(decoding: data, as: UTF8.self)
         let meta = Self.metaTags(html)
         let title = meta["og:title"] ?? meta["twitter:title"] ?? Self.titleTag(html)
         guard let title, !title.isEmpty else { return nil }

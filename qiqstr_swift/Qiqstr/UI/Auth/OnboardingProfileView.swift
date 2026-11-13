@@ -52,7 +52,9 @@ final class OnboardingProfileViewModel {
         defer { if isPicture { isUploadingPicture = false } else { isUploadingBanner = false } }
         do {
             guard let raw = try await item.loadTransferable(type: Data.self) else { return }
-            let (data, mime) = Self.prepare(raw, type: item.supportedContentTypes.first)
+            let type = item.supportedContentTypes.first
+            let maxPixel: CGFloat = isPicture ? 1024 : 2048
+            let (data, mime) = await Task.detached(priority: .userInitiated) { Self.prepare(raw, type: type, maxPixel: maxPixel) }.value
             let url = try await MediaUploadService.shared.upload(data: data, mimeType: mime)
             guard !url.isEmpty else { throw CoreError(L("authUploadNoUrl")) }
             if isPicture { picture = url } else { banner = url }
@@ -72,6 +74,7 @@ final class OnboardingProfileViewModel {
             ToastCenter.shared.show(L("privateKeyNotFound"), style: .error)
             return false
         }
+        if [name, about, picture, banner, lud16, website].allSatisfy(\.authTrimmed.isEmpty) { return true }
         isSaving = true
         defer { isSaving = false }
         let profile = Profile(
@@ -97,9 +100,9 @@ final class OnboardingProfileViewModel {
         }
     }
 
-    private static func prepare(_ data: Data, type: UTType?) -> (Data, String) {
+    nonisolated private static func prepare(_ data: Data, type: UTType?, maxPixel: CGFloat) -> (Data, String) {
         if type?.conforms(to: .gif) == true { return (data, "image/gif") }
-        if let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.85) { return (jpeg, "image/jpeg") }
+        if let image = ImagePipeline.downsample(data, maxPixel: maxPixel), let jpeg = image.jpegData(compressionQuality: 0.85) { return (jpeg, "image/jpeg") }
         return (data, type?.preferredMIMEType ?? "image/jpeg")
     }
 }
@@ -154,6 +157,11 @@ struct OnboardingProfileView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) { OnboardingStepIndicator(current: 2) }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(L("skip")) { onDone() }
+                    .disabled(model.isSaving)
+                    .accessibilityIdentifier("onboarding-profile-skip")
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button(L("done")) { focus = nil }

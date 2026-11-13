@@ -177,6 +177,7 @@ struct FollowPackView: View {
     @State private var packs = FollowPackService.shared
     @State private var follows = FollowService.shared
     @State private var confirmFollowAll = false
+    @State private var confirmNewList = false
     @State private var isFollowing = false
 
     private var pack: FollowPack? { packs.packs.first { $0.id == packId } }
@@ -204,6 +205,9 @@ struct FollowPackView: View {
         .confirmationDialog(L("explorePackFollowAllConfirm", ["count": remaining.count]), isPresented: $confirmFollowAll, titleVisibility: .visible) {
             Button(L("authFollowAll")) { Task { await followAll() } }
             Button(L("cancel"), role: .cancel) {}
+        }
+        .newFollowListConfirmation(isPresented: $confirmNewList) {
+            Task { await followAll(creatingList: true) }
         }
         .accessibilityIdentifier("follow-pack-view")
     }
@@ -266,12 +270,14 @@ struct FollowPackView: View {
         .task { await ProfileCache.shared.load(Array(pack.members.prefix(60))) }
     }
 
-    private func followAll() async {
+    private func followAll(creatingList: Bool = false) async {
         isFollowing = true
         defer { isFollowing = false }
         do {
-            try await follows.follow(many: remaining)
+            try await follows.follow(many: remaining, creatingList: creatingList)
             ToastCenter.shared.show(L("explorePackFollowed"), style: .success)
+        } catch FollowError.listNotFound {
+            confirmNewList = true
         } catch {
             ToastCenter.shared.error(error)
         }

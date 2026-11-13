@@ -36,27 +36,19 @@ struct ProfileActionButtons: View {
     }
 }
 
-enum ReportReason: String, CaseIterable, Identifiable {
-    case spam, nudity, profanity, illegal, impersonation, other
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .spam: L("reportReasonSpam")
-        case .nudity: L("reportReasonNudity")
-        case .profanity: L("reportReasonProfanity")
-        case .illegal: L("reportReasonIllegal")
-        case .impersonation: L("reportReasonImpersonation")
-        case .other: L("reportReasonOther")
-        }
-    }
-}
-
 struct ProfileModerationModifier: ViewModifier {
     let model: ProfileViewModel
     @Binding var confirmMute: Bool
     @Binding var showReport: Bool
     @State private var mutes = MuteService.shared
     @State private var feedback = 0
+
+    private var reportTarget: Binding<ReportTarget?> {
+        Binding(
+            get: { showReport ? ReportTarget(pubkey: model.pubkey, name: model.displayName) : nil },
+            set: { if $0 == nil { showReport = false } }
+        )
+    }
 
     func body(content: Content) -> some View {
         content
@@ -67,34 +59,15 @@ struct ProfileModerationModifier: ViewModifier {
             } message: {
                 Text(L("muteUserDescription"))
             }
-            .confirmationDialog(L("reportUser", ["user": model.displayName]), isPresented: $showReport, titleVisibility: .visible) {
-                ForEach(ReportReason.allCases) { reason in
-                    Button(reason.title, role: .destructive) { Task { await report(reason) } }
-                        .accessibilityIdentifier("report-\(reason.rawValue)")
-                }
-                Button(L("cancel"), role: .cancel) {}
-            } message: {
-                Text(L("reportUserDescription"))
-            }
+            .reportSheet(reportTarget) { _ in feedback += 1 }
             .sensoryFeedback(.success, trigger: feedback)
     }
 
     private func setMuted(_ muted: Bool) async {
         do {
             if muted { try await mutes.mute(model.pubkey) } else { try await mutes.unmute(model.pubkey) }
-            Session.shared.mutedPubkeys = mutes.mutedPubkeys
             feedback += 1
             DataBus.shared.feedChanged()
-        } catch {
-            ToastCenter.shared.error(error)
-        }
-    }
-
-    private func report(_ reason: ReportReason) async {
-        do {
-            try await InteractionService.shared.report(pubkey: model.pubkey, noteId: nil, reason: reason.rawValue)
-            feedback += 1
-            ToastCenter.shared.show(L("reportSubmitted"), style: .success)
         } catch {
             ToastCenter.shared.error(error)
         }
@@ -103,7 +76,6 @@ struct ProfileModerationModifier: ViewModifier {
     static func unmute(_ model: ProfileViewModel) async {
         do {
             try await MuteService.shared.unmute(model.pubkey)
-            Session.shared.mutedPubkeys = MuteService.shared.mutedPubkeys
             DataBus.shared.feedChanged()
         } catch {
             ToastCenter.shared.error(error)

@@ -40,6 +40,9 @@ pub fn generate_keypair() -> KeyPair { let (a, b) = api::crypto::generate_keypai
 pub fn extract_embedded_ids_batch_typed(contents: Vec<String>) -> EmbeddedIds { let (a, b) = api::database::extract_embedded_ids_batch_typed(contents); EmbeddedIds { event_ids: a, addresses: b } }
 
 #[uniffi::export]
+pub fn cashu_set_account(pubkey_hex: String) -> Result<(), QiqError> { api::cashu::cashu_set_account(pubkey_hex).map_err(Into::into) }
+
+#[uniffi::export]
 pub async fn cashu_receive_and_melt(token: String, lightning_target: String) -> Result<String, QiqError> { on_rt(async move { api::cashu::cashu_receive_and_melt(token, lightning_target).await }).await }
 
 #[uniffi::export]
@@ -98,6 +101,9 @@ pub fn ncryptsec_decrypt(ncryptsec: String, password: String) -> Result<String, 
 
 #[uniffi::export]
 pub fn set_active_mute_list(muted_pubkeys: Vec<String>, muted_words: Vec<String>) -> () { api::database::set_active_mute_list(muted_pubkeys, muted_words) }
+
+#[uniffi::export]
+pub fn set_known_zappers(zappers_json: String) -> () { api::database::set_known_zappers(zappers_json) }
 
 #[uniffi::export]
 pub fn is_event_new_and_track(event_id: String) -> bool { api::database::is_event_new_and_track(event_id) }
@@ -328,6 +334,9 @@ pub async fn db_get_notifications_missing_profiles(user_pubkey_hex: String, limi
 pub fn create_signed_event(kind: u16, content: String, tags: Vec<Vec<String>>, private_key_hex: String) -> Result<String, QiqError> { api::events::create_signed_event(kind, content, tags, private_key_hex).map_err(Into::into) }
 
 #[uniffi::export]
+pub fn zap_receipt_summary(event_json: String) -> Result<String, QiqError> { api::events::zap_receipt_summary(event_json).map_err(Into::into) }
+
+#[uniffi::export]
 pub fn create_note_event(content: String, tags: Vec<Vec<String>>, private_key_hex: String) -> Result<String, QiqError> { api::events::create_note_event(content, tags, private_key_hex).map_err(Into::into) }
 
 #[uniffi::export]
@@ -397,6 +406,9 @@ pub fn marmot_groups() -> Result<String, QiqError> { api::marmot::marmot_groups(
 pub fn marmot_messages(group_id_hex: String, limit: u32) -> Result<String, QiqError> { api::marmot::marmot_messages(group_id_hex, limit).map_err(Into::into) }
 
 #[uniffi::export]
+pub fn marmot_messages_page(group_id_hex: String, limit: u32, offset: u32) -> Result<String, QiqError> { api::marmot::marmot_messages_page(group_id_hex, limit, offset).map_err(Into::into) }
+
+#[uniffi::export]
 pub fn marmot_groups_needing_self_update(threshold_secs: u64) -> Result<Vec<String>, QiqError> { api::marmot::marmot_groups_needing_self_update(threshold_secs).map_err(Into::into) }
 
 #[uniffi::export]
@@ -448,6 +460,9 @@ pub fn nip44_encrypt(content: String, sender_sk_hex: String, receiver_pk_hex: St
 pub fn nip44_decrypt(payload: String, receiver_sk_hex: String, sender_pk_hex: String) -> Result<String, QiqError> { api::nip44::nip44_decrypt(payload, receiver_sk_hex, sender_pk_hex).map_err(Into::into) }
 
 #[uniffi::export]
+pub fn nip04_decrypt(payload: String, receiver_sk_hex: String, sender_pk_hex: String) -> Result<String, QiqError> { api::nip44::nip04_decrypt(payload, receiver_sk_hex, sender_pk_hex).map_err(Into::into) }
+
+#[uniffi::export]
 pub fn validate_nwc_uri(uri: String) -> bool { api::nwc::validate_nwc_uri(uri) }
 
 #[uniffi::export]
@@ -455,6 +470,9 @@ pub fn parse_nwc_uri(uri: String) -> Result<String, QiqError> { api::nwc::parse_
 
 #[uniffi::export]
 pub async fn nwc_pay_invoice(nwc_uri: String, invoice: String) -> Result<String, QiqError> { on_rt(async move { api::nwc::nwc_pay_invoice(nwc_uri, invoice).await }).await }
+
+#[uniffi::export]
+pub async fn nwc_lookup_invoice(nwc_uri: String, invoice: String) -> Result<String, QiqError> { on_rt(async move { api::nwc::nwc_lookup_invoice(nwc_uri, invoice).await }).await }
 
 #[uniffi::export]
 pub async fn nwc_get_balance(nwc_uri: String) -> Result<String, QiqError> { on_rt(async move { api::nwc::nwc_get_balance(nwc_uri).await }).await }

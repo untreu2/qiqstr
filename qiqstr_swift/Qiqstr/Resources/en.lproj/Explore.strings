@@ -150,3 +150,4 @@
 "exploreDiscoverFeeds" = "Discover feeds";
 "explorePackFollowAllConfirm" = "{count, plural, =1{Follow 1 person?} other{Follow {count} people?}}";
 "explorePackFollowed" = "Followed everyone in this pack";
+"searchSecretBlocked" = "That looks like a private key or recovery phrase, so it was not searched or saved. Never share it.";

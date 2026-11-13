@@ -47,3 +47,17 @@
 "dmRequestsEmptyTitle" = "No message requests";
 "dmRequestsEmptyMessage" = "Messages from people you don't follow and haven't replied to appear here.";
 "dmSearchNewPerson" = "You haven't messaged this person yet.";
+"dmDeleteConversation" = "Delete conversation";
+"dmDeleteConversationMessage" = "This removes the conversation from this device. The other person keeps their copy.";
+"dmBlockUser" = "Block {user}?";
+"dmBlockMessage" = "You will no longer receive messages from this user or see their notes.";
+"dmUnblock" = "Unblock";
+"dmUserBlocked" = "User blocked";
+"dmLoadMedia" = "Tap to load media";
+"dmLoadEarlier" = "Load earlier messages";
+"dmRequestNotice" = "{name} wants to message you. You don't follow them, so their photos and videos stay hidden until you accept. They won't know you've seen this.";
+"dmRequestAccept" = "Accept";
+"dmSpokenMessage" = "{sender}: {text}";
+"dmSpokenPhoto" = "Photo from {sender}";
+"dmSpokenVideo" = "Video from {sender}";
+"dmRetryMediaHint" = "Double-tap to try loading again";

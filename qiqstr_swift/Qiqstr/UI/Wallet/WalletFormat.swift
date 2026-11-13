@@ -1,5 +1,17 @@
 import Foundation
 
+nonisolated enum SatsAmount {
+    static let maximum = 2_100_000_000_000_000
+
+    static func isValid(_ sats: Int) -> Bool { sats > 0 && sats <= maximum }
+
+    static func msat(_ sats: Int) -> Int64? {
+        guard isValid(sats) else { return nil }
+        let (value, overflow) = Int64(sats).multipliedReportingOverflow(by: 1000)
+        return overflow ? nil : value
+    }
+}
+
 enum WalletFormat {
     static func sats(_ value: Int) -> String { Sats.format(abs(value)) }
 

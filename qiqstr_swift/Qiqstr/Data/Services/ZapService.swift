@@ -7,9 +7,11 @@ enum ZapError: LocalizedError {
     case noLightningAddress
     case zapsNotSupported
     case invalidAmount
+    case inProgress
 
     var errorDescription: String? {
         switch self {
+        case .inProgress: L("zapInProgress")
         case .noWallet: L("pleaseConnectWalletFirst")
         case .noAccount: L("walletNoAccount")
         case .noLightningAddress: L("userNoLightningAddress")
@@ -30,6 +32,7 @@ struct ZapFailure: Identifiable, Equatable {
     var note: Note
     var amountSats: Int
     var message: String
+    var mayHaveSettled = false
 }
 
 struct ZapRecipient: Hashable, Sendable {
@@ -47,6 +50,7 @@ final class ZapService {
     static let presetAmounts = [21, 100, 500, 1000, 5000, 10000]
     static let oneTapKey = "one_tap_zap"
     static let defaultAmountKey = "default_zap_amount"
+    static let quickZapLimit = 5_000
     static let lastAmountKey = "last_zap_amount"
 
     static var defaultAmount: Int {
@@ -95,7 +99,7 @@ final class ZapService {
     @discardableResult
     func retry(_ failure: ZapFailure) async -> QuickZapResult {
         if self.failure?.id == failure.id { self.failure = nil }
-        guard canZap else { return .needsSheet }
+        guard canZap, !failure.mayHaveSettled else { return .needsSheet }
         return await quickZap(note: failure.note, amountSats: failure.amountSats)
     }
 
@@ -113,7 +117,7 @@ final class ZapService {
         } catch {
             let message = coreMessage(error)
             failureTick += 1
-            failure = ZapFailure(note: note, amountSats: amountSats, message: message)
+            failure = ZapFailure(note: note, amountSats: amountSats, message: message, mayHaveSettled: (error as? WalletError) == .paymentPending)
             if failureHosts == 0 { ToastCenter.shared.show("\(L("failedToZap")): \(message)", style: .error) }
             return .failed(message)
         }
@@ -141,19 +145,24 @@ final class ZapService {
 
     func zap(note: Note?, pubkey: String, amountSats: Int, comment: String) async throws {
         guard canZap else { throw ZapError.noWallet }
-        guard amountSats > 0 else { throw ZapError.invalidAmount }
+        guard let amountMsat = SatsAmount.msat(amountSats) else { throw ZapError.invalidAmount }
+        if let note {
+            guard pendingSats[note.id] == nil else { throw ZapError.inProgress }
+            pendingSats[note.id] = amountSats
+        }
+        defer { if let note { pendingSats[note.id] = nil } }
         let privateKey = try Session.shared.requireSigner()
         let recipient = await recipient(pubkey)
         let params: LnurlPayParams
         if let address = recipient.lightningAddress {
             params = try await Lnurl.payParams(address: address)
+            ZapperDirectory.shared.record(pubkey, address: address, params: params)
         } else if let url = recipient.lnurl {
             params = try await Lnurl.payParams(url: url)
         } else {
             throw ZapError.noLightningAddress
         }
         guard params.allowsNostr, let nostrPubkey = params.nostrPubkey, !nostrPubkey.isEmpty else { throw ZapError.zapsNotSupported }
-        let amountMsat = Int64(amountSats) * 1000
         var tags: [[String]] = [
             ["relays"] + RelayConfig.mainRelays,
             ["amount", String(amountMsat)],
@@ -164,8 +173,6 @@ final class ZapService {
             tags.append(["e", note.id])
             tags.append(["k", "1"])
         }
-        if let note { pendingSats[note.id] = amountSats }
-        defer { if let note { pendingSats[note.id] = nil } }
         let zapRequest = try createZapRequestEvent(tags: tags, content: comment.trimmingCharacters(in: .whitespacesAndNewlines), privateKeyHex: privateKey)
         let invoice = try await Lnurl.requestInvoice(params, amountMsat: amountMsat, zapRequest: zapRequest)
         try await WalletService.shared.payBolt11(invoice)

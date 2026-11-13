@@ -333,6 +333,7 @@ final class FeedViewModel {
 
     func refresh() async {
         acceptNext = true
+        exhaustedRelays = false
         switch source {
         case .explore:
             exploreHidden = ExploreSeenStore.shared.snapshot()
@@ -366,10 +367,10 @@ final class FeedViewModel {
         var result = await query(limit: limit)
         guard generation == self.generation else { return }
         if result.count <= previousCount || result.count < limit {
-            let oldest = (result.isEmpty ? notes : result).map(\.createdAt).filter { $0 > 0 }.min() ?? TimeFormat.now
+            let oldest = (result.isEmpty ? notes : result).map(\.displayTimestamp).filter { $0 > 0 }.min() ?? TimeFormat.now
             let received = await fetchOlder(until: oldest)
             guard generation == self.generation else { return }
-            if received == 0 { exhaustedRelays = true }
+            if received == 0, await SyncService.shared.hasConnectedRelays() { exhaustedRelays = true }
             result = await query(limit: limit)
             guard generation == self.generation else { return }
         }

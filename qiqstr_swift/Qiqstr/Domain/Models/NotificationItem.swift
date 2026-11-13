@@ -24,6 +24,6 @@ struct NotificationItem: Identifiable, Hashable, Sendable {
         createdAt = j.int("createdAt")
         fromName = j.str("fromName")
         fromImage = j.str("fromImage")
-        zapAmount = j.int("zapAmount")
+        zapAmount = min(max(0, j.int("zapAmount")), SatsAmount.maximum)
     }
 }

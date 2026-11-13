@@ -141,6 +141,13 @@ struct RelaySettingsView: View {
         }
         .onDisappear { model.stopStatus() }
         .sheet(isPresented: $model.showAdd) { addSheet }
+        .confirmationDialog(L("relayPublishReplaceTitle"), isPresented: Binding(get: { model.publishChanges != nil }, set: { if !$0 { model.publishChanges = nil } }), titleVisibility: .visible, presenting: model.publishChanges) { _ in
+            Button(L("publish"), role: .destructive) { Task { await model.publish(confirmed: true) } }
+                .accessibilityIdentifier("relays-publish-confirm")
+            Button(L("cancel"), role: .cancel) {}
+        } message: { changes in
+            Text(L("relayPublishReplaceMessage", ["added": changes.added, "removed": changes.removed]))
+        }
         .confirmationDialog(L("resetToDefaults"), isPresented: $model.showResetConfirm, titleVisibility: .visible) {
             Button(L("reset"), role: .destructive) { Task { await model.resetToDefaults() } }
                 .accessibilityIdentifier("relays-reset-confirm")

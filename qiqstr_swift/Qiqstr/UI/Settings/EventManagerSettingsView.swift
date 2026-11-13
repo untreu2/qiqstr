@@ -137,10 +137,6 @@ final class EventManagerModel {
     }
 
     func beginDelete() {
-        guard !events.isEmpty else {
-            ToastCenter.shared.show(L("noEventsFoundToDelete"), style: .error)
-            return
-        }
         showDeleteConfirm = true
     }
 
@@ -156,21 +152,23 @@ final class EventManagerModel {
     func deleteAccount() async {
         guard canConfirmVanish, !isDeleting else { return }
         let ids = events.compactMap { JSON.object($0)?.str("id") }
-        guard !ids.isEmpty else {
-            ToastCenter.shared.show(L("noValidEventIds"), style: .error)
-            return
-        }
         isDeleting = true
         defer { isDeleting = false }
         let reason = "User requested account deletion"
         do {
-            let deletion = JSON.object(try await deleteEvents(eventIds: ids, reason: reason)) ?? [:]
-            let deleteSuccess = deletion.int("totalSuccess")
-            if deleteSuccess > 0 {
-                let key = deleteSuccess == 1 ? "deletionRequestSent" : "deletionRequestSentPlural"
-                ToastCenter.shared.show(L(key, ["count": ids.count, "relays": deleteSuccess]), style: .success)
+            if !ids.isEmpty {
+                var deleteSuccess = 0
+                for start in stride(from: 0, to: ids.count, by: 200) {
+                    let chunk = Array(ids[start..<min(start + 200, ids.count)])
+                    let deletion = JSON.object(try? await deleteEvents(eventIds: chunk, reason: reason)) ?? [:]
+                    deleteSuccess = max(deleteSuccess, deletion.int("totalSuccess"))
+                }
+                if deleteSuccess > 0 {
+                    let key = deleteSuccess == 1 ? "deletionRequestSent" : "deletionRequestSentPlural"
+                    ToastCenter.shared.show(L(key, ["count": ids.count, "relays": deleteSuccess]), style: .success)
+                }
+                try? await Task.sleep(for: .milliseconds(500))
             }
-            try? await Task.sleep(for: .milliseconds(500))
             let vanish = JSON.object(try await requestToVanish(relayUrls: ["ALL_RELAYS"], reason: reason)) ?? [:]
             let vanishSuccess = vanish.int("totalSuccess")
             if vanishSuccess > 0 {
@@ -179,11 +177,14 @@ final class EventManagerModel {
                 feedback += 1
                 try? await Task.sleep(for: .seconds(2))
                 stop()
-                await Session.shared.logout()
+                await Session.shared.logout(erasingData: true)
             } else {
                 let failed = vanish.int("totalFailed")
                 let key = failed == 1 ? "vanishRequestFailed" : "vanishRequestFailedPlural"
                 ToastCenter.shared.show(L(key, ["relays": failed]), style: .error)
+                try? await Task.sleep(for: .seconds(2))
+                stop()
+                await Session.shared.logout(erasingData: true)
             }
         } catch {
             ToastCenter.shared.show(L("errorDeletingAccount", ["error": coreErrorMessage(error)]), style: .error)
@@ -322,19 +323,21 @@ struct EventManagerSettingsView: View {
                     }
                 }
             }
-            Section {
-                Button(role: .destructive) { model.beginDelete() } label: {
-                    HStack(spacing: 8) {
-                        Spacer()
-                        Text(L("deleteAccount"))
-                        if model.isDeleting { ProgressView() }
-                        Spacer()
+            if Session.shared.canSign {
+                Section {
+                    Button(role: .destructive) { model.beginDelete() } label: {
+                        HStack(spacing: 8) {
+                            Spacer()
+                            Text(L("deleteAccount"))
+                            if model.isDeleting { ProgressView() }
+                            Spacer()
+                        }
                     }
+                    .disabled(model.isBusy)
+                    .accessibilityIdentifier("events-delete-account")
+                } footer: {
+                    Text(L("settingsVanishFooter"))
                 }
-                .disabled(model.isBusy || model.isScanning)
-                .accessibilityIdentifier("events-delete-account")
-            } footer: {
-                Text(L("settingsVanishFooter"))
             }
         }
         .settingsListStyle()

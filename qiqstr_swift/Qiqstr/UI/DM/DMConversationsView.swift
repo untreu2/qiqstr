@@ -4,10 +4,12 @@ struct DMConversationsView: View {
     @State private var model = DMConversationsViewModel()
     @State private var bus = DataBus.shared
     @State private var router = Router.shared
+    @State private var safety = DMSafetyModel()
 
     var body: some View {
         content
             .background(AppColors.background)
+            .modifier(DMSafetyDialogs(safety: safety))
             .navigationTitle(L("messages"))
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: $model.query, prompt: L("search"))
@@ -32,7 +34,12 @@ struct DMConversationsView: View {
 
     @ViewBuilder
     private var content: some View {
-        if model.isInitialLoading {
+        if !Session.shared.canSign {
+            EmptyStateView(systemImage: "lock", title: L("readOnlyTitle"), message: L("readOnlyMessage"), actionTitle: L("readOnlyAddKey")) {
+                ReadOnlyGate.shared.addKey()
+            }
+            .accessibilityIdentifier("dm-read-only")
+        } else if model.isInitialLoading {
             LoadingView().accessibilityIdentifier("dm-loading")
         } else {
             List {
@@ -145,6 +152,11 @@ struct DMConversationsView: View {
                 Label(L("dmCopyNpub"), systemImage: "doc.on.doc")
             }
             .tint(.indigo)
+            Button(role: .destructive) {
+                safety.deleteTarget = conversation.peer
+            } label: {
+                Label(L("dmDeleteConversation"), systemImage: "trash")
+            }
         }
         .contextMenu {
             Button {
@@ -169,6 +181,7 @@ struct DMConversationsView: View {
             } label: {
                 Label(L("dmCopyNpub"), systemImage: "doc.on.doc")
             }
+            DMSafetyMenuItems(peer: conversation.peer, safety: safety)
         }
         .accessibilityIdentifier("dm-conversation-\(conversation.peer)")
     }

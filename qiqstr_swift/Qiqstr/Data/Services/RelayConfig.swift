@@ -10,14 +10,30 @@ enum GossipMode: String, CaseIterable, Identifiable {
 enum RelayConfig {
     static let defaultMainRelays = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://vitor.nostr1.com"]
     static let discoveryRelays = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://vitor.nostr1.com", "wss://nostr.bitcoiner.social", "wss://nostr.mom"]
-    static let primalCacheUrl = "wss://cache2.primal.net/v1"
-    static let vertexRelayUrl = "wss://relay.vertexlab.io"
+    static let indexerRelays = ["wss://purplepag.es", "wss://nostr.mom", "wss://relay.primal.net"]
+    nonisolated static let primalCacheUrl = "wss://cache2.primal.net/v1"
+    nonisolated static let vertexRelayUrl = "wss://relay.vertexlab.io"
     static let blossomServer = "https://blossom.primal.net"
     static let encryptedMediaServers = [blossomServer, "https://nostr.download"]
 
     static var mainRelays: [String] {
-        get { UserDefaults.standard.stringArray(forKey: "custom_main_relays") ?? defaultMainRelays }
-        set { UserDefaults.standard.set(newValue, forKey: "custom_main_relays") }
+        get {
+            guard let stored = UserDefaults.standard.stringArray(forKey: "custom_main_relays") else { return defaultMainRelays }
+            let valid = stored.filter(isUsableRelayURL)
+            return valid.isEmpty ? defaultMainRelays : valid
+        }
+        set { UserDefaults.standard.set(newValue.filter(isUsableRelayURL), forKey: "custom_main_relays") }
+    }
+
+    nonisolated static func isUsableRelayURL(_ raw: String) -> Bool {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value == raw, !value.contains(where: \.isWhitespace),
+              let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(), scheme == "wss" || scheme == "ws",
+              let host = components.host, !host.isEmpty,
+              value.components(separatedBy: "://").count == 2 else { return false }
+        if let port = components.port, !(1...65535).contains(port) { return false }
+        return true
     }
 
     static func resetRelays() { UserDefaults.standard.removeObject(forKey: "custom_main_relays") }

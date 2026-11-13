@@ -39,6 +39,7 @@ cdk-sqlite = { version = "0.16", default-features = false, features = ["wallet"]
 mdk-core = { version = "0.8.0", features = ["mip04"] }
 mdk-sqlite-storage = "0.8.0"
 mdk-storage-traits = "0.8.0"
+openmls = { version = "0.8", default-features = false }
 
 [profile.release]
 opt-level = "z"

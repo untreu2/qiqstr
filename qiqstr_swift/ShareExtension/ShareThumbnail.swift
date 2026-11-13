@@ -18,8 +18,9 @@ struct ShareThumbnail: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .controlSize(.mini)
-                .padding(4)
+                .controlSize(.small)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
                 .accessibilityLabel(Text("shareRemoveImage"))
             }
     }

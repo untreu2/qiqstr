@@ -1,3 +1,5 @@
+import AVFoundation
+import ImageIO
 import Foundation
 import Observation
 import PhotosUI
@@ -86,9 +88,22 @@ final class ComposeViewModel {
         if let draft = pending?.contextKey == contextKey ? pending : store.latest(contextKey: contextKey) {
             apply(draft)
         }
-        if context == .newNote, let shared = SharedInbox.defaults?.string(forKey: "compose_prefill_text"), !shared.isEmpty {
-            text = text.isEmpty ? shared : text + "\n" + shared
+        if context == .newNote, let share = SharedInbox.shared.pending {
+            if !share.text.isEmpty { text = text.isEmpty ? share.text : text + "\n" + share.text }
+            let images = share.imageURLs.prefix(max(0, Self.maxAttachments - attachments.count)).compactMap { try? Data(contentsOf: $0) }
             SharedInbox.shared.consume()
+            if !images.isEmpty { Task { await self.importShared(images) } }
+        }
+    }
+
+    private func importShared(_ images: [Data]) async {
+        for data in images {
+            guard let image = UIImage(data: data) else { continue }
+            let preview = ImagePipeline.downsample(data, maxPixel: 400)
+            let attachment = ComposeAttachment(preview: preview, isVideo: false, dimensions: CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale), blurhash: preview.flatMap { BlurHash.encode($0) })
+            attachment.payload = (MediaSanitizer.strippedImage(data, mime: "image/jpeg") ?? data, "image/jpeg")
+            attachments.append(attachment)
+            await upload(attachment)
         }
     }
 
@@ -338,28 +353,55 @@ final class ComposeViewModel {
     private func add(_ item: PhotosPickerItem) async {
         let type = item.supportedContentTypes.first
         let isVideo = type?.conforms(to: .movie) == true || type?.conforms(to: .video) == true
-        guard let data = try? await item.loadTransferable(type: Data.self) else {
-            ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
-            return
+        var mime = type?.preferredMIMEType ?? (isVideo ? "video/mp4" : "image/jpeg")
+        if isVideo, mime.isEmpty { mime = "video/quicktime" }
+        let data: Data
+        if isVideo {
+            guard let movie = try? await item.loadTransferable(type: PickedMovie.self) else {
+                ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
+                return
+            }
+            defer { movie.discard() }
+            guard movie.size <= Self.maxFileSize else {
+                ToastCenter.shared.show(L("fileTooLarge"), style: .error)
+                return
+            }
+            guard let stripped = await MediaSanitizer.strippedVideo(at: movie.url, mime: mime) else {
+                ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
+                return
+            }
+            data = stripped
+        } else {
+            guard let loaded = try? await item.loadTransferable(type: Data.self) else {
+                ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
+                return
+            }
+            data = loaded
         }
         var payload = data
-        var mime = type?.preferredMIMEType ?? (isVideo ? "video/mp4" : "image/jpeg")
         var preview: UIImage?
         var dimensions: CGSize?
-        if isVideo {
-            if mime == "video/quicktime" || mime.isEmpty { mime = "video/quicktime" }
-        } else if let image = UIImage(data: data) {
-            dimensions = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
-            preview = ImagePipeline.downsample(data, maxPixel: 400)
-            if mime != "image/gif", mime != "image/png" || data.count > 4_000_000 {
-                if let jpeg = image.jpegData(compressionQuality: 0.86) {
-                    payload = jpeg
-                    mime = "image/jpeg"
+        if !isVideo {
+            let inputMime = mime
+            let prepared = await Task.detached(priority: .userInitiated) { () -> (Data, String, UIImage?, CGSize)? in
+                guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                      let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                      let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+                      let height = properties[kCGImagePropertyPixelHeight] as? CGFloat else { return nil }
+                let preview = ImagePipeline.downsample(data, maxPixel: 400)
+                if inputMime == "image/gif" { return (data, inputMime, preview, CGSize(width: width, height: height)) }
+                guard let image = ImagePipeline.downsample(data, maxPixel: 4096) else { return nil }
+                if inputMime == "image/png", data.count <= 4_000_000, let png = image.pngData() {
+                    return (png, "image/png", preview, CGSize(width: image.size.width, height: image.size.height))
                 }
+                guard let jpeg = image.jpegData(compressionQuality: 0.86) else { return nil }
+                return (jpeg, "image/jpeg", preview, CGSize(width: image.size.width, height: image.size.height))
+            }.value
+            guard let prepared else {
+                ToastCenter.shared.show(L("invalidMediaFileType"), style: .error)
+                return
             }
-        } else {
-            ToastCenter.shared.show(L("invalidMediaFileType"), style: .error)
-            return
+            (payload, mime, preview, dimensions) = (prepared.0, prepared.1, prepared.2, prepared.3)
         }
         guard payload.count <= Self.maxFileSize else {
             ToastCenter.shared.show(L("fileTooLarge"), style: .error)
@@ -409,6 +451,10 @@ final class ComposeViewModel {
     func post() async -> Bool {
         guard canPost else {
             if !hasContent { ToastCenter.shared.show(L("emptyNoteMessage"), style: .error) }
+            return false
+        }
+        guard !SearchService.containsSecret(text) else {
+            ToastCenter.shared.show(L("composeSecretBlocked"), style: .error)
             return false
         }
         isPosting = true

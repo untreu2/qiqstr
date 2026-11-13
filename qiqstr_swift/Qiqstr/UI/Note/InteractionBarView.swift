@@ -23,8 +23,10 @@ struct InteractionBarView: View {
             Spacer(minLength: 4)
             likeButton
             Spacer(minLength: 4)
-            zapButton
-            Spacer(minLength: 4)
+            if AppStorePolicy.allowsContentZaps {
+                zapButton
+                Spacer(minLength: 4)
+            }
             moreMenu
         }
         .font(compact ? .subheadline : .body)
@@ -78,7 +80,7 @@ struct InteractionBarView: View {
         .menuStyle(.button)
         .buttonStyle(InteractionPressStyle())
         .accessibilityLabel(L("repost"))
-        .accessibilityValue(model.counts.hasReposted ? L("reposted") : "")
+        .accessibilityValue(Self.spoken(model.counts.reposts, state: model.counts.hasReposted ? L("reposted") : nil))
         .accessibilityIdentifier("note-repost")
     }
 
@@ -115,7 +117,7 @@ struct InteractionBarView: View {
         }
         .disabled(model.isReacting)
         .accessibilityLabel(L("reaction"))
-        .accessibilityValue(model.counts.hasReacted ? L("liked") : "")
+        .accessibilityValue(Self.spoken(model.counts.reactions, state: model.counts.hasReacted ? L("liked") : nil))
         .accessibilityAction(named: L("reactWithEmoji")) { showReactions = true }
         .accessibilityIdentifier("note-like")
     }
@@ -143,7 +145,12 @@ struct InteractionBarView: View {
         }
         .buttonStyle(InteractionPressStyle())
         .accessibilityLabel(L("zap"))
+        .accessibilityValue(model.counts.zapAmount > 0 ? L("notificationZapSatsCount", ["count": model.counts.zapAmount]) : "")
         .accessibilityIdentifier("note-zap")
+    }
+
+    private static func spoken(_ count: Int, state: String?) -> String {
+        [state, count > 0 ? count.formatted() : nil].compactMap { $0 }.joined(separator: ", ")
     }
 
     private var moreMenu: some View {
@@ -151,7 +158,7 @@ struct InteractionBarView: View {
             NoteMenuItems(note: note, actions: actions)
         } label: {
             Image(systemName: "ellipsis")
-                .frame(width: 36, height: 32)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .menuStyle(.button)

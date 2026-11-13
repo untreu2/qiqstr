@@ -37,6 +37,7 @@ struct ExploreFollowButton: View {
     @State private var follows = FollowService.shared
     @State private var busy = false
     @State private var feedback = 0
+    @State private var confirmNewList = false
 
     var body: some View {
         let following = follows.isFollowing(pubkey)
@@ -53,6 +54,9 @@ struct ExploreFollowButton: View {
         .disabled(busy)
         .sensoryFeedback(.impact(weight: .light), trigger: feedback)
         .accessibilityIdentifier("user-follow-\(pubkey)")
+        .newFollowListConfirmation(isPresented: $confirmNewList) {
+            Task { await toggle(false, creatingList: true) }
+        }
     }
 
     @ViewBuilder
@@ -64,12 +68,14 @@ struct ExploreFollowButton: View {
         }
     }
 
-    private func toggle(_ following: Bool) async {
+    private func toggle(_ following: Bool, creatingList: Bool = false) async {
         busy = true
         defer { busy = false }
         do {
-            if following { try await follows.unfollow(pubkey) } else { try await follows.follow(pubkey) }
+            if following { try await follows.unfollow(pubkey) } else { try await follows.follow(pubkey, creatingList: creatingList) }
             feedback += 1
+        } catch FollowError.listNotFound {
+            confirmNewList = !following
         } catch {
             ToastCenter.shared.error(error)
         }

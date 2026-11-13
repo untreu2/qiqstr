@@ -83,3 +83,6 @@
 "walletZapCustom" = "Eigenen Betrag zappen";
 "walletZappedState" = "Gezappt";
 "walletQuickZapHint" = "Zappt {amount} Sats. Halten, um einen Betrag zu wählen.";
+"walletPaymentPending" = "Deine Wallet hat diese Zahlung noch nicht bestätigt. Sie kann trotzdem noch ausgeführt werden, prüfe also deine Wallet, bevor du es erneut versuchst.";
+"zapInProgress" = "Für diese Notiz läuft bereits ein Zap.";
+"walletReplaceWarning" = "{wallet} ist verbunden. Eine neue Verbindung ersetzt diese Wallet.";

@@ -121,6 +121,7 @@
 "pleaseConnectWalletFirst" = "Bitte verbinde zuerst dein Wallet";
 "user" = "Benutzer";
 "errorLoadingUserProfile" = "Fehler beim Laden des Benutzerprofils";
+"errorLoadingProfile" = "qiqstr konnte nicht gestartet werden";
 "send" = "Senden";
 "enterValidAmount" = "Gib einen gültigen Betrag ein";
 "relaysFromYourFollows" = "Relays von deinen Followern";
@@ -206,7 +207,7 @@
 "areYouSureLogout" = "Bist du sicher, dass du dich abmelden möchtest?";
 "seedPhraseWarning" = "Wenn du deine Seed-Phrase nicht gespeichert hast, verlierst du dein Konto für immer.";
 "muteUser" = "{user} stummschalten?";
-"muteUserDescription" = "Du wirst keine Notizen von diesem Benutzer in deinem Feed sehen.";
+"muteUserDescription" = "Du siehst keine Notizen, Antworten, Nachrichten oder Mitteilungen dieses Nutzers mehr.";
 "unfollowUser" = "{user} entfolgen?";
 "deleteThisPost" = "Diesen Beitrag löschen?";
 "yes" = "Ja";
@@ -303,7 +304,7 @@
 "unblock" = "Entsperren";
 "report" = "Melden";
 "reportUser" = "{user} melden?";
-"reportUserDescription" = "Wähle einen Grund für die Meldung dieses Benutzers. Deine Meldung wird an Relays veröffentlicht.";
+"reportUserDescription" = "Wähle einen Grund. Deine Meldung wird als öffentliche Markierung an Relays veröffentlicht und dieser Inhalt wird für dich sofort ausgeblendet.";
 "reportReasonSpam" = "Spam";
 "reportReasonNudity" = "Nacktheit";
 "reportReasonProfanity" = "Beleidigungen";
@@ -312,6 +313,9 @@
 "reportReasonOther" = "Sonstiges";
 "reportSubmitted" = "Meldung gesendet";
 "reportFailed" = "Meldung konnte nicht gesendet werden";
+"reportHiddenOnly" = "Auf diesem Gerät ausgeblendet. Die Meldung konnte nicht an Relays gesendet werden.";
+"reportSentHidden" = "Meldung gesendet. Dieser Inhalt ist jetzt ausgeblendet.";
+"reportAlsoMute" = "Diesen Nutzer auch stummschalten";
 "selectReportReason" = "Grund auswählen";
 "today" = "Heute";
 "justNow" = "Gerade eben";
@@ -531,7 +535,7 @@
 "onboardingCoinosConnect" = "Wallet einrichten";
 "onboardingCoinosFeatureSend" = "Sende Bitcoin-Zahlungen sofort über Lightning";
 "onboardingCoinosFeatureReceive" = "Empfange Bitcoin mit deiner eigenen Lightning-Adresse";
-"onboardingCoinosFeatureZap" = "Sende Bitcoin an deine Lieblingsbeiträge und Ersteller";
+"onboardingCoinosFeatureZap" = "Sende Sats an Menschen, die du schätzt";
 "onboardingCoinosDisclaimer" = "Deine Wallet ist selbstverwaltend und wird von Spark betrieben. Deine Schlüssel werden nur sicher auf deinem Gerät gespeichert. Sichere deine Wiederherstellungsphrase, um den Zugang zu deinen Geldern zu behalten.";
 "onboardingCoinosAccept" = "Ich verstehe und stimme zu";
 "onboardingCoinosConnected" = "Wallet bereit";
@@ -543,7 +547,7 @@
 "onboardingSparkReady" = "Wallet erfolgreich eingerichtet";
 "welcomeTitle" = "qiqstr";
 "welcomeSubtitle" = "Ein dezentrales soziales Netzwerk auf Nostr. Vollständig open source.";
-"welcomeFeatureDecentralized" = "Keine zentralen Server, keine CEOs. Niemand kann dich sperren.";
+"welcomeFeatureDecentralized" = "Keine zentralen Server. Du wählst die Relays, die du nutzt.";
 "welcomeFeatureKeys" = "Besitze deine Identität mit deinen eigenen Schlüsseln.";
 "welcomeFeatureBitcoin" = "Kommuniziere sicher mit Ende-zu-Ende-Verschlüsselung.";
 "welcomeAlreadyHaveAccount" = "Ich habe bereits ein Konto";
@@ -597,7 +601,7 @@
 "exporting" = "Wird exportiert…";
 "exportFailed" = "Export fehlgeschlagen: {error}";
 "deleteAccountTitle" = "Konto löschen?";
-"deleteAccountConfirmation" = "Dadurch werden Löschanfragen für alle deine Ereignisse gesendet und alle Relays gebeten, deine Daten zu löschen. Diese Aktion kann nicht rückgängig gemacht werden.";
+"deleteAccountConfirmation" = "Dadurch werden Löschanfragen für alle deine Ereignisse gesendet, alle Relays gebeten, deine Daten zu löschen, und dieses Konto wird von diesem Gerät entfernt. Diese Aktion kann nicht rückgängig gemacht werden.";
 "noValidEventIds" = "Keine gültigen Ereignis-IDs gefunden";
 "deletionRequestSent" = "Löschanfrage für {count} Ereignisse an {relays} Relay gesendet";
 "deletionRequestSentPlural" = "Löschanfrage für {count} Ereignisse an {relays} Relays gesendet";
@@ -673,3 +677,6 @@
 "cashuMeltAllSuccess" = "{amount} Sats an Lightning gesendet";
 "close" = "Schließen";
 "notificationsFilterEmpty" = "Noch keine {filter}";
+"noRelayConnection" = "Mit keinem Relay verbunden. Prüfe deine Verbindung und versuche es erneut.";
+"bookmarksUnreadable" = "Deine gespeicherten Lesezeichen konnten nicht gelesen werden. Damit sie nicht verloren gehen, wurde nichts geändert.";
+"publishNoRelayAccepted" = "Veröffentlichen fehlgeschlagen: Kein Relay hat es angenommen. Prüfe deine Verbindung und Relays und versuche es erneut.";

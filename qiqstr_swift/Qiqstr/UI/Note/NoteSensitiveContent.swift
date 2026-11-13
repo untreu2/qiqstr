@@ -20,7 +20,8 @@ struct NoteSensitiveCover: ViewModifier {
     @AppStorage(SensitiveContentStore.preferenceKey) private var showSensitive = false
     @State private var store = SensitiveContentStore.shared
 
-    private var hidden: Bool { reason != nil && !showSensitive && !store.isRevealed(noteId) }
+    private var showsAll: Bool { AppStorePolicy.allowsSensitiveContentToggle && showSensitive }
+    private var hidden: Bool { reason != nil && !showsAll && !store.isRevealed(noteId) }
 
     func body(content: Content) -> some View {
         if hidden {

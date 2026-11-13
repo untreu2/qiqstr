@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import QiqstrCore
 
-nonisolated struct DMFileInfo: Hashable, Sendable {
+nonisolated struct DMFileInfo: Hashable, Sendable, Codable {
     var url: String
     var mimeType: String
     var groupId: String
@@ -35,7 +35,7 @@ nonisolated struct DMFileInfo: Hashable, Sendable {
     var imetaWithoutURL: [String] { imeta.filter { !$0.hasPrefix("url ") } }
 }
 
-nonisolated enum DMDeliveryState: Hashable, Sendable {
+nonisolated enum DMDeliveryState: Hashable, Sendable, Codable {
     case sent, sending, failed
 }
 
@@ -43,7 +43,7 @@ nonisolated enum DMPeerStatus: Hashable, Sendable {
     case unknown, checking, ready, unavailable
 }
 
-nonisolated struct DMMessage: Identifiable, Hashable, Sendable {
+nonisolated struct DMMessage: Identifiable, Hashable, Sendable, Codable {
     var id: String
     var sender: String
     var peer: String
@@ -111,6 +111,8 @@ final class DMService {
     static let maxFileSize = 50 * 1024 * 1024
     private static let messageKind: UInt16 = 9
     private static let historyLimit = 500
+    private static let historyPage = 200
+    private static let unprocessedLimit = 300
     private static let keyPackageRefresh = 7 * 86_400
     private static let keyRotationAge: UInt64 = 30 * 86_400
     private static let giftWrapJitter = 3 * 86_400
@@ -123,6 +125,9 @@ final class DMService {
     private(set) var isRefreshing = false
     private(set) var peerStatus: [String: DMPeerStatus] = [:]
     private(set) var deliveryRelays: [String: [String]] = [:]
+    private(set) var accepted: Set<String> = []
+    private(set) var historyComplete: Set<String> = []
+    private(set) var loadingOlder: Set<String> = []
     var activePeer: String? {
         didSet { if let activePeer { markRead(activePeer) } }
     }
@@ -137,6 +142,7 @@ final class DMService {
     @ObservationIgnored private var groups: [String: MarmotGroup] = [:]
     @ObservationIgnored private var seenEvents: Set<String> = []
     @ObservationIgnored private var hiddenIds: Set<String> = []
+    @ObservationIgnored private var clearedAt: [String: Int] = [:]
     @ObservationIgnored private var welcomeTask: Task<Void, Never>?
     @ObservationIgnored private var groupTask: Task<Void, Never>?
     @ObservationIgnored private var subscribedGroups: Set<String> = []
@@ -150,6 +156,10 @@ final class DMService {
     @ObservationIgnored private var tabSeenAt = 0
     @ObservationIgnored private var verifiedMedia: Set<String> = []
     @ObservationIgnored private var mediaTasks: [String: Task<URL, Error>] = [:]
+    @ObservationIgnored private var unprocessed: [String: String] = [:]
+    @ObservationIgnored private var unprocessedOrder: [String] = []
+    @ObservationIgnored private var historyLoaded: [String: Int] = [:]
+    @ObservationIgnored private var outboxReady = false
 
     private var defaults: UserDefaults { .standard }
 
@@ -169,6 +179,7 @@ final class DMService {
         groups.removeAll()
         seenEvents.removeAll()
         hiddenIds.removeAll()
+        clearedAt.removeAll()
         keyPackages.removeAll()
         inboxRelayCache.removeAll()
         remoteRelaysFetchedAt = .distantPast
@@ -179,6 +190,13 @@ final class DMService {
         mediaTasks.values.forEach { $0.cancel() }
         mediaTasks.removeAll()
         deliveryRelays = [:]
+        accepted = []
+        historyComplete = []
+        loadingOlder = []
+        unprocessed = [:]
+        unprocessedOrder = []
+        historyLoaded = [:]
+        outboxReady = false
         peerStatus = [:]
         conversations = []
         messagesByPeer = [:]
@@ -192,7 +210,12 @@ final class DMService {
     }
 
     func start() async {
-        guard let me = Session.shared.pubkey, let key = Session.shared.privateKey else { return }
+        guard Session.shared.pubkey != nil else { return }
+        guard let me = Session.shared.pubkey, let key = Session.shared.privateKey else {
+            isLoading = false
+            hasLoaded = true
+            return
+        }
         if self.me == me, let startTask {
             await startTask.value
             return
@@ -203,6 +226,8 @@ final class DMService {
         let generation = self.generation
         loadReadState(me)
         hiddenIds = Set(defaults.stringArray(forKey: storeKey("marmot_hidden", me)) ?? [])
+        clearedAt = (defaults.dictionary(forKey: storeKey("cleared", me)) as? [String: Int]) ?? [:]
+        accepted = Set(defaults.stringArray(forKey: storeKey("accepted", me)) ?? [])
         isLoading = true
         let task = Task { await self.performStart(me, key: key, generation: generation) }
         startTask = task
@@ -221,6 +246,7 @@ final class DMService {
         }
         await reloadGroups(loadingAll: true, generation: generation)
         guard generation == self.generation else { return }
+        loadOutbox(me)
         startRealtime(generation: generation)
         await fetchFromRelays(initial: true, generation: generation)
         guard generation == self.generation else { return }
@@ -245,7 +271,59 @@ final class DMService {
 
     func incomingMessages(since: Int) async -> [DMMessage] {
         if hasLoaded, me == Session.shared.pubkey { await refresh() } else { await start() }
-        return messagesByPeer.values.flatMap { $0 }.filter { !$0.isMine && $0.state == .sent && $0.createdAt > since }
+        let blocked = Set(Session.shared.mutedPubkeys)
+        return messagesByPeer.values.flatMap { $0 }.filter { !$0.isMine && $0.state == .sent && $0.createdAt > since && !blocked.contains($0.peer) && isKnown($0.peer) }
+    }
+
+    func deleteConversation(with peer: String) {
+        guard let me else { return }
+        let latest = messagesByPeer[peer]?.map(\.createdAt).max() ?? 0
+        clearedAt[peer] = max(latest, Int(Date().timeIntervalSince1970), clearedAt[peer] ?? 0)
+        defaults.set(clearedAt, forKey: storeKey("cleared", me))
+        messagesByPeer[peer] = nil
+        saveOutbox()
+        rebuildConversations()
+        DataBus.shared.dmChanged()
+    }
+
+    func accept(_ peer: String) {
+        guard let me, accepted.insert(peer).inserted else { return }
+        defaults.set(Array(accepted), forKey: storeKey("accepted", me))
+        rebuildConversations()
+        DataBus.shared.dmChanged()
+    }
+
+    func isRequest(_ peer: String) -> Bool {
+        !isKnown(peer) && (messagesByPeer[peer]?.contains { !$0.isMine } ?? false)
+    }
+
+    func canLoadOlder(_ peer: String) -> Bool {
+        guard let me else { return false }
+        return groups.values.contains { $0.peer(for: me) == peer && !historyComplete.contains($0.id) }
+    }
+
+    func loadOlder(_ peer: String) async {
+        guard let me, !loadingOlder.contains(peer) else { return }
+        loadingOlder.insert(peer)
+        defer { loadingOlder.remove(peer) }
+        let generation = self.generation
+        var loaded: [DMMessage] = []
+        for group in groups.values where group.peer(for: me) == peer && !historyComplete.contains(group.id) {
+            let offset = historyLoaded[group.id] ?? 0
+            guard let raw = try? await engine.messages(groupId: group.id, limit: Self.historyPage, offset: offset) else { continue }
+            guard generation == self.generation else { return }
+            let page = JSON.array(raw)
+            historyLoaded[group.id] = offset + page.count
+            if page.count < Self.historyPage { historyComplete.insert(group.id) }
+            loaded += page.reversed().flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
+        }
+        apply(loaded.sorted { $0.createdAt < $1.createdAt })
+    }
+
+    func mutesChanged() {
+        guard me != nil else { return }
+        rebuildConversations()
+        DataBus.shared.dmChanged()
     }
 
     func reloadFollowing() async {
@@ -261,7 +339,7 @@ final class DMService {
     func isFollowing(_ pubkey: String) -> Bool { following.contains(pubkey) }
 
     func isKnown(_ peer: String) -> Bool {
-        following.contains(peer) || (messagesByPeer[peer]?.contains(where: \.isMine) ?? false)
+        following.contains(peer) || accepted.contains(peer) || (messagesByPeer[peer]?.contains(where: \.isMine) ?? false)
     }
 
     var unreadCount: Int { conversations.filter(\.isUnread).count }
@@ -305,7 +383,10 @@ final class DMService {
         for id in targets {
             guard let group = active[id], let peer = group.peer(for: me),
                   let raw = try? await engine.messages(groupId: id, limit: Self.historyLimit) else { continue }
-            loaded += JSON.array(raw).reversed().flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
+            let page = JSON.array(raw)
+            historyLoaded[id] = page.count
+            if page.count < Self.historyLimit { historyComplete.insert(id) } else { historyComplete.remove(id) }
+            loaded += page.reversed().flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
         }
         guard generation == self.generation else { return }
         let ordered = loaded.enumerated()
@@ -326,6 +407,7 @@ final class DMService {
         guard let me else { return }
         let cursor = defaults.integer(forKey: storeKey("marmot_cursor", me))
         let startedAt = TimeFormat.now
+        let reachable = ((try? await getConnectedRelayCount()) ?? 0) > 0
         var wrapFilter: JSONObject = ["kinds": [1059], "#p": [me], "limit": initial ? 500 : 200]
         if cursor > 0 { wrapFilter["since"] = cursor - Self.giftWrapJitter }
         let wraps = Self.parseArray((try? await fetchEvents(filterJson: Self.jsonString(wrapFilter), timeoutSecs: initial ? 10 : 8)) ?? "[]")
@@ -333,7 +415,7 @@ final class DMService {
         await ingest(wraps.map { Self.jsonString($0) }, generation: generation)
         guard generation == self.generation else { return }
         await fetchGroupMessages(since: cursor > 0 ? cursor - 600 : nil, generation: generation)
-        guard generation == self.generation else { return }
+        guard generation == self.generation, reachable else { return }
         defaults.set(startedAt, forKey: storeKey("marmot_cursor", me))
     }
 
@@ -387,11 +469,13 @@ final class DMService {
         }
     }
 
-    private func ingest(_ raws: [String], generation: Int) async {
+    private func ingest(_ raws: [String], generation: Int, depth: Int = 0) async {
         if seenEvents.count > 20_000 { seenEvents.removeAll() }
+        var groupEvents: [String: String] = [:]
         let fresh = raws.filter { raw in
-            guard let id = JSON.object(raw)?.str("id"), !seenEvents.contains(id) else { return false }
+            guard let event = JSON.object(raw), let id = event.str("id"), !seenEvents.contains(id) else { return false }
             seenEvents.insert(id)
+            if event.int("kind") == 445 { groupEvents[id] = raw }
             return true
         }
         guard !fresh.isEmpty else { return }
@@ -400,7 +484,11 @@ final class DMService {
         var groupsChanged = false
         var joined = false
         var incoming: [DMMessage] = []
+        var retry: [String] = []
         for outcome in outcomes {
+            if let raw = groupEvents[outcome.eventId] {
+                if outcome.type == "ignored" || outcome.type == "error" { holdUnprocessed(outcome.eventId, raw) } else { unprocessed[outcome.eventId] = nil }
+            }
             switch outcome.type {
             case "message":
                 guard let groupId = outcome.groupId, let group = groups[groupId], let peer = group.peer(for: me) else {
@@ -421,18 +509,47 @@ final class DMService {
                 }
             case "commit":
                 groupsChanged = true
+                retry += outcome.retry
             default:
                 break
             }
         }
         apply(incoming)
         if groupsChanged { await reloadGroups(loadingAll: false, generation: generation) }
+        if !retry.isEmpty, depth < 4 { await reprocess(Set(retry), generation: generation, depth: depth + 1) }
         if joined {
             defaults.removeObject(forKey: storeKey("marmot_kp_at", me))
             await fetchGroupMessages(since: nil, generation: generation)
             await rotateKeys(generation: generation)
             await publishKeyPackageIfNeeded(me, generation: generation)
         }
+    }
+
+    private func holdUnprocessed(_ id: String, _ raw: String) {
+        guard unprocessed[id] == nil else { return }
+        unprocessed[id] = raw
+        unprocessedOrder.append(id)
+        while unprocessedOrder.count > Self.unprocessedLimit { unprocessed[unprocessedOrder.removeFirst()] = nil }
+    }
+
+    private func reprocess(_ ids: Set<String>, generation: Int, depth: Int) async {
+        var raws = ids.compactMap { unprocessed[$0] }
+        let missing = Array(ids.subtracting(unprocessed.keys))
+        if !missing.isEmpty {
+            let filter = Self.jsonString(["ids": missing, "limit": missing.count])
+            let relays = Array(Set(groups.values.flatMap(\.relays)))
+            async let pooled = fetchEvents(filterJson: filter, timeoutSecs: 6)
+            async let extra = relays.isEmpty ? "[]" : fetchEventsFromRelays(filterJson: filter, relayUrls: relays, timeoutSecs: 6)
+            let fetched = Self.parseArray((try? await pooled) ?? "[]") + Self.parseArray((try? await extra) ?? "[]")
+            raws += fetched.filter { ($0["id"] as? String).map(ids.contains) ?? false }.map { Self.jsonString($0) }
+        }
+        guard generation == self.generation, !raws.isEmpty else { return }
+        for id in ids {
+            seenEvents.remove(id)
+            unprocessed[id] = nil
+        }
+        unprocessedOrder.removeAll { ids.contains($0) }
+        await ingest(raws, generation: generation, depth: depth)
     }
 
     private func apply(_ messages: [DMMessage]) {
@@ -450,6 +567,7 @@ final class DMService {
 
     @discardableResult
     private func insert(_ message: DMMessage) -> Bool {
+        if let cutoff = clearedAt[message.peer], message.createdAt <= cutoff { return false }
         var list = messagesByPeer[message.peer] ?? []
         if let index = list.firstIndex(where: { $0.id == message.id }) {
             guard list[index].state != .sent else { return false }
@@ -471,8 +589,9 @@ final class DMService {
     }
 
     private func rebuildConversations() {
+        let blocked = Set(Session.shared.mutedPubkeys)
         conversations = messagesByPeer.compactMap { peer, list in
-            guard let last = list.last(where: { $0.state == .sent }) ?? list.last else { return nil }
+            guard !blocked.contains(peer), let last = list.last(where: { $0.state == .sent }) ?? list.last else { return nil }
             return DMConversation(peer: peer, lastMessage: last, isUnread: isUnread(peer: peer, list: list))
         }
         .sorted { $0.timestamp > $1.timestamp }
@@ -489,7 +608,7 @@ final class DMService {
 
     private func updateBadge() {
         let unseen = conversations.contains { conversation in
-            guard conversation.isUnread, let incoming = lastIncoming(messagesByPeer[conversation.peer] ?? []) else { return false }
+            guard conversation.isUnread, isKnown(conversation.peer), let incoming = lastIncoming(messagesByPeer[conversation.peer] ?? []) else { return false }
             return incoming.createdAt > tabSeenAt
         }
         if isListVisible, unseen { markTabSeen(); return }
@@ -624,18 +743,62 @@ final class DMService {
         guard message.state != .sent else { return }
         messagesByPeer[message.peer]?.removeAll { $0.id == message.id }
         if messagesByPeer[message.peer]?.isEmpty == true { messagesByPeer[message.peer] = nil }
+        saveOutbox()
         rebuildConversations()
     }
 
     private func addPending(_ message: DMMessage) {
         insert(message)
+        saveOutbox()
         rebuildConversations()
     }
 
     private func markFailed(_ id: String, peer: String) {
         guard let index = messagesByPeer[peer]?.firstIndex(where: { $0.id == id }) else { return }
         messagesByPeer[peer]?[index].state = .failed
+        saveOutbox()
         rebuildConversations()
+    }
+
+    private func outboxURL(_ me: String) -> URL {
+        MarmotEngine.storageDirectory
+            .appendingPathComponent(me.lowercased(), isDirectory: true)
+            .appendingPathComponent("outbox.json")
+    }
+
+    private func loadOutbox(_ me: String) {
+        let url = outboxURL(me)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            outboxReady = true
+            return
+        }
+        guard let data = try? Data(contentsOf: url), let saved = try? JSONDecoder().decode([DMMessage].self, from: data) else { return }
+        outboxReady = true
+        for var message in saved where message.isMine && message.sender == me && !wasDelivered(message) {
+            message.state = .failed
+            insert(message)
+        }
+        saveOutbox()
+        rebuildConversations()
+    }
+
+    private func wasDelivered(_ message: DMMessage) -> Bool {
+        (messagesByPeer[message.peer] ?? []).contains { sent in
+            sent.isMine && sent.state == .sent && sent.kind == message.kind && sent.content == message.content && abs(sent.createdAt - message.createdAt) < 300
+        }
+    }
+
+    private func saveOutbox() {
+        guard let me, outboxReady else { return }
+        let unsent = messagesByPeer.values.flatMap { $0 }.filter { $0.isMine && $0.state != .sent }.sorted { $0.createdAt < $1.createdAt }
+        let url = outboxURL(me)
+        guard !unsent.isEmpty else {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard let data = try? JSONEncoder().encode(Array(unsent.suffix(100))) else { return }
+        try? data.write(to: url, options: [.atomic, .completeFileProtection])
     }
 
     private func hide(_ ids: [String]) {
@@ -670,6 +833,7 @@ final class DMService {
         if let index = groups.index(forKey: groupId) { groups.values[index].lastMessageAt = TimeFormat.now }
         apply(messages)
         markReadSilently(peer)
+        saveOutbox()
         rebuildConversations()
     }
 
@@ -695,6 +859,7 @@ final class DMService {
             let name = ProfileCache.shared.profile(peer)?.bestName ?? Profile.shortNpub(peer)
             throw CoreError(L("dmPeerNotOnMarmot", ["name": name]))
         }
+        guard generation == self.generation, !Task.isCancelled else { throw CancellationError() }
         let chat = try await engine.createChat(keyPackage: keyPackage, relays: RelayConfig.mainRelays)
         guard generation == self.generation, let group = MarmotGroup(json: JSON.object(chat.groupJSON) ?? [:]) else {
             throw CoreError(L("dmSendFailed"))
@@ -724,9 +889,10 @@ final class DMService {
         let lists = Self.parseArray((try? await pooledList) ?? "[]") + Self.parseArray((try? await discoveredList) ?? "[]")
         var relays = Self.relayURLs(from: lists)
         for relay in RelayConfig.discoveryRelays where !relays.contains(relay) { relays.append(relay) }
+        let packageRelays = relays
         let filter = Self.jsonString(["kinds": [30443, 443], "authors": [peer], "limit": 20])
         async let pooled = fetchEvents(filterJson: filter, timeoutSecs: 6)
-        async let remote = fetchEventsFromRelays(filterJson: filter, relayUrls: relays, timeoutSecs: 6)
+        async let remote = fetchEventsFromRelays(filterJson: filter, relayUrls: packageRelays, timeoutSecs: 6)
         let events = Self.parseArray((try? await pooled) ?? "[]") + Self.parseArray((try? await remote) ?? "[]")
         let picked = events.isEmpty ? nil : (try? await engine.pickKeyPackage(eventsJSON: Self.jsonString(events), owner: peer)) ?? nil
         keyPackages[peer] = (picked, Date())
@@ -928,10 +1094,14 @@ nonisolated enum DMMediaCrypto {
     }
 
     static func download(_ source: String) async throws -> Data {
-        guard let url = URL(string: source), url.scheme?.hasPrefix("http") == true else { throw CoreError(L("failedToDecryptMedia")) }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let url = URL(string: source), url.scheme?.lowercased() == "https" else { throw CoreError(L("failedToDecryptMedia")) }
+        let limit = 50 * 1024 * 1024 + 1024
+        let (file, response) = try await URLSession.shared.download(from: url)
+        defer { try? FileManager.default.removeItem(at: file) }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { throw CoreError(L("failedToDecryptMedia")) }
-        return data
+        let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= limit else { throw CoreError(L("fileTooLarge")) }
+        return try Data(contentsOf: file)
     }
 
     static func cacheURL(hash: String, ext: String) -> URL? {

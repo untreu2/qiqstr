@@ -1,10 +1,10 @@
 "shareTitle" = "New post";
 "sharePlaceholder" = "What's on your mind?";
 "shareCancel" = "Cancel";
-"sharePost" = "Post";
+"sharePost" = "Save to qiqstr";
 "shareDone" = "Done";
 "shareSavedTitle" = "Ready in qiqstr";
-"shareOpenAppMessage" = "Open qiqstr to finish posting.";
+"shareOpenAppMessage" = "Open qiqstr to review and post it.";
 "shareFailedTitle" = "Couldn't save this post";
 "shareFailedMessage" = "Try sharing again from the original app.";
 "shareRemoveImage" = "Remove image";

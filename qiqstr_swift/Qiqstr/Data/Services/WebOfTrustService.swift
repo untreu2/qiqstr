@@ -16,7 +16,9 @@ final class WebOfTrustService {
 
     static var filtersNotifications: Bool { UserDefaults.standard.object(forKey: filterNotificationsKey) as? Bool ?? true }
     static var filtersReplies: Bool { UserDefaults.standard.object(forKey: filterRepliesKey) as? Bool ?? true }
-    static var showsSensitiveContent: Bool { UserDefaults.standard.bool(forKey: showSensitiveContentKey) }
+    static var showsSensitiveContent: Bool {
+        AppStorePolicy.allowsSensitiveContentToggle && UserDefaults.standard.bool(forKey: showSensitiveContentKey)
+    }
 
     private(set) var follows: Set<String> = []
     private(set) var scores: [String: Int] = [:]

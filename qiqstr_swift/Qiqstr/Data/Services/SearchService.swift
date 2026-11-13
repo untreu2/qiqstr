@@ -1,7 +1,7 @@
 import Foundation
 import QiqstrCore
 
-enum SearchKind: CaseIterable, Sendable {
+nonisolated enum SearchKind: CaseIterable, Sendable {
     case people, notes, articles
 
     var eventKind: Int {
@@ -37,6 +37,29 @@ struct SearchBatch: Sendable {
 }
 
 nonisolated enum SearchService {
+    static func containsSecret(_ text: String) -> Bool {
+        let tokens = text.lowercased().split(whereSeparator: { $0.isWhitespace || $0 == "\"" || $0 == "'" || $0 == "(" || $0 == ")" }).map(String.init)
+        if tokens.contains(where: { token in
+            let value = Nip19.stripScheme(token)
+            return value.hasPrefix("nsec1") || value.hasPrefix("ncryptsec1") || (value.contains("walletconnect://") && value.contains("secret="))
+        }) { return true }
+        let words = tokens.filter { $0.allSatisfy(\.isLetter) }
+        for size in [24, 12] where words.count >= size {
+            for start in 0...(words.count - size) where validateMnemonic(mnemonic: words[start..<start + size].joined(separator: " ")) {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func looksSecret(_ text: String) -> Bool {
+        let value = Nip19.stripScheme(text.trimmingCharacters(in: .whitespacesAndNewlines)).lowercased()
+        if value.hasPrefix("nsec1") || value.hasPrefix("ncryptsec1") || value.contains("walletconnect://") { return true }
+        let words = value.split(whereSeparator: \.isWhitespace)
+        guard [12, 15, 18, 21, 24].contains(words.count) else { return false }
+        return validateMnemonic(mnemonic: words.joined(separator: " "))
+    }
+
     static let remoteTimeout: UInt32 = 6
     private static let entityPrefixes = ["npub1", "nprofile1", "note1", "nevent1", "naddr1"]
 

@@ -33,6 +33,7 @@ final class Session {
 
     func launch() async {
         ServiceRegistry.register()
+        clearKeychainAfterReinstall()
         refreshAccounts()
         #if DEBUG
         if store.active == nil, let input = UserDefaults.standard.string(forKey: "QIQ_LOGIN") {
@@ -48,6 +49,21 @@ final class Session {
     }
 
     func refreshAccounts() { accounts = store.accounts }
+
+    func recoverFromLaunchFailure() async {
+        try? FileManager.default.removeItem(at: RelayConfig.databaseURL)
+        RelayConfig.resetRelays()
+        await launch()
+    }
+
+    private func clearKeychainAfterReinstall() {
+        let defaults = UserDefaults.standard
+        let marker = "install_marker"
+        guard !defaults.bool(forKey: marker) else { return }
+        let stored = Bundle.main.bundleIdentifier.flatMap(defaults.persistentDomain(forName:)) ?? [:]
+        if stored.isEmpty { Keychain.wipe() }
+        defaults.set(true, forKey: marker)
+    }
 
     func login(_ input: String) async throws {
         let account: StoredAccount
@@ -96,13 +112,24 @@ final class Session {
         await start(account)
     }
 
-    func logout() async {
+    func logout(erasingData: Bool = false) async {
+        let leaving = account?.pubkeyHex
         let next = store.logoutActive()
         await teardown()
         refreshAccounts()
+        if let leaving {
+            if erasingData {
+                account = nil
+                phase = .starting
+                await AccountData.erase(pubkey: leaving, isLastAccount: next == nil)
+            } else {
+                AccountData.removeCredentials(pubkey: leaving)
+            }
+        }
         if let next {
             await start(next)
         } else {
+            try? await shutdownClient()
             account = nil
             phase = .signedOut
         }
@@ -112,6 +139,7 @@ final class Session {
         if npub == account?.npub {
             await logout()
         } else {
+            if let removed = accounts.first(where: { $0.npub == npub }) { AccountData.removeCredentials(pubkey: removed.pubkeyHex) }
             store.remove(npub: npub)
             refreshAccounts()
         }

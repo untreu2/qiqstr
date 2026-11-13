@@ -9,6 +9,8 @@ struct DMChatView: View {
     @State private var awayFromBottom = false
     @State private var unseenCount = 0
     @State private var searchPresented = false
+    @State private var safety = DMSafetyModel()
+    @Environment(\.dismiss) private var dismiss
     @FocusState private var inputFocused: Bool
 
     init(pubkey: String) {
@@ -26,8 +28,19 @@ struct DMChatView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if model.isSearching {
                     matchNavigator
+                } else if model.isRequest {
+                    requestBanner
                 } else {
-                    DMInputBar(model: model, focus: $inputFocused, placeholder: L("dmMessagePlaceholder", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]))
+                    if Session.shared.canSign {
+                        DMInputBar(model: model, focus: $inputFocused, placeholder: L("dmMessagePlaceholder", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]))
+                    } else {
+                        Button(L("readOnlyAddKey")) { ReadOnlyGate.shared.addKey() }
+                            .buttonStyle(.glassProminent)
+                            .foregroundStyle(AppColors.background)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityIdentifier("dm-read-only-add-key")
+                    }
                 }
             }
             .searchable(text: $model.searchQuery, isPresented: $searchPresented, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("dmSearchPrompt"))
@@ -46,6 +59,7 @@ struct DMChatView: View {
                 DMMessageInfoSheet(message: message, deliveryRelays: model.deliveryRelays(for: message), chatRelays: model.chatRelays())
                     .presentationDetents([.medium, .large])
             }
+            .modifier(DMSafetyDialogs(safety: safety) { _ in dismiss() })
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .tabBar)
             .toolbar {
@@ -114,6 +128,7 @@ struct DMChatView: View {
                 UIPasteboard.general.string = Nip19.npub(pubkey)
                 ToastCenter.shared.show(L("copiedToClipboard"), style: .success)
             }
+            DMSafetyMenuItems(peer: pubkey, safety: safety)
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -154,6 +169,51 @@ struct DMChatView: View {
             .accessibilityValue(unseenCount > 0 ? L("dmNewMessagesCount", ["count": unseenCount]) : "")
             .accessibilityIdentifier("dm-jump-latest")
         }
+    }
+
+    private var loadOlderButton: some View {
+        Button {
+            Task { await model.loadOlder() }
+        } label: {
+            if model.isLoadingOlder {
+                ProgressView()
+            } else {
+                Text(L("dmLoadEarlier"))
+            }
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+        .disabled(model.isLoadingOlder)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.top, 8)
+        .accessibilityIdentifier("dm-load-earlier")
+    }
+
+    private var requestBanner: some View {
+        VStack(spacing: 12) {
+            Text(L("dmRequestNotice", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button(L("block"), role: .destructive) { safety.blockTarget = pubkey }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("dm-request-block")
+                Button(L("dmRequestAccept")) { withAnimation(.smooth) { model.acceptRequest() } }
+                    .buttonStyle(.glassProminent)
+                    .foregroundStyle(AppColors.background)
+                    .accessibilityIdentifier("dm-request-accept")
+            }
+            .controlSize(.large)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("dm-request-banner")
     }
 
     private var matchNavigator: some View {
@@ -228,6 +288,7 @@ struct DMChatView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if model.canLoadOlder { loadOlderButton }
                     ForEach(model.rows) { row in
                         rowView(row)
                             .padding(.horizontal, 12)

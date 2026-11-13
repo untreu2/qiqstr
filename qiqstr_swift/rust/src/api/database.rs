@@ -35,6 +35,31 @@ pub fn set_active_mute_list(muted_pubkeys: Vec<String>, muted_words: Vec<String>
     }
 }
 
+static KNOWN_ZAPPERS: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
+
+fn known_zappers() -> &'static RwLock<HashMap<String, String>> {
+    KNOWN_ZAPPERS.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+pub fn set_known_zappers(zappers_json: String) {
+    let parsed: HashMap<String, String> = serde_json::from_str(&zappers_json).unwrap_or_default();
+    let normalized = parsed
+        .into_iter()
+        .map(|(recipient, zapper)| (recipient.to_lowercase(), zapper.to_lowercase()))
+        .collect();
+    if let Ok(mut map) = known_zappers().write() {
+        *map = normalized;
+    }
+}
+
+fn zapper_allowed(recipient: &str, signer: &str) -> bool {
+    let Ok(map) = known_zappers().read() else { return true };
+    match map.get(&recipient.to_lowercase()) {
+        Some(zapper) => !zapper.is_empty() && zapper == &signer.to_lowercase(),
+        None => true,
+    }
+}
+
 fn active_muted_pubkeys() -> Vec<String> {
     mute_state()
         .read()
@@ -180,71 +205,67 @@ fn extract_bolt11_amount_sats(bolt11: &str) -> Option<u64> {
     Some(msats / 1000)
 }
 
+const MAX_ZAP_SATS: u64 = 2_100_000_000_000_000;
+
+fn verified_zap_request(receipt: &Event) -> Option<Event> {
+    let description = receipt.tags.iter().find(|tag| tag.kind() == TagKind::Description)?.content()?;
+    let request = Event::from_json(description).ok()?;
+    if request.kind != Kind::ZapRequest || request.verify().is_err() {
+        return None;
+    }
+    let values = |event: &Event, name: &str| -> Vec<String> {
+        event
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().first().map(|k| k.as_str()) == Some(name))
+            .filter_map(|tag| tag.as_slice().get(1).cloned())
+            .collect()
+    };
+    let receipt_p = values(receipt, "p");
+    let request_p = values(&request, "p");
+    if receipt_p.is_empty() || !receipt_p.iter().any(|pk| request_p.contains(pk)) {
+        return None;
+    }
+    let signer = receipt.pubkey.to_hex();
+    if !receipt_p.iter().all(|recipient| zapper_allowed(recipient, &signer)) {
+        return None;
+    }
+    let receipt_e = values(receipt, "e");
+    let request_e = values(&request, "e");
+    if !receipt_e.iter().all(|id| request_e.contains(id)) {
+        return None;
+    }
+    Some(request)
+}
+
 pub(crate) fn extract_zap_amount_sats(event: &Event) -> u64 {
-    for tag in event.tags.iter() {
-        if tag.kind() == TagKind::Bolt11 {
-            if let Some(bolt11) = tag.content() {
-                if let Some(sats) = extract_bolt11_amount_sats(bolt11) {
-                    return sats;
-                }
-            }
-        }
-    }
-
-    for tag in event.tags.iter() {
-        if tag.kind() == TagKind::Description {
-            if let Some(desc_str) = tag.content() {
-                if let Ok(zap_req) = serde_json::from_str::<serde_json::Value>(desc_str) {
-                    if let Some(tags) = zap_req["tags"].as_array() {
-                        for t in tags {
-                            if let Some(arr) = t.as_array() {
-                                if arr.len() >= 2 && arr[0].as_str() == Some("amount") {
-                                    if let Some(amount_str) = arr[1].as_str() {
-                                        if let Ok(millisats) = amount_str.parse::<u64>() {
-                                            return millisats / 1000;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    0
+    let Some(request) = verified_zap_request(event) else { return 0 };
+    let bolt11_sats = event
+        .tags
+        .iter()
+        .filter(|tag| tag.kind() == TagKind::Bolt11)
+        .find_map(|tag| tag.content().and_then(extract_bolt11_amount_sats));
+    let requested_sats = request
+        .tags
+        .iter()
+        .find(|tag| tag.as_slice().first().map(|k| k.as_str()) == Some("amount"))
+        .and_then(|tag| tag.as_slice().get(1))
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(|msats| msats / 1000);
+    let sats = match (bolt11_sats, requested_sats) {
+        (Some(paid), Some(requested)) if paid != requested => return 0,
+        (Some(paid), _) => paid,
+        (None, _) => return 0,
+    };
+    sats.min(MAX_ZAP_SATS)
 }
 
-fn extract_zap_sender(event: &Event) -> Option<String> {
-    for tag in event.tags.iter() {
-        if tag.kind() == TagKind::Description {
-            if let Some(desc_str) = tag.content() {
-                if let Ok(zap_req) = serde_json::from_str::<serde_json::Value>(desc_str) {
-                    if let Some(pubkey) = zap_req["pubkey"].as_str() {
-                        return Some(pubkey.to_string());
-                    }
-                }
-            }
-        }
-    }
-    None
+pub(crate) fn extract_zap_sender(event: &Event) -> Option<String> {
+    verified_zap_request(event).map(|request| request.pubkey.to_hex())
 }
 
-fn extract_zap_comment(event: &Event) -> String {
-    for tag in event.tags.iter() {
-        if tag.kind() == TagKind::Description {
-            if let Some(desc_str) = tag.content() {
-                if let Ok(zap_req) = serde_json::from_str::<serde_json::Value>(desc_str) {
-                    if let Some(content) = zap_req["content"].as_str() {
-                        if !content.is_empty() {
-                            return content.to_string();
-                        }
-                    }
-                }
-            }
-        }
-    }
-    String::new()
+pub(crate) fn extract_zap_comment(event: &Event) -> String {
+    verified_zap_request(event).map(|request| request.content).unwrap_or_default()
 }
 
 pub(crate) struct NoteReferences {
@@ -1668,29 +1689,16 @@ async fn hydrate_notes(
                 }
             }
 
-            for tag in tags.iter() {
-                if !tag.is_empty() && tag[0] == "p" && tag.len() > 1 {
-                    pubkey = tag[1].clone();
-                    break;
+            let embedded_json: Option<serde_json::Value> = repost_cache.get(&id).cloned().or_else(|| {
+                let original = Event::from_json(&content).ok()?;
+                if original.verify().is_err() || original.id.to_hex() != id {
+                    return None;
                 }
+                serde_json::from_str::<serde_json::Value>(&original.as_json()).ok()
+            });
+            if embedded_json.is_none() {
+                continue;
             }
-
-            let embedded_json: Option<serde_json::Value> =
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if parsed.get("content").is_some() && parsed.get("pubkey").is_some() {
-                        Some(parsed)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-            let embedded_json: Option<serde_json::Value> = if embedded_json.is_some() {
-                embedded_json
-            } else {
-                repost_cache.get(&id).cloned()
-            };
 
             if let Some(parsed) = embedded_json {
                 if let Some(c) = parsed["content"].as_str() {
@@ -2268,26 +2276,34 @@ pub async fn db_get_hydrated_profile_notes(
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
 
-    let query_limit = if filter_replies {
-        limit.saturating_mul(4)
-    } else {
-        limit
-    };
-    let mut filter = Filter::new()
-        .author(pk)
-        .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
-        .limit(query_limit as usize);
-    if let Some(until) = until_timestamp {
-        if until > 0 {
-            filter = filter.until(Timestamp::from(until as u64));
+    let batch_limit = limit.saturating_mul(if filter_replies { 4 } else { 1 }).max(1) as usize;
+    let mut cursor = until_timestamp.filter(|until| *until > 0).map(|until| until as u64);
+    let mut filtered: Vec<Event> = Vec::new();
+    let mut seen: HashSet<EventId> = HashSet::new();
+    for _ in 0..8 {
+        let mut filter = Filter::new()
+            .author(pk)
+            .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
+            .limit(batch_limit);
+        if let Some(until) = cursor {
+            filter = filter.until(Timestamp::from(until));
+        }
+        let events = client.database().query(filter).await?;
+        let batch: Vec<Event> = events.into_iter().filter(|e| seen.insert(e.id)).collect();
+        if batch.is_empty() {
+            break;
+        }
+        let full = batch.len() >= batch_limit;
+        cursor = batch.iter().map(|e| e.created_at.as_secs()).min();
+        filtered.extend(batch.into_iter().filter(|e| {
+            !is_future_dated(e)
+                && !is_event_muted(e, &muted_pubkeys, &muted_words)
+                && !(filter_replies && e.kind == Kind::TextNote && extract_note_references(&tags_from_event(e)).is_reply)
+        }));
+        if filtered.len() >= limit as usize || !full {
+            break;
         }
     }
-    let events = client.database().query(filter).await?;
-
-    let filtered: Vec<Event> = events
-        .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .collect();
 
     let hydrated =
         hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
@@ -3013,23 +3029,31 @@ pub fn parse_note_content(content: String) -> String {
         .cloned()
         .collect();
 
-    let quote_ids: Vec<String> = quote_re
-        .captures_iter(&content)
-        .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
+    let url_spans: Vec<(usize, usize)> = content_link_re()
+        .find_iter(&content)
+        .map(|m| (m.start(), m.end()))
         .collect();
+    let outside_urls = |m: &regex::Match| !url_spans.iter().any(|(start, end)| m.start() >= *start && m.end() <= *end);
 
-    let article_ids: Vec<String> = article_re
-        .captures_iter(&content)
-        .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
-        .collect();
-
+    let mut quote_ids: Vec<String> = Vec::new();
+    let mut article_ids: Vec<String> = Vec::new();
     let mut to_remove: Vec<String> = Vec::new();
     to_remove.extend(media_urls.iter().cloned());
     for c in quote_re.captures_iter(&content) {
-        to_remove.push(c.get(0).unwrap().as_str().to_string());
+        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else { continue };
+        if !outside_urls(&full) {
+            continue;
+        }
+        quote_ids.push(id.as_str().to_string());
+        to_remove.push(full.as_str().to_string());
     }
     for c in article_re.captures_iter(&content) {
-        to_remove.push(c.get(0).unwrap().as_str().to_string());
+        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else { continue };
+        if !outside_urls(&full) {
+            continue;
+        }
+        article_ids.push(id.as_str().to_string());
+        to_remove.push(full.as_str().to_string());
     }
 
     let mut cleaned = content.clone();
@@ -4047,6 +4071,63 @@ mod tests {
             parsed["linkUrls"],
             serde_json::json!(["https://example.com/page"])
         );
+    }
+
+    #[test]
+    fn zap_receipts_need_a_matching_signed_request() {
+        let zapper = Keys::generate();
+        let recipient = Keys::generate().public_key();
+        let provider = Keys::generate();
+        let request = |amount: &str| {
+            EventBuilder::new(Kind::ZapRequest, "thanks")
+                .tags([
+                    Tag::custom(TagKind::custom("p"), [recipient.to_hex()]),
+                    Tag::custom(TagKind::custom("amount"), [amount.to_string()]),
+                ])
+                .sign_with_keys(&zapper)
+                .unwrap()
+        };
+        let receipt = |description: String| {
+            EventBuilder::new(Kind::ZapReceipt, "")
+                .tags([
+                    Tag::custom(TagKind::custom("p"), [recipient.to_hex()]),
+                    Tag::custom(TagKind::custom("bolt11"), ["lnbc210n1pexample".to_string()]),
+                    Tag::custom(TagKind::custom("description"), [description]),
+                ])
+                .sign_with_keys(&provider)
+                .unwrap()
+        };
+        let valid = receipt(request("21000").as_json());
+        assert_eq!(extract_zap_amount_sats(&valid), 21);
+        assert_eq!(extract_zap_sender(&valid), Some(zapper.public_key().to_hex()));
+        assert_eq!(extract_zap_comment(&valid), "thanks");
+
+        assert_eq!(extract_zap_amount_sats(&receipt(request("99000000").as_json())), 0);
+
+        let mut forged: serde_json::Value = serde_json::from_str(&request("21000").as_json()).unwrap();
+        forged["pubkey"] = serde_json::json!(Keys::generate().public_key().to_hex());
+        let forged_receipt = receipt(forged.to_string());
+        assert_eq!(extract_zap_amount_sats(&forged_receipt), 0);
+        assert_eq!(extract_zap_sender(&forged_receipt), None);
+
+        let zappers = |value: String| set_known_zappers(serde_json::json!({ recipient.to_hex(): value }).to_string());
+        zappers(provider.public_key().to_hex());
+        assert_eq!(extract_zap_amount_sats(&valid), 21);
+        zappers(Keys::generate().public_key().to_hex());
+        assert_eq!(extract_zap_amount_sats(&valid), 0);
+        zappers(String::new());
+        assert_eq!(extract_zap_sender(&valid), None);
+        set_known_zappers("{}".to_string());
+        assert_eq!(extract_zap_amount_sats(&valid), 21);
+    }
+
+    #[test]
+    fn parse_note_content_keeps_ids_inside_links() {
+        let content = "see https://njump.me/nevent1qqsxyz123 and nostr:note1abcdef".to_string();
+        let parsed: serde_json::Value = serde_json::from_str(&parse_note_content(content)).unwrap();
+        assert_eq!(parsed["quoteIds"], serde_json::json!(["note1abcdef"]));
+        let text: String = parsed["textParts"].as_array().unwrap().iter().filter_map(|p| p["text"].as_str()).collect();
+        assert!(text.contains("https://njump.me/nevent1qqsxyz123"));
     }
 
     #[test]

@@ -57,9 +57,17 @@ struct RootView: View {
             case .ready:
                 HomeView().id(session.account?.npub).onboardingGate().notificationPrompt()
             case .failed(let message):
-                EmptyStateView(systemImage: "exclamationmark.triangle", title: L("errorLoadingProfile"), message: message, actionTitle: L("retry")) {
-                    Task { await session.launch() }
+                VStack(spacing: 12) {
+                    EmptyStateView(systemImage: "exclamationmark.triangle", title: L("errorLoadingProfile"), message: message, actionTitle: L("retry")) {
+                        Task { await session.launch() }
+                    }
+                    Button(L("launchResetCache")) { Task { await session.recoverFromLaunchFailure() } }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("launch-reset-cache")
+                    Button(L("logout"), role: .destructive) { Task { await session.logout() } }
+                        .accessibilityIdentifier("launch-logout")
                 }
+                .padding(.bottom, 32)
             }
         }
         .animation(.smooth(duration: 0.3), value: session.phase)

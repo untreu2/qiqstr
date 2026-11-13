@@ -27,6 +27,7 @@ final class ZapViewModel {
     private(set) var recipient: ZapRecipient?
     private(set) var isLoadingRecipient = true
     private(set) var isZapping = false
+    private(set) var mayHaveSettled = false
     private(set) var zappedTick = 0
     private(set) var failedTick = 0
 
@@ -52,7 +53,7 @@ final class ZapViewModel {
     }
 
     var hasPayDestination: Bool { recipient?.lightningAddress != nil || recipient?.lnurl != nil }
-    var canSubmit: Bool { canZap && amount != nil && !isZapping && hasPayDestination }
+    var canSubmit: Bool { canZap && amount != nil && !isZapping && !mayHaveSettled && hasPayDestination }
 
     var recipientName: String {
         recipient?.name ?? ProfileCache.shared.profile(target.pubkey)?.bestName ?? Profile.shortNpub(target.pubkey)
@@ -79,6 +80,11 @@ final class ZapViewModel {
             zappedTick += 1
             ZapService.lastAmount = amount
             ToastCenter.shared.show(L("walletZapped", ["sats": Sats.format(amount), "user": recipientName]), style: .success)
+            return true
+        } catch WalletError.paymentPending {
+            mayHaveSettled = true
+            failedTick += 1
+            ToastCenter.shared.show(L("walletPaymentPending"), style: .error)
             return true
         } catch {
             failedTick += 1
@@ -170,7 +176,7 @@ struct ZapSheet: View {
                     .accessibilityIdentifier("zap-submit")
                 }
             }
-            .navigationTitle(target.note == nil ? L("zapUser", ["user": model.recipientName]) : L("zapNote"))
+            .navigationTitle(L("zapUser", ["user": model.recipientName]))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
