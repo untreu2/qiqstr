@@ -49,16 +49,16 @@ extension AuthTermsText {
 
     ### Auf Ihrem Gerät gespeicherte Daten
 
-    - Ihre privaten Schlüssel und Ihre Wallet-Verbindung werden in der iOS-Schlüsselbund (Keychain) aufbewahrt.
+    - Ihre privaten Schlüssel und Ihre Wallet-Verbindung werden im iOS-Schlüsselbund (Keychain) aufbewahrt.
     - Direktnachrichten werden in einer verschlüsselten Datenbank auf Ihrem Gerät gespeichert.
     - Notizen, Profile und Medien werden zwischengespeichert, damit die App schnell arbeitet. Diesen Cache können Sie in den Einstellungen leeren.
-    - Ihre Einstellungen, Entwürfe, Stummschaltliste und ausgeblendeten Beiträge werden lokal gespeichert.
+    - Ihre Einstellungen, Entwürfe, Stummschaltungsliste und ausgeblendeten Beiträge werden lokal gespeichert.
 
     ---
 
     ### Löschen Ihrer Daten
 
-    Sie können Ihr Konto jederzeit unter **Einstellungen > Konto löschen** löschen. Die App fordert die Relays daraufhin auf, Ihre Ereignisse zu löschen (NIP-09) und Ihr Konto zu entfernen (NIP-62, Request to Vanish), und löscht die Schlüssel, Nachrichten, die Wallet-Verbindung und weitere Daten des Kontos von Ihrem Gerät.
+    Sie können Ihr Konto jederzeit unter **Einstellungen > Konto löschen** löschen. Die App fordert die Relays daraufhin auf, Ihre Ereignisse zu löschen (NIP-09) und Ihr Konto zu entfernen (NIP-62-Anfrage zum Verschwinden), und löscht die Schlüssel, Nachrichten, die Wallet-Verbindung und weitere Daten des Kontos von Ihrem Gerät.
 
     Relays werden von Dritten betrieben. Der Entwickler kann sie nicht zwingen, Löschanfragen nachzukommen, und Inhalte, die andere bereits kopiert haben, können nicht zurückgerufen werden. Beim Abmelden wird Ihr Schlüssel vom Gerät entfernt, ohne dass eine Löschanfrage gesendet wird.
 
@@ -121,7 +121,7 @@ extension AuthTermsText {
 
     qiqstr kann Bitcoin-Lightning-Zahlungen über das Nostr-Wallet-Connect-Protokoll (NWC) senden und anfordern. Durch die Nutzung der Wallet-Funktionen erkennen Sie Folgendes an:
 
-    - Die App steuert einen von Ihnen konfigurierten externen Wallet-Dienst oder Node fern. Der Entwickler betreibt keinen Wallet-Dienst und verwahrt, kontrolliert oder hat keinen Zugriff auf Ihre Gelder.
+    - Die App steuert einen von Ihnen konfigurierten externen Wallet-Dienst oder Node fern. Der Entwickler betreibt keinen Wallet-Dienst, verwahrt und kontrolliert Ihre Gelder nicht und hat keinen Zugriff darauf.
     - **Zaps sind freiwillige Geschenke.** Ein Zap ist eine optionale Zahlung, die direkt von Ihrer Wallet an die Wallet einer anderen Person gesendet wird. Zaps schalten keine Inhalte, Funktionen oder Dienste in der App frei, und der Entwickler erhält keinen Anteil daran.
     - Bitcoin- und Lightning-Network-Transaktionen sind **unumkehrbar**. Prüfen Sie alle Zahlungsangaben, bevor Sie bestätigen.
     - Der Entwickler ist kein Finanzinstitut, kein Geldtransferdienstleister und kein Zahlungsabwickler.

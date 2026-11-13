@@ -23,6 +23,7 @@ enum ServiceRegistry {
             ExploreSeenStore.shared.reset()
             ExploreService.shared.reset()
             ZapperDirectory.shared.reset()
+            ExploreSafety.shared.reset()
         }
         SessionHooks.onBootstrap { pubkey in
             NoteInteractionStore.shared.prepareForAccount()

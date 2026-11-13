@@ -131,7 +131,7 @@ final class FeedViewModel {
             ids += pool.filter { hidden[$0] != nil }.sorted { (hidden[$0] ?? 0) < (hidden[$1] ?? 0) }
         }
         let byId = Dictionary(await NoteRepository.notes(ids).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return ids.compactMap { byId[$0] }
+        return await ExploreSafety.shared.screen(ids.compactMap { byId[$0] })
     }
 
     @ObservationIgnored private var discoverCache: [String: [Note]] = [:]
@@ -140,7 +140,8 @@ final class FeedViewModel {
 
     private func discoverNotes(_ feed: DiscoverFeed, force: Bool) async -> [Note] {
         if !force, let cached = discoverCache[feed.id] { return cached }
-        guard let notes = await ExploreService.shared.feedNotes(feed) else { return discoverCache[feed.id] ?? [] }
+        guard let fetched = await ExploreService.shared.feedNotes(feed) else { return discoverCache[feed.id] ?? [] }
+        let notes = await ExploreSafety.shared.screen(fetched)
         discoverCache[feed.id] = notes
         return notes
     }
@@ -246,7 +247,7 @@ final class FeedViewModel {
         let generation = self.generation
         try? await Task.sleep(for: .milliseconds(120))
         guard !Task.isCancelled, generation == self.generation else { return }
-        let result = await query(limit: limit)
+        let result = await Perf.measure("Feed query") { await query(limit: limit) }
         guard generation == self.generation else { return }
         apply(result)
     }
@@ -284,6 +285,7 @@ final class FeedViewModel {
 
     private func show(_ visible: [Note]) {
         notes = visible
+        Perf.feedShown(count: visible.count)
         latestDisplayed = visible.map(\.displayTimestamp).max() ?? 0
         pendingCount = 0
     }

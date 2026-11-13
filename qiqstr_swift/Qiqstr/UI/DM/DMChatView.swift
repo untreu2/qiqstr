@@ -201,7 +201,7 @@ struct DMChatView: View {
                 Button(L("block"), role: .destructive) { safety.blockTarget = pubkey }
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("dm-request-block")
-                Button(L("dmRequestAccept")) { withAnimation(.smooth) { model.acceptRequest() } }
+                Button(L("dmRequestAccept")) { model.acceptRequest() }
                     .buttonStyle(.glassProminent)
                     .foregroundStyle(AppColors.background)
                     .accessibilityIdentifier("dm-request-accept")

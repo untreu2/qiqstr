@@ -11,7 +11,7 @@
 "settingsBroadcastOne" = "Tüm etkinliklerini bu yeni röleye yayınlamak ister misin?";
 "settingsBroadcastMany" = "Tüm etkinliklerini bu {count} yeni röleye yayınlamak ister misin?";
 "settingsCleanupResult" = "Temizlik tamamlandı, {count} etkinlik silindi";
-"settingsCopyNpub" = "npub'u kopyala";
+"settingsCopyNpub" = "npub'ı kopyala";
 "settingsExpandedNotesFooter" = "Genişletilmiş notlar, içeriği yazarın altında gösteren tam genişlikte bir düzen kullanır.";
 "settingsGossipNormal" = "Normal";
 "settingsGossipAggressive" = "Agresif";
@@ -103,7 +103,7 @@
 "localNotifyRepostedOne" = "{name} gönderini yeniden paylaştı";
 "localNotifyRepostedTwo" = "{name} ve {other} gönderini yeniden paylaştı";
 "localNotifyRepostedMany" = "{count} kişi gönderini yeniden paylaştı";
-"localNotifyZap" = "Zap: {name} kişisinden {amount} sat";
+"localNotifyZap" = "Zap: {name} kişisinden {amount} sats";
 "localNotifyZapNoAmount" = "{name} kişisinden zap";
 "localNotifyNewMessage" = "Yeni mesaj";
 "localNotifyNewMessages" = "{count} yeni mesaj";
@@ -126,7 +126,7 @@
 "relayPublishReplaceMessage" = "Ağdaki röle listen bu cihazdakinden farklı: {added} eklenecek, {removed} kaldırılacak. Listeni kullanan diğer uygulamalar bu değişikliği görecek. Yayınlanan listenden başlamak için önce Al'a dokun.";
 "launchResetCache" = "Önbelleği ve röleleri temizle, sonra tekrar dene";
 "listNotFoundTitle" = "Yeni liste başlatılsın mı?";
-"listNotFoundMessage" = "Hiçbir röle {list} listeni döndürmedi. Başka bir uygulamada oluşturduysan, burada yeni liste başlatmak onun yerini alır.";
+"listNotFoundMessage" = "Hiçbir röleden {list} alınamadı. Başka bir uygulamada oluşturduysan, burada yeni liste başlatmak onun yerini alır.";
 "listStartNew" = "Yeni liste başlat";
 "listNewCancelled" = "Hiçbir şey değiştirilmedi.";
 "listNamePins" = "sabitlenmiş notlar";
@@ -134,3 +134,12 @@
 "listNameTopics" = "takip edilen konular";
 "listNameRelays" = "röle listesi";
 "listNameGeneric" = "liste";
+"diagnosticsTitle" = "Çökme raporları";
+"diagnosticsFooter" = "iOS, qiqstr için çökme ve performans raporlarını bu cihazda toplar. Raporlar burada kalır ve hiçbir yere yüklenmez. Bir sorunun çözülmesine yardım etmek için bir raporu paylaşıp destek talebine ekleyebilirsin. Raporlar uygulamayla ilgili teknik ayrıntılar içerir; gönderilerini, mesajlarını veya anahtarlarını içermez.";
+"diagnosticsEmpty" = "Rapor yok";
+"diagnosticsEmptyMessage" = "iOS, bildirecek bir şey olduğunda raporları günde yaklaşık bir kez iletir.";
+"diagnosticsCrashes" = "Çökme: {count}";
+"diagnosticsHangs" = "Donma: {count}";
+"diagnosticsOther" = "Tanılama raporu";
+"diagnosticsPerformance" = "Günlük performans raporu";
+"diagnosticsDeleteAll" = "Tüm raporları sil";

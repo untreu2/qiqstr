@@ -83,3 +83,5 @@
 "videoPause" = "Video pausieren";
 "noteHiddenMuted" = "Ausgeblendete Notiz";
 "composeSecretBlocked" = "Dieser Beitrag enthält einen privaten Schlüssel, ein Wallet-Geheimnis oder eine Wiederherstellungsphrase. Entferne sie vor dem Posten: Wer sie sieht, kann dein Konto oder Guthaben übernehmen.";
+"feedFollowPromptTitle" = "Gestalte deine Startseite";
+"feedFollowPromptMessage" = "Du folgst noch niemandem, deshalb siehst du Entdecken. Folge ein paar Leuten, dann erscheinen ihre Beiträge hier.";

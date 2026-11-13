@@ -15,7 +15,7 @@ Answers and settings for App Store Connect that cannot live in code. Review them
 >
 > To review: tap "Create a new account", accept the terms, and skip the optional onboarding steps. The Explore feed shows public content immediately.
 >
-> Moderation (guideline 1.2): users accept terms with a zero-tolerance clause before any content is shown. Every note, profile, conversation, live stream, live chat message and article has Report and Mute/Block in its menu. Reported content is hidden for the reporter immediately, and blocked users disappear from feeds, threads, replies, messages and notifications. Posts marked sensitive are blurred. Reports and complaints sent to the support link (Settings > Contact support) are reviewed within 24 hours.
+> Moderation (guideline 1.2): users accept terms with a zero-tolerance clause before any content is shown. Every note, profile, conversation, live stream, live chat message and article has Report and Mute/Block in its menu. Reported content is hidden for the reporter immediately, and blocked users disappear from feeds, threads, replies, messages and notifications. Posts marked sensitive are blurred. Explore, curated feeds and top zaps leave out posts marked sensitive or tagged as adult content, posts that anyone has reported, and their authors once they have been reported. For accounts that follow people, Explore also shows only authors inside the user's network. Reports and complaints sent to the support link (Settings > Contact support) are reviewed within 24 hours.
 >
 > Account deletion (5.1.1(v)): Settings > Delete account. It sends deletion requests to relays and erases the account's keys and data from the device.
 >
@@ -30,7 +30,7 @@ Answers and settings for App Store Connect that cannot live in code. Review them
 
 ## App Privacy (nutrition label)
 
-The developer collects no data: there is no server, analytics or crash reporting. Answer **"No, we do not collect data from this app"**. Data sent to relays, media hosts and wallets goes to third-party services the user chooses and is described in the in-app privacy policy. Tracking: **No**.
+The developer collects no data: there is no server, analytics or crash reporting. Settings > Crash reports lists the crash and performance reports iOS collects through MetricKit; they stay on the device unless the user shares one, which Apple does not count as collection. Answer **"No, we do not collect data from this app"**. Data sent to relays, media hosts and wallets goes to third-party services the user chooses and is described in the in-app privacy policy. Tracking: **No**.
 
 Privacy Policy URL: host the text of `Qiqstr/UI/Auth/AuthTermsText.swift` (for example as an iOS-specific page next to `TERMS.md`). The repository-wide `TERMS.md` still describes the Flutter app.
 
@@ -71,5 +71,10 @@ Everything else from the November 2026 audit is fixed. What is left needs an ups
   - An idle chat polls less often, backing off from 8 s to 60 s. Live delivery uses a subscription.
   - The encrypted message store is excluded from device backups, because restoring old MLS state would break existing chats.
 - **Wallet:** an NWC payment that times out is checked with `lookup_invoice` before being reported as "may still complete". Cashu ecash and its seed are kept per account, using the "complete unless open" file protection class. On upgrade, existing ecash moves to the first account that opens the wallet. It is kept on account deletion, so funds are not destroyed.
+- **Explore safety:** `ExploreSafety` checks Explore, curated feeds, Explore media and top zaps against kind 1984 reports from the last 180 days, fetched from relays with a 5-second limit and cached for 30 minutes. A reported note is always hidden. Its author is hidden after one reporter for accounts without a web of trust, or two reporters once the web of trust is ready. Reports from muted users and your own reports are ignored here (your own already hide content). It cannot catch posts no one has reported yet.
 - **Notifications:** the widget count and tab dot skip muted, spam-filtered and hidden items. Unread dots stay when you return from a notification and clear the next time the tab is opened.
 - **Terms:** the in-app policy is shown in English, Turkish or German. The translation says the English text prevails. `TERMS.md` at the repository root still describes the cross-platform app.
+
+## Measuring performance
+
+`Perf` (`Qiqstr/Core/Utilities/Perf.swift`) marks "Launch to first feed" and each "Feed query" as signpost intervals in the Points of Interest track. Profile a Release build on a device with Instruments (Time Profiler or the App Launch template) and read those intervals. `testLaunchPerformance` in the UI tests measures cold launch on a simulator.

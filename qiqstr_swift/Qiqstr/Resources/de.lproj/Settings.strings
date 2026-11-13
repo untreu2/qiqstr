@@ -111,7 +111,7 @@
 "kindDMRelays" = "Nachrichten-Relays";
 "kindKeyPackageRelays" = "Schlüsselpaket-Relays";
 "kindKeyPackage" = "Nachrichten-Schlüsselpaket";
-"keysBackupAuthenticateReason" = "Authentifiziere dich, um ein verschlüsseltes Backup deines Schlüssels zu erstellen";
+"keysBackupAuthenticateReason" = "Authentifiziere dich, um eine verschlüsselte Sicherung deines Schlüssels zu erstellen";
 "kindComment" = "Kommentar";
 "kindPoll" = "Umfrage";
 "kindPollVote" = "Umfragestimme";
@@ -134,3 +134,12 @@
 "listNameTopics" = "gefolgten Themen";
 "listNameRelays" = "Relay-Liste";
 "listNameGeneric" = "Liste";
+"diagnosticsTitle" = "Absturzberichte";
+"diagnosticsFooter" = "iOS sammelt auf diesem Gerät Absturz- und Leistungsberichte für qiqstr. Sie bleiben hier und werden nie hochgeladen. Um bei einem Problem zu helfen, teile einen Bericht und hänge ihn an eine Support-Anfrage an. Berichte enthalten technische Details zur App, nicht deine Beiträge, Nachrichten oder Schlüssel.";
+"diagnosticsEmpty" = "Keine Berichte";
+"diagnosticsEmptyMessage" = "iOS liefert Berichte etwa einmal am Tag, wenn es etwas zu melden gibt.";
+"diagnosticsCrashes" = "Abstürze: {count}";
+"diagnosticsHangs" = "Hänger: {count}";
+"diagnosticsOther" = "Diagnosebericht";
+"diagnosticsPerformance" = "Täglicher Leistungsbericht";
+"diagnosticsDeleteAll" = "Alle Berichte löschen";

@@ -148,6 +148,6 @@
 "exploreFeedUnpinned" = "{name} Ana sayfadan kaldırıldı";
 "exploreFeedCreator" = "Akışın sahibini gör";
 "exploreDiscoverFeeds" = "Akış keşfet";
-"explorePackFollowAllConfirm" = "{count, plural, =1{1 kişiyi takip et?} other{{count} kişiyi takip et?}}";
+"explorePackFollowAllConfirm" = "{count, plural, =1{1 kişi takip edilsin mi?} other{{count} kişi takip edilsin mi?}}";
 "explorePackFollowed" = "Bu paketteki herkes takip edildi";
 "searchSecretBlocked" = "Bu bir özel anahtar veya kurtarma ifadesine benziyor, bu yüzden aranmadı ve kaydedilmedi. Asla paylaşma.";

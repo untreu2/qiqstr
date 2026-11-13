@@ -16,7 +16,7 @@
 "feedNewNotesMany" = "{count} yeni not";
 "feedRemoveBookmark" = "Yer İşaretini Kaldır";
 "feedRepostedBy" = "{name} yeniden paylaştı";
-"feedSats" = "sat";
+"feedSats" = "sats";
 "feedShowMore" = "Devamını göster";
 "feedSortLatest" = "En Yeni";
 "feedSortMostInteracted" = "En Çok Etkileşim";
@@ -83,3 +83,5 @@
 "videoPause" = "Videoyu duraklat";
 "noteHiddenMuted" = "Gizlenen not";
 "composeSecretBlocked" = "Bu gönderi bir özel anahtar, cüzdan sırrı veya kurtarma ifadesi içeriyor. Paylaşmadan önce kaldır: onu gören herkes hesabını veya paranı ele geçirebilir.";
+"feedFollowPromptTitle" = "Ana sayfanı kişiselleştir";
+"feedFollowPromptMessage" = "Henüz kimseyi takip etmiyorsun, bu yüzden Keşfet'i görüyorsun. Birkaç kişiyi takip et, gönderileri burada görünsün.";

@@ -61,6 +61,12 @@ struct SettingsView: View {
                     SettingsRowLabel(title: L("settingsContactSupport"), systemImage: "envelope.fill", fill: AppColors.settingsTile)
                 }
                 .accessibilityIdentifier("settings-contact")
+                NavigationLink {
+                    DiagnosticsView()
+                } label: {
+                    SettingsRowLabel(title: L("diagnosticsTitle"), systemImage: "stethoscope", fill: AppColors.settingsTile)
+                }
+                .accessibilityIdentifier("settings-diagnostics")
                 Button { router.sheet = .url(Self.sourceURL) } label: {
                     SettingsRowLabel(title: L("settingsSourceCode"), systemImage: "chevron.left.forwardslash.chevron.right", fill: AppColors.settingsTile)
                 }

@@ -79,4 +79,6 @@ The app should be indistinguishable from a first-party iOS 26 app while keeping 
 
 - Lists that replace themselves on relays (kind 0 profile, kind 3 follows, 10000 mutes, 10001 pins, 30001 bookmarks, 10015 topics) must be edited as a merge onto the newest event fetched from relays, keeping its content and every tag the app does not manage. Never publish one built from an empty or cached local copy; if nothing can be fetched, fail or ask the user (see `FollowService.latestContactList`; `SyncService.latestEditableEvent` asks through `ListConfirmation` before starting a new list).
 - Report and mute must work offline and for view-only accounts: `Moderation.report` hides the content locally first, `MuteService` keeps pending changes on device and publishes them when it can.
+- Explore surfaces strangers' posts, so everything shown there goes through `ExploreSafety.screen` (sensitive filter, web of trust once ready, kind 1984 reports).
+- Crash and performance reports come from MetricKit through `DiagnosticsStore` and stay on the device (Settings > Crash reports). Use `Perf` signposts to time new loading paths.
 - App Store switches live in `Core/Utilities/AppStorePolicy.swift`; `docs/app-store-submission.md` explains them.

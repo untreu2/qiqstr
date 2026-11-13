@@ -101,6 +101,101 @@ final class QiqstrUITests: XCTestCase {
         if discard.waitForExistence(timeout: 3) { discard.tap() }
     }
 
+    func testExploreInvitesNewAccountsToFollowPeople() {
+        let app = signedInApp(contentSize: "UICTContentSizeCategoryL")
+        dismissNotificationPrompt(app)
+        let prompt = app.buttons["feed-follow-prompt-open"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 60), "An account that follows no one must be invited to find people.")
+        prompt.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["suggested-list"].firstMatch.waitForExistence(timeout: 10))
+    }
+
+    func testMessagesSeparatesRequests() {
+        let app = signedInApp(contentSize: "UICTContentSizeCategoryL")
+        dismissNotificationPrompt(app)
+        app.buttons["Messages"].tap()
+        let filter = app.segmentedControls["dm-filter"]
+        XTCAssertExists(filter)
+        XCTAssertEqual(filter.buttons.count, 2)
+        filter.buttons.element(boundBy: 1).tap()
+        XCTAssertTrue(app.staticTexts["No message requests"].waitForExistence(timeout: 10))
+    }
+
+    func testWalletRejectsAnInvalidConnection() {
+        let app = signedInApp(contentSize: "UICTContentSizeCategoryL")
+        dismissNotificationPrompt(app)
+        app.buttons["Wallet"].tap()
+        let connect = app.buttons["wallet-connect"]
+        for _ in 0..<5 where !connect.isHittable { app.swipeUp() }
+        XTCAssertExists(connect)
+        connect.tap()
+        let field = app.textViews["wallet-connect-uri"].exists ? app.textViews["wallet-connect-uri"] : app.textFields["wallet-connect-uri"]
+        XTCAssertExists(field)
+        field.tap()
+        field.typeText("nostr+walletconnect://not-a-wallet")
+        XCTAssertFalse(app.buttons["wallet-connect-submit"].isEnabled, "An invalid connection string must not be accepted.")
+        app.buttons["wallet-connect-cancel"].firstMatch.tap()
+    }
+
+    func testCrashReportsStayOnDevice() {
+        let app = signedInApp(contentSize: "UICTContentSizeCategoryL")
+        dismissNotificationPrompt(app)
+        let list = openSettings(app)
+        let row = app.buttons["settings-diagnostics"]
+        for _ in 0..<6 where !row.isHittable { list.swipeUp() }
+        row.tap()
+        XCTAssertTrue(app.collectionViews["diagnostics-list"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "never uploaded")).firstMatch.exists)
+    }
+
+    func testAccountDeletionNeedsTwoConfirmations() {
+        let app = signedInApp(contentSize: "UICTContentSizeCategoryL")
+        dismissNotificationPrompt(app)
+        let list = openSettings(app)
+        let row = app.buttons["settings-delete-account"]
+        for _ in 0..<6 where !row.isHittable { list.swipeUp() }
+        row.tap()
+        let delete = app.buttons["events-delete-account"]
+        for _ in 0..<8 where !delete.isHittable { app.swipeUp() }
+        XTCAssertExists(delete)
+        delete.tap()
+        let proceed = app.buttons["events-delete-continue"].firstMatch
+        XTCAssertExists(proceed)
+        proceed.tap()
+        let confirm = app.alerts.buttons["events-delete-confirm"].firstMatch
+        XTCAssertExists(confirm)
+        XCTAssertFalse(confirm.isEnabled, "Deletion must stay disabled until the confirmation word is typed.")
+        app.alerts.buttons["Cancel"].firstMatch.tap()
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+    }
+
+    func testLaunchPerformance() {
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+        measure(metrics: [XCTApplicationLaunchMetric()], options: options) {
+            let app = XCUIApplication()
+            app.launchArguments += ["-QIQ_LOGIN", Self.randomKeyHex()]
+            app.launch()
+        }
+    }
+
+    private func dismissNotificationPrompt(_ app: XCUIApplication) {
+        let notNow = app.buttons["Not now"]
+        if notNow.waitForExistence(timeout: 8) { notNow.tap() }
+    }
+
+    private func openSettings(_ app: XCUIApplication) -> XCUIElement {
+        let profile = app.navigationBars.buttons["Profile"].firstMatch
+        XTCAssertExists(profile)
+        profile.tap()
+        let settings = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Settings")).firstMatch
+        XTCAssertExists(settings)
+        settings.tap()
+        let list = app.collectionViews["settings-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 10))
+        return list
+    }
+
     private func XTCAssertExists(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(element.waitForExistence(timeout: 10), file: file, line: line)
     }

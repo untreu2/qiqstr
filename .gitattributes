@@ -1,0 +1,2 @@
+# Leave the Flutter client out of GitHub language stats so the repo is labeled Swift.
+qiqstr_flutter/** linguist-detectable=false

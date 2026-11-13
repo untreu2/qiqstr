@@ -19,7 +19,7 @@
 "walletScan" = "Scannen";
 "walletPaste" = "Einfügen";
 "walletMelt" = "Einschmelzen";
-"walletMeltAllConfirm" = "Alle {amount} Sats an Cashu an deine Lightning-Wallet senden?";
+"walletMeltAllConfirm" = "Alle {amount} Sats aus Cashu an deine Lightning-Wallet senden?";
 "walletCashuPending" = "{amount} Sats an Cashu warten auf das Einschmelzen";
 "walletCashuRedeemDescription" = "Füge ein Cashu-Token ein, um es in deine verbundene Lightning-Wallet einzulösen. Eine kleine Mint-Gebühr wird abgezogen.";
 "walletCashuTooSmall" = "Dieses Token ist zu klein, um die Mint-Gebühren zu decken.";
@@ -73,7 +73,7 @@
 "walletProviderCoinos" = "Web-Wallet, keine Installation nötig";
 "walletProviderMinibits" = "Ecash-Wallet mit App-Verbindungen";
 "walletProviderZeus" = "Selbstverwahrter Lightning-Node auf deinem Telefon";
-"walletClipboardReady" = "In deiner Zwischenablage ist etwas Neues. Füge es ein, um nach einer Verbindungszeichenfolge zu suchen.";
+"walletClipboardReady" = "In deiner Zwischenablage ist etwas Neues. Füge es ein, um nach einem Verbindungsstring zu suchen.";
 "walletEmptyTransactionsMessage" = "Zahlungen und Zaps, die du sendest oder empfängst, erscheinen hier.";
 "walletDayNet" = "Netto {amount} Sats";
 "walletFiatEstimate" = "≈ {amount}";

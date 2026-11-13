@@ -8,10 +8,18 @@ struct FeedView: View {
     @State private var hashtags = HashtagFollowService.shared
     @State private var isManagingTopics = false
     @State private var explore = ExploreService.shared
+    @State private var follows = FollowService.shared
 
     var body: some View {
         ScrollViewReader { proxy in
-            NoteList(notes: model.notes, isLoadingMore: model.isLoadingMore, onAppearNote: model.loadMoreIfNeeded)
+            NoteList(notes: model.notes, isLoadingMore: model.isLoadingMore, onAppearNote: model.loadMoreIfNeeded) {
+                if showsFollowPrompt {
+                    FeedFollowPrompt()
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(AppColors.background)
+                        .listRowSeparator(.hidden)
+                }
+            }
                 .accessibilityIdentifier("feed-list")
                 .refreshable { await model.refresh() }
                 .overlay { stateOverlay }
@@ -44,6 +52,10 @@ struct FeedView: View {
         }
         .sensoryFeedback(.selection, trigger: model.source)
         .sensoryFeedback(.selection, trigger: model.sort)
+    }
+
+    private var showsFollowPrompt: Bool {
+        model.source.isExplore && follows.isLoaded && follows.count == 0 && !model.notes.isEmpty
     }
 
     private func scrollToTop(_ proxy: ScrollViewProxy) {
@@ -259,6 +271,29 @@ struct FeedSkeletonRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+}
+
+struct FeedFollowPrompt: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(L("feedFollowPromptTitle"), systemImage: "person.2")
+                .font(.headline)
+            Text(L("feedFollowPromptMessage"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(L("suggestedFollows")) { Router.shared.push(.suggestedFollows) }
+                .buttonStyle(.glassProminent)
+                .foregroundStyle(AppColors.background)
+                .buttonBorderShape(.capsule)
+                .accessibilityIdentifier("feed-follow-prompt-open")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(AppColors.overlayLight, in: .rect(cornerRadius: 20))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("feed-follow-prompt")
     }
 }
 

@@ -68,6 +68,7 @@ struct NotificationsView: View {
                         message: L("whenSomeoneInteractsWithYourPosts")
                     )
                         .listRowSeparator(.hidden)
+                        .listRowBackground(AppColors.background)
                         .padding(.top, 40)
                 } else {
                     Section {

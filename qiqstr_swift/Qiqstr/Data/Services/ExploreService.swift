@@ -237,10 +237,10 @@ final class ExploreService {
         }
         .sorted { $0.sats > $1.sats }
         if !parsed.isEmpty {
-            zaps = parsed
             let noteIds = Array(Set(parsed.compactMap(\.noteId)))
-            let notes = await SearchService.notes(ids: noteIds, context: .current)
+            let notes = await ExploreSafety.shared.screen(await SearchService.notes(ids: noteIds, context: .current))
             zapNotes = Dictionary(notes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            zaps = parsed.filter { zap in zap.noteId.map { zapNotes[$0] != nil } ?? true }
             await ProfileCache.shared.load(Array(Set(parsed.flatMap { [$0.sender, $0.receiver] })))
         }
         finish("zaps", ok: !parsed.isEmpty)
@@ -291,7 +291,7 @@ final class ExploreService {
         let raw = PrimalCache.signed(events, kinds: [1])
         var ids = PrimalCache.order(events).filter { id in raw.contains { $0.str("id") == id } }
         if ids.isEmpty { ids = raw.sorted { $0.int("created_at") > $1.int("created_at") }.compactMap { $0.str("id") } }
-        let notes = await SearchService.notes(ids: ids, context: .current)
+        let notes = await ExploreSafety.shared.screen(await SearchService.notes(ids: ids, context: .current))
         var seen = Set<String>()
         var entries: [ProfileMediaEntry] = []
         for note in notes where !note.isRepost && !Self.isSensitive(note) {

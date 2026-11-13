@@ -134,3 +134,12 @@
 "listNameTopics" = "followed topics";
 "listNameRelays" = "relay list";
 "listNameGeneric" = "list";
+"diagnosticsTitle" = "Crash reports";
+"diagnosticsFooter" = "iOS collects crash and performance reports for qiqstr on this device. They stay here and are never uploaded. To help fix a problem, share a report and attach it to a support request. Reports hold technical details about the app, not your posts, messages or keys.";
+"diagnosticsEmpty" = "No reports";
+"diagnosticsEmptyMessage" = "iOS delivers reports about once a day when there is something to report.";
+"diagnosticsCrashes" = "Crashes: {count}";
+"diagnosticsHangs" = "Freezes: {count}";
+"diagnosticsOther" = "Diagnostic report";
+"diagnosticsPerformance" = "Daily performance report";
+"diagnosticsDeleteAll" = "Delete all reports";

@@ -299,7 +299,9 @@ final class DMService {
 
     func canLoadOlder(_ peer: String) -> Bool {
         guard let me else { return false }
-        return groups.values.contains { $0.peer(for: me) == peer && !historyComplete.contains($0.id) }
+        return groups.values.contains { group in
+            group.peer(for: me) == peer && (historyLoaded[group.id] ?? 0) >= Self.historyLimit && !historyComplete.contains(group.id)
+        }
     }
 
     func loadOlder(_ peer: String) async {

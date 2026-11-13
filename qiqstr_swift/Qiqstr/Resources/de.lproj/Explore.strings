@@ -127,7 +127,7 @@
 "exploreZapFromTo" = "{sender} hat {receiver} gezappt";
 "exploreViewSender" = "Absender ansehen";
 "exploreViewReceiver" = "Empfänger ansehen";
-"exploreFollowPacks" = "Follow-Pakete";
+"exploreFollowPacks" = "Follow-Packs";
 "exploreMore" = "Mehr entdecken";
 "exploreReadsSubtitle" = "Lange Artikel von Leuten, denen du folgst, und darüber hinaus.";
 "exploreLiveSubtitle" = "Streams, die gerade auf Nostr laufen.";
@@ -149,5 +149,5 @@
 "exploreFeedCreator" = "Ersteller des Feeds ansehen";
 "exploreDiscoverFeeds" = "Feeds entdecken";
 "explorePackFollowAllConfirm" = "{count, plural, =1{1 Person folgen?} other{{count} Personen folgen?}}";
-"explorePackFollowed" = "Allen in diesem Paket gefolgt";
+"explorePackFollowed" = "Allen in diesem Pack gefolgt";
 "searchSecretBlocked" = "Das sieht nach einem privaten Schlüssel oder einer Wiederherstellungsphrase aus und wurde daher weder gesucht noch gespeichert. Teile das niemals.";

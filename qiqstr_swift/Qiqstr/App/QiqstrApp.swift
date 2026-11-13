@@ -8,7 +8,9 @@ struct QiqstrApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        Perf.start()
         LocalNotificationService.shared.activate()
+        DiagnosticsStore.shared.activate()
     }
 
     var body: some Scene {
