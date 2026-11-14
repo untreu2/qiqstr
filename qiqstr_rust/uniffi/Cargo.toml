@@ -1,0 +1,32 @@
+[package]
+name = "qiqstr_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "lib"]
+name = "qiqstr_core"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[dependencies]
+uniffi = { version = "0.32", features = ["cli", "tokio"] }
+thiserror = "2"
+once_cell = "1"
+anyhow = "1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
+qiqstr = { path = "..", features = ["marmot"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+
+[patch.crates-io]
+mdk-sqlite-storage = { path = "../vendor/mdk-sqlite-storage" }

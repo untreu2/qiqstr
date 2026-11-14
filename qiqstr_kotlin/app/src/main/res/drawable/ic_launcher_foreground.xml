@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <group android:pivotX="512" android:pivotY="512" android:scaleX="0.62" android:scaleY="0.62">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M200 470 A270 270 0 1 1 740 470 A270 270 0 1 1 200 470 Z M640 640 L800 830 L560 720 Z M350 470 A120 120 0 1 0 590 470 A120 120 0 1 0 350 470 Z" />
+    </group>
+</vector>

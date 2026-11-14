@@ -1033,7 +1033,7 @@ enum QiqError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
-    case Failed(message: String
+    case Failed(reason: String
     )
 
     
@@ -1065,7 +1065,7 @@ public struct FfiConverterTypeQiqError: FfiConverterRustBuffer {
 
         
         case 1: return .Failed(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -1079,9 +1079,9 @@ public struct FfiConverterTypeQiqError: FfiConverterRustBuffer {
 
         
         
-        case let .Failed(message):
+        case let .Failed(reason):
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
             
         }
     }

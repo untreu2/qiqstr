@@ -15,9 +15,9 @@ xcodebuild -project Qiqstr.xcodeproj -scheme Qiqstr -destination 'generic/platfo
 
 ## Rust ↔ Swift
 
-- Rust logic lives in the shared core, `../qiqstr_rust/src/api/*.rs`. `rust/` is a thin UniFFI crate (`qiqstr_core`) that depends on it with the `marmot` feature. Change Rust behavior in the core, not here.
-- `rust/src/ffi.rs` is **generated** by `scripts/gen_ffi.py` from the core's `api` modules (except `nip17`). It wraps every public `api` function with `#[uniffi::export]`, runs async work on a dedicated Tokio runtime, and maps `anyhow::Error` to `QiqError`. Re-run the script after changing the Rust API. Do not edit it by hand.
-- Streams use the `EventSink` callback interface (`rust/src/sink.rs`, adapted to the core's sink by `ForeignSink`). On the Swift side, wrap them with `EventStream.make { sink in try await someStreamingFn(..., sink: sink) }` to get an `AsyncThrowingStream<String, Error>`.
+- Rust logic lives in the shared core, `../qiqstr_rust/src/api/*.rs`. The UniFFI crate (`qiqstr_core`) is `../qiqstr_rust/uniffi`, shared with the Kotlin app; it depends on the core with the `marmot` feature. Change Rust behavior in the core, not in the bridge.
+- `../qiqstr_rust/uniffi/src/ffi.rs` is **generated** by `../qiqstr_rust/uniffi/gen_ffi.py` from the core's `api` modules (except `nip17`). It wraps every public `api` function with `#[uniffi::export]`, runs async work on a dedicated Tokio runtime, and maps `anyhow::Error` to `QiqError`. Re-run the script after changing the Rust API. Do not edit it by hand.
+- Streams use the `EventSink` callback interface (`../qiqstr_rust/uniffi/src/sink.rs`, adapted to the core's sink by `ForeignSink`). On the Swift side, wrap them with `EventStream.make { sink in try await someStreamingFn(..., sink: sink) }` to get an `AsyncThrowingStream<String, Error>`.
 - Generated Swift bindings live in `QiqstrCore` (a local Swift package). `import QiqstrCore` exposes the functions in camelCase, for example `dbGetHydratedFeedNotes(...)`, `createNoteEvent(...)`, `sendEvent(...)`. The full list is in `QiqstrCore/Sources/QiqstrCore/qiqstr_core.swift`.
 - Use `coreErrorMessage(error)` to show Rust errors.
 - `../qiqstr_rust/vendor/mdk-sqlite-storage` is `mdk-sqlite-storage` 0.8.0 patched to `rusqlite` 0.31 so it shares one SQLCipher build with `cdk-sqlite`. Only one `libsqlite3-sys` can be linked, so keep both crates on the same `rusqlite`.

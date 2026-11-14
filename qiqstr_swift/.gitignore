@@ -1,7 +1,6 @@
 .DS_Store
 build/
 DerivedData/
-rust/target/
 QiqstrCore/QiqstrCoreFFI.xcframework
 QiqstrCore/.build/
 QiqstrCore/.swiftpm/
