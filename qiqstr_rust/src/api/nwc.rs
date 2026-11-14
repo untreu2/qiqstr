@@ -117,7 +117,11 @@ pub async fn nwc_lookup_invoice(nwc_uri: String, invoice: String) -> Result<Stri
         Some(TransactionState::Failed) => "failed",
         Some(TransactionState::Expired) => "expired",
         Some(TransactionState::Pending) => "pending",
-        None if result.settled_at.is_some() || result.preimage.as_deref().is_some_and(|p| !p.is_empty()) => "settled",
+        None if result.settled_at.is_some()
+            || result.preimage.as_deref().is_some_and(|p| !p.is_empty()) =>
+        {
+            "settled"
+        }
         None => "pending",
     };
     Ok(serde_json::json!({
@@ -214,8 +218,14 @@ mod tests {
     #[test]
     fn rejects_wallet_keys_that_are_not_curve_points() {
         let secret = Keys::generate().secret_key().to_secret_hex();
-        let valid = format!("nostr+walletconnect://{}?relay=wss%3A%2F%2Frelay.example.com&secret={secret}", Keys::generate().public_key().to_hex());
-        let invalid = format!("nostr+walletconnect://{}?relay=wss%3A%2F%2Frelay.example.com&secret={secret}", "ff".repeat(32));
+        let valid = format!(
+            "nostr+walletconnect://{}?relay=wss%3A%2F%2Frelay.example.com&secret={secret}",
+            Keys::generate().public_key().to_hex()
+        );
+        let invalid = format!(
+            "nostr+walletconnect://{}?relay=wss%3A%2F%2Frelay.example.com&secret={secret}",
+            "ff".repeat(32)
+        );
         assert!(validate_nwc_uri(valid));
         assert!(!validate_nwc_uri(invalid));
     }

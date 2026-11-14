@@ -26,3 +26,22 @@ String encodeBasicBech32({required String hexStr, required String prefix}) =>
       hexStr: hexStr,
       prefix: prefix,
     );
+
+String nip19EncodeNaddr({
+  required int kind,
+  required String pubkeyHex,
+  required String identifier,
+}) => RustLib.instance.api.crateApiNip19Nip19EncodeNaddr(
+  kind: kind,
+  pubkeyHex: pubkeyHex,
+  identifier: identifier,
+);
+
+String nip19EncodeNevent({required String eventIdHex, String? authorHex}) =>
+    RustLib.instance.api.crateApiNip19Nip19EncodeNevent(
+      eventIdHex: eventIdHex,
+      authorHex: authorHex,
+    );
+
+String nip19EncodeNprofile({required String pubkeyHex}) =>
+    RustLib.instance.api.crateApiNip19Nip19EncodeNprofile(pubkeyHex: pubkeyHex);

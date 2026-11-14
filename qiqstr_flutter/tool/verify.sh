@@ -3,6 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 flutter pub get --enforce-lockfile
+cargo fmt --manifest-path ../qiqstr_rust/Cargo.toml --check
+cargo clippy --locked --manifest-path ../qiqstr_rust/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path ../qiqstr_rust/Cargo.toml
 cargo fmt --manifest-path rust/Cargo.toml --check
 cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings
 cargo test --locked --manifest-path rust/Cargo.toml

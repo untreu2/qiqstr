@@ -18,6 +18,9 @@ String createSignedEvent({
   privateKeyHex: privateKeyHex,
 );
 
+String zapReceiptSummary({required String eventJson}) =>
+    RustLib.instance.api.crateApiEventsZapReceiptSummary(eventJson: eventJson);
+
 String createNoteEvent({
   required String content,
   required List<List<String>> tags,

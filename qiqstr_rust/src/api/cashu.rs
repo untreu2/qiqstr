@@ -121,7 +121,9 @@ pub fn cashu_set_account(pubkey_hex: String) -> Result<()> {
     if pubkey.len() != 64 || !pubkey.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(anyhow!("Invalid account for Cashu"));
     }
-    *CASHU_ACCOUNT.write().map_err(|_| anyhow!("Cashu is unavailable"))? = Some(pubkey);
+    *CASHU_ACCOUNT
+        .write()
+        .map_err(|_| anyhow!("Cashu is unavailable"))? = Some(pubkey);
     Ok(())
 }
 
@@ -152,7 +154,12 @@ async fn store() -> Result<Arc<Mutex<WalletStore>>> {
         .read()
         .await
         .as_ref()
-        .map(|path| PathBuf::from(path).parent().unwrap_or_else(|| Path::new(".")).to_path_buf())
+        .map(|path| {
+            PathBuf::from(path)
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf()
+        })
         .ok_or_else(|| anyhow!("Initialize persistent app storage before using Cashu"))?;
     let account = CASHU_ACCOUNT
         .read()

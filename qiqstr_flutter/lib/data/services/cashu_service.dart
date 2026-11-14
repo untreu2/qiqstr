@@ -42,7 +42,17 @@ class CashuService {
     }
   }
 
+  Result<void> _useAccount(String pubkeyHex) {
+    try {
+      rust_cashu.cashuSetAccount(pubkeyHex: pubkeyHex);
+      return const Result.success(null);
+    } catch (e) {
+      return Result.error(e.toString());
+    }
+  }
+
   Future<Result<int>> receiveAndMelt({
+    required String accountPubkeyHex,
     required String token,
     required String lightningTarget,
   }) async {
@@ -50,6 +60,8 @@ class CashuService {
     if (lightningTarget.trim().isEmpty) {
       return Result.error('Lightning destination cannot be empty');
     }
+    final account = _useAccount(accountPubkeyHex);
+    if (account is Error<void>) return Result.failure(account.appError);
     try {
       final jsonStr = await rust_cashu.cashuReceiveAndMelt(
         token: token.trim(),
@@ -63,10 +75,15 @@ class CashuService {
     }
   }
 
-  Future<Result<int>> meltAll({required String lightningTarget}) async {
+  Future<Result<int>> meltAll({
+    required String accountPubkeyHex,
+    required String lightningTarget,
+  }) async {
     if (lightningTarget.trim().isEmpty) {
       return Result.error('Lightning destination cannot be empty');
     }
+    final account = _useAccount(accountPubkeyHex);
+    if (account is Error<void>) return Result.failure(account.appError);
     try {
       final jsonStr = await rust_cashu.cashuMeltAll(
         lightningTarget: lightningTarget.trim(),
@@ -79,7 +96,11 @@ class CashuService {
     }
   }
 
-  Future<Result<CashuBalance>> getBalance() async {
+  Future<Result<CashuBalance>> getBalance({
+    required String accountPubkeyHex,
+  }) async {
+    final account = _useAccount(accountPubkeyHex);
+    if (account is Error<void>) return Result.failure(account.appError);
     try {
       final jsonStr = await rust_cashu.cashuGetBalance();
       final map = jsonDecode(jsonStr) as Map<String, dynamic>;

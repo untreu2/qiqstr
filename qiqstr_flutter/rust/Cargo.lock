@@ -2204,6 +2204,7 @@ dependencies = [
  "serde_json",
  "unicode-normalization",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -2614,6 +2615,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "qiqstr"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "aes-gcm",
+ "anyhow",
+ "base64 0.22.1",
+ "bip39",
+ "cdk",
+ "cdk-sqlite",
+ "futures",
+ "hex",
+ "nostr",
+ "nostr-database",
+ "nostr-lmdb",
+ "nostr-sdk",
+ "rand 0.8.8",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-tungstenite 0.24.0",
+ "typenum",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2904,28 +2932,9 @@ dependencies = [
 name = "rust_lib_qiqstr"
 version = "0.1.0"
 dependencies = [
- "aes",
- "aes-gcm",
  "anyhow",
- "base64 0.22.1",
- "bip39",
- "cdk",
- "cdk-sqlite",
  "flutter_rust_bridge",
- "futures",
- "hex",
- "nostr",
- "nostr-database",
- "nostr-lmdb",
- "nostr-sdk",
- "rand 0.8.8",
- "regex",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tokio-tungstenite 0.24.0",
- "typenum",
+ "qiqstr",
 ]
 
 [[package]]

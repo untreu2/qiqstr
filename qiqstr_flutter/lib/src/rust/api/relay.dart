@@ -6,8 +6,6 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_counts_json`, `build_thread_result_json`, `counting_client_lock`, `db_path_state`, `get_client_pub`, `get_client`, `publish_event`, `published_event_json`, `resolve_repost_to_original_local`, `resolve_repost_to_original`, `resolve_thread_root_internal`, `resolve_thread_root_local`, `state`, `try_open_lmdb`, `user_relays_state`
-
 Future<void> initClient({
   required List<String> relayUrls,
   String? privateKeyHex,
@@ -268,3 +266,13 @@ Future<String> fetchFollowerCounts({required List<String> pubkeyHexes}) =>
     RustLib.instance.api.crateApiRelayFetchFollowerCounts(
       pubkeyHexes: pubkeyHexes,
     );
+
+Future<String> fetchEventsFromRelays({
+  required String filterJson,
+  required List<String> relayUrls,
+  required int timeoutSecs,
+}) => RustLib.instance.api.crateApiRelayFetchEventsFromRelays(
+  filterJson: filterJson,
+  relayUrls: relayUrls,
+  timeoutSecs: timeoutSecs,
+);

@@ -1,6 +1,7 @@
 use std::sync::Arc;
-use crate::api;
-use crate::sink::{EventSink, StreamSink};
+use qiqstr::api;
+use qiqstr::sink::StreamSink;
+use crate::sink::{EventSink, ForeignSink};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum QiqError {
@@ -523,7 +524,7 @@ pub async fn get_connected_relay_count() -> Result<u32, QiqError> { on_rt(async 
 pub async fn get_relay_status() -> Result<String, QiqError> { on_rt(async move { api::relay::get_relay_status().await }).await }
 
 #[uniffi::export]
-pub async fn stream_relay_status(sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::stream_relay_status(StreamSink::new(sink)).await }).await }
+pub async fn stream_relay_status(sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::stream_relay_status(StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]
 pub async fn discover_and_connect_outbox_relays(pubkeys_hex: Vec<String>, max_outbox_relays: u32, min_relay_frequency: u32) -> Result<String, QiqError> { on_rt(async move { api::relay::discover_and_connect_outbox_relays(pubkeys_hex, max_outbox_relays as usize, min_relay_frequency as usize).await }).await }
@@ -538,7 +539,7 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
 pub async fn fetch_counts_from_relays(note_ids: Vec<String>, user_pubkey_hex: Option<String>) -> Result<String, QiqError> { on_rt(async move { api::relay::fetch_counts_from_relays(note_ids, user_pubkey_hex).await }).await }
 
 #[uniffi::export]
-pub async fn stream_interaction_counts(note_ids: Vec<String>, user_pubkey_hex: Option<String>, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::stream_interaction_counts(note_ids, user_pubkey_hex, StreamSink::new(sink)).await }).await }
+pub async fn stream_interaction_counts(note_ids: Vec<String>, user_pubkey_hex: Option<String>, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::stream_interaction_counts(note_ids, user_pubkey_hex, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]
 pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Option<String>, QiqError> { on_rt(async move { api::relay::fetch_event_by_id(event_id, timeout_secs).await }).await }
@@ -559,7 +560,7 @@ pub async fn send_event_to(event_json: String, relay_urls: Vec<String>) -> Resul
 pub async fn broadcast_events(events_json: String, relay_urls: Option<Vec<String>>) -> Result<String, QiqError> { on_rt(async move { api::relay::broadcast_events(events_json, relay_urls).await }).await }
 
 #[uniffi::export]
-pub async fn stream_broadcast_events(events_json: String, relay_urls: Option<Vec<String>>, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::stream_broadcast_events(events_json, relay_urls, StreamSink::new(sink)).await }).await }
+pub async fn stream_broadcast_events(events_json: String, relay_urls: Option<Vec<String>>, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::stream_broadcast_events(events_json, relay_urls, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]
 pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Result<String, QiqError> { on_rt(async move { api::relay::request_to_vanish(relay_urls, reason).await }).await }
@@ -568,13 +569,13 @@ pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Resul
 pub async fn delete_events(event_ids: Vec<String>, reason: String) -> Result<String, QiqError> { on_rt(async move { api::relay::delete_events(event_ids, reason).await }).await }
 
 #[uniffi::export]
-pub async fn fetch_all_events_for_author(author_hex: String, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::fetch_all_events_for_author(author_hex, StreamSink::new(sink)).await }).await }
+pub async fn fetch_all_events_for_author(author_hex: String, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::fetch_all_events_for_author(author_hex, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]
-pub async fn fetch_profile_events(author_hex: String, kinds_str: String, since_timestamp: i64, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::fetch_profile_events(author_hex, kinds_str, since_timestamp, StreamSink::new(sink)).await }).await }
+pub async fn fetch_profile_events(author_hex: String, kinds_str: String, since_timestamp: i64, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::fetch_profile_events(author_hex, kinds_str, since_timestamp, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]
-pub async fn subscribe_to_events(filter_json: String, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::subscribe_to_events(filter_json, StreamSink::new(sink)).await }).await }
+pub async fn subscribe_to_events(filter_json: String, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::subscribe_to_events(filter_json, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]
 pub async fn resolve_thread_root(note_id: String) -> Result<String, QiqError> { on_rt(async move { api::relay::resolve_thread_root(note_id).await }).await }

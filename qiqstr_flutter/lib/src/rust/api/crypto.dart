@@ -67,3 +67,19 @@ Uint8List aesGcmDecrypt({
 
 String sha256Hash({required List<int> data}) =>
     RustLib.instance.api.crateApiCryptoSha256Hash(data: data);
+
+String ncryptsecEncrypt({
+  required String privateKeyHex,
+  required String password,
+}) => RustLib.instance.api.crateApiCryptoNcryptsecEncrypt(
+  privateKeyHex: privateKeyHex,
+  password: password,
+);
+
+String ncryptsecDecrypt({
+  required String ncryptsec,
+  required String password,
+}) => RustLib.instance.api.crateApiCryptoNcryptsecDecrypt(
+  ncryptsec: ncryptsec,
+  password: password,
+);

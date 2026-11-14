@@ -2,7 +2,9 @@
 
 - `qiqstr_flutter/` contains the Flutter client. Read `qiqstr_flutter/AGENTS.md` before changing it.
 - `qiqstr_swift/` contains the native SwiftUI client. Read `qiqstr_swift/AGENTS.md` before changing it.
-- Run build, generation, and test commands from the relevant application directory. Each app owns its Rust bridge and generated artifacts.
+- `qiqstr_rust/` is the shared Rust core (crate `qiqstr`) used by both apps: nostr-sdk, LMDB, relays, NWC, Cashu, NIP-17, and Marmot behind the `marmot` feature. Put Rust logic here, not in an app.
+- Each app owns a thin bridge crate around the core: `qiqstr_flutter/rust` (flutter_rust_bridge) and `qiqstr_swift/rust` (UniFFI). Both are generated from `qiqstr_rust/src/api`. After changing the core's public API, regenerate both bridges (see each app's AGENTS.md).
+- Run build, generation, and test commands from the relevant directory. Check the core with `cargo fmt --check`, `cargo clippy --all-targets --features marmot -- -D warnings`, and `cargo test --features marmot` in `qiqstr_rust/`.
 
 ## Browser
 

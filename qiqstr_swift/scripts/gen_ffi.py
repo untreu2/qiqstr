@@ -1,6 +1,8 @@
 import re, glob, os, sys
-root = sys.argv[1]
-out = ["use std::sync::Arc;", "use crate::api;", "use crate::sink::{EventSink, StreamSink};", "",
+root = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "rust")
+shared = os.path.join(root, "..", "..", "qiqstr_rust")
+skip_modules = {"mod", "nip17"}
+out = ["use std::sync::Arc;", "use qiqstr::api;", "use qiqstr::sink::StreamSink;", "use crate::sink::{EventSink, ForeignSink};", "",
 "#[derive(Debug, thiserror::Error, uniffi::Error)]",
 "pub enum QiqError {", "    #[error(\"{message}\")]", "    Failed { message: String },", "}", "",
 "impl From<anyhow::Error> for QiqError {", "    fn from(e: anyhow::Error) -> Self { QiqError::Failed { message: format!(\"{e:#}\") } }", "}", "",
@@ -20,9 +22,9 @@ out = ["use std::sync::Arc;", "use crate::api;", "use crate::sink::{EventSink, S
 "#[uniffi::export]", "pub fn extract_embedded_ids_batch_typed(contents: Vec<String>) -> EmbeddedIds { let (a, b) = api::database::extract_embedded_ids_batch_typed(contents); EmbeddedIds { event_ids: a, addresses: b } }", "",
 ]
 skip = {"generate_keypair", "extract_embedded_ids_batch_typed"}
-for f in sorted(glob.glob(os.path.join(root, "src/api/*.rs"))):
+for f in sorted(glob.glob(os.path.join(shared, "src/api/*.rs"))):
     mod = os.path.basename(f)[:-3]
-    if mod == "mod": continue
+    if mod in skip_modules: continue
     s = open(f).read()
     for m in re.finditer(r'\npub (async )?fn (\w+)\s*\((.*?)\)\s*(?:->\s*([^{]+?))?\s*\{', s, re.S):
         is_async, name, args, ret = bool(m.group(1)), m.group(2), m.group(3), (m.group(4) or "").strip()
@@ -32,7 +34,7 @@ for f in sorted(glob.glob(os.path.join(root, "src/api/*.rs"))):
         for p in params:
             n, t = [x.strip() for x in p.split(":", 1)]
             if t.startswith("StreamSink"):
-                sink = n; sig.append(f"{n}: Arc<dyn EventSink>"); call.append(f"StreamSink::new({n})")
+                sink = n; sig.append(f"{n}: Arc<dyn EventSink>"); call.append(f"StreamSink::new(Arc::new(ForeignSink({n})))")
             elif t == "usize":
                 sig.append(f"{n}: u32"); call.append(f"{n} as usize")
             else:

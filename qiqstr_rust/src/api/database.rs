@@ -53,7 +53,9 @@ pub fn set_known_zappers(zappers_json: String) {
 }
 
 fn zapper_allowed(recipient: &str, signer: &str) -> bool {
-    let Ok(map) = known_zappers().read() else { return true };
+    let Ok(map) = known_zappers().read() else {
+        return true;
+    };
     match map.get(&recipient.to_lowercase()) {
         Some(zapper) => !zapper.is_empty() && zapper == &signer.to_lowercase(),
         None => true,
@@ -208,7 +210,11 @@ fn extract_bolt11_amount_sats(bolt11: &str) -> Option<u64> {
 const MAX_ZAP_SATS: u64 = 2_100_000_000_000_000;
 
 fn verified_zap_request(receipt: &Event) -> Option<Event> {
-    let description = receipt.tags.iter().find(|tag| tag.kind() == TagKind::Description)?.content()?;
+    let description = receipt
+        .tags
+        .iter()
+        .find(|tag| tag.kind() == TagKind::Description)?
+        .content()?;
     let request = Event::from_json(description).ok()?;
     if request.kind != Kind::ZapRequest || request.verify().is_err() {
         return None;
@@ -227,7 +233,10 @@ fn verified_zap_request(receipt: &Event) -> Option<Event> {
         return None;
     }
     let signer = receipt.pubkey.to_hex();
-    if !receipt_p.iter().all(|recipient| zapper_allowed(recipient, &signer)) {
+    if !receipt_p
+        .iter()
+        .all(|recipient| zapper_allowed(recipient, &signer))
+    {
         return None;
     }
     let receipt_e = values(receipt, "e");
@@ -239,7 +248,9 @@ fn verified_zap_request(receipt: &Event) -> Option<Event> {
 }
 
 pub(crate) fn extract_zap_amount_sats(event: &Event) -> u64 {
-    let Some(request) = verified_zap_request(event) else { return 0 };
+    let Some(request) = verified_zap_request(event) else {
+        return 0;
+    };
     let bolt11_sats = event
         .tags
         .iter()
@@ -265,7 +276,9 @@ pub(crate) fn extract_zap_sender(event: &Event) -> Option<String> {
 }
 
 pub(crate) fn extract_zap_comment(event: &Event) -> String {
-    verified_zap_request(event).map(|request| request.content).unwrap_or_default()
+    verified_zap_request(event)
+        .map(|request| request.content)
+        .unwrap_or_default()
 }
 
 pub(crate) struct NoteReferences {
@@ -1689,13 +1702,14 @@ async fn hydrate_notes(
                 }
             }
 
-            let embedded_json: Option<serde_json::Value> = repost_cache.get(&id).cloned().or_else(|| {
-                let original = Event::from_json(&content).ok()?;
-                if original.verify().is_err() || original.id.to_hex() != id {
-                    return None;
-                }
-                serde_json::from_str::<serde_json::Value>(&original.as_json()).ok()
-            });
+            let embedded_json: Option<serde_json::Value> =
+                repost_cache.get(&id).cloned().or_else(|| {
+                    let original = Event::from_json(&content).ok()?;
+                    if original.verify().is_err() || original.id.to_hex() != id {
+                        return None;
+                    }
+                    serde_json::from_str::<serde_json::Value>(&original.as_json()).ok()
+                });
             if embedded_json.is_none() {
                 continue;
             }
@@ -2276,8 +2290,12 @@ pub async fn db_get_hydrated_profile_notes(
     let client = get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
 
-    let batch_limit = limit.saturating_mul(if filter_replies { 4 } else { 1 }).max(1) as usize;
-    let mut cursor = until_timestamp.filter(|until| *until > 0).map(|until| until as u64);
+    let batch_limit = limit
+        .saturating_mul(if filter_replies { 4 } else { 1 })
+        .max(1) as usize;
+    let mut cursor = until_timestamp
+        .filter(|until| *until > 0)
+        .map(|until| until as u64);
     let mut filtered: Vec<Event> = Vec::new();
     let mut seen: HashSet<EventId> = HashSet::new();
     for _ in 0..8 {
@@ -2296,9 +2314,10 @@ pub async fn db_get_hydrated_profile_notes(
         let full = batch.len() >= batch_limit;
         cursor = batch.iter().map(|e| e.created_at.as_secs()).min();
         filtered.extend(batch.into_iter().filter(|e| {
-            !is_future_dated(e)
-                && !is_event_muted(e, &muted_pubkeys, &muted_words)
-                && !(filter_replies && e.kind == Kind::TextNote && extract_note_references(&tags_from_event(e)).is_reply)
+            let hidden_reply = filter_replies
+                && e.kind == Kind::TextNote
+                && extract_note_references(&tags_from_event(e)).is_reply;
+            !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words) && !hidden_reply
         }));
         if filtered.len() >= limit as usize || !full {
             break;
@@ -3033,14 +3052,20 @@ pub fn parse_note_content(content: String) -> String {
         .find_iter(&content)
         .map(|m| (m.start(), m.end()))
         .collect();
-    let outside_urls = |m: &regex::Match| !url_spans.iter().any(|(start, end)| m.start() >= *start && m.end() <= *end);
+    let outside_urls = |m: &regex::Match| {
+        !url_spans
+            .iter()
+            .any(|(start, end)| m.start() >= *start && m.end() <= *end)
+    };
 
     let mut quote_ids: Vec<String> = Vec::new();
     let mut article_ids: Vec<String> = Vec::new();
     let mut to_remove: Vec<String> = Vec::new();
     to_remove.extend(media_urls.iter().cloned());
     for c in quote_re.captures_iter(&content) {
-        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else { continue };
+        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else {
+            continue;
+        };
         if !outside_urls(&full) {
             continue;
         }
@@ -3048,7 +3073,9 @@ pub fn parse_note_content(content: String) -> String {
         to_remove.push(full.as_str().to_string());
     }
     for c in article_re.captures_iter(&content) {
-        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else { continue };
+        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else {
+            continue;
+        };
         if !outside_urls(&full) {
             continue;
         }
@@ -4099,18 +4126,27 @@ mod tests {
         };
         let valid = receipt(request("21000").as_json());
         assert_eq!(extract_zap_amount_sats(&valid), 21);
-        assert_eq!(extract_zap_sender(&valid), Some(zapper.public_key().to_hex()));
+        assert_eq!(
+            extract_zap_sender(&valid),
+            Some(zapper.public_key().to_hex())
+        );
         assert_eq!(extract_zap_comment(&valid), "thanks");
 
-        assert_eq!(extract_zap_amount_sats(&receipt(request("99000000").as_json())), 0);
+        assert_eq!(
+            extract_zap_amount_sats(&receipt(request("99000000").as_json())),
+            0
+        );
 
-        let mut forged: serde_json::Value = serde_json::from_str(&request("21000").as_json()).unwrap();
+        let mut forged: serde_json::Value =
+            serde_json::from_str(&request("21000").as_json()).unwrap();
         forged["pubkey"] = serde_json::json!(Keys::generate().public_key().to_hex());
         let forged_receipt = receipt(forged.to_string());
         assert_eq!(extract_zap_amount_sats(&forged_receipt), 0);
         assert_eq!(extract_zap_sender(&forged_receipt), None);
 
-        let zappers = |value: String| set_known_zappers(serde_json::json!({ recipient.to_hex(): value }).to_string());
+        let zappers = |value: String| {
+            set_known_zappers(serde_json::json!({ recipient.to_hex(): value }).to_string())
+        };
         zappers(provider.public_key().to_hex());
         assert_eq!(extract_zap_amount_sats(&valid), 21);
         zappers(Keys::generate().public_key().to_hex());
@@ -4126,7 +4162,12 @@ mod tests {
         let content = "see https://njump.me/nevent1qqsxyz123 and nostr:note1abcdef".to_string();
         let parsed: serde_json::Value = serde_json::from_str(&parse_note_content(content)).unwrap();
         assert_eq!(parsed["quoteIds"], serde_json::json!(["note1abcdef"]));
-        let text: String = parsed["textParts"].as_array().unwrap().iter().filter_map(|p| p["text"].as_str()).collect();
+        let text: String = parsed["textParts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|p| p["text"].as_str())
+            .collect();
         assert!(text.contains("https://njump.me/nevent1qqsxyz123"));
     }
 

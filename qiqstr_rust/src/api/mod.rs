@@ -2,8 +2,10 @@ pub mod cashu;
 pub mod crypto;
 pub mod database;
 pub mod events;
+#[cfg(feature = "marmot")]
 pub mod marmot;
-pub mod nip44;
+pub mod nip17;
 pub mod nip19;
+pub mod nip44;
 pub mod nwc;
 pub mod relay;

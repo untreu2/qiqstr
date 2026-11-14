@@ -418,6 +418,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     );
 
     final result = await _cashuService.receiveAndMelt(
+      accountPubkeyHex: await _cashuAccount(),
       token: event.token,
       lightningTarget: event.lightningTarget,
     );
@@ -468,6 +469,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     );
 
     final result = await _cashuService.meltAll(
+      accountPubkeyHex: await _cashuAccount(),
       lightningTarget: event.lightningTarget,
     );
 
@@ -505,7 +507,9 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     WalletCashuBalanceRequested event,
     Emitter<WalletState> emit,
   ) async {
-    final result = await _cashuService.getBalance();
+    final result = await _cashuService.getBalance(
+      accountPubkeyHex: await _cashuAccount(),
+    );
     if (isClosed) return;
     result.fold((balance) {
       if (state is WalletLoaded) {
@@ -514,6 +518,11 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         );
       }
     }, (_) {});
+  }
+
+  Future<String> _cashuAccount() async {
+    final pubkeyResult = await _authService.getCurrentUserPublicKeyHex();
+    return pubkeyResult.data ?? '';
   }
 
   Future<void> _publishLud16ToProfile(String lud16) async {

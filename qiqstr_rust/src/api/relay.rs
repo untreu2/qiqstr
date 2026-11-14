@@ -8,8 +8,8 @@ use nostr_lmdb::NostrLMDB;
 use nostr_sdk::prelude::*;
 use tokio::sync::RwLock;
 
-use crate::sink::StreamSink;
 use crate::hybrid_database::HybridDatabase;
+use crate::sink::StreamSink;
 
 static COUNTING_CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
 
@@ -78,7 +78,11 @@ fn try_open_lmdb(path: &str) -> Result<NostrLMDB> {
 const FETCH_GRACE_AFTER_RESULTS: Duration = Duration::from_millis(1500);
 const FETCH_GRACE_AFTER_MAJORITY: Duration = Duration::from_millis(1000);
 
-pub(crate) async fn quick_fetch(client: &Client, filter: Filter, timeout: Duration) -> Result<Events> {
+pub(crate) async fn quick_fetch(
+    client: &Client,
+    filter: Filter,
+    timeout: Duration,
+) -> Result<Events> {
     use futures::stream::{FuturesUnordered, StreamExt};
     let urls: Vec<RelayUrl> = client
         .relays()
@@ -474,9 +478,16 @@ pub async fn stream_relay_status(sink: StreamSink<String>) -> Result<()> {
 
 fn is_public_secure_relay(url: &RelayUrl) -> bool {
     let text = url.as_str().to_ascii_lowercase();
-    let Some(rest) = text.strip_prefix("wss://") else { return false };
+    let Some(rest) = text.strip_prefix("wss://") else {
+        return false;
+    };
     let host = rest.split(['/', ':', '?']).next().unwrap_or("");
-    if host.is_empty() || host == "localhost" || host.ends_with(".local") || host.ends_with(".onion") || host.starts_with('[') {
+    if host.is_empty()
+        || host == "localhost"
+        || host.ends_with(".local")
+        || host.ends_with(".onion")
+        || host.starts_with('[')
+    {
         return false;
     }
     if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
@@ -591,7 +602,9 @@ pub async fn discover_and_connect_outbox_relays(
         .filter_map(|(url, _, is_outbox, is_inbox)| {
             RelayUrl::parse(url.as_str())
                 .ok()
-                .filter(|relay_url| is_public_secure_relay(relay_url) && !pooled.contains(relay_url))
+                .filter(|relay_url| {
+                    is_public_secure_relay(relay_url) && !pooled.contains(relay_url)
+                })
                 .map(|relay_url| (relay_url, *is_outbox, *is_inbox))
         })
         .collect();
@@ -937,7 +950,7 @@ pub async fn stream_interaction_counts(
                         seen_events.insert(event_id);
 
                         let kind = event.kind;
-                        let is_user = user_pk.as_ref().map_or(false, |pk| event.pubkey == *pk);
+                        let is_user = user_pk.as_ref().is_some_and(|pk| event.pubkey == *pk);
                         let zap_sats = if kind == Kind::ZapReceipt {
                             super::database::extract_zap_amount_sats(&event) as usize
                         } else {
@@ -1169,7 +1182,8 @@ async fn publish_event(
         .map(|(url, relay)| {
             let event = event.clone();
             async move {
-                let result = tokio::time::timeout(Duration::from_secs(12), relay.send_event(&event)).await;
+                let result =
+                    tokio::time::timeout(Duration::from_secs(12), relay.send_event(&event)).await;
                 let result = match result {
                     Ok(result) => result.map(|_| ()).map_err(|error| error.to_string()),
                     Err(_) => Err("Event dispatch timed out".to_string()),
@@ -1186,10 +1200,12 @@ async fn publish_event(
     let mut deadline: Option<tokio::time::Instant> = None;
     loop {
         let next = match deadline {
-            Some(at) => match tokio::time::timeout_at(at, futures::StreamExt::next(&mut pending)).await {
-                Ok(next) => next,
-                Err(_) => break,
-            },
+            Some(at) => {
+                match tokio::time::timeout_at(at, futures::StreamExt::next(&mut pending)).await {
+                    Ok(next) => next,
+                    Err(_) => break,
+                }
+            }
             None => futures::StreamExt::next(&mut pending).await,
         };
         let Some((url, result)) = next else { break };
@@ -1206,9 +1222,9 @@ async fn publish_event(
         }
     }
     if !pending.is_empty() {
-        tokio::spawn(async move {
-            while futures::StreamExt::next(&mut pending).await.is_some() {}
-        });
+        tokio::spawn(
+            async move { while futures::StreamExt::next(&mut pending).await.is_some() {} },
+        );
     }
     if !output.success.is_empty() {
         client.database().save_event(event).await?;
@@ -1270,11 +1286,19 @@ impl TargetPool {
             temp.wait_for_connection(Duration::from_secs(4)).await;
             Some((temp, fresh))
         };
-        TargetPool { main: main.clone(), pooled, extra }
+        TargetPool {
+            main: main.clone(),
+            pooled,
+            extra,
+        }
     }
 
     async fn publish(&self, event: &Event) -> Result<Output<EventId>> {
-        let mut output = Output { val: event.id, success: HashSet::new(), failed: HashMap::new() };
+        let mut output = Output {
+            val: event.id,
+            success: HashSet::new(),
+            failed: HashMap::new(),
+        };
         if !self.pooled.is_empty() {
             if let Ok(result) = publish_event(&self.main, event, Some(&self.pooled)).await {
                 output.success.extend(result.success);
@@ -1728,7 +1752,10 @@ pub async fn fetch_profile_events(
                     .collect()
             };
 
-            if active.is_empty() || round >= max_rounds || sink_closed.load(std::sync::atomic::Ordering::Relaxed) {
+            if active.is_empty()
+                || round >= max_rounds
+                || sink_closed.load(std::sync::atomic::Ordering::Relaxed)
+            {
                 break;
             }
             round += 1;
@@ -1914,7 +1941,7 @@ async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<
 
         if event.is_none() {
             let filter = Filter::new().id(eid).limit(1);
-            let _ = quick_fetch(&client, filter, Duration::from_secs(3)).await;
+            let _ = quick_fetch(client, filter, Duration::from_secs(3)).await;
             event = client.database().event_by_id(&eid).await.ok().flatten();
             if event.is_none() {
                 break;
@@ -1937,7 +1964,7 @@ async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<
                     .is_none()
                 {
                     let f = Filter::new().id(root_eid).limit(1);
-                    let _ = quick_fetch(&client, f, Duration::from_secs(3)).await;
+                    let _ = quick_fetch(client, f, Duration::from_secs(3)).await;
                 }
                 return Ok(rid.clone());
             }
@@ -2020,8 +2047,7 @@ pub async fn sync_replies_recursive(note_id: String, max_depth: u32) -> Result<u
                 .authors(missing)
                 .kind(Kind::Metadata)
                 .limit(200);
-            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5))
-                .await;
+            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5)).await;
         }
     }
 
@@ -2299,8 +2325,7 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
                 .authors(missing_pks.into_iter().collect::<Vec<_>>())
                 .kind(Kind::Metadata)
                 .limit(50);
-            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5))
-                .await;
+            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5)).await;
         }
     }
 
@@ -2348,7 +2373,7 @@ async fn resolve_repost_to_original(client: &Client, note_id: &str) -> String {
         Ok(Some(e)) => e,
         _ => {
             let filter = Filter::new().id(eid).limit(1);
-            match quick_fetch(&client, filter, Duration::from_secs(5)).await {
+            match quick_fetch(client, filter, Duration::from_secs(5)).await {
                 Ok(events) => match events.into_iter().next() {
                     Some(e) => e,
                     None => return note_id.to_string(),
@@ -2780,8 +2805,7 @@ pub async fn fetch_full_thread(
                     .authors(missing)
                     .kind(Kind::Metadata)
                     .limit(200);
-                let _ = quick_fetch(&client, profile_filter, Duration::from_secs(3))
-                    .await;
+                let _ = quick_fetch(&client, profile_filter, Duration::from_secs(3)).await;
             }
         }
     }
@@ -2962,8 +2986,7 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
                 .authors(missing_pks.into_iter().collect::<Vec<_>>())
                 .kind(Kind::Metadata)
                 .limit(50);
-            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5))
-                .await;
+            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5)).await;
         }
     }
 
@@ -3054,6 +3077,28 @@ pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> 
     Ok(serde_json::to_string(&follower_counts)?)
 }
 
+pub async fn fetch_events_from_relays(
+    filter_json: String,
+    relay_urls: Vec<String>,
+    timeout_secs: u32,
+) -> Result<String> {
+    let filter = Filter::from_json(&filter_json)?;
+    let client = Client::default();
+    for url in &relay_urls {
+        RelayUrl::parse(url)?;
+        client.add_relay(url.as_str()).await?;
+    }
+    client.connect().await;
+    let events = quick_fetch(&client, filter, Duration::from_secs(timeout_secs as u64)).await;
+    client.shutdown().await;
+    let events = events?;
+    let list: Vec<serde_json::Value> = events
+        .into_iter()
+        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .collect();
+    Ok(serde_json::to_string(&list)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3067,16 +3112,31 @@ mod tests {
             while let Ok((stream, _)) = listener.accept().await {
                 let answer = answer.clone();
                 tokio::spawn(async move {
-                    let Ok(mut socket) = accept_async(stream).await else { return };
+                    let Ok(mut socket) = accept_async(stream).await else {
+                        return;
+                    };
                     while let Some(Ok(frame)) = socket.next().await {
                         let Message::Text(text) = frame else { continue };
-                        let Ok(message) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
-                        if message[0] != "REQ" { continue; }
-                        let Some(answer) = answer.clone() else { continue };
+                        let Ok(message) = serde_json::from_str::<serde_json::Value>(&text) else {
+                            continue;
+                        };
+                        if message[0] != "REQ" {
+                            continue;
+                        }
+                        let Some(answer) = answer.clone() else {
+                            continue;
+                        };
                         let id = message[1].clone();
-                        let event: serde_json::Value = serde_json::from_str(&answer.as_json()).unwrap();
-                        let _ = socket.send(Message::Text(serde_json::json!(["EVENT", id, event]).to_string())).await;
-                        let _ = socket.send(Message::Text(serde_json::json!(["EOSE", id]).to_string())).await;
+                        let event: serde_json::Value =
+                            serde_json::from_str(&answer.as_json()).unwrap();
+                        let _ = socket
+                            .send(Message::Text(
+                                serde_json::json!(["EVENT", id, event]).to_string(),
+                            ))
+                            .await;
+                        let _ = socket
+                            .send(Message::Text(serde_json::json!(["EOSE", id]).to_string()))
+                            .await;
                     }
                 });
             }
@@ -3087,7 +3147,9 @@ mod tests {
     #[tokio::test]
     async fn quick_fetch_returns_without_waiting_for_silent_relays() {
         let keys = Keys::generate();
-        let note = EventBuilder::text_note("hello").sign_with_keys(&keys).unwrap();
+        let note = EventBuilder::text_note("hello")
+            .sign_with_keys(&keys)
+            .unwrap();
         let answering = fake_relay(Some(note.clone())).await;
         let silent = fake_relay(None).await;
         let client = Client::default();
@@ -3096,11 +3158,19 @@ mod tests {
         client.connect().await;
         client.wait_for_connection(Duration::from_secs(3)).await;
         let started = std::time::Instant::now();
-        let events = quick_fetch(&client, Filter::new().author(keys.public_key()).limit(1), Duration::from_secs(10))
-            .await
-            .unwrap();
+        let events = quick_fetch(
+            &client,
+            Filter::new().author(keys.public_key()).limit(1),
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
         assert!(events.iter().any(|event| event.id == note.id));
-        assert!(started.elapsed() < Duration::from_secs(4), "took {:?}", started.elapsed());
+        assert!(
+            started.elapsed() < Duration::from_secs(4),
+            "took {:?}",
+            started.elapsed()
+        );
         client.shutdown().await;
     }
 
@@ -3327,27 +3397,4 @@ mod tests {
         assert!(get_client().await.is_err());
         assert!(db_path_state().read().await.is_none());
     }
-}
-
-pub async fn fetch_events_from_relays(
-    filter_json: String,
-    relay_urls: Vec<String>,
-    timeout_secs: u32,
-) -> Result<String> {
-    let filter = Filter::from_json(&filter_json)?;
-    let client = Client::default();
-    for url in &relay_urls {
-        RelayUrl::parse(url)?;
-        client.add_relay(url.as_str()).await?;
-    }
-    client.connect().await;
-    let events = quick_fetch(&client, filter, Duration::from_secs(timeout_secs as u64))
-        .await;
-    client.shutdown().await;
-    let events = events?;
-    let list: Vec<serde_json::Value> = events
-        .into_iter()
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
-        .collect();
-    Ok(serde_json::to_string(&list)?)
 }

@@ -3465,7 +3465,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
-name = "qiqstr_core"
+name = "qiqstr"
 version = "0.1.0"
 dependencies = [
  "aes",
@@ -3484,17 +3484,26 @@ dependencies = [
  "nostr-database",
  "nostr-lmdb",
  "nostr-sdk",
- "once_cell",
  "openmls",
  "rand 0.8.8",
  "regex",
  "serde",
  "serde_json",
  "sha2",
- "thiserror 2.0.21",
  "tokio",
  "tokio-tungstenite 0.24.0",
  "typenum",
+]
+
+[[package]]
+name = "qiqstr_core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "once_cell",
+ "qiqstr",
+ "thiserror 2.0.21",
+ "tokio",
  "uniffi",
 ]
 

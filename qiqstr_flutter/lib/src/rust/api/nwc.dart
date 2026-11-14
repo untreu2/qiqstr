@@ -6,8 +6,6 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `request_wallet`
-
 bool validateNwcUri({required String uri}) =>
     RustLib.instance.api.crateApiNwcValidateNwcUri(uri: uri);
 
@@ -18,6 +16,14 @@ Future<String> nwcPayInvoice({
   required String nwcUri,
   required String invoice,
 }) => RustLib.instance.api.crateApiNwcNwcPayInvoice(
+  nwcUri: nwcUri,
+  invoice: invoice,
+);
+
+Future<String> nwcLookupInvoice({
+  required String nwcUri,
+  required String invoice,
+}) => RustLib.instance.api.crateApiNwcNwcLookupInvoice(
   nwcUri: nwcUri,
   invoice: invoice,
 );

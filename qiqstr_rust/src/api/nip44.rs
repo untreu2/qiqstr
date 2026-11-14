@@ -47,19 +47,45 @@ mod tests {
     fn legacy_nip04_payloads_decrypt() {
         let alice = Keys::generate();
         let bob = Keys::generate();
-        let payload = nostr::nips::nip04::encrypt(alice.secret_key(), &bob.public_key(), "legacy").unwrap();
-        let plain = nip04_decrypt(payload.clone(), bob.secret_key().to_secret_hex(), alice.public_key().to_hex()).unwrap();
+        let payload =
+            nostr::nips::nip04::encrypt(alice.secret_key(), &bob.public_key(), "legacy").unwrap();
+        let plain = nip04_decrypt(
+            payload.clone(),
+            bob.secret_key().to_secret_hex(),
+            alice.public_key().to_hex(),
+        )
+        .unwrap();
         assert_eq!(plain, "legacy");
-        assert!(nip04_decrypt("not a payload".into(), bob.secret_key().to_secret_hex(), alice.public_key().to_hex()).is_err());
+        assert!(nip04_decrypt(
+            "not a payload".into(),
+            bob.secret_key().to_secret_hex(),
+            alice.public_key().to_hex()
+        )
+        .is_err());
     }
 
     #[test]
     fn round_trips_between_two_keys() {
         let alice = Keys::generate();
         let bob = Keys::generate();
-        let payload = nip44_encrypt("secret".into(), alice.secret_key().to_secret_hex(), bob.public_key().to_hex()).unwrap();
-        let plain = nip44_decrypt(payload.clone(), bob.secret_key().to_secret_hex(), alice.public_key().to_hex()).unwrap();
+        let payload = nip44_encrypt(
+            "secret".into(),
+            alice.secret_key().to_secret_hex(),
+            bob.public_key().to_hex(),
+        )
+        .unwrap();
+        let plain = nip44_decrypt(
+            payload.clone(),
+            bob.secret_key().to_secret_hex(),
+            alice.public_key().to_hex(),
+        )
+        .unwrap();
         assert_eq!(plain, "secret");
-        assert!(nip44_decrypt(payload, Keys::generate().secret_key().to_secret_hex(), alice.public_key().to_hex()).is_err());
+        assert!(nip44_decrypt(
+            payload,
+            Keys::generate().secret_key().to_secret_hex(),
+            alice.public_key().to_hex()
+        )
+        .is_err());
     }
 }

@@ -1,6 +1,6 @@
 # qiqstr for iOS (Swift)
 
-Native SwiftUI port of [qiqstr](https://github.com/untreu2/qiqstr). The Rust core from the Flutter app (nostr-sdk, LMDB, NWC, Cashu) is exposed to Swift with **UniFFI**. Direct messages use the Marmot protocol through MDK (`rust/src/api/marmot.rs`, `Data/Services/MarmotEngine.swift`); NIP-17 is not used.
+Native SwiftUI port of [qiqstr](https://github.com/untreu2/qiqstr). The shared Rust core in `../qiqstr_rust` (nostr-sdk, LMDB, NWC, Cashu), which the Flutter app also uses, is exposed to Swift with **UniFFI**. Direct messages use the Marmot protocol through MDK (`../qiqstr_rust/src/api/marmot.rs`, `Data/Services/MarmotEngine.swift`); NIP-17 is not used.
 
 ## Build
 
@@ -15,12 +15,12 @@ xcodebuild -project Qiqstr.xcodeproj -scheme Qiqstr -destination 'generic/platfo
 
 ## Rust ↔ Swift
 
-- `rust/src/api/*.rs` is the Rust core from the Flutter app, minus flutter_rust_bridge annotations.
-- `rust/src/ffi.rs` is **generated** by `scripts/gen_ffi.py`. It wraps every public `api` function with `#[uniffi::export]`, runs async work on a dedicated Tokio runtime, and maps `anyhow::Error` to `QiqError`. Re-run the script after changing the Rust API. Do not edit it by hand.
-- Streams use the `EventSink` callback interface (`rust/src/sink.rs`). On the Swift side, wrap them with `EventStream.make { sink in try await someStreamingFn(..., sink: sink) }` to get an `AsyncThrowingStream<String, Error>`.
+- Rust logic lives in the shared core, `../qiqstr_rust/src/api/*.rs`. `rust/` is a thin UniFFI crate (`qiqstr_core`) that depends on it with the `marmot` feature. Change Rust behavior in the core, not here.
+- `rust/src/ffi.rs` is **generated** by `scripts/gen_ffi.py` from the core's `api` modules (except `nip17`). It wraps every public `api` function with `#[uniffi::export]`, runs async work on a dedicated Tokio runtime, and maps `anyhow::Error` to `QiqError`. Re-run the script after changing the Rust API. Do not edit it by hand.
+- Streams use the `EventSink` callback interface (`rust/src/sink.rs`, adapted to the core's sink by `ForeignSink`). On the Swift side, wrap them with `EventStream.make { sink in try await someStreamingFn(..., sink: sink) }` to get an `AsyncThrowingStream<String, Error>`.
 - Generated Swift bindings live in `QiqstrCore` (a local Swift package). `import QiqstrCore` exposes the functions in camelCase, for example `dbGetHydratedFeedNotes(...)`, `createNoteEvent(...)`, `sendEvent(...)`. The full list is in `QiqstrCore/Sources/QiqstrCore/qiqstr_core.swift`.
 - Use `coreErrorMessage(error)` to show Rust errors.
-- `rust/vendor/mdk-sqlite-storage` is `mdk-sqlite-storage` 0.8.0 patched to `rusqlite` 0.31 so it shares one SQLCipher build with `cdk-sqlite`. Only one `libsqlite3-sys` can be linked, so keep both crates on the same `rusqlite`.
+- `../qiqstr_rust/vendor/mdk-sqlite-storage` is `mdk-sqlite-storage` 0.8.0 patched to `rusqlite` 0.31 so it shares one SQLCipher build with `cdk-sqlite`. Only one `libsqlite3-sys` can be linked, so keep both crates on the same `rusqlite`.
 
 ## App layering
 

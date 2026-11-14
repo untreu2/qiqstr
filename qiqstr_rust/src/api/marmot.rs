@@ -8,9 +8,9 @@ use mdk_core::prelude::*;
 use mdk_sqlite_storage::{EncryptionConfig, MdkSqliteStorage};
 use mdk_storage_traits::groups::Pagination;
 use mdk_storage_traits::messages::MessageStorage;
-use openmls::prelude::OpenMlsProvider;
 use nostr::nips::nip59;
 use nostr::prelude::*;
+use openmls::prelude::OpenMlsProvider;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -27,8 +27,12 @@ struct Marmot {
 static STATE: Mutex<Option<Marmot>> = Mutex::new(None);
 
 fn with_marmot<T>(work: impl FnOnce(&Marmot) -> Result<T>) -> Result<T> {
-    let guard = STATE.lock().map_err(|_| anyhow!("Messaging storage is unavailable"))?;
-    let marmot = guard.as_ref().ok_or_else(|| anyhow!("Messaging is not ready"))?;
+    let guard = STATE
+        .lock()
+        .map_err(|_| anyhow!("Messaging storage is unavailable"))?;
+    let marmot = guard
+        .as_ref()
+        .ok_or_else(|| anyhow!("Messaging is not ready"))?;
     work(marmot)
 }
 
@@ -44,7 +48,9 @@ fn database_key(keys: &Keys) -> [u8; 32] {
 }
 
 fn parse_group_id(group_id_hex: &str) -> Result<GroupId> {
-    Ok(GroupId::from_slice(&hex::decode(group_id_hex).context("Invalid group id")?))
+    Ok(GroupId::from_slice(
+        &hex::decode(group_id_hex).context("Invalid group id")?,
+    ))
 }
 
 fn parse_relays(relays: &[String]) -> Vec<RelayUrl> {
@@ -59,7 +65,13 @@ fn parse_relays(relays: &[String]) -> Vec<RelayUrl> {
 fn tags_json(tags: &Tags) -> Value {
     Value::Array(
         tags.iter()
-            .map(|tag| json!(tag.as_slice().iter().map(|s| s.to_string()).collect::<Vec<_>>()))
+            .map(|tag| {
+                json!(tag
+                    .as_slice()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>())
+            })
             .collect(),
     )
 }
@@ -107,7 +119,12 @@ fn signed(keys: &Keys, builder: EventBuilder) -> Result<Event> {
 
 fn rejected_groups(dir: &Path) -> std::collections::HashSet<String> {
     std::fs::read_to_string(dir.join("rejected_groups"))
-        .map(|s| s.lines().map(|line| line.trim().to_string()).filter(|line| !line.is_empty()).collect())
+        .map(|s| {
+            s.lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -120,7 +137,11 @@ fn reject_group(dir: &Path, group_id: &str) {
     }
 }
 
-fn welcome_is_authentic(members: &std::collections::BTreeSet<PublicKey>, me: &PublicKey, sender: &PublicKey) -> bool {
+fn welcome_is_authentic(
+    members: &std::collections::BTreeSet<PublicKey>,
+    me: &PublicKey,
+    sender: &PublicKey,
+) -> bool {
     if sender == me || !members.contains(me) || !members.contains(sender) {
         return false;
     }
@@ -148,7 +169,9 @@ fn key_package_relays(event: &Event) -> Vec<String> {
 pub fn marmot_open(data_dir: String, private_key_hex: String) -> Result<String> {
     let keys = Keys::new(SecretKey::parse(&private_key_hex)?);
     let pubkey = keys.public_key().to_hex();
-    let mut guard = STATE.lock().map_err(|_| anyhow!("Messaging storage is unavailable"))?;
+    let mut guard = STATE
+        .lock()
+        .map_err(|_| anyhow!("Messaging storage is unavailable"))?;
     if let Some(existing) = guard.as_ref() {
         if existing.keys.public_key() == keys.public_key() {
             return Ok(pubkey);
@@ -229,7 +252,10 @@ pub fn marmot_pick_key_package(events_json: String, pubkey_hex: String) -> Resul
             .filter_map(|value| Event::from_json(value.to_string()).ok())
             .filter(|event| {
                 event.pubkey == owner
-                    && matches!(event.kind.as_u16(), KEY_PACKAGE_KIND | LEGACY_KEY_PACKAGE_KIND)
+                    && matches!(
+                        event.kind.as_u16(),
+                        KEY_PACKAGE_KIND | LEGACY_KEY_PACKAGE_KIND
+                    )
                     && event.verify().is_ok()
             })
             .collect();
@@ -450,7 +476,10 @@ pub fn marmot_messages_page(group_id_hex: String, limit: u32, offset: u32) -> Re
             .mdk
             .get_messages(
                 &group_id,
-                Some(Pagination::new(Some(limit.clamp(1, 1000) as usize), Some(offset as usize))),
+                Some(Pagination::new(
+                    Some(limit.clamp(1, 1000) as usize),
+                    Some(offset as usize),
+                )),
             )?
             .iter()
             .map(message_json)
@@ -518,7 +547,11 @@ pub fn marmot_encrypt_media(
     })
 }
 
-pub fn marmot_decrypt_media(group_id_hex: String, imeta: Vec<String>, data: Vec<u8>) -> Result<Vec<u8>> {
+pub fn marmot_decrypt_media(
+    group_id_hex: String,
+    imeta: Vec<String>,
+    data: Vec<u8>,
+) -> Result<Vec<u8>> {
     let group_id = parse_group_id(&group_id_hex)?;
     let mut values = vec!["imeta".to_string()];
     values.extend(imeta);
@@ -541,7 +574,11 @@ mod tests {
         let me = Keys::generate().public_key();
         let sender = Keys::generate().public_key();
         let victim = Keys::generate().public_key();
-        let pair = |a: PublicKey, b: PublicKey| [a, b].into_iter().collect::<std::collections::BTreeSet<_>>();
+        let pair = |a: PublicKey, b: PublicKey| {
+            [a, b]
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>()
+        };
         assert!(welcome_is_authentic(&pair(me, sender), &me, &sender));
         assert!(!welcome_is_authentic(&pair(me, victim), &me, &sender));
         assert!(!welcome_is_authentic(&pair(sender, victim), &me, &sender));
@@ -564,7 +601,10 @@ mod tests {
     }
 
     fn temp_dir(name: &str) -> String {
-        let dir = std::env::temp_dir().join(format!("qiqstr-marmot-{name}-{}", Keys::generate().public_key().to_hex()));
+        let dir = std::env::temp_dir().join(format!(
+            "qiqstr-marmot-{name}-{}",
+            Keys::generate().public_key().to_hex()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir.to_string_lossy().to_string()
     }
@@ -580,16 +620,24 @@ mod tests {
         marmot_open(bob_dir.clone(), bob.secret_key().to_secret_hex()).unwrap();
         let key_package = marmot_key_package_event(relays.clone()).unwrap();
         let again = marmot_key_package_event(relays.clone()).unwrap();
-        let slot = |raw: &str| Event::from_json(raw).unwrap().tags.identifier().map(|s| s.to_string());
+        let slot = |raw: &str| {
+            Event::from_json(raw)
+                .unwrap()
+                .tags
+                .identifier()
+                .map(|s| s.to_string())
+        };
         assert_eq!(slot(&key_package), slot(&again));
 
         marmot_open(alice_dir.clone(), alice.secret_key().to_secret_hex()).unwrap();
-        let events = serde_json::to_string(&vec![
-            serde_json::from_str::<Value>(&key_package).unwrap(),
-        ])
-        .unwrap();
-        let picked = marmot_pick_key_package(events, bob.public_key().to_hex()).unwrap().unwrap();
-        let chat: Value = serde_json::from_str(&marmot_create_chat(picked, relays.clone()).unwrap()).unwrap();
+        let events =
+            serde_json::to_string(&vec![serde_json::from_str::<Value>(&key_package).unwrap()])
+                .unwrap();
+        let picked = marmot_pick_key_package(events, bob.public_key().to_hex())
+            .unwrap()
+            .unwrap();
+        let chat: Value =
+            serde_json::from_str(&marmot_create_chat(picked, relays.clone()).unwrap()).unwrap();
         let group_id = chat["group"]["id"].as_str().unwrap().to_string();
         let welcome = chat["welcomes"][0].as_str().unwrap().to_string();
         let sent: Value = serde_json::from_str(
@@ -600,32 +648,65 @@ mod tests {
         let outer = sent["event"].as_str().unwrap().to_string();
 
         let media = b"plain text attachment".to_vec();
-        let output = std::env::temp_dir().join(format!("{}.enc", Keys::generate().public_key().to_hex()));
+        let output =
+            std::env::temp_dir().join(format!("{}.enc", Keys::generate().public_key().to_hex()));
         let upload: Value = serde_json::from_str(
-            &marmot_encrypt_media(group_id.clone(), media.clone(), "text/plain".into(), "note.txt".into(), output.to_string_lossy().to_string()).unwrap(),
+            &marmot_encrypt_media(
+                group_id.clone(),
+                media.clone(),
+                "text/plain".into(),
+                "note.txt".into(),
+                output.to_string_lossy().to_string(),
+            )
+            .unwrap(),
         )
         .unwrap();
-        let mut imeta = vec!["imeta".to_string(), "url https://blossom.example.com/x".to_string()];
-        imeta.extend(upload["imeta"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()));
+        let mut imeta = vec![
+            "imeta".to_string(),
+            "url https://blossom.example.com/x".to_string(),
+        ];
+        imeta.extend(
+            upload["imeta"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap().to_string()),
+        );
         let media_event: Value = serde_json::from_str(
-            &marmot_send_message(group_id.clone(), 9, String::new(), serde_json::to_string(&vec![imeta.clone()]).unwrap()).unwrap(),
+            &marmot_send_message(
+                group_id.clone(),
+                9,
+                String::new(),
+                serde_json::to_string(&vec![imeta.clone()]).unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         let encrypted = std::fs::read(&output).unwrap();
 
         marmot_open(bob_dir.clone(), bob.secret_key().to_secret_hex()).unwrap();
-        let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
-        let joined: Value = serde_json::from_str(&runtime.block_on(async { marmot_process_event(welcome) }).unwrap()).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let joined: Value = serde_json::from_str(
+            &runtime
+                .block_on(async { marmot_process_event(welcome) })
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(joined["type"], "welcome");
         assert_eq!(joined["groupId"], group_id.as_str());
         let received: Value = serde_json::from_str(&marmot_process_event(outer).unwrap()).unwrap();
         assert_eq!(received["type"], "message");
         assert_eq!(received["message"]["content"], "hi bob");
         assert_eq!(received["message"]["pubkey"], alice.public_key().to_hex());
-        let media_received: Value =
-            serde_json::from_str(&marmot_process_event(media_event["event"].as_str().unwrap().to_string()).unwrap()).unwrap();
+        let media_received: Value = serde_json::from_str(
+            &marmot_process_event(media_event["event"].as_str().unwrap().to_string()).unwrap(),
+        )
+        .unwrap();
         assert_eq!(media_received["type"], "message");
-        let decrypted = marmot_decrypt_media(group_id.clone(), imeta[1..].to_vec(), encrypted).unwrap();
+        let decrypted =
+            marmot_decrypt_media(group_id.clone(), imeta[1..].to_vec(), encrypted).unwrap();
         assert_eq!(decrypted, media);
 
         let needing = marmot_groups_needing_self_update(86_400).unwrap();
@@ -647,14 +728,22 @@ mod tests {
             .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
             .unwrap_or(Value::Null);
         assert_ne!(early["type"], "message");
-        let processed: Value = serde_json::from_str(&marmot_process_event(commit).unwrap()).unwrap();
+        let processed: Value =
+            serde_json::from_str(&marmot_process_event(commit).unwrap()).unwrap();
         assert_eq!(processed["type"], "commit");
-        assert!(processed["retry"].as_array().unwrap().iter().any(|id| id == &Value::String(reply_id.clone())));
-        let reply_received: Value = serde_json::from_str(&marmot_process_event(reply_event).unwrap()).unwrap();
+        assert!(processed["retry"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|id| id == &Value::String(reply_id.clone())));
+        let reply_received: Value =
+            serde_json::from_str(&marmot_process_event(reply_event).unwrap()).unwrap();
         assert_eq!(reply_received["message"]["content"], "hi alice");
-        let history: Value = serde_json::from_str(&marmot_messages(group_id.clone(), 50).unwrap()).unwrap();
+        let history: Value =
+            serde_json::from_str(&marmot_messages(group_id.clone(), 50).unwrap()).unwrap();
         assert_eq!(history.as_array().unwrap().len(), 3);
-        let older: Value = serde_json::from_str(&marmot_messages_page(group_id, 2, 2).unwrap()).unwrap();
+        let older: Value =
+            serde_json::from_str(&marmot_messages_page(group_id, 2, 2).unwrap()).unwrap();
         assert_eq!(older.as_array().unwrap().len(), 1);
         marmot_close();
     }

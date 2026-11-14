@@ -49,11 +49,15 @@ class _Cashu extends CashuService {
   int balance = 50;
 
   @override
-  Future<Result<CashuBalance>> getBalance() async =>
-      Result.success(CashuBalance(totalSats: balance, mints: []));
+  Future<Result<CashuBalance>> getBalance({
+    required String accountPubkeyHex,
+  }) async => Result.success(CashuBalance(totalSats: balance, mints: []));
 
   @override
-  Future<Result<int>> meltAll({required String lightningTarget}) async {
+  Future<Result<int>> meltAll({
+    required String accountPubkeyHex,
+    required String lightningTarget,
+  }) async {
     balance = 40;
     return Result.success(10);
   }
@@ -86,9 +90,7 @@ void main() {
     final remaining = bloc.stream.firstWhere(
       (state) => state is WalletLoaded && state.cashuBalanceSats == 40,
     );
-    bloc.add(
-      const WalletCashuMeltAllRequested('alice@example.com'),
-    );
+    bloc.add(const WalletCashuMeltAllRequested('alice@example.com'));
     expect((await remaining as WalletLoaded).cashuRedeemedAmountSats, 10);
   });
   test('repeated payment requests cannot submit parallel payments', () async {
