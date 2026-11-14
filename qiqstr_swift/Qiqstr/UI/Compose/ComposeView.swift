@@ -56,11 +56,15 @@ struct ComposeEditor: View {
             .safeAreaBar(edge: .bottom) { bottomBar }
             .navigationTitle(model.title)
             .navigationBarTitleDisplayMode(.inline)
+            #if os(macOS)
+            .onExitCommand { if model.hasContent { confirmDiscard = true } else { dismiss() } }
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L("cancel"), systemImage: "xmark") {
                         if model.hasContent { confirmDiscard = true } else { dismiss() }
                     }
+                    .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("compose-cancel")
                 }
                 if !model.otherDrafts.isEmpty {
@@ -84,6 +88,7 @@ struct ComposeEditor: View {
                     .buttonStyle(.glassProminent)
                     .foregroundStyle(AppColors.background)
                     .disabled(!model.canPost)
+                    .keyboardShortcut(.return, modifiers: .command)
                     .accessibilityIdentifier("compose-post")
                 }
             }
@@ -156,7 +161,7 @@ struct ComposeEditor: View {
                 PhotosPicker(selection: $model.pickerItems, maxSelectionCount: max(1, ComposeViewModel.maxAttachments - model.attachments.count), matching: .any(of: [.images, .videos]), photoLibrary: .shared()) {
                     Image(systemName: "photo.on.rectangle.angled")
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.circle)
                 .controlSize(.large)
                 .disabled(model.attachments.count >= ComposeViewModel.maxAttachments)
@@ -169,7 +174,7 @@ struct ComposeEditor: View {
                         .foregroundStyle(model.contentWarningEnabled ? AppColors.link : AppColors.textPrimary)
                         .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.circle)
                 .controlSize(.large)
                 .accessibilityLabel(L("feedContentWarning"))
@@ -183,7 +188,7 @@ struct ComposeEditor: View {
                         Image(systemName: "chart.bar.xaxis")
                             .foregroundStyle(model.pollEnabled ? AppColors.link : AppColors.textPrimary)
                     }
-                    .buttonStyle(.glass)
+                    .secondaryGlassStyle()
                     .buttonBorderShape(.circle)
                     .controlSize(.large)
                     .accessibilityLabel(L("feedPoll"))
@@ -508,6 +513,7 @@ struct ComposePollEditor: View {
                 Text(L("feedPollMultiple")).tag(true)
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .accessibilityIdentifier("compose-poll-type")
             Toggle(L("feedPollEndDate"), isOn: $model.pollHasEnd.animation(.snappy))
                 .font(.subheadline)

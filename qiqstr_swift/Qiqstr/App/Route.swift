@@ -2,7 +2,7 @@ import SwiftUI
 
 enum FollowListMode: String, Hashable { case following, followers }
 
-enum SettingsRoute: Hashable { case keys, relays, muted, display, database, eventManager, payments, language }
+enum SettingsRoute: Hashable { case keys, relays, muted, display, database, eventManager, payments, language, notifications, safety, diagnostics }
 
 enum Route: Hashable {
     case profile(String)
@@ -75,7 +75,7 @@ extension View {
 final class Router {
     static let shared = Router()
     var selectedTab: AppTab = .feed
-    var paths: [AppTab: NavigationPath] = [.feed: NavigationPath(), .dm: NavigationPath(), .wallet: NavigationPath(), .notifications: NavigationPath(), .search: NavigationPath()]
+    var paths: [AppTab: NavigationPath] = Dictionary(uniqueKeysWithValues: AppTab.allCases.map { ($0, NavigationPath()) })
     var isComposing = false
     var composeContext: ComposeContext?
     var showSidebar = false
@@ -174,7 +174,7 @@ final class Router {
     }
 }
 
-enum AppTab: Hashable { case feed, dm, wallet, notifications, search, compose }
+enum AppTab: Hashable, CaseIterable { case feed, dm, wallet, notifications, search, compose, profile, reads, live, lists, bookmarks, settings }
 
 enum AppSheet: Identifiable {
     case zap(Note)

@@ -69,7 +69,7 @@ struct ExploreChipBar: View {
         if selected {
             button.buttonStyle(.glassProminent).foregroundStyle(AppColors.background)
         } else {
-            button.buttonStyle(.glass).foregroundStyle(.primary)
+            button.secondaryGlassStyle().foregroundStyle(.primary)
         }
     }
 }

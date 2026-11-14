@@ -23,19 +23,9 @@ struct SettingsView: View {
             Section {
                 link(.keys, L("keys"), "key.horizontal.fill", fill: AppColors.settingsTile)
                 link(.relays, L("relays"), "point.3.connected.trianglepath.dotted", fill: AppColors.settingsTile)
-                NavigationLink {
-                    NotificationSettingsView()
-                } label: {
-                    SettingsRowLabel(title: L("notifications"), systemImage: "bell.badge.fill", value: notifications.isDelivering ? L("localNotifyOn") : L("localNotifyOff"), fill: AppColors.settingsTile)
-                }
-                .accessibilityIdentifier("settings-row-notifications")
+                link(.notifications, L("notifications"), "bell.badge.fill", fill: AppColors.settingsTile, value: notifications.isDelivering ? L("localNotifyOn") : L("localNotifyOff"))
                 link(.muted, L("muted"), "bell.slash.fill", fill: AppColors.settingsTile)
-                NavigationLink {
-                    SafetySettingsView()
-                } label: {
-                    SettingsRowLabel(title: L("safetyTitle"), systemImage: "hand.raised.fill", fill: AppColors.settingsTile)
-                }
-                .accessibilityIdentifier("settings-row-safety")
+                link(.safety, L("safetyTitle"), "hand.raised.fill", fill: AppColors.settingsTile)
             }
             Section {
                 link(.display, L("display"), "circle.lefthalf.filled", fill: AppColors.settingsTile)
@@ -61,9 +51,7 @@ struct SettingsView: View {
                     SettingsRowLabel(title: L("settingsContactSupport"), systemImage: "envelope.fill", fill: AppColors.settingsTile)
                 }
                 .accessibilityIdentifier("settings-contact")
-                NavigationLink {
-                    DiagnosticsView()
-                } label: {
+                NavigationLink(value: Route.settingsPage(.diagnostics)) {
                     SettingsRowLabel(title: L("diagnosticsTitle"), systemImage: "stethoscope", fill: AppColors.settingsTile)
                 }
                 .accessibilityIdentifier("settings-diagnostics")

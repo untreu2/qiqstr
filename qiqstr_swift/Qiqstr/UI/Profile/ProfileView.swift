@@ -61,6 +61,7 @@ struct ProfileView: View {
             .refreshable { await model.refresh() }
             .accessibilityIdentifier("profile-scroll")
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 8) {
                         AvatarView(url: model.profile.picture.nilIfEmpty, size: 26)
@@ -71,6 +72,7 @@ struct ProfileView: View {
                     .animation(.smooth(duration: 0.25), value: titleVisible)
                     .accessibilityHidden(!titleVisible)
                 }
+                #endif
                 ToolbarItem(placement: .topBarTrailing) {
                     ProfileMenu(model: model, confirmMute: $confirmMute, showReport: $showReport)
                 }
@@ -125,6 +127,7 @@ struct ProfileView: View {
             }
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
         .padding(.horizontal, 16)
         .padding(.top, 18)
         .padding(.bottom, 8)

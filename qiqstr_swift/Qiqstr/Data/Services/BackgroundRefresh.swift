@@ -1,4 +1,6 @@
+#if os(iOS)
 import BackgroundTasks
+#endif
 import Foundation
 
 @MainActor

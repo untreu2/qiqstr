@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 nonisolated enum BlurHash {
     private static let alphabet = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~")

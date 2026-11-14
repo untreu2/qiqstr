@@ -13,6 +13,9 @@ struct SettingsPageView: View {
         case .eventManager: EventManagerSettingsView()
         case .payments: PaymentsSettingsView()
         case .language: LanguageSettingsView()
+        case .notifications: NotificationSettingsView()
+        case .safety: SafetySettingsView()
+        case .diagnostics: DiagnosticsView()
         }
     }
 }

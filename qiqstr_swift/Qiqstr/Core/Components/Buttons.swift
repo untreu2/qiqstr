@@ -38,7 +38,7 @@ struct SecondaryButton: View {
             .font(.headline)
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.glass)
+        .secondaryGlassStyle()
         .buttonBorderShape(.capsule)
         .controlSize(.extraLarge)
         .disabled(isLoading)
@@ -59,7 +59,7 @@ struct PillButton: View {
                 .buttonBorderShape(.capsule)
         } else {
             Button(action: action) { label }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.capsule)
         }
     }
@@ -84,7 +84,7 @@ struct GlassIconButton: View {
                 .font(.body.weight(.semibold))
                 .frame(width: size, height: size)
         }
-        .buttonStyle(.glass)
+        .secondaryGlassStyle()
         .buttonBorderShape(.circle)
         .accessibilityLabel(accessibilityLabel ?? systemImage)
     }
@@ -109,5 +109,16 @@ struct IconTile: View {
             .foregroundStyle(tint)
             .frame(width: size, height: size)
             .background(AppColors.tile, in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func secondaryGlassStyle() -> some View {
+        #if os(macOS)
+        buttonStyle(.bordered)
+        #else
+        buttonStyle(.glass)
+        #endif
     }
 }

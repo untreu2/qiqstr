@@ -1,5 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 struct HighlightDraft: Identifiable, Hashable {
     let id = UUID()
@@ -90,6 +94,7 @@ struct HighlightComposerSheet: View {
     }
 }
 
+#if os(iOS)
 struct SelectableTextView: UIViewRepresentable {
     let text: String
     @Binding var selection: String
@@ -135,6 +140,7 @@ struct SelectableTextView: UIViewRepresentable {
         }
     }
 }
+#endif
 
 struct HighlightsSheet: View {
     let highlights: [ArticleHighlight]

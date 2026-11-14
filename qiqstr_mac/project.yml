@@ -1,0 +1,59 @@
+name: QiqstrMac
+options:
+  bundleIdPrefix: me.untreu
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+packages:
+  QiqstrCore:
+    path: ../qiqstr_swift/QiqstrCore
+targets:
+  Qiqstr:
+    type: application
+    platform: macOS
+    sources:
+      - path: Mac
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/*.entitlements"
+      - path: ../qiqstr_swift/Qiqstr
+        excludes:
+          - "App/QiqstrApp.swift"
+          - "App/HomeView.swift"
+          - "Core/Components/SafariView.swift"
+          - "UI/Auth/AuthQRScanner.swift"
+          - "UI/Wallet/QRScannerView.swift"
+          - "Resources/Info.plist"
+          - "Resources/PrivacyInfo.xcprivacy"
+          - "Qiqstr.entitlements"
+    dependencies:
+      - package: QiqstrCore
+      - sdk: WidgetKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.untreu.qiqstrmac
+        PRODUCT_NAME: qiqstr
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Mac/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Mac/Resources/Qiqstr.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        OTHER_LDFLAGS: ["-lc++"]
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+schemes:
+  Qiqstr:
+    build:
+      targets:
+        Qiqstr: all

@@ -82,6 +82,7 @@ struct ReaderSettingsPopover: View {
                     Text(L("readerFontSerif")).fontDesign(.serif).tag(true)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .accessibilityIdentifier("reader-font")
             }
             VStack(alignment: .leading, spacing: 8) {
@@ -92,6 +93,7 @@ struct ReaderSettingsPopover: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .accessibilityIdentifier("reader-line-spacing")
             }
             if offset != 0 || serif || spacing != ReaderLineSpacing.standard.rawValue {

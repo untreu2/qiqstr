@@ -44,6 +44,6 @@ enum RelayConfig {
     }
 
     static var databaseURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("nostr-lmdb", isDirectory: true)
+        AppDirectories.support.appendingPathComponent("nostr-lmdb", isDirectory: true)
     }
 }

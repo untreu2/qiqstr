@@ -160,7 +160,7 @@ struct LiveStreamHeader: View {
                     Label(L("liveZapHost"), systemImage: "bolt.fill")
                         .font(.subheadline.weight(.semibold))
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
                 .accessibilityIdentifier("live-zap-host")

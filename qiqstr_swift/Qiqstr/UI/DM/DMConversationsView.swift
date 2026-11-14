@@ -101,6 +101,7 @@ struct DMConversationsView: View {
             }
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
         .controlSize(.large)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)

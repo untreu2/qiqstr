@@ -12,10 +12,8 @@ enum AccountData {
         removeCredentials(pubkey: pubkey)
         await MarmotEngine.shared.close()
         let files = FileManager.default
-        if let support = files.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            for path in ["marmot/\(pubkey)", "Drafts/\(pubkey).json", "WebOfTrust/\(pubkey).json"] {
-                try? files.removeItem(at: support.appendingPathComponent(path))
-            }
+        for path in ["marmot/\(pubkey)", "Drafts/\(pubkey).json", "WebOfTrust/\(pubkey).json"] {
+            try? files.removeItem(at: AppDirectories.support.appendingPathComponent(path))
         }
         try? files.removeItem(at: files.temporaryDirectory.appendingPathComponent("decrypted_media", isDirectory: true))
         let defaults = UserDefaults.standard

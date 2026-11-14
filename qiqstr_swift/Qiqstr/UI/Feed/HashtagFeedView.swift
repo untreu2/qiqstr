@@ -180,7 +180,7 @@ struct HashtagFollowButton: View {
         Group {
             if isFollowing {
                 Button(action: action) { Text(L("following")).font(.subheadline.weight(.semibold)) }
-                    .buttonStyle(.glass)
+                    .secondaryGlassStyle()
             } else {
                 Button(action: action) { Text(L("follow")).font(.subheadline.weight(.semibold)) }
                     .buttonStyle(.glassProminent)

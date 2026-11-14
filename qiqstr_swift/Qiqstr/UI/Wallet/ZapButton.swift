@@ -157,7 +157,7 @@ struct ZapRetryBanner: View {
                     retryTick += 1
                     Task { await ZapService.shared.retry(failure) }
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.capsule)
                 .accessibilityIdentifier("zap-retry")
             }

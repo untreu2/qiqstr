@@ -115,7 +115,7 @@ struct AuthWelcomeView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glass)
+            .secondaryGlassStyle()
             .buttonBorderShape(.capsule)
             .controlSize(.extraLarge)
             .accessibilityIdentifier("welcome-login")

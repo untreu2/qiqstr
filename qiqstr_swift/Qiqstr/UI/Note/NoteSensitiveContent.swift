@@ -84,7 +84,7 @@ struct NoteSensitiveOverlay: View {
     private var showButton: some View {
         Button(L("feedSensitiveShow"), action: onReveal)
             .font(.subheadline.weight(.semibold))
-            .buttonStyle(.glass)
+            .secondaryGlassStyle()
             .buttonBorderShape(.capsule)
             .controlSize(compact ? .small : .regular)
             .accessibilityIdentifier("note-sensitive-show")

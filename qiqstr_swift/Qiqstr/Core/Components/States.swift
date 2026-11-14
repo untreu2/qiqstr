@@ -1,4 +1,8 @@
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 import QiqstrCore
 import SwiftUI
 
@@ -54,14 +58,24 @@ final class ToastCenter {
     func show(_ message: String, style: Toast.Style = .info) {
         if style == .error, ReadOnlyGate.intercepts(message) { return }
         let toast = Toast(message: message, style: style)
+        #if os(iOS)
         ToastWindow.shared.install()
+        #endif
         current = toast
         AccessibilityNotification.Announcement(message).post()
-        let seconds: Double = UIAccessibility.isVoiceOverRunning ? 6 : style == .error ? 4 : 2.6
+        let seconds: Double = Self.voiceOverRunning ? 6 : style == .error ? 4 : 2.6
         Task {
             try? await Task.sleep(for: .seconds(seconds))
             if current?.id == toast.id { current = nil }
         }
+    }
+
+    private static var voiceOverRunning: Bool {
+        #if os(iOS)
+        UIAccessibility.isVoiceOverRunning
+        #else
+        NSWorkspace.shared.isVoiceOverEnabled
+        #endif
     }
 
     func error(_ error: Error) {
@@ -78,7 +92,11 @@ func coreMessage(_ error: Error) -> String {
 
 struct ToastOverlay: ViewModifier {
     func body(content: Content) -> some View {
+        #if os(iOS)
         content.onAppear { ToastWindow.shared.install() }
+        #else
+        content.overlay { ToastHost() }
+        #endif
     }
 }
 
@@ -111,6 +129,7 @@ private struct ToastHost: View {
     }
 }
 
+#if os(iOS)
 @MainActor
 final class ToastWindow {
     static let shared = ToastWindow()
@@ -141,6 +160,7 @@ final class PassthroughWindow: UIWindow {
         return hit
     }
 }
+#endif
 
 extension View {
     func toastOverlay() -> some View { modifier(ToastOverlay()) }

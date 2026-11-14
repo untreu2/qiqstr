@@ -77,7 +77,7 @@ struct FollowButton: View {
     @ViewBuilder
     private func styled(_ button: some View) -> some View {
         if isFollowing {
-            button.buttonStyle(.glass)
+            button.secondaryGlassStyle()
         } else {
             button.buttonStyle(.glassProminent).foregroundStyle(AppColors.background)
         }

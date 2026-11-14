@@ -1,6 +1,8 @@
 import CoreImage.CIFilterBuiltins
 import SwiftUI
+#if os(iOS)
 import VisionKit
+#endif
 
 enum QRCodeRenderer {
     static func image(_ text: String) -> UIImage? {
@@ -127,7 +129,7 @@ struct ShareProfileSheet: View {
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.glass)
+        .secondaryGlassStyle()
         .buttonBorderShape(.roundedRectangle(radius: 22))
         .accessibilityLabel(L("copy"))
         .accessibilityIdentifier("share-profile-copy")
@@ -171,6 +173,7 @@ struct ShareProfileSheet: View {
     }
 }
 
+#if os(iOS)
 struct ProfileQRScannerView: View {
     var onScan: (String) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -258,3 +261,4 @@ private struct QRDataScanner: UIViewControllerRepresentable {
         }
     }
 }
+#endif

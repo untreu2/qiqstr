@@ -118,6 +118,7 @@ struct NoteStatisticsView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .accessibilityIdentifier("statistics-tabs")

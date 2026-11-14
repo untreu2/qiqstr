@@ -1,5 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 enum AppColors {
     static let accent = Color(uiColor: .link)
@@ -31,7 +35,11 @@ extension Color {
     }
 
     init(light: Color, dark: Color) {
+        #if os(iOS)
         self.init(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light) })
+        #else
+        self.init(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(dark) : NSColor(light) })
+        #endif
     }
 }
 

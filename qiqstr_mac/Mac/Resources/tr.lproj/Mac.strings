@@ -1,0 +1,6 @@
+"localNotifyDeniedFooter" = "qiqstr için bildirimler Sistem Ayarları'nda kapalı.";
+"localNotifyDeliveryFooter" = "qiqstr, çalıştığı sürece, penceresi arka planda olsa bile yeni etkinlikler için bildirim gösterir. Uygulamadan çıktıktan sonra hiçbir şey kontrol edilmez.";
+"diagnosticsFooter" = "macOS, qiqstr için çökme ve performans raporlarını bu Mac'te toplar. Raporlar burada kalır ve hiçbir yere yüklenmez. Bir sorunun çözülmesine yardımcı olmak için bir raporu paylaşıp destek talebine ekleyin. Raporlar gönderilerinizi, mesajlarınızı veya anahtarlarınızı değil, uygulamayla ilgili teknik ayrıntıları içerir.";
+"diagnosticsEmptyMessage" = "macOS, bildirecek bir şey olduğunda raporları günde yaklaşık bir kez iletir.";
+"macGoMenu" = "Git";
+"macLibrary" = "Kitaplık";

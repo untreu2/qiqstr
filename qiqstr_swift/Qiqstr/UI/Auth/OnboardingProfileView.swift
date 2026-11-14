@@ -112,6 +112,11 @@ private extension String {
 }
 
 struct OnboardingProfileView: View {
+    #if os(macOS)
+    private static let keyboardCoversContent = false
+    #else
+    private static let keyboardCoversContent = true
+    #endif
     let onDone: () -> Void
 
     @State private var model = OnboardingProfileViewModel()
@@ -145,7 +150,7 @@ struct OnboardingProfileView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(AppColors.background)
         .safeAreaInset(edge: .bottom) {
-            if focus == nil {
+            if focus == nil || !Self.keyboardCoversContent {
                 PrimaryButton(title: L("continueButton"), isLoading: model.isSaving, isEnabled: !model.isUploadingPicture && !model.isUploadingBanner) {
                     Task { if await model.save() { onDone() } }
                 }

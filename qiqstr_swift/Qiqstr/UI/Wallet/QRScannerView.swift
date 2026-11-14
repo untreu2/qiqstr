@@ -2,7 +2,11 @@ import AVFoundation
 import CoreImage
 import PhotosUI
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 enum CameraPermission {
     case undetermined, authorized, denied, unavailable
@@ -136,7 +140,7 @@ struct QRScannerView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .accessibilityIdentifier("qr-photo")
                 Button {
                     if let text = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { deliver(text) }
@@ -145,7 +149,7 @@ struct QRScannerView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .accessibilityIdentifier("qr-paste")
             }
             .foregroundStyle(.white)

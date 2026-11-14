@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "QiqstrCore",
-    platforms: [.iOS("26.0")],
+    platforms: [.iOS("26.0"), .macOS("26.0")],
     products: [.library(name: "QiqstrCore", targets: ["QiqstrCore"])],
     targets: [
         .binaryTarget(name: "QiqstrCoreFFI", path: "QiqstrCoreFFI.xcframework"),

@@ -232,7 +232,7 @@ struct WalletOnboardingView: View {
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .secondaryGlassStyle()
                     .buttonBorderShape(.capsule)
                     .controlSize(.large)
                     .accessibilityIdentifier("wallet-connect-scan")
@@ -331,7 +331,7 @@ struct WalletDashboard: View {
             }
             .frame(maxWidth: .infinity, minHeight: 56)
         }
-        .buttonStyle(.glass)
+        .secondaryGlassStyle()
         .buttonBorderShape(.roundedRectangle(radius: 22))
         .accessibilityIdentifier(id)
     }
@@ -409,7 +409,7 @@ struct WalletDashboard: View {
                 Button { model.receive() } label: {
                     Label(L("receive"), systemImage: "arrow.down.left")
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.capsule)
                 .accessibilityIdentifier("wallet-empty-receive")
             }

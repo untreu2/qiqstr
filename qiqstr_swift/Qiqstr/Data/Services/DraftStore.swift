@@ -106,8 +106,7 @@ final class DraftStore {
     }
 
     private static func fileURL(_ owner: String) -> URL? {
-        guard owner.count == 64, owner.allSatisfy(\.isHexDigit),
-              let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
-        return base.appendingPathComponent("Drafts", isDirectory: true).appendingPathComponent("\(owner).json")
+        guard owner.count == 64, owner.allSatisfy(\.isHexDigit) else { return nil }
+        return AppDirectories.support.appendingPathComponent("Drafts", isDirectory: true).appendingPathComponent("\(owner).json")
     }
 }

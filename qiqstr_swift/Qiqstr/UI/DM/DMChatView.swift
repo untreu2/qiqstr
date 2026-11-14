@@ -147,7 +147,7 @@ struct DMChatView: View {
                     .font(.body.weight(.semibold))
                     .frame(width: 28, height: 28)
             }
-            .buttonStyle(.glass)
+            .secondaryGlassStyle()
             .buttonBorderShape(.circle)
             .controlSize(.large)
             .overlay(alignment: .topTrailing) {
@@ -196,6 +196,7 @@ struct DMChatView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .lineLimit(6)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 Button(L("block"), role: .destructive) { safety.blockTarget = pubkey }

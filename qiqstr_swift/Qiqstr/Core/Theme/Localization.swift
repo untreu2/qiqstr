@@ -38,7 +38,11 @@ nonisolated final class Localizer: @unchecked Sendable {
         }
     }
 
+    #if os(macOS)
+    private static let tables = ["Mac", "Localizable", "Auth", "Feed", "Profile", "Explore", "DM", "Wallet", "Settings"]
+    #else
     private static let tables = ["Localizable", "Auth", "Feed", "Profile", "Explore", "DM", "Wallet", "Settings"]
+    #endif
 
     func string(_ key: String) -> String {
         lock.lock(); defer { lock.unlock() }

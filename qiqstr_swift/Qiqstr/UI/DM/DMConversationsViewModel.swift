@@ -1,6 +1,10 @@
 import Foundation
 import Observation
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 enum DMConversationFilter: String, CaseIterable, Identifiable {
     case primary, requests

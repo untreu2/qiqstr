@@ -1,4 +1,8 @@
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 enum ListError: LocalizedError {
     case cancelled
@@ -17,6 +21,19 @@ enum ListConfirmation {
         return await task.value
     }
 
+    #if os(macOS)
+    private static func ask(kind: Int) async -> Bool {
+        let alert = NSAlert()
+        alert.messageText = L("listNotFoundTitle")
+        alert.informativeText = L("listNotFoundMessage", ["list": name(kind)])
+        alert.addButton(withTitle: L("listStartNew"))
+        alert.addButton(withTitle: L("cancel"))
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else { return alert.runModal() == .alertFirstButtonReturn }
+        return await withCheckedContinuation { continuation in
+            alert.beginSheetModal(for: window) { continuation.resume(returning: $0 == .alertFirstButtonReturn) }
+        }
+    }
+    #else
     private static func ask(kind: Int) async -> Bool {
         guard let presenter = topController() else { return false }
         return await withCheckedContinuation { continuation in
@@ -27,6 +44,7 @@ enum ListConfirmation {
             presenter.present(alert, animated: true)
         }
     }
+    #endif
 
     private static func name(_ kind: Int) -> String {
         switch kind {
@@ -38,6 +56,7 @@ enum ListConfirmation {
         }
     }
 
+    #if os(iOS)
     private static func topController() -> UIViewController? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let window = scenes.flatMap(\.windows).first { $0.isKeyWindow } ?? scenes.first?.windows.first
@@ -45,4 +64,5 @@ enum ListConfirmation {
         while let presented = top?.presentedViewController, !presented.isBeingDismissed { top = presented }
         return top
     }
+    #endif
 }

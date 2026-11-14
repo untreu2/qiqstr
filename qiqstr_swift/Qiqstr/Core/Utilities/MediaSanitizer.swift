@@ -1,6 +1,10 @@
 import AVFoundation
 import CoreTransferable
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 import UniformTypeIdentifiers
 
 nonisolated enum MediaSanitizer {
@@ -70,6 +74,7 @@ nonisolated struct PickedMovie: Transferable {
 
 enum PlaybackAudio {
     static func prepare(muted: Bool) {
+        #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         if muted {
             try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
@@ -77,9 +82,12 @@ enum PlaybackAudio {
             try? session.setCategory(.playback, mode: .moviePlayback)
             try? session.setActive(true)
         }
+        #endif
     }
 
     static func release() {
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
     }
 }

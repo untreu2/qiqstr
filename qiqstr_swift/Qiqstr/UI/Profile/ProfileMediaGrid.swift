@@ -98,17 +98,27 @@ struct ProfileMediaPager: View {
 
     private var current: ProfileMediaEntry? { entries.indices.contains(index) ? entries[index] : nil }
 
+    @ViewBuilder private var pager: some View {
+        #if os(macOS)
+        MacPager(index: $index, count: entries.count) { offset in
+            page(entries[offset], isCurrent: offset == index)
+        }
+        #else
+        TabView(selection: $index) {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { offset, entry in
+                page(entry, isCurrent: offset == index)
+                    .tag(offset)
+                    .ignoresSafeArea()
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        #endif
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea().opacity(1 - min(abs(dragOffset) / 400, 0.7))
-            TabView(selection: $index) {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { offset, entry in
-                    page(entry, isCurrent: offset == index)
-                        .tag(offset)
-                        .ignoresSafeArea()
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            pager
             .offset(y: dragOffset)
             .simultaneousGesture(dismissDrag)
             .ignoresSafeArea()
@@ -180,7 +190,7 @@ struct ProfileMediaPager: View {
                         .font(.subheadline.weight(.semibold))
                         .padding(.horizontal, 6)
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .controlSize(.large)
                 .padding(.bottom, 12)
                 .accessibilityIdentifier("profile-media-open-note")
@@ -215,7 +225,9 @@ private struct ProfileMediaVideoPage: View {
 
     private func prepare() {
         guard player == nil, let u = URL(string: url) else { return }
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        #endif
         let p = AVPlayer(url: u)
         player = p
         if isCurrent { p.play() }

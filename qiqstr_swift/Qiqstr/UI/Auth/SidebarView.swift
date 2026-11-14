@@ -168,7 +168,7 @@ struct SidebarView: View {
                 .font(.body.weight(.semibold))
                 .frame(width: 28, height: 28)
         }
-        .buttonStyle(.glass)
+        .secondaryGlassStyle()
         .buttonBorderShape(.circle)
         .accessibilityLabel(L("close"))
         .accessibilityIdentifier("sidebar-close")
@@ -236,6 +236,7 @@ struct SidebarView: View {
             Text(L("authThemeDark")).tag(ThemePreference.dark.rawValue)
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
         .accessibilityIdentifier("sidebar-theme")
     }
 

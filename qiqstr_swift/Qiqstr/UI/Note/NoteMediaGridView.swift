@@ -165,17 +165,27 @@ struct NotePhotoViewer: View {
     @State private var dragOffset: CGFloat = 0
     @State private var chromeVisible = true
 
+    @ViewBuilder private var pager: some View {
+        #if os(macOS)
+        MacPager(index: $index, count: urls.count) { offset in
+            NoteZoomableImage(url: urls[offset], onSingleTap: { withAnimation(.easeInOut(duration: 0.2)) { chromeVisible.toggle() } })
+        }
+        #else
+        TabView(selection: $index) {
+            ForEach(Array(urls.enumerated()), id: \.offset) { offset, url in
+                NoteZoomableImage(url: url, onSingleTap: { withAnimation(.easeInOut(duration: 0.2)) { chromeVisible.toggle() } })
+                    .tag(offset)
+                    .ignoresSafeArea()
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: urls.count > 1 && chromeVisible ? .automatic : .never))
+        #endif
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea().opacity(1 - min(abs(dragOffset) / 400, 0.7))
-            TabView(selection: $index) {
-                ForEach(Array(urls.enumerated()), id: \.offset) { offset, url in
-                    NoteZoomableImage(url: url, onSingleTap: { withAnimation(.easeInOut(duration: 0.2)) { chromeVisible.toggle() } })
-                        .tag(offset)
-                        .ignoresSafeArea()
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: urls.count > 1 && chromeVisible ? .automatic : .never))
+            pager
             .offset(y: dragOffset)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 24)
@@ -226,6 +236,7 @@ struct NotePhotoViewer: View {
     }
 }
 
+#if os(iOS)
 struct NoteZoomableImage: UIViewRepresentable {
     let url: String
     var onSingleTap: () -> Void = {}
@@ -308,6 +319,7 @@ struct NoteZoomableImage: UIViewRepresentable {
         }
     }
 }
+#endif
 
 struct NoteVideoView: View {
     let url: String
@@ -527,6 +539,7 @@ actor NoteVideoThumbnailCache {
     }
 }
 
+#if os(iOS)
 struct NotePlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
 
@@ -547,7 +560,9 @@ struct NotePlayerLayerView: UIViewRepresentable {
         var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
     }
 }
+#endif
 
+#if os(iOS)
 enum NoteFullScreenVideo {
     static func present(_ player: AVPlayer, onDismiss: @escaping () -> Void) {
         guard let presenter = topViewController() else { return }
@@ -572,7 +587,9 @@ enum NoteFullScreenVideo {
         return top
     }
 }
+#endif
 
+#if os(iOS)
 final class NoteFullScreenPlayerController: AVPlayerViewController {
     var onDismiss: (() -> Void)?
     private var wasPlaying = false
@@ -589,6 +606,7 @@ final class NoteFullScreenPlayerController: AVPlayerViewController {
         onDismiss?()
     }
 }
+#endif
 
 extension AVPlayer {
     private static var presentedKey: UInt8 = 0

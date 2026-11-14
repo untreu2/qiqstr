@@ -28,6 +28,13 @@ struct DMInputBar: View {
                     .textInputAutocapitalization(.sentences)
                     .focused(focus)
                     .padding(.vertical, 8)
+                    #if os(macOS)
+                    .onKeyPress(.return, phases: .down) { press in
+                        guard !press.modifiers.contains(.shift) else { return .ignored }
+                        if model.canSend { model.send() }
+                        return .handled
+                    }
+                    #endif
                     .accessibilityIdentifier("dm-input")
 
                 Button(action: model.send) {

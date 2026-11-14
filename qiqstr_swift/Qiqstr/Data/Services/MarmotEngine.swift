@@ -81,7 +81,7 @@ actor MarmotEngine {
     private var tail: Task<Void, Never>?
 
     static var storageDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppDirectories.support
             .appendingPathComponent("marmot", isDirectory: true)
     }
 

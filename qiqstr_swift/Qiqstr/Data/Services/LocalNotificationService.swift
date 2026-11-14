@@ -1,6 +1,10 @@
 import Foundation
 import Observation
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 import QiqstrCore
 import UserNotifications
 import QiqstrCore
@@ -127,7 +131,13 @@ final class LocalNotificationService: NSObject {
     @ObservationIgnored private var seenOrder: [String: [String]] = [:]
     @ObservationIgnored private var groups: [String: [String]] = [:]
 
-    var isAuthorized: Bool { authorization == .authorized || authorization == .provisional || authorization == .ephemeral }
+    var isAuthorized: Bool {
+        #if os(iOS)
+        authorization == .authorized || authorization == .provisional || authorization == .ephemeral
+        #else
+        authorization == .authorized || authorization == .provisional
+        #endif
+    }
     var isDenied: Bool { authorization == .denied }
     var isDelivering: Bool { isEnabled && isAuthorized }
     var shouldOfferPrompt: Bool {

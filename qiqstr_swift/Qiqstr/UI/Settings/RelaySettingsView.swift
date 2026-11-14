@@ -17,7 +17,9 @@ extension GossipMode {
 struct RelaySettingsView: View {
     @State private var model = RelaySettingsModel()
     @FocusState private var urlFocused: Bool
+    #if os(iOS)
     @State private var editMode: EditMode = .inactive
+    #endif
 
     var body: some View {
         List {
@@ -119,10 +121,13 @@ struct RelaySettingsView: View {
             }
         }
         .settingsListStyle()
+        #if os(iOS)
         .environment(\.editMode, $editMode)
+        #endif
         .navigationTitle(L("relays"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
+            #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
                 Button(editMode.isEditing ? L("done") : L("edit")) {
                     withAnimation { editMode = editMode.isEditing ? .inactive : .active }
@@ -130,6 +135,7 @@ struct RelaySettingsView: View {
                 .accessibilityIdentifier("relays-edit")
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            #endif
             ToolbarItem(placement: .topBarTrailing) {
                 Button(L("addRelay"), systemImage: "plus") { model.showAdd = true }
                     .accessibilityIdentifier("relays-add")

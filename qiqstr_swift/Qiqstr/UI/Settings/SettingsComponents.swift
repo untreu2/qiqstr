@@ -1,5 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 struct SettingsIcon: View {
     let systemImage: String
@@ -43,11 +47,19 @@ struct SettingsRowLabel: View {
     }
 
     private var label: some View {
+        #if os(macOS)
+        HStack(spacing: 10) {
+            SettingsIcon(systemImage: systemImage, tint: tint, fill: fill)
+            Text(title).foregroundStyle(tint)
+        }
+        .contentShape(Rectangle())
+        #else
         Label {
             Text(title).foregroundStyle(tint)
         } icon: {
             SettingsIcon(systemImage: systemImage, tint: tint, fill: fill)
         }
+        #endif
     }
 }
 
@@ -69,7 +81,14 @@ enum SettingsByteFormat {
 
 extension View {
     func settingsListStyle() -> some View {
+        #if os(macOS)
+        self
+            .formStyle(.grouped)
+            .listStyle(.inset)
+            .buttonStyle(.plain)
+        #else
         self
             .listStyle(.insetGrouped)
+        #endif
     }
 }

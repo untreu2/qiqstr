@@ -2,9 +2,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE="${PROFILE:-release}"
-TARGETS="${TARGETS:-aarch64-apple-ios aarch64-apple-ios-sim}"
+TARGETS="${TARGETS:-aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-darwin}"
 cd "$ROOT/../qiqstr_rust/uniffi"
-export IPHONEOS_DEPLOYMENT_TARGET=26.0
+export IPHONEOS_DEPLOYMENT_TARGET=26.0 MACOSX_DEPLOYMENT_TARGET=26.0
 for t in $TARGETS; do
   cargo build --profile "$PROFILE" --target "$t" --lib
 done

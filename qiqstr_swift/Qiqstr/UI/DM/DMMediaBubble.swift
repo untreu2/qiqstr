@@ -249,7 +249,7 @@ struct DMImageViewer: View {
                         .font(.body.weight(.semibold))
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.circle)
             }
             .foregroundStyle(.white)

@@ -28,6 +28,7 @@ struct EditProfileView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("bio")).font(.footnote.weight(.medium)).foregroundStyle(.secondary)
                     TextField(L("profileAboutPlaceholder"), text: $model.draft.about, axis: .vertical)
+                        .labelsHidden()
                         .lineLimit(3...10)
                         .focused($focus, equals: .about)
                         .accessibilityIdentifier("edit-about")
@@ -166,6 +167,7 @@ struct EditProfileView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.footnote.weight(.medium)).foregroundStyle(.secondary)
             TextField(prompt ?? label, text: text)
+                .labelsHidden()
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(capitalize ? .words : .never)
                 .autocorrectionDisabled(!capitalize)

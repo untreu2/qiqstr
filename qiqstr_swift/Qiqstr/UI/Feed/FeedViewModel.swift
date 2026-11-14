@@ -126,12 +126,11 @@ final class FeedViewModel {
         if exploreHidden == nil { exploreHidden = ExploreSeenStore.shared.snapshot() }
         let hidden = exploreHidden ?? [:]
         let pool = await TrendingService.shared.explorePool(force: force)
-        var ids = pool.filter { hidden[$0] == nil }
-        if ids.count < Self.exploreMinimumFresh {
-            ids += pool.filter { hidden[$0] != nil }.sorted { (hidden[$0] ?? 0) < (hidden[$1] ?? 0) }
-        }
-        let byId = Dictionary(await NoteRepository.notes(ids).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return await ExploreSafety.shared.screen(ids.compactMap { byId[$0] })
+        let byId = Dictionary(await NoteRepository.notes(pool).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let screened = await ExploreSafety.shared.screen(pool.compactMap { byId[$0] })
+        let fresh = screened.filter { hidden[$0.id] == nil }
+        guard fresh.count < Self.exploreMinimumFresh else { return fresh }
+        return fresh + screened.filter { hidden[$0.id] != nil }.sorted { (hidden[$0.id] ?? 0) < (hidden[$1.id] ?? 0) }
     }
 
     @ObservationIgnored private var discoverCache: [String: [Note]] = [:]

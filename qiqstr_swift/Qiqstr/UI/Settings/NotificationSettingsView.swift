@@ -1,5 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 struct NotificationSettingsView: View {
     @State private var service = LocalNotificationService.shared
@@ -49,6 +53,7 @@ struct NotificationSettingsView: View {
                 Text(L("localNotifyOnlyKnownFooter"))
             }
             Section {
+                #if os(iOS)
                 LabeledContent(L("localNotifyBackgroundRefresh")) {
                     Text(service.backgroundRefreshAvailable ? L("localNotifyOn") : L("localNotifyOff"))
                 }
@@ -56,6 +61,7 @@ struct NotificationSettingsView: View {
                 if !service.backgroundRefreshAvailable {
                     Button(L("walletOpenSettings")) { openSystemSettings() }
                 }
+                #endif
             } footer: {
                 Text(L("localNotifyDeliveryFooter"))
             }
@@ -145,7 +151,7 @@ struct NotificationPromptSheet: View {
                 } label: {
                     Text(L("localNotifyPromptLater")).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .accessibilityIdentifier("notify-prompt-later")

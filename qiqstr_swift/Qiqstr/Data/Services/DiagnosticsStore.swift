@@ -26,7 +26,7 @@ final class DiagnosticsStore: NSObject, MXMetricManagerSubscriber {
     @ObservationIgnored private var isActive = false
 
     nonisolated static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppDirectories.support
             .appendingPathComponent("Diagnostics", isDirectory: true)
     }
 
@@ -66,11 +66,19 @@ final class DiagnosticsStore: NSObject, MXMetricManagerSubscriber {
         Task { @MainActor in self.reload() }
     }
 
+    nonisolated private static func launchDiagnostics(_ payload: MXDiagnosticPayload) -> Int {
+        #if os(iOS)
+        payload.appLaunchDiagnostics?.count ?? 0
+        #else
+        0
+        #endif
+    }
+
     nonisolated private static func save(diagnostics payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
             let crashes = payload.crashDiagnostics?.count ?? 0
             let hangs = payload.hangDiagnostics?.count ?? 0
-            let other = (payload.cpuExceptionDiagnostics?.count ?? 0) + (payload.diskWriteExceptionDiagnostics?.count ?? 0) + (payload.appLaunchDiagnostics?.count ?? 0)
+            let other = (payload.cpuExceptionDiagnostics?.count ?? 0) + (payload.diskWriteExceptionDiagnostics?.count ?? 0) + launchDiagnostics(payload)
             write(payload.jsonRepresentation(), kind: .diagnostics, date: payload.timeStampEnd, counts: (crashes, hangs, other))
         }
         prune()

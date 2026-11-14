@@ -31,7 +31,10 @@ final class WebOfTrustService {
     private var generation = 0
     private var buildTask: Task<Void, Never>?
 
-    var isReady: Bool { owner != nil && !follows.isEmpty && (updatedAt != nil || !scores.isEmpty) }
+    var isReady: Bool {
+        guard let owner else { return false }
+        return follows.contains { $0 != owner } && (updatedAt != nil || !scores.isEmpty)
+    }
 
     func isTrusted(_ pubkey: String) -> Bool {
         guard let owner, isReady else { return true }
@@ -236,8 +239,7 @@ actor WebOfTrustGraph {
     }
 
     nonisolated static func cacheURL(owner: String) -> URL? {
-        guard owner.count == 64, owner.allSatisfy(\.isHexDigit),
-              let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
-        return base.appendingPathComponent("WebOfTrust", isDirectory: true).appendingPathComponent("\(owner).json")
+        guard owner.count == 64, owner.allSatisfy(\.isHexDigit) else { return nil }
+        return AppDirectories.support.appendingPathComponent("WebOfTrust", isDirectory: true).appendingPathComponent("\(owner).json")
     }
 }

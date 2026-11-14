@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct FeedView: View {
-    @State private var model = FeedViewModel()
+    @State private var model: FeedViewModel
     @State private var bus = DataBus.shared
     @State private var session = Session.shared
     @State private var store = NoteInteractionStore.shared
@@ -9,6 +9,10 @@ struct FeedView: View {
     @State private var isManagingTopics = false
     @State private var explore = ExploreService.shared
     @State private var follows = FollowService.shared
+
+    init(model: FeedViewModel? = nil) {
+        _model = State(initialValue: model ?? FeedViewModel())
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -228,7 +232,7 @@ struct FeedNewNotesPill: View {
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 4)
         }
-        .buttonStyle(.glass)
+        .secondaryGlassStyle()
         .buttonBorderShape(.capsule)
         .controlSize(.large)
         .sensoryFeedback(.impact(weight: .light), trigger: count)
@@ -314,7 +318,7 @@ struct FeedEmptyState: View {
                 .controlSize(.large)
                 .accessibilityIdentifier("feed-empty-suggested")
             Button(L("feedExplore"), systemImage: "safari", action: onExplore)
-                .buttonStyle(.glass)
+                .secondaryGlassStyle()
                 .buttonBorderShape(.capsule)
                 .accessibilityIdentifier("feed-empty-explore")
             Button(L("refresh"), action: onRefresh)

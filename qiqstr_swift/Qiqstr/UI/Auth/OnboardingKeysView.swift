@@ -150,7 +150,7 @@ struct OnboardingKeysView: View {
                 Label(L("copy"), systemImage: "doc.on.doc")
                     .font(.subheadline.weight(.semibold))
             }
-            .buttonStyle(.glass)
+            .secondaryGlassStyle()
             .controlSize(.small)
             .accessibilityIdentifier(copyIdentifier)
         }

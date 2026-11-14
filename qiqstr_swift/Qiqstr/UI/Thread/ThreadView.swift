@@ -111,7 +111,7 @@ struct ThreadView: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glass)
+            .secondaryGlassStyle()
             .buttonBorderShape(.capsule)
             .controlSize(.large)
             .padding(16)
@@ -201,7 +201,7 @@ struct ThreadReplyEntryButton: View {
             .font(.body)
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.glass)
+        .secondaryGlassStyle()
         .buttonBorderShape(.capsule)
         .controlSize(.large)
         .padding(.horizontal, 16)
