@@ -82,6 +82,11 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
     val text: String get() = input.text
     var contentWarningEnabled by mutableStateOf(false)
     var contentWarningReason by mutableStateOf("")
+    var goalEnabled by mutableStateOf(false)
+    var goalAmount by mutableStateOf("")
+    var goalHasEnd by mutableStateOf(false)
+    var goalEndsAt by mutableStateOf(TimeFormat.now + 7 * 86400)
+    private var emojiMap = mutableMapOf<String, String>()
     var pollEnabled by mutableStateOf(false)
     val pollOptions = mutableStateListOf(ComposePollOption(), ComposePollOption())
     var pollMultiple by mutableStateOf(false)
@@ -156,12 +161,17 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
                 )
             }
             val poll = if (pollEnabled) ComposeDraftPoll(pollOptions.map { it.text }, pollMultiple, if (pollHasEnd) pollEndsAt else null) else null
-            return ComposeDraft(draftId, kind, target?.id, target?.pubkey, text, mentionMap.toMap(), media, contentWarningEnabled, contentWarningReason, poll, 0)
+            return ComposeDraft(draftId, kind, target?.id, target?.pubkey, text, mentionMap.toMap(), media, contentWarningEnabled, contentWarningReason, poll, 0, emojiMap.toMap(), if (isGoalActive) ComposeDraftGoal(goalSats ?: 0, if (goalHasEnd) goalEndsAt else null) else null)
         }
 
     private fun apply(draft: ComposeDraft) {
         draftId = draft.id
         mentionMap = draft.mentions.toMutableMap()
+        emojiMap = draft.emojis.toMutableMap()
+        goalEnabled = draft.goal != null && supportsPoll
+        goalAmount = draft.goal?.amountSats?.takeIf { it > 0 }?.toString() ?: ""
+        goalHasEnd = draft.goal?.closesAt != null
+        goalEndsAt = draft.goal?.closesAt ?: (TimeFormat.now + 7 * 86400)
         input = TextFieldValue(draft.text, TextRange(draft.text.length))
         contentWarningEnabled = draft.contentWarningEnabled
         contentWarningReason = draft.contentWarningReason
@@ -284,6 +294,26 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
 
     fun togglePoll() {
         pollEnabled = !pollEnabled
+        if (pollEnabled) goalEnabled = false
+        scheduleSave()
+    }
+
+    fun toggleGoal() {
+        goalEnabled = !goalEnabled
+        if (goalEnabled) pollEnabled = false
+        scheduleSave()
+    }
+
+    val isGoalActive: Boolean get() = goalEnabled && supportsPoll
+    val goalSats: Long? get() = goalAmount.filter(Char::isDigit).toLongOrNull()?.takeIf { it > 0 && me.untreu.qiqstr.ui.wallet.SatsAmount.msat(it) != null }
+
+    fun insert(choice: me.untreu.qiqstr.data.services.EmojiChoice) {
+        if (choice is me.untreu.qiqstr.data.services.EmojiChoice.Custom) emojiMap[choice.emoji.shortcode] = choice.emoji.url
+        val range = input.selection
+        val inserted = choice.content
+        val next = text.replaceRange(range.min, range.max, inserted)
+        input = TextFieldValue(next, TextRange(range.min + inserted.length))
+        clearSuggestions()
         scheduleSave()
     }
 
@@ -309,6 +339,7 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
     val canPost: Boolean
         get() {
             if (isPosting || isUploading) return false
+            if (isGoalActive) return text.isNotBlank() && goalSats != null && (!goalHasEnd || goalEndsAt > TimeFormat.now)
             if (isPollActive) return text.isNotBlank() && validPollOptions.size >= MIN_POLL_OPTIONS && (!pollHasEnd || pollEndsAt > TimeFormat.now)
             if (context is ComposeContext.Quote) return true
             return text.isNotBlank() || attachments.any { it.uploaded != null }
@@ -323,6 +354,7 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
 
     val placeholder: String
         get() {
+            if (isGoalActive) return L("zapGoalPlaceholder")
             if (isPollActive) return L("feedPollQuestion")
             return when (context) {
                 is ComposeContext.Reply -> L("addAReply")

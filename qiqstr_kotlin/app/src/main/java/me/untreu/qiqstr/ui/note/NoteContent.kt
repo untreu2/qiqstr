@@ -1,5 +1,7 @@
 package me.untreu.qiqstr.ui.note
 
+import androidx.compose.foundation.text.appendInlineContent
+import me.untreu.qiqstr.data.services.CustomEmoji
 import android.net.Uri
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
@@ -23,6 +25,7 @@ sealed interface NoteContentSegment {
     data class Link(val url: String) : NoteContentSegment
     data class Hashtag(val tag: String) : NoteContentSegment
     data class Mention(val bech: String) : NoteContentSegment
+    data class Emoji(val shortcode: String, val url: String) : NoteContentSegment
 }
 
 @Immutable
@@ -103,11 +106,12 @@ class NoteContent(content: String, tags: List<List<String>>) {
     init {
         val parsed = NoteRepository.parse(content)
         val imeta = NoteImeta.map(tags)
+        val emojis = CustomEmoji.map(tags)
         val segments = mutableListOf<NoteContentSegment>()
         val mentions = mutableListOf<String>()
         for (part in parsed.parts) {
             when (part) {
-                is ContentPart.Text -> segments.addAll(split(part.text))
+                is ContentPart.Text -> segments.addAll(split(part.text, emojis))
                 is ContentPart.Mention -> {
                     segments.add(NoteContentSegment.Mention(part.id))
                     Nip19.pubkeyHex(part.id)?.let { if (it !in mentions) mentions.add(it) }
@@ -124,6 +128,7 @@ class NoteContent(content: String, tags: List<List<String>>) {
             val urls = audioItems.map { it.url }.toSet()
             segments.removeAll { it is NoteContentSegment.Link && it.url in urls }
             while ((segments.lastOrNull() as? NoteContentSegment.Text)?.text?.isBlank() == true) segments.removeAt(segments.lastIndex)
+            (segments.lastOrNull() as? NoteContentSegment.Text)?.let { segments[segments.lastIndex] = NoteContentSegment.Text(it.text.trimEnd()) }
         }
         this.segments = segments
         truncatedSegments = truncate(segments, TRUNCATION_LIMIT)
@@ -140,6 +145,8 @@ class NoteContent(content: String, tags: List<List<String>>) {
         mentionPubkeys = mentions
         isEmptyText = segments.all { it is NoteContentSegment.Text && it.text.isBlank() }
     }
+
+    fun inlineEmojis(segments: List<NoteContentSegment>) = segments.filterIsInstance<NoteContentSegment.Emoji>().associate { it.url to it.shortcode }
 
     val images: List<NoteMediaItem> get() = media.filter { !it.isVideo }
     val videos: List<NoteMediaItem> get() = media.filter { it.isVideo }
@@ -165,6 +172,7 @@ class NoteContent(content: String, tags: List<List<String>>) {
         for (segment in segments) {
             when (segment) {
                 is NoteContentSegment.Text -> append(segment.text)
+                is NoteContentSegment.Emoji -> appendInlineContent(segment.url, ":${segment.shortcode}:")
                 is NoteContentSegment.Link -> withLink(LinkAnnotation.Clickable(segment.url, linkStyle) { Router.openUrl(segment.url) }) {
                     append(displayUrl(segment.url))
                 }
@@ -192,7 +200,7 @@ class NoteContent(content: String, tags: List<List<String>>) {
         private val linkRegex = Regex("""https?://[^\s<>"']+""", RegexOption.IGNORE_CASE)
         private val hashtagRegex = Regex("""(?<![\p{L}\p{N}_/#&])#[\p{L}\p{N}_]+""")
 
-        private fun split(text: String): List<NoteContentSegment> {
+        private fun split(text: String, emojis: Map<String, String> = emptyMap()): List<NoteContentSegment> {
             val tokens = mutableListOf<Pair<IntRange, NoteContentSegment>>()
             for (match in linkRegex.findAll(text)) {
                 var url = match.value
@@ -203,6 +211,11 @@ class NoteContent(content: String, tags: List<List<String>>) {
             for (match in hashtagRegex.findAll(text)) {
                 if (tokens.any { it.first.first <= match.range.last && match.range.first <= it.first.last }) continue
                 tokens.add(match.range to NoteContentSegment.Hashtag(match.value.drop(1)))
+            }
+            for (match in Regex(":([A-Za-z0-9_-]{1,64}):").findAll(text)) {
+                if (tokens.any { it.first.first <= match.range.last && match.range.first <= it.first.last }) continue
+                val code = match.groupValues[1]
+                emojis[code]?.let { tokens.add(match.range to NoteContentSegment.Emoji(code, it)) }
             }
             tokens.sortBy { it.first.first }
             val result = mutableListOf<NoteContentSegment>()
@@ -225,6 +238,7 @@ class NoteContent(content: String, tags: List<List<String>>) {
                     is NoteContentSegment.Link -> minOf(segment.url.length, 34)
                     is NoteContentSegment.Hashtag -> segment.tag.length + 1
                     is NoteContentSegment.Mention -> 8
+                    is NoteContentSegment.Emoji -> 2
                 }
                 if (length + cost <= limit) {
                     result.add(segment)

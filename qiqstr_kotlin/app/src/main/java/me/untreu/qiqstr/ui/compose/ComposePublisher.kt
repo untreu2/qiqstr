@@ -20,10 +20,15 @@ object ComposePublisher {
             extraTags.add(if (reason.isEmpty()) listOf("content-warning") else listOf("content-warning", reason))
         }
         val content = finalContent(draft)
+        for ((code, url) in draft.emojis.toSortedMap()) if (content.contains(":$code:")) extraTags.add(listOf("emoji", code, url))
         when (draft.kind) {
             ComposeDraft.Kind.NEW_NOTE -> {
                 val poll = draft.poll
-                if (poll != null) {
+                val goal = draft.goal
+                if (goal != null) {
+                    if (goal.amountSats <= 0) throw CoreError(L("enterValidAmount"))
+                    InteractionService.publishGoal(content, goal.amountSats, goal.closesAt, urls, extraTags)
+                } else if (poll != null) {
                     val options = pollOptions(poll)
                     if (options.size < 2) throw CoreError(L("feedPollNeedsOptions"))
                     InteractionService.publishPoll(content, options, poll.multiple, poll.endsAt, urls, extraTags)

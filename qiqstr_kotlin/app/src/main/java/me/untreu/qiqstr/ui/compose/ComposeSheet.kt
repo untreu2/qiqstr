@@ -42,6 +42,9 @@ import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.EmojiEmotions
+import androidx.compose.material.icons.outlined.Adjust
+import me.untreu.qiqstr.core.components.EmojiPickerSheet
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
@@ -142,6 +145,7 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
     var confirmDiscard by remember { mutableStateOf(false) }
     var showsDrafts by remember { mutableStateOf(false) }
     var showsGifs by remember { mutableStateOf(false) }
+    var showsEmoji by remember { mutableStateOf(false) }
     var showsRecorder by remember { mutableStateOf(false) }
     var showsSchedule by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
@@ -192,6 +196,7 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
             if (context is ComposeContext.Reply) ReplyTargetPreview(context.note)
             ComposeTextEditor(model, focus, isQuote = context is ComposeContext.Quote)
             AnimatedVisibility(model.isPollActive) { ComposePollEditor(model) }
+            AnimatedVisibility(model.isGoalActive) { ComposeGoalEditor(model) }
             AnimatedVisibility(model.contentWarningEnabled) {
                 ComposeContentWarningField(model.contentWarningReason) { model.contentWarningReason = it }
             }
@@ -228,6 +233,7 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
             onGif = { showsGifs = true },
             onVoice = { showsRecorder = true },
             onSchedule = { showsSchedule = true },
+            onEmoji = { showsEmoji = true },
         )
     }
 
@@ -276,6 +282,7 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
             )
         }
     }
+    if (showsEmoji) EmojiPickerSheet(onDismiss = { showsEmoji = false }) { model.insert(it) }
     if (showsGifs) GifPickerSheet(onDismiss = { showsGifs = false }) { model.addGif(it) }
     if (showsRecorder) VoiceRecorderSheet(onDismiss = { showsRecorder = false }) { model.addRecording(it) }
     if (showsSchedule) ComposeScheduleSheet(model.scheduledAt, onChange = { model.scheduledAt = it }) { showsSchedule = false }
@@ -315,6 +322,7 @@ private fun ComposeBottomBar(
     onGif: () -> Unit,
     onVoice: () -> Unit,
     onSchedule: () -> Unit,
+    onEmoji: () -> Unit,
 ) {
     var showsCameraModes by remember { mutableStateOf(false) }
     var showsMore by remember { mutableStateOf(false) }
@@ -378,7 +386,7 @@ private fun ComposeBottomBar(
                 modifier = Modifier.testTag("compose-voice"),
             ) { Icon(Icons.Outlined.Mic, L("voiceTitle")) }
             Box {
-                val isActive = model.contentWarningEnabled || model.pollEnabled || model.scheduledAt != null
+                val isActive = model.contentWarningEnabled || model.pollEnabled || model.goalEnabled || model.scheduledAt != null
                 FilledTonalIconButton(onClick = { showsMore = true }, colors = colors, modifier = Modifier.testTag("compose-more")) {
                     Icon(Icons.Outlined.MoreHoriz, L("feedMoreOptions"), tint = if (isActive) AppColors.link else AppColors.textPrimary)
                 }
@@ -393,6 +401,11 @@ private fun ComposeBottomBar(
                             model.togglePoll()
                         }
                     }
+                    if (model.supportsPoll) ComposeMenuToggle(L("zapGoalTitle"), Icons.Outlined.Adjust, model.goalEnabled, "compose-goal") {
+                        showsMore = false
+                        model.toggleGoal()
+                    }
+                    DropdownMenuItem(text = { Text(L("emojiTitle")) }, leadingIcon = { Icon(Icons.Outlined.EmojiEmotions, null) }, onClick = { showsMore = false; onEmoji() }, modifier = Modifier.testTag("compose-emoji"))
                     DropdownMenuItem(
                         text = { Text(if (model.scheduledAt == null) L("feedSchedule") else L("feedScheduleChange")) },
                         leadingIcon = { Icon(Icons.Outlined.Schedule, null) },

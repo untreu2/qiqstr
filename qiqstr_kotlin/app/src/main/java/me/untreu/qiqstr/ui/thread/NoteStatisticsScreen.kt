@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import me.untreu.qiqstr.app.Route
 import me.untreu.qiqstr.app.Router
 import me.untreu.qiqstr.core.AppColors
+import me.untreu.qiqstr.core.components.CustomEmojiImage
 import me.untreu.qiqstr.core.L
 import me.untreu.qiqstr.core.Sats
 import me.untreu.qiqstr.core.TimeFormat
@@ -73,7 +74,9 @@ enum class NoteStatisticsTab {
         }
 }
 
-data class NoteReactionGroup(val emoji: String, val items: List<NoteInteractionDetail>)
+data class NoteReactionGroup(val emoji: String, val items: List<NoteInteractionDetail>) {
+    val emojiUrl: String? get() = items.firstNotNullOfOrNull { it.emojiUrl }
+}
 
 class NoteStatisticsViewModel(val noteId: String) : ViewModel() {
     var details by mutableStateOf<List<NoteInteractionDetail>>(emptyList())
@@ -166,12 +169,12 @@ fun NoteStatisticsScreen(noteId: String) {
                         NoteStatisticsTab.REACTIONS -> model.reactionGroups.forEach { group ->
                             item(key = "h-${group.emoji}") {
                                 Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(group.emoji, style = MaterialTheme.typography.titleSmall)
+                                    ReactionEmoji(group, 20)
                                     Text("${group.items.size}", style = MaterialTheme.typography.titleSmall, color = AppColors.textSecondary)
                                 }
                             }
                             items(group.items, key = { "r-${group.emoji}-${it.id}" }) { detail ->
-                                InteractionUserRow(detail) { Text(group.emoji, style = MaterialTheme.typography.titleLarge) }
+                                InteractionUserRow(detail) { ReactionEmoji(group, 28) }
                             }
                         }
                         NoteStatisticsTab.REPOSTS -> items(model.reposts, key = { it.id }) { detail ->
@@ -226,4 +229,10 @@ private fun InteractionUserRow(detail: NoteInteractionDetail, trailing: @Composa
         colors = ListItemDefaults.colors(containerColor = AppColors.background),
         modifier = Modifier.clickable { Router.push(Route.Profile(detail.pubkey)) }.testTag("statistics-user-row"),
     )
+}
+
+@Composable
+private fun ReactionEmoji(group: NoteReactionGroup, size: Int) {
+    val url = group.emojiUrl
+    if (url != null) CustomEmojiImage(url, size.dp) else Text(group.emoji, style = MaterialTheme.typography.titleLarge)
 }

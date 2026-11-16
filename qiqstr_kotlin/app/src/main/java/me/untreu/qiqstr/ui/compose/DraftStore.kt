@@ -76,6 +76,11 @@ data class ComposeDraftPoll(val options: List<String>, val multiple: Boolean, va
     }
 }
 
+data class ComposeDraftGoal(val amountSats: Long, val closesAt: Long?) {
+    fun toJson() = JSONObject().apply { put("amountSats", amountSats); closesAt?.let { put("closesAt", it) } }
+    companion object { fun from(j: JSONObject) = ComposeDraftGoal(j.long("amountSats"), if (j.has("closesAt")) j.long("closesAt") else null) }
+}
+
 data class ComposeDraft(
     val id: String,
     val kind: Kind,
@@ -88,6 +93,8 @@ data class ComposeDraft(
     val contentWarningReason: String,
     val poll: ComposeDraftPoll?,
     val updatedAt: Long,
+    val emojis: Map<String, String> = emptyMap(),
+    val goal: ComposeDraftGoal? = null,
 ) {
     enum class Kind(val raw: String) {
         NEW_NOTE("newNote"), REPLY("reply"), QUOTE("quote");
@@ -118,6 +125,8 @@ data class ComposeDraft(
         put("contentWarningReason", contentWarningReason)
         poll?.let { put("poll", it.toJson()) }
         put("updatedAt", updatedAt)
+        put("emojis", JSONObject(emojis))
+        goal?.let { put("goal", it.toJson()) }
     }
 
     companion object {
@@ -137,6 +146,8 @@ data class ComposeDraft(
                 contentWarningReason = j.optString("contentWarningReason", ""),
                 poll = j.optJSONObject("poll")?.let(ComposeDraftPoll::from),
                 updatedAt = j.long("updatedAt"),
+                emojis = j.optJSONObject("emojis")?.let { m -> m.keys().asSequence().associateWith { m.optString(it) } } ?: emptyMap(),
+                goal = j.optJSONObject("goal")?.let(ComposeDraftGoal::from),
             )
         }
     }

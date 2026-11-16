@@ -42,6 +42,11 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material3.IconButton
+import me.untreu.qiqstr.core.components.EmojiPickerSheet
+import me.untreu.qiqstr.core.components.CustomEmojiImage
+import me.untreu.qiqstr.data.services.EmojiChoice
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -106,9 +111,14 @@ fun InteractionBar(note: Note, model: NoteCountsModel, actions: NoteActionHandle
     var likeTick by remember { mutableIntStateOf(0) }
     var showRepostMenu by remember { mutableStateOf(false) }
     var showReactions by remember { mutableStateOf(false) }
+    var showEmojiPicker by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
     val counts = model.counts
 
+    if (showEmojiPicker) EmojiPickerSheet(onDismiss = { showEmojiPicker = false }) { choice ->
+        val content = if (choice.content == "❤️") LIKE_CONTENT else choice.content
+        App.scope.launch { NoteInteractionStore.react(note, content, (choice as? EmojiChoice.Custom)?.emoji) }
+    }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         InteractionButton(
             onClick = {
@@ -189,6 +199,7 @@ fun InteractionBar(note: Note, model: NoteCountsModel, actions: NoteActionHandle
                     if (counts.hasReacted) AppColors.reaction else null,
                     compact,
                     emoji = emoji,
+                    emojiURL = if (counts.hasReacted) model.myReactionEmoji?.url else null,
                     popTick = likeTick,
                     burstTick = likeTick,
                 )
@@ -197,6 +208,7 @@ fun InteractionBar(note: Note, model: NoteCountsModel, actions: NoteActionHandle
                 ReactionPicker(
                     selected = if (counts.hasReacted) model.myReaction ?: LIKE_CONTENT else null,
                     onDismiss = { showReactions = false },
+                    onMore = { showReactions = false; showEmojiPicker = true },
                 ) { picked ->
                     showReactions = false
                     val content = if (picked == "❤️") LIKE_CONTENT else picked
@@ -271,6 +283,7 @@ fun InteractionLabel(
     tint: Color?,
     compact: Boolean = false,
     emoji: String? = null,
+    emojiURL: String? = null,
     popTick: Int = 0,
     burstTick: Int = 0,
     rotateTick: Int = 0,
@@ -325,7 +338,9 @@ fun InteractionLabel(
                     transitionSpec = { (scaleIn(initialScale = 0.3f) + fadeIn()) togetherWith fadeOut(tween(90)) },
                     label = "icon",
                 ) { (currentEmoji, currentIcon) ->
-                    if (currentEmoji != null) {
+                    if (emojiURL != null) {
+                        CustomEmojiImage(emojiURL, if (compact) 18.dp else 20.dp)
+                    } else if (currentEmoji != null) {
                         Text(currentEmoji, style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge)
                     } else {
                         Icon(currentIcon, null, Modifier.size(iconSize), tint = color)
@@ -402,7 +417,7 @@ fun ReactionBurst(trigger: Int, color: Color, size: Dp) {
 val reactionEmojis = listOf("❤️", "🤙", "🔥", "😂", "🫂", "👀", "⚡️", "💜")
 
 @Composable
-fun ReactionPicker(selected: String?, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+fun ReactionPicker(selected: String?, onDismiss: () -> Unit, onMore: () -> Unit = {}, onPick: (String) -> Unit) {
     val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
     val haptics = LocalHapticFeedback.current
     val positioner = remember(gap) { AbovePositionProvider(gap) }
@@ -420,7 +435,7 @@ fun ReactionPicker(selected: String?, onDismiss: () -> Unit, onPick: (String) ->
                     val pressed by interaction.collectIsPressedAsState()
                     val pressScale by animateFloatAsState(if (pressed) 1.4f else 1f, spring(dampingRatio = 0.55f), label = "emoji-press")
                     Box(
-                        Modifier.size(42.dp, 46.dp)
+                        Modifier.size(36.dp, 46.dp)
                             .graphicsLayer {
                                 scaleX = appear.value * pressScale
                                 scaleY = appear.value * pressScale
@@ -439,6 +454,7 @@ fun ReactionPicker(selected: String?, onDismiss: () -> Unit, onPick: (String) ->
                         Text(emoji, style = MaterialTheme.typography.headlineSmall)
                     }
                 }
+                IconButton(onClick = onMore, modifier = Modifier.size(40.dp, 46.dp).testTag("reaction-more")) { Icon(Icons.Outlined.Add, L("emojiMore")) }
             }
         }
     }

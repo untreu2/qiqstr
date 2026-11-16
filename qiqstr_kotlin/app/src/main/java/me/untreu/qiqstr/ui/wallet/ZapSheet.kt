@@ -24,6 +24,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,8 @@ import me.untreu.qiqstr.core.L
 import me.untreu.qiqstr.core.Sats
 import me.untreu.qiqstr.core.components.ProfileAvatar
 import me.untreu.qiqstr.core.coreErrorMessage
+import me.untreu.qiqstr.data.services.NutzapInfo
+import me.untreu.qiqstr.data.services.NutzapService
 import me.untreu.qiqstr.data.services.ToastCenter
 import me.untreu.qiqstr.data.services.ToastStyle
 import me.untreu.qiqstr.data.sync.ProfileCache
@@ -73,6 +76,11 @@ sealed interface ZapTarget {
     }
 
     data class ProfileTarget(override val pubkey: String) : ZapTarget
+}
+
+enum class ZapMethod {
+    LIGHTNING, NUTZAP;
+    val title: String get() = L(if (this == LIGHTNING) "zapMethodLightning" else "zapMethodNutzap")
 }
 
 class ZapViewModel(val target: ZapTarget) : ViewModel() {
@@ -92,13 +100,15 @@ class ZapViewModel(val target: ZapTarget) : ViewModel() {
     var failedTick by mutableIntStateOf(0)
         private set
 
-    init {
-        val initial = ZapService.lastAmount ?: ZapService.defaultAmount
-        if (initial in ZapService.presetAmounts) selectedPreset = initial else customAmount = initial.toString()
-        viewModelScope.launch { load() }
-    }
-
+    var nutzapInfo by mutableStateOf<NutzapInfo?>(null)
+        private set
+    var method by mutableStateOf(ZapMethod.LIGHTNING)
+    val splits: List<ZapSplit> get() = target.note?.let { ZapSplit.parse(it.tags) }.orEmpty()
     val canZap: Boolean get() = ZapService.canZap
+    val hasPayDestination: Boolean get() = recipient?.lightningAddress != null || recipient?.lnurl != null
+    val canNutzap: Boolean get() = nutzapInfo != null
+    val hasAnyDestination: Boolean get() = hasPayDestination || canNutzap
+    val usesNutzap: Boolean get() = canNutzap && (method == ZapMethod.NUTZAP || !hasPayDestination)
 
     val amount: Long?
         get() {
@@ -108,11 +118,16 @@ class ZapViewModel(val target: ZapTarget) : ViewModel() {
 
     val fiatEstimate: String? get() = amount?.let { BitcoinPriceService.formatted(it) }?.let { L("walletFiatEstimate", "amount" to it) }
 
-    val hasPayDestination: Boolean get() = recipient?.lightningAddress != null || recipient?.lnurl != null
-    val canSubmit: Boolean get() = canZap && amount != null && !isZapping && !mayHaveSettled && hasPayDestination
+    val canSubmit: Boolean get() = canZap && amount != null && !isZapping && !mayHaveSettled && hasAnyDestination
 
     val recipientName: String
-        get() = recipient?.name ?: ProfileCache.profile(target.pubkey)?.bestName ?: Profile.shortNpub(target.pubkey)
+        get() = if (splits.isEmpty()) recipient?.name ?: ProfileCache.profile(target.pubkey)?.bestName ?: Profile.shortNpub(target.pubkey) else ProfileCache.profile(target.pubkey)?.bestName ?: Profile.shortNpub(target.pubkey)
+
+    init {
+        val initial = ZapService.lastAmount ?: ZapService.defaultAmount
+        if (initial in ZapService.presetAmounts) selectedPreset = initial else customAmount = initial.toString()
+        viewModelScope.launch { load() }
+    }
 
     fun select(preset: Long) {
         selectedPreset = preset
@@ -121,7 +136,9 @@ class ZapViewModel(val target: ZapTarget) : ViewModel() {
 
     private suspend fun load() {
         viewModelScope.launch { BitcoinPriceService.refreshIfNeeded() }
-        recipient = ZapService.recipient(target.pubkey)
+        if (splits.isNotEmpty()) ProfileCache.load(splits.map { it.pubkey })
+        recipient = ZapService.recipient(splits.firstOrNull()?.pubkey ?: target.pubkey)
+        if (splits.isEmpty()) nutzapInfo = NutzapService.info(target.pubkey)
         isLoadingRecipient = false
     }
 
@@ -131,7 +148,7 @@ class ZapViewModel(val target: ZapTarget) : ViewModel() {
         App.scope.launch {
             isZapping = true
             val close = try {
-                ZapService.zap(target.note, target.pubkey, amount, comment)
+                if (usesNutzap) NutzapService.send(target.pubkey, target.note, amount, comment) else ZapService.zap(target.note, target.pubkey, amount, comment)
                 zappedTick += 1
                 ZapService.lastAmount = amount
                 ToastCenter.show(L("walletZapped", "sats" to Sats.format(amount), "user" to recipientName), ToastStyle.SUCCESS)
@@ -183,10 +200,12 @@ private fun ZapContent(model: ZapViewModel, onDismiss: () -> Unit) {
             FormSection { Header(model) }
             when {
                 !model.canZap -> ConnectCta(model)
-                !model.isLoadingRecipient && !model.hasPayDestination -> FormSection {
+                !model.isLoadingRecipient && !model.hasAnyDestination -> FormSection {
                     NoticeLabel(L("userNoLightningAddress"), Icons.Outlined.FlashOff, AppColors.error, Modifier.padding(16.dp).testTag("zap-no-address"))
                 }
                 else -> {
+                    if (model.canNutzap && model.hasPayDestination) MethodPicker(model)
+                    if (model.splits.isNotEmpty()) SplitSection(model.splits)
                     FormSection(
                         header = L("amount"),
                         footer = model.fiatEstimate?.let { fiat -> { Text(fiat) } },
@@ -203,7 +222,7 @@ private fun ZapContent(model: ZapViewModel, onDismiss: () -> Unit) {
                 }
             }
         }
-        if (model.canZap && model.hasPayDestination) {
+        if (model.canZap && model.hasAnyDestination) {
             val amount = model.amount
             Button(
                 onClick = {
@@ -332,6 +351,32 @@ private fun ConnectCta(model: ZapViewModel) {
                 Icon(Icons.Outlined.AccountBalanceWallet, null, Modifier.size(18.dp))
                 Spacer(Modifier.size(8.dp))
                 Text(L("walletConnectWallet"), fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MethodPicker(model: ZapViewModel) {
+    FormSection(header = L("zapMethod"), footer = if (model.usesNutzap) ({ Text(L("zapMethodNutzapFooter")) }) else null) {
+        androidx.compose.material3.SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(12.dp).testTag("zap-method")) {
+            ZapMethod.entries.forEachIndexed { index, method ->
+                SegmentedButton(selected = model.method == method, onClick = { model.method = method }, shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(index, 2)) { Text(method.title) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SplitSection(splits: List<ZapSplit>) {
+    FormSection(header = L("zapSplitTitle"), footer = { Text(L("zapSplitFooter")) }) {
+        Column(Modifier.testTag("zap-splits")) {
+            splits.forEach { split ->
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ProfileAvatar(split.pubkey, 26.dp)
+                    Text(ProfileCache.profile(split.pubkey)?.bestName ?: Profile.shortNpub(split.pubkey), Modifier.weight(1f), maxLines = 1)
+                    Text("${ZapSplit.percent(split, splits)}%")
+                }
             }
         }
     }

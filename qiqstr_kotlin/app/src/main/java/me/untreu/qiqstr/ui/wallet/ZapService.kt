@@ -11,8 +11,10 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import me.untreu.qiqstr.App
 import me.untreu.qiqstr.core.Json
+import me.untreu.qiqstr.core.Sats
 import me.untreu.qiqstr.core.L
 import me.untreu.qiqstr.core.Prefs
 import me.untreu.qiqstr.core.coreErrorMessage
@@ -59,6 +61,28 @@ data class ZapRecipient(
     val lightningAddress: String?,
     val lnurl: HttpUrl?,
 )
+
+data class ZapSplit(val pubkey: String, val weight: Double) {
+    companion object {
+        fun parse(tags: List<List<String>>): List<ZapSplit> {
+            val entries = tags.filter { it.size > 1 && it[0] == "zap" && it[1].length == 64 }
+            val weighted = entries.any { it.getOrNull(3)?.toDoubleOrNull() != null }
+            return entries.mapNotNull { tag ->
+                val weight = if (weighted) tag.getOrNull(3)?.toDoubleOrNull() ?: 0.0 else 1.0
+                if (weight > 0 && weight.isFinite()) ZapSplit(tag[1], weight) else null
+            }.distinctBy { it.pubkey }
+        }
+        fun shares(amountSats: Long, splits: List<ZapSplit>): List<Pair<String, Long>> {
+            val total = splits.sumOf { it.weight }
+            if (total <= 0 || !total.isFinite() || amountSats <= 0) return emptyList()
+            val amounts = splits.map { kotlin.math.floor(amountSats.toDouble() * (it.weight / total)).toLong() }.toMutableList()
+            var remainder = amountSats - amounts.sum()
+            for (index in splits.indices.sortedByDescending { splits[it].weight }) if (remainder > 0) { amounts[index]++; remainder-- }
+            return splits.mapIndexed { index, split -> split.pubkey to amounts[index] }.filter { it.second > 0 }
+        }
+        fun percent(split: ZapSplit, splits: List<ZapSplit>): Int = (split.weight / splits.sumOf { it.weight } * 100).roundToInt()
+    }
+}
 
 object ZapService {
     val presetAmounts = listOf(21L, 100L, 500L, 1000L, 5000L, 10000L)
@@ -169,44 +193,46 @@ object ZapService {
 
     suspend fun zap(note: Note?, pubkey: String, amountSats: Long, comment: String) {
         if (!canZap) throw ZapError.NoWallet()
-        val amountMsat = SatsAmount.msat(amountSats) ?: throw ZapError.InvalidAmount()
+        SatsAmount.msat(amountSats) ?: throw ZapError.InvalidAmount()
         if (note != null) {
             if (pendingSats.containsKey(note.id)) throw ZapError.InProgress()
             pendingSats[note.id] = amountSats
         }
         try {
             val privateKey = Session.requireSigner()
-            val recipient = recipient(pubkey)
-            val address = recipient.lightningAddress
-            val url = recipient.lnurl
-            val params = when {
-                address != null -> Lnurl.payParams(address).also { ZapperDirectory.record(pubkey, address, it) }
-                url != null -> Lnurl.payParams(url)
-                else -> throw ZapError.NoLightningAddress()
+            val targets = ZapSplit.shares(amountSats, note?.let { ZapSplit.parse(it.tags) }.orEmpty()).ifEmpty { listOf(pubkey to amountSats) }
+            var paid = 0L
+            var lastError: Exception? = null
+            for ((recipient, sats) in targets) {
+                try { pay(recipient, sats, comment, note, privateKey); paid += sats }
+                catch (error: WalletError.PaymentPending) { throw error }
+                catch (error: Exception) { lastError = error }
             }
-            val nostrPubkey = params.nostrPubkey
-            if (!params.allowsNostr || nostrPubkey.isNullOrEmpty()) throw ZapError.ZapsNotSupported()
-            val tags = mutableListOf(
-                listOf("relays") + RelayConfig.mainRelays,
-                listOf("amount", amountMsat.toString()),
-                listOf("lnurl", params.lnurl),
-                listOf("p", pubkey),
-            )
+            if (paid == 0L) lastError?.let { throw it }
+            if (paid < amountSats) ToastCenter.show(L("zapSplitPartial", "sent" to Sats.format(paid), "total" to Sats.format(amountSats)), ToastStyle.ERROR)
             if (note != null) {
-                tags.add(listOf("e", note.id))
-                tags.add(listOf("k", "1"))
-            }
-            val zapRequest = createZapRequestEvent(tags, comment.trim(), privateKey)
-            val invoice = Lnurl.requestInvoice(params, amountMsat, zapRequest = zapRequest)
-            WalletService.payBolt11(invoice)
-            if (note != null) {
-                zappedSats[note.id] = (zappedSats[note.id] ?: 0L) + amountSats
+                zappedSats[note.id] = (zappedSats[note.id] ?: 0L) + paid
                 zappedIds[note.id] = true
                 scheduleReceiptSync(note.id)
             }
-        } finally {
-            if (note != null) pendingSats.remove(note.id)
+        } finally { if (note != null) pendingSats.remove(note.id) }
+    }
+
+    private suspend fun pay(pubkey: String, sats: Long, comment: String, note: Note?, privateKey: String) {
+        val amountMsat = SatsAmount.msat(sats) ?: throw ZapError.InvalidAmount()
+        val recipient = recipient(pubkey)
+        val address = recipient.lightningAddress
+        val url = recipient.lnurl
+        val params = when {
+            address != null -> Lnurl.payParams(address).also { ZapperDirectory.record(pubkey, address, it) }
+            url != null -> Lnurl.payParams(url)
+            else -> throw ZapError.NoLightningAddress()
         }
+        if (!params.allowsNostr || params.nostrPubkey.isNullOrEmpty()) throw ZapError.ZapsNotSupported()
+        val tags = mutableListOf(listOf("relays") + RelayConfig.mainRelays, listOf("amount", amountMsat.toString()), listOf("lnurl", params.lnurl), listOf("p", pubkey))
+        if (note != null) { tags.add(listOf("e", note.id)); tags.add(listOf("k", note.kind.toString())) }
+        val zapRequest = createZapRequestEvent(tags, comment.trim(), privateKey)
+        WalletService.payBolt11(Lnurl.requestInvoice(params, amountMsat, zapRequest = zapRequest))
     }
 
     private fun scheduleReceiptSync(noteId: String) {

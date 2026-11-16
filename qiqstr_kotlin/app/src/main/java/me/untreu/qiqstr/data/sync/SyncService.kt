@@ -27,6 +27,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import me.untreu.qiqstr.data.services.NutzapService
 import me.untreu.qiqstr.App
 import me.untreu.qiqstr.core.CoreError
 import me.untreu.qiqstr.core.Json
@@ -102,7 +103,7 @@ object SyncService {
         if (!force && !shouldSync(key)) return
         val since = since(key) ?: (TimeFormat.now - 86400 * 2)
         val noteEvents = coroutineScope {
-            val notes = async { fetchAndStore(mapOf("authors" to follows, "kinds" to listOf(1, 5, 6, 1068), "since" to since, "limit" to 100)) }
+            val notes = async { fetchAndStore(mapOf("authors" to follows, "kinds" to listOf(1, 5, 6, 1068, 1222), "since" to since, "limit" to 100)) }
             val articles = async { fetchAndStore(mapOf("kinds" to listOf(30023), "authors" to follows, "since" to since, "limit" to 30)) }
             articles.await()
             notes.await()
@@ -119,7 +120,7 @@ object SyncService {
         val key = "list_feed_${pubkeys.sorted().joinToString("").hashCode()}"
         if (!force && !shouldSync(key)) return
         val since = since(key) ?: (TimeFormat.now - 86400 * 2)
-        val events = fetchAndStore(mapOf("authors" to pubkeys, "kinds" to listOf(1, 5, 6, 1068), "since" to since, "limit" to 100))
+        val events = fetchAndStore(mapOf("authors" to pubkeys, "kinds" to listOf(1, 5, 6, 1068, 1222), "since" to since, "limit" to 100))
         runCatching { dbProcessDeletionEvents() }
         DataBus.feedChanged()
         queueMissingRepostOriginals(since)
@@ -186,7 +187,7 @@ object SyncService {
         if (!force && !shouldSync(key)) return
         val first = lastSync[key] == null
         val sinceValue = since(key) ?: (TimeFormat.now - 86400 * 30)
-        fetchAndStore(mapOf("#p" to listOf(me), "kinds" to listOf(1, 6, 7, 9735), "since" to sinceValue, "limit" to if (first) 300 else 150))
+        fetchAndStore(mapOf("#p" to listOf(me), "kinds" to listOf(1, 6, 7, 9321, 9735), "since" to sinceValue, "limit" to if (first) 300 else 150))
         DataBus.notificationsChanged()
         val missing = runCatching { dbGetNotificationsMissingProfiles(me, 200u) }.getOrDefault(emptyList())
         if (missing.isNotEmpty()) {
@@ -200,7 +201,7 @@ object SyncService {
         val me = Session.pubkey ?: return 0
         if (before <= 0) return 0
         val sinceValue = maxOf(0, before - 86400 * 90)
-        val events = fetchEvents(mapOf("#p" to listOf(me), "kinds" to listOf(1, 6, 7, 9735), "until" to before - 1, "since" to sinceValue, "limit" to 100), timeout = 12)
+        val events = fetchEvents(mapOf("#p" to listOf(me), "kinds" to listOf(1, 6, 7, 9321, 9735), "until" to before - 1, "since" to sinceValue, "limit" to 100), timeout = 12)
         if (events.isNotEmpty()) {
             runCatching { dbSaveEvents(JSONArray(events).toString()) }
             DataBus.notificationsChanged()
@@ -289,7 +290,7 @@ object SyncService {
 
     suspend fun syncInteractions(noteIds: List<String>) {
         if (noteIds.isEmpty()) return
-        fetchEvents(mapOf("#e" to noteIds, "kinds" to listOf(1, 6, 7, 9735), "limit" to 500), timeout = 8)
+        fetchEvents(mapOf("#e" to noteIds, "kinds" to listOf(1, 6, 7, 9321, 9735), "limit" to 500), timeout = 8)
         DataBus.interactionsChanged()
     }
 
@@ -378,7 +379,7 @@ object SyncService {
         while (isActive && generation == realtimeGeneration) {
             val follows = (followingList(me) + me).distinct()
             val since = feedLastEventTs?.let { it - 1 } ?: (TimeFormat.now - 60)
-            val filter = Json.string(mapOf("kinds" to listOf(1, 5, 6, 1068), "authors" to follows, "since" to since))
+            val filter = Json.string(mapOf("kinds" to listOf(1, 5, 6, 1068, 1222), "authors" to follows, "since" to since))
             runCatching {
                 EventStream.make { sink -> subscribeToEvents(filter, sink) }.collect { raw ->
                     if (generation != realtimeGeneration) throw kotlinx.coroutines.CancellationException()
@@ -403,7 +404,7 @@ object SyncService {
         var attempts = 0
         while (isActive && generation == realtimeGeneration) {
             val since = notificationLastEventTs?.let { it - 1 } ?: (TimeFormat.now - 60)
-            val filter = Json.string(mapOf("kinds" to listOf(1, 6, 7, 9735), "#p" to listOf(me), "since" to since))
+            val filter = Json.string(mapOf("kinds" to listOf(1, 6, 7, 9321, 9735), "#p" to listOf(me), "since" to since))
             runCatching {
                 EventStream.make { sink -> subscribeToEvents(filter, sink) }.collect { raw ->
                     if (generation != realtimeGeneration) throw kotlinx.coroutines.CancellationException()
@@ -418,6 +419,7 @@ object SyncService {
                     }
                     notificationHandler.handleRealtime(event, me)
                     DataBus.notificationsChanged()
+                    if (event.int("kind") == 9321) App.scope.launch { NutzapService.redeemPending() }
                     if (from != null) fetchMissingProfiles(listOf(from))
                 }
             }

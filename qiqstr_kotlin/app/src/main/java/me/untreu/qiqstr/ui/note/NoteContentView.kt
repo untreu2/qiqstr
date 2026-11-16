@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import me.untreu.qiqstr.core.components.CustomEmojiImage
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,11 +55,12 @@ fun NoteContentView(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val segments = if (isTruncated) content.truncatedSegments ?: content.segments else content.segments
                     val text = content.annotated(segments, AppColors.link, ProfileCache.profiles)
+                    val inline = emojiInlineContent(content, segments)
                     val textStyle = style.copy(color = AppColors.textPrimary, lineHeight = 1.35.em)
                     if (selectable) {
-                        SelectionContainer { Text(text, style = textStyle, modifier = Modifier.fillMaxWidth()) }
+                        SelectionContainer { Text(text, style = textStyle, inlineContent = inline, modifier = Modifier.fillMaxWidth()) }
                     } else {
-                        Text(text, style = textStyle, modifier = Modifier.fillMaxWidth())
+                        Text(text, style = textStyle, inlineContent = inline, modifier = Modifier.fillMaxWidth())
                     }
                     if (isTruncated) {
                         Text(
@@ -69,6 +74,7 @@ fun NoteContentView(
                 }
             }
             if (poll != null) NotePollView(poll, note.pubkey)
+            ZapGoal.from(note)?.let { ZapGoalView(it, note) }
             if (content.media.isNotEmpty()) NoteMediaGrid(content.media)
             content.audio.forEach { NoteAudioView(it) }
             content.previewLink?.let { if (!MediaPolicy.defersMedia) NoteLinkPreview(it) }
@@ -76,4 +82,8 @@ fun NoteContentView(
             content.articleIds.forEach { NoteArticleCard(it) }
         }
     }
+}
+
+fun emojiInlineContent(content: NoteContent, segments: List<NoteContentSegment>): Map<String, InlineTextContent> = content.inlineEmojis(segments).mapValues { (url, _) ->
+    InlineTextContent(Placeholder(1.2.em, 1.2.em, PlaceholderVerticalAlign.TextCenter)) { CustomEmojiImage(url, 22.dp) }
 }

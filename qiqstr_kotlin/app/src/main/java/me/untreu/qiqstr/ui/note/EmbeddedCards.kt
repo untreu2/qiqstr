@@ -140,9 +140,10 @@ private fun QuoteContent(note: Note, depth: Int, modifier: Modifier) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!parsed.isEmptyText) {
                         val text = parsed.annotated(parsed.truncatedSegments ?: parsed.segments, AppColors.link, ProfileCache.profiles)
-                        Text(text, style = MaterialTheme.typography.bodyMedium, color = AppColors.textPrimary, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                        Text(text, inlineContent = emojiInlineContent(parsed, parsed.truncatedSegments ?: parsed.segments), style = MaterialTheme.typography.bodyMedium, color = AppColors.textPrimary, maxLines = 6, overflow = TextOverflow.Ellipsis)
                     }
                     NotePoll.from(note.id, note.tags)?.let { NotePollView(it, note.pubkey, interactive = false) }
+                    ZapGoal.from(note)?.let { ZapGoalView(it, note) }
                     val image = parsed.images.firstOrNull()
                     if (image != null) {
                         NoteMediaImage(image, Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)))

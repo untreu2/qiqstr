@@ -193,8 +193,9 @@ object AudioPlayback {
     fun toggle(url: String) {
         val existing = player
         if (currentURL == url && existing != null) {
-            if (isPlaying) existing.pause() else existing.play()
-            isPlaying = !isPlaying
+            val resumes = !isPlaying
+            if (resumes) existing.play() else existing.pause()
+            isPlaying = resumes
             return
         }
         stop()

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.PermMedia
 import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.TagFaces
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.QrCode
@@ -104,6 +105,7 @@ fun SettingsScreen() {
         settingsSection("display") {
             Link(L("display"), Icons.Filled.Contrast, tile, "settings-row-DISPLAY") { open(SettingsRoute.DISPLAY) }
             Link(L("language"), Icons.Filled.Translate, tile, "settings-row-LANGUAGE", languageName) { open(SettingsRoute.LANGUAGE) }
+            Link(L("emojiPacksTitle"), Icons.Filled.TagFaces, tile, "settings-row-EMOJI_PACKS") { open(SettingsRoute.EMOJI_PACKS) }
             Link(L("payments"), Icons.Filled.Bolt, tile, "settings-row-PAYMENTS") { open(SettingsRoute.PAYMENTS) }
         }
         settingsSection("data") {

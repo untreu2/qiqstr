@@ -19,5 +19,7 @@ fun SettingsPageScreen(page: SettingsRoute) {
         SettingsRoute.SAFETY -> SafetySettingsScreen()
         SettingsRoute.DIAGNOSTICS -> DiagnosticsScreen()
         SettingsRoute.MEDIA_SERVER -> MediaServerSettingsScreen()
+        SettingsRoute.EMOJI_PACKS -> EmojiPacksSettingsScreen()
+        SettingsRoute.NUTZAPS -> me.untreu.qiqstr.ui.wallet.CashuMintsSettingsScreen()
     }
 }

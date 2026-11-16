@@ -110,6 +110,7 @@ sealed interface WalletSheet {
     data class Connect(val uri: String?) : WalletSheet
     data class Send(val input: String?) : WalletSheet
     data class Cashu(val token: String?) : WalletSheet
+    object CashuSend : WalletSheet
     data class Payment(val transaction: WalletTransaction) : WalletSheet
 }
 
@@ -273,18 +274,20 @@ fun WalletScreen() {
         }
     }
 
+    var cashuCreating by remember { mutableStateOf(false) }
     model.sheet?.let { sheet ->
-        val skipPartial = sheet is WalletSheet.Connect
+        val skipPartial = sheet is WalletSheet.Connect || sheet == WalletSheet.CashuSend
         val state = rememberModalBottomSheetState(
             skipPartiallyExpanded = skipPartial,
-            confirmValueChange = { !(it == androidx.compose.material3.SheetValue.Hidden && (wallet.isPaying || wallet.isRedeemingCashu)) },
+            confirmValueChange = { !(it == androidx.compose.material3.SheetValue.Hidden && (wallet.isPaying || wallet.isRedeemingCashu || cashuCreating)) },
         )
-        val dismiss = { model.sheet = null }
+        val dismiss = { if (!cashuCreating) model.sheet = null }
         ModalBottomSheet(onDismissRequest = dismiss, sheetState = state, containerColor = AppColors.background) {
             when (sheet) {
                 is WalletSheet.Connect -> ConnectWalletSheet(sheet.uri, dismiss)
                 is WalletSheet.Send -> SendSheet(sheet.input, dismiss)
                 is WalletSheet.Cashu -> CashuRedeemSheet(sheet.token, dismiss)
+                WalletSheet.CashuSend -> ScopedViewModels { CashuSendSheet(dismiss) { cashuCreating = it } }
                 is WalletSheet.Payment -> PaymentDetailSheet(sheet.transaction, dismiss)
             }
         }
@@ -325,6 +328,7 @@ private fun WalletMenu(model: WalletViewModel) {
             Icon(Icons.Outlined.MoreVert, L("walletMore"))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(text = { Text(L("cashuSendTitle")) }, onClick = { expanded = false; model.sheet = WalletSheet.CashuSend }, modifier = Modifier.testTag("wallet-menu-cashu-send"))
             DropdownMenuItem(
                 text = { Text(L("walletReceiveCashu")) },
                 leadingIcon = { Icon(Icons.Outlined.Payments, null) },

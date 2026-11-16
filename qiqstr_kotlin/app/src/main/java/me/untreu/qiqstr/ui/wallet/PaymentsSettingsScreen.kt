@@ -109,6 +109,9 @@ fun PaymentsSettingsScreen() {
                     modifier = Modifier.clickable { openWallet() }.testTag("payments-open-wallet"),
                 )
             }
+            FormSection(footer = { Text(L("nutzapSettingsFooter")) }) {
+                ListItem(headlineContent = { Text(L("nutzapTitle")) }, supportingContent = { Text(L(if (me.untreu.qiqstr.data.services.NutzapService.isReceiving) "feedOn" else "feedOff")) }, modifier = Modifier.clickable { Router.push(me.untreu.qiqstr.app.Route.SettingsPage(me.untreu.qiqstr.app.SettingsRoute.NUTZAPS)) }.testTag("payments-nutzaps"), colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+            }
             FormSection(footer = { Text(L("oneTapZapDescription")) }) {
                 val oneTap = ZapService.isOneTapEnabled
                 ListItem(

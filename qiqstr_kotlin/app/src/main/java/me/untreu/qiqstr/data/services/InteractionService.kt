@@ -74,6 +74,7 @@ data class NoteInteractionDetail(
     val content: String,
     val zapAmount: Int,
     val createdAt: Long,
+    val emojiUrl: String? = null,
 ) {
     val id: String get() = "${kind.raw}-$pubkey-$createdAt-${content.hashCode()}"
 
@@ -81,7 +82,7 @@ data class NoteInteractionDetail(
         fun from(j: JSONObject): NoteInteractionDetail? {
             val kind = NoteInteractionKind.from(j.str("type")) ?: return null
             val pubkey = j.str("pubkey") ?: return null
-            return NoteInteractionDetail(kind, pubkey, j.text("content"), j.int("zapAmount"), j.long("createdAt"))
+            return NoteInteractionDetail(kind, pubkey, j.text("content"), j.int("zapAmount"), j.long("createdAt"), j.str("emojiUrl"))
         }
     }
 }
@@ -108,10 +109,10 @@ object InteractionService {
     private suspend fun primaryRelay(): String =
         runCatching { getRelayList() }.getOrNull()?.firstOrNull() ?: RelayConfig.mainRelays.firstOrNull() ?: ""
 
-    suspend fun react(note: Note, content: String = "+") {
+    suspend fun react(note: Note, content: String = "+", emoji: CustomEmoji? = null) {
         val key = signingKey()
         val relay = primaryRelay()
-        val event = createReactionEvent(note.id, note.pubkey, content, key, relay, 1u.toUShort())
+        val event = if (emoji != null) createSignedEvent(7u.toUShort(), emoji.token, listOf(listOf("e", note.id, relay, note.pubkey), listOf("p", note.pubkey, relay), listOf("k", note.kind.toString()), listOf("emoji", emoji.shortcode, emoji.url)), key) else createReactionEvent(note.id, note.pubkey, content, key, relay, note.kind.toUShort())
         SyncService.publish(event)
     }
 
@@ -231,6 +232,21 @@ object InteractionService {
         tags = merge(tags, contentTags(body, mediaUrls) + extraTags)
         val event = createSignedEvent(NotePoll.KIND.toUShort(), body, tags, key)
         return publishReturningId(event)
+    }
+
+    suspend fun publishGoal(description: String, amountSats: Long, closesAt: Long?, mediaUrls: List<String>, extraTags: List<List<String>> = emptyList()) {
+        val key = signingKey()
+        val msats = me.untreu.qiqstr.ui.wallet.SatsAmount.msat(amountSats) ?: throw CoreError(L("enterValidAmount"))
+        val relays = runCatching { getRelayList() }.getOrDefault(RelayConfig.mainRelays).filter { it.startsWith("wss://") }.take(5)
+        val tags = mutableListOf(listOf("amount", msats.toString()), listOf("relays") + relays)
+        if (closesAt != null) tags.add(listOf("closed_at", closesAt.toString()))
+        val body = composeContent(description, mediaUrls)
+        val goal = SyncService.publish(createSignedEvent(9041u.toUShort(), body, merge(tags, contentTags(body, mediaUrls) + extraTags), key))
+        val id = goal.str("id") ?: return
+        val me = Session.pubkey ?: return
+        val reference = Nip19.nevent(id, me) ?: Nip19.note(id) ?: return
+        val announcement = createQuoteEvent("$body\nnostr:$reference", id, me, primaryRelay(), key, merge(contentTags(body, mediaUrls), extraTags).filter { it.firstOrNull() != "q" })
+        SyncService.publish(announcement)
     }
 
     suspend fun publishPollResponse(pollId: String, optionIds: List<String>, relays: List<String>) {

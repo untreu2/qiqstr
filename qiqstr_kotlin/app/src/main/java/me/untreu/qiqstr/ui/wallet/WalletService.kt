@@ -399,7 +399,7 @@ object WalletService {
 
     private fun sorted(list: List<WalletTransaction>) = list.sortedByDescending { it.createdAt }
 
-    private fun prepareCashu() {
+    fun prepareCashu() {
         val pubkey = Session.pubkey ?: throw WalletError.NoAccount()
         cashuSetAccount(pubkey)
     }

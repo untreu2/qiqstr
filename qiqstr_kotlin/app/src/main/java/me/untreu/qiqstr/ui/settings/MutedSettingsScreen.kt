@@ -31,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -256,11 +257,12 @@ fun MutedSettingsScreen() {
         PullToRefreshBox(isRefreshing = model.isRefreshing, onRefresh = { model.refresh() }, modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(Modifier.fillMaxSize()) {
                 item("tabs") {
-                    Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.padding(bottom = 8.dp)) {
                         PrimaryScrollableTabRow(
                             selectedTabIndex = model.tab.ordinal,
                             containerColor = AppColors.background,
                             edgePadding = 0.dp,
+                            divider = {},
                             modifier = Modifier.fillMaxWidth().testTag("muted-tab"),
                         ) {
                             MutedSettingsModel.Tab.entries.forEach { tab ->
@@ -272,7 +274,13 @@ fun MutedSettingsScreen() {
                                 )
                             }
                         }
-                        Text(L("mutedSubtitle"), style = MaterialTheme.typography.bodySmall, color = AppColors.textSecondary, modifier = Modifier.padding(horizontal = 16.dp))
+                        HorizontalDivider(color = AppColors.divider)
+                        Text(
+                            L("mutedSubtitle"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppColors.textSecondary,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                        )
                     }
                 }
                 when (model.tab) {

@@ -1,6 +1,7 @@
 package me.untreu.qiqstr.ui.wallet
 
 import kotlinx.coroutines.launch
+import me.untreu.qiqstr.data.services.NutzapService
 import me.untreu.qiqstr.App
 import me.untreu.qiqstr.app.Router
 import me.untreu.qiqstr.data.accounts.AccountData
@@ -13,11 +14,12 @@ object WalletFeature : FeatureHooks {
         Router.externalHandlers.add { uri -> WalletService.handleIncoming(uri) }
         SessionHooks.onTeardown {
             WalletService.reset()
+            NutzapService.reset()
             ZapperDirectory.reset()
         }
         SessionHooks.onBootstrap { pubkey ->
             ZapperDirectory.prepare()
-            App.scope.launch { WalletService.load() }
+            App.scope.launch { WalletService.load(); NutzapService.load() }
             App.scope.launch { ZapperDirectory.verify(pubkey) }
         }
     }

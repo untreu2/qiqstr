@@ -10,6 +10,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.untreu.qiqstr.data.services.CustomEmoji
 import me.untreu.qiqstr.App
 import me.untreu.qiqstr.data.services.HiddenNotesStore
 import me.untreu.qiqstr.data.services.InteractionCounts
@@ -24,6 +25,7 @@ class NoteCountsModel(val noteId: String, counts: InteractionCounts) {
     var isReacting by mutableStateOf(false)
     var isReposting by mutableStateOf(false)
     var myReaction by mutableStateOf<String?>(null)
+    var myReactionEmoji by mutableStateOf<CustomEmoji?>(null)
     var lastUserAction: Long? = null
 
     val userActionActive: Boolean
@@ -134,21 +136,24 @@ object NoteInteractionStore {
         if (next != old) model.counts = next
     }
 
-    suspend fun toggleReaction(note: Note, content: String = "+") {
+    suspend fun toggleReaction(note: Note, content: String = "+", emoji: CustomEmoji? = null) {
         val model = model(note)
         if (model.isReacting) return
         model.isReacting = true
         try {
             val wasReacted = model.counts.hasReacted
             val previousReaction = model.myReaction
+            val previousEmoji = model.myReactionEmoji
             model.lastUserAction = System.currentTimeMillis()
             model.counts = model.counts.copy(hasReacted = !wasReacted, reactions = maxOf(0, model.counts.reactions + if (wasReacted) -1 else 1))
             model.myReaction = if (wasReacted) null else content
+            model.myReactionEmoji = if (wasReacted) null else emoji
             try {
-                if (wasReacted) InteractionService.unreact(note) else InteractionService.react(note, content)
+                if (wasReacted) InteractionService.unreact(note) else InteractionService.react(note, content, emoji)
             } catch (error: Throwable) {
                 model.counts = model.counts.copy(hasReacted = wasReacted, reactions = maxOf(0, model.counts.reactions + if (wasReacted) 1 else -1))
                 model.myReaction = previousReaction
+                model.myReactionEmoji = previousEmoji
                 model.lastUserAction = null
                 ToastCenter.error(error)
             }
@@ -157,14 +162,14 @@ object NoteInteractionStore {
         }
     }
 
-    suspend fun react(note: Note, content: String) {
+    suspend fun react(note: Note, content: String, emoji: CustomEmoji? = null) {
         val model = model(note)
         if (model.counts.hasReacted) {
             if (model.myReaction == content) return
             toggleReaction(note)
             if (model.counts.hasReacted) return
         }
-        toggleReaction(note, content)
+        toggleReaction(note, content, emoji)
     }
 
     suspend fun toggleRepost(note: Note) {
