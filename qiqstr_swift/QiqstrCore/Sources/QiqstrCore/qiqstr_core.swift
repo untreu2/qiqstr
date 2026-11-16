@@ -3671,6 +3671,20 @@ public func subscribeToEvents(filterJson: String, sink: EventSink)async throws  
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
+public func subscribeToEventsOnRelays(filterJson: String, relayUrls: [String], sink: EventSink)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_subscribe_to_events_on_relays(FfiConverterString.lower(filterJson),FfiConverterSequenceString.lower(relayUrls),FfiConverterTypeEventSink_lower(sink)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_void,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_void,
+            freeFunc: ffi_qiqstr_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
+}
 public func syncEvents(filterJson: String)async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
@@ -4386,6 +4400,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_subscribe_to_events() != 32664) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_subscribe_to_events_on_relays() != 37913) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_sync_events() != 2417) {

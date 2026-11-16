@@ -29,6 +29,7 @@ enum ServiceRegistry {
             EmojiPackService.shared.reset()
             NutzapService.shared.reset()
             ArticleDraftStore.shared.reset()
+            CommunityService.shared.reset()
         }
         SessionHooks.onBootstrap { pubkey in
             NoteInteractionStore.shared.prepareForAccount()

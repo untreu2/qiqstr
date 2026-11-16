@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 553104961;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1663211381;
 
 // Section: executor
 
@@ -6921,6 +6921,52 @@ fn wire__crate__api__relay__subscribe_to_events_impl(
         },
     )
 }
+fn wire__crate__api__relay__subscribe_to_events_on_relays_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "subscribe_to_events_on_relays",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_filter_json = <String>::sse_decode(&mut deserializer);
+            let api_relay_urls = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_sink =
+                <StreamSink<String, flutter_rust_bridge::for_generated::SseCodec>>::sse_decode(
+                    &mut deserializer,
+                );
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::relay::subscribe_to_events_on_relays(
+                            api_filter_json,
+                            api_relay_urls,
+                            api_sink,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__relay__sync_events_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -7970,19 +8016,25 @@ fn pde_ffi_dispatcher_primary_impl(
         ),
         177 => wire__crate__api__relay__stream_relay_status_impl(port, ptr, rust_vec_len, data_len),
         178 => wire__crate__api__relay__subscribe_to_events_impl(port, ptr, rust_vec_len, data_len),
-        179 => wire__crate__api__relay__sync_events_impl(port, ptr, rust_vec_len, data_len),
-        180 => {
-            wire__crate__api__relay__sync_replies_recursive_impl(port, ptr, rust_vec_len, data_len)
-        }
-        183 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
-        187 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
-        188 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
+        179 => wire__crate__api__relay__subscribe_to_events_on_relays_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        189 => wire__crate__api__relay__wait_for_ready_impl(port, ptr, rust_vec_len, data_len),
+        180 => wire__crate__api__relay__sync_events_impl(port, ptr, rust_vec_len, data_len),
+        181 => {
+            wire__crate__api__relay__sync_replies_recursive_impl(port, ptr, rust_vec_len, data_len)
+        }
+        184 => wire__crate__api__relay__update_signer_impl(port, ptr, rust_vec_len, data_len),
+        188 => wire__crate__api__crypto__verify_note_by_id_impl(port, ptr, rust_vec_len, data_len),
+        189 => wire__crate__api__crypto__verify_profile_by_pubkey_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        190 => wire__crate__api__relay__wait_for_ready_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -8071,12 +8123,12 @@ fn pde_ffi_dispatcher_sync_impl(
         171 => wire__crate__api__database__set_known_zappers_impl(ptr, rust_vec_len, data_len),
         172 => wire__crate__api__crypto__sha256_hash_impl(ptr, rust_vec_len, data_len),
         174 => wire__crate__api__crypto__sign_event_id_impl(ptr, rust_vec_len, data_len),
-        181 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
-        182 => wire__crate__api__nip17__unwrap_gift_wrap_dm_impl(ptr, rust_vec_len, data_len),
-        184 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        185 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
-        186 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
-        190 => wire__crate__api__events__zap_receipt_summary_impl(ptr, rust_vec_len, data_len),
+        182 => wire__crate__api__nip17__unwrap_gift_wrap_impl(ptr, rust_vec_len, data_len),
+        183 => wire__crate__api__nip17__unwrap_gift_wrap_dm_impl(ptr, rust_vec_len, data_len),
+        185 => wire__crate__api__crypto__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        186 => wire__crate__api__nwc__validate_nwc_uri_impl(ptr, rust_vec_len, data_len),
+        187 => wire__crate__api__crypto__verify_event_impl(ptr, rust_vec_len, data_len),
+        191 => wire__crate__api__events__zap_receipt_summary_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

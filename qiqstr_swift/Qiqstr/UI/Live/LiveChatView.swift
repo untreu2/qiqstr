@@ -88,12 +88,13 @@ struct LiveChatInput: View {
     @Binding var text: String
     let canSend: Bool
     let isSending: Bool
+    var placeholder: String = L("liveChatPlaceholder")
     let onSend: () -> Void
 
     var body: some View {
         GlassEffectContainer {
             HStack(alignment: .bottom, spacing: 8) {
-                TextField(L("liveChatPlaceholder"), text: $text, axis: .vertical)
+                TextField(placeholder, text: $text, axis: .vertical)
                     .lineLimit(1...4)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)

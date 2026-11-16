@@ -16,13 +16,15 @@ enum NostrLinkResolver {
             let relays = hintRelays(entity)
             Task {
                 let kind = await locateEvent(id, relays: relays)
-                router.push(kind == 30023 ? .article(id) : .thread(id))
+                router.push(kind == 30023 ? .article(id) : kind == CommunityService.channelCreateKind ? .publicChannel(id) : .thread(id))
             }
         case .address(let entity):
             let tlv = Nip19.decodeTLV(entity)
             let kind = tlv?["kind"] as? Int
             if kind == 30311, let pubkey = tlv?["pubkey"] as? String, let identifier = tlv?["identifier"] as? String {
                 router.push(.liveStream("30311:\(pubkey):\(identifier)"))
+            } else if kind == CommunityService.communityKind, let pubkey = tlv?["pubkey"] as? String, let identifier = tlv?["identifier"] as? String {
+                router.push(.community("\(CommunityService.communityKind):\(pubkey):\(identifier)"))
             } else if kind == nil || kind == 30023 || kind == 30024 {
                 router.push(.articleAddress(entity))
             } else if let url = URL(string: "https://njump.me/\(entity)") {

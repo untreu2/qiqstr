@@ -1255,6 +1255,21 @@ pub async fn send_event(event_json: String) -> Result<String> {
     published_event_json(output)
 }
 
+/// A short-lived client for relays outside the main pool. It signs with the account's key so
+/// relays that require NIP-42 auth (such as NIP-29 group relays) accept reads and writes.
+async fn temporary_client() -> Client {
+    let signer = match get_client().await {
+        Ok(main) => main.signer().await.ok(),
+        Err(_) => None,
+    };
+    let client = match signer {
+        Some(signer) => Client::builder().signer(signer).build(),
+        None => Client::default(),
+    };
+    client.automatic_authentication(true);
+    client
+}
+
 struct TargetPool {
     main: Client,
     pooled: Vec<RelayUrl>,
@@ -1278,7 +1293,7 @@ impl TargetPool {
         let extra = if fresh.is_empty() {
             None
         } else {
-            let temp = Client::default();
+            let temp = temporary_client().await;
             for url in &fresh {
                 let _ = temp.add_relay(url.as_str()).await;
             }
@@ -1851,6 +1866,63 @@ pub async fn fetch_profile_events(
             }
         }
 
+        Ok(())
+    }
+    .await;
+    if let Err(error) = result {
+        let _ = sink.add_error(error);
+    }
+    Ok(())
+}
+
+/// Streams events matching the filter from the given relays only, without saving them locally.
+/// Used for relay-scoped chats such as NIP-29 groups.
+pub async fn subscribe_to_events_on_relays(
+    filter_json: String,
+    relay_urls: Vec<String>,
+    sink: StreamSink<String>,
+) -> Result<()> {
+    let result: Result<()> = async {
+        let filter = Filter::from_json(&filter_json)?;
+        let client = temporary_client().await;
+        for url in &relay_urls {
+            RelayUrl::parse(url)?;
+            client.add_relay(url.as_str()).await?;
+        }
+        client.connect().await;
+        client.wait_for_connection(Duration::from_secs(4)).await;
+        let mut notifications = client.notifications();
+        let Output { val: sub_id, .. } = client
+            .subscribe(filter, None)
+            .await
+            .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
+        let mut liveness = tokio::time::interval(Duration::from_secs(2));
+        loop {
+            let received = tokio::select! {
+                received = notifications.recv() => received,
+                _ = liveness.tick() => {
+                    if sink.is_closed() {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            match received {
+                Ok(RelayPoolNotification::Event {
+                    subscription_id,
+                    event,
+                    ..
+                }) if subscription_id == sub_id => {
+                    if sink.add(event.as_json()).is_err() {
+                        break;
+                    }
+                }
+                Ok(RelayPoolNotification::Shutdown)
+                | Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                _ => continue,
+            }
+        }
+        client.shutdown().await;
         Ok(())
     }
     .await;
@@ -3083,7 +3155,7 @@ pub async fn fetch_events_from_relays(
     timeout_secs: u32,
 ) -> Result<String> {
     let filter = Filter::from_json(&filter_json)?;
-    let client = Client::default();
+    let client = temporary_client().await;
     for url in &relay_urls {
         RelayUrl::parse(url)?;
         client.add_relay(url.as_str()).await?;

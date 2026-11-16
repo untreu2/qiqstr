@@ -64,6 +64,7 @@ struct SidebarView: View {
                     row(L("profile"), systemImage: "person", identifier: "sidebar-profile") { open(.profile(me)) }
                     row(L("reads"), systemImage: "doc.text", identifier: "sidebar-reads") { open(.reads) }
                     row(L("liveTitle"), systemImage: "dot.radiowaves.left.and.right", identifier: "sidebar-live") { open(.liveStreams) }
+                    row(L("communities"), systemImage: "person.3", identifier: "sidebar-communities") { open(.communities) }
                     row(L("listsTitle"), systemImage: "list.bullet", identifier: "sidebar-lists") { open(.followSets) }
                     row(L("bookmarks"), systemImage: "bookmark", identifier: "sidebar-bookmarks") { open(.bookmarks) }
                 }

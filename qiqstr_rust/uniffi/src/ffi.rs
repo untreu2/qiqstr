@@ -608,6 +608,9 @@ pub async fn fetch_all_events_for_author(author_hex: String, sink: Arc<dyn Event
 pub async fn fetch_profile_events(author_hex: String, kinds_str: String, since_timestamp: i64, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::fetch_profile_events(author_hex, kinds_str, since_timestamp, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]
+pub async fn subscribe_to_events_on_relays(filter_json: String, relay_urls: Vec<String>, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::subscribe_to_events_on_relays(filter_json, relay_urls, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
+
+#[uniffi::export]
 pub async fn subscribe_to_events(filter_json: String, sink: Arc<dyn EventSink>) -> Result<(), QiqError> { on_rt(async move { api::relay::subscribe_to_events(filter_json, StreamSink::new(Arc::new(ForeignSink(sink)))).await }).await }
 
 #[uniffi::export]

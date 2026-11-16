@@ -168,6 +168,17 @@ pub async fn fetch_profile_events(
     .await
 }
 
+/// Streams events matching the filter from the given relays only, without saving them locally.
+/// Used for relay-scoped chats such as NIP-29 groups.
+pub async fn subscribe_to_events_on_relays(
+    filter_json: String,
+    relay_urls: Vec<String>,
+    sink: StreamSink<String>,
+) -> Result<()> {
+    qiqstr::api::relay::subscribe_to_events_on_relays(filter_json, relay_urls, dart_sink(sink))
+        .await
+}
+
 pub async fn subscribe_to_events(filter_json: String, sink: StreamSink<String>) -> Result<()> {
     qiqstr::api::relay::subscribe_to_events(filter_json, dart_sink(sink)).await
 }

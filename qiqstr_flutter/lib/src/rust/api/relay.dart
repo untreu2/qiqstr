@@ -185,6 +185,16 @@ Stream<String> fetchProfileEvents({
   sinceTimestamp: sinceTimestamp,
 );
 
+/// Streams events matching the filter from the given relays only, without saving them locally.
+/// Used for relay-scoped chats such as NIP-29 groups.
+Stream<String> subscribeToEventsOnRelays({
+  required String filterJson,
+  required List<String> relayUrls,
+}) => RustLib.instance.api.crateApiRelaySubscribeToEventsOnRelays(
+  filterJson: filterJson,
+  relayUrls: relayUrls,
+);
+
 Stream<String> subscribeToEvents({required String filterJson}) =>
     RustLib.instance.api.crateApiRelaySubscribeToEvents(filterJson: filterJson);
 

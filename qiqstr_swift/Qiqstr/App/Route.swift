@@ -30,6 +30,10 @@ enum Route: Hashable {
     case discoverFeed(String)
     case followPack(String)
     case articleDrafts
+    case communities
+    case relayGroup(String)
+    case publicChannel(String)
+    case community(String)
 }
 
 struct RouteDestination: View {
@@ -62,6 +66,10 @@ struct RouteDestination: View {
         case .discoverFeed(let id): DiscoverFeedView(feedId: id)
         case .followPack(let id): FollowPackView(packId: id)
         case .articleDrafts: ArticleDraftsView()
+        case .communities: CommunitiesView()
+        case .relayGroup(let id): CommunityChatView(target: .group(id))
+        case .publicChannel(let id): CommunityChatView(target: .channel(id))
+        case .community(let coordinate): CommunityView(coordinate: coordinate)
         }
     }
 }
@@ -176,7 +184,7 @@ final class Router {
     }
 }
 
-enum AppTab: Hashable, CaseIterable { case feed, dm, wallet, notifications, search, compose, profile, reads, live, lists, bookmarks, settings }
+enum AppTab: Hashable, CaseIterable { case feed, dm, wallet, notifications, search, compose, profile, reads, live, communities, lists, bookmarks, settings }
 
 enum AppSheet: Identifiable {
     case zap(Note)
