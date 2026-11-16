@@ -15,7 +15,7 @@ def unescape(value):
 
 
 tables = sys.argv[1:] or ["Localizable", "Auth", "Feed", "Profile", "Explore", "DM", "Wallet", "Settings"]
-for lang in ["en", "tr", "de"]:
+for lang in ["en", "tr", "de", "es", "pt-BR", "fr", "it", "nl", "pl"]:
     os.makedirs(os.path.join(target, lang), exist_ok=True)
     for table in tables:
         path = os.path.join(source, f"{lang}.lproj", f"{table}.strings")

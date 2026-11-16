@@ -4,6 +4,7 @@
  "articleContent": "Article text",
  "articleContentPlaceholder": "Write in Markdown…",
  "articleContinueReading": "Continue reading",
+ "articleCoverURL": "Cover image URL",
  "articleDeleteDraftTitle": "Delete this draft?",
  "articleDeleteMessage": "Relays that honour deletion requests will remove it. Copies elsewhere may remain.",
  "articleDeleteTitle": "Delete this article?",
@@ -244,6 +245,5 @@
  "searchSuggestedPeople": "Suggested people",
  "searchTrendingHashtags": "Trending hashtags",
  "searchTrendingNotes": "Trending notes",
- "searchTrendingUnavailable": "Trending notes are unavailable right now.",
- "articleCoverURL": "Cover image URL"
+ "searchTrendingUnavailable": "Trending notes are unavailable right now."
 }

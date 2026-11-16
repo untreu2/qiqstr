@@ -7,15 +7,29 @@ import org.json.JSONObject
 enum class AppLanguage(val code: String, val displayName: String) {
     EN("en", "English"),
     TR("tr", "Türkçe"),
-    DE("de", "Deutsch");
+    DE("de", "Deutsch"),
+    ES("es", "Español"),
+    PT_BR("pt-BR", "Português (Brasil)"),
+    FR("fr", "Français"),
+    IT("it", "Italiano"),
+    NL("nl", "Nederlands"),
+    PL("pl", "Polski");
 
     companion object {
         fun from(code: String?): AppLanguage? = entries.firstOrNull { it.code == code }
 
+        /** The app language for a tag such as "pt-PT", "es_MX" or "fr", matching on the language part. */
+        fun matching(code: String?): AppLanguage? {
+            if (code == null) return null
+            from(code)?.let { return it }
+            val base = code.takeWhile { it != '-' && it != '_' }.lowercase()
+            return if (base == "pt") PT_BR else from(base)
+        }
+
         val stored: String? get() = Prefs.string("app_language")
 
         val current: AppLanguage
-            get() = from(stored) ?: from(Locale.getDefault().language) ?: EN
+            get() = from(stored) ?: matching(Locale.getDefault().toLanguageTag()) ?: EN
 
         val locale: Locale get() = stored?.let { Locale.forLanguageTag(it) } ?: Locale.getDefault()
     }
@@ -41,10 +55,13 @@ object Localizer {
     }
 
     fun apply(code: String?) = synchronized(lock) {
-        val lang = (AppLanguage.from(code) ?: AppLanguage.from(Locale.getDefault().language) ?: AppLanguage.EN).code
+        val lang = (AppLanguage.from(code) ?: AppLanguage.matching(Locale.getDefault().toLanguageTag()) ?: AppLanguage.EN).code
         language = lang
         strings = if (lang == "en") english else load(lang)
     }
+
+    /** The language the UI is showing, such as "pl" or "pt-BR". */
+    val languageCode: String get() = synchronized(lock) { language ?: AppLanguage.current.code }
 
     fun string(key: String): String = synchronized(lock) {
         if (language == null) apply(AppLanguage.stored)
@@ -72,10 +89,21 @@ object IcuPlural {
             val body = result.substring(match.range.last + 1, end)
             val count = args[name]?.toString()?.toLongOrNull() ?: 0
             val choices = parseChoices(body)
-            val chosen = choices["=$count"] ?: (if (count == 1L) choices["one"] else null) ?: choices["other"] ?: ""
+            val chosen = choices["=$count"] ?: choices[category(count, Localizer.languageCode)] ?: choices["other"] ?: ""
             result = result.substring(0, match.range.first) + chosen.replace("#", count.toString()) + result.substring(end + 1)
         }
         return result
+    }
+
+    /** The CLDR plural category of a whole number in the app's languages. */
+    fun category(n: Long, language: String): String = when (language) {
+        "pl" -> when {
+            n == 1L -> "one"
+            n % 10 in 2..4 && n % 100 !in 12..14 -> "few"
+            else -> "many"
+        }
+        "fr", "pt-BR" -> if (n == 0L || n == 1L) "one" else "other"
+        else -> if (n == 1L) "one" else "other"
     }
 
     private fun matchingBrace(s: String, from: Int): Int? {

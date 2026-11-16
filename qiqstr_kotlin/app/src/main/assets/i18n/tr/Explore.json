@@ -4,6 +4,7 @@
  "articleContent": "Makale metni",
  "articleContentPlaceholder": "Markdown ile yaz…",
  "articleContinueReading": "Okumaya devam et",
+ "articleCoverURL": "Kapak görseli URL’si",
  "articleDeleteDraftTitle": "Bu taslak silinsin mi?",
  "articleDeleteMessage": "Silme isteklerine uyan röleler onu kaldıracak. Başka yerlerdeki kopyalar kalabilir.",
  "articleDeleteTitle": "Bu makale silinsin mi?",
@@ -244,6 +245,5 @@
  "searchSuggestedPeople": "Önerilen kişiler",
  "searchTrendingHashtags": "Gündemdeki etiketler",
  "searchTrendingNotes": "Gündemdeki notlar",
- "searchTrendingUnavailable": "Gündemdeki notlar şu anda kullanılamıyor.",
- "articleCoverURL": "Kapak görseli URL’si"
+ "searchTrendingUnavailable": "Gündemdeki notlar şu anda kullanılamıyor."
 }

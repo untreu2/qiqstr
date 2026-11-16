@@ -160,12 +160,11 @@ fun rememberQrScanner(onScan: (String) -> Unit): () -> Unit {
     }
 }
 
+/** The language's name in the app's current language, such as "German" or "Almanca". */
 val AppLanguage.localizedName: String
-    get() = when (this) {
-        AppLanguage.EN -> L("english")
-        AppLanguage.TR -> L("turkish")
-        AppLanguage.DE -> L("german")
-    }
+    get() = java.util.Locale.forLanguageTag(code).getDisplayName(java.util.Locale.forLanguageTag(AppLanguage.current.code))
+        .replaceFirstChar { it.titlecase(java.util.Locale.forLanguageTag(AppLanguage.current.code)) }
+        .ifEmpty { displayName }
 
 object SuggestedUsers {
     val pubkeys = listOf(

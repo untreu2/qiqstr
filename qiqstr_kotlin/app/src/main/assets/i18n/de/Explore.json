@@ -4,6 +4,7 @@
  "articleContent": "Artikeltext",
  "articleContentPlaceholder": "In Markdown schreiben …",
  "articleContinueReading": "Weiterlesen",
+ "articleCoverURL": "URL des Titelbilds",
  "articleDeleteDraftTitle": "Diesen Entwurf löschen?",
  "articleDeleteMessage": "Relays, die Löschanfragen beachten, entfernen ihn. Kopien anderswo können bleiben.",
  "articleDeleteTitle": "Diesen Artikel löschen?",
@@ -244,6 +245,5 @@
  "searchSuggestedPeople": "Vorgeschlagene Personen",
  "searchTrendingHashtags": "Angesagte Hashtags",
  "searchTrendingNotes": "Angesagte Notizen",
- "searchTrendingUnavailable": "Angesagte Notizen sind gerade nicht verfügbar.",
- "articleCoverURL": "URL des Titelbilds"
+ "searchTrendingUnavailable": "Angesagte Notizen sind gerade nicht verfügbar."
 }

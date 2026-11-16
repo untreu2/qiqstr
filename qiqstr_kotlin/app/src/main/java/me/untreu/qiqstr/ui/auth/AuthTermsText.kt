@@ -9,7 +9,8 @@ object AuthTermsText {
         get() = when (AppLanguage.current) {
             AppLanguage.TR -> markdownTR
             AppLanguage.DE -> markdownDE
-            AppLanguage.EN -> markdown
+            // The terms are only written in English, Turkish and German.
+            else -> markdown
         }
 
     private val markdown = """
