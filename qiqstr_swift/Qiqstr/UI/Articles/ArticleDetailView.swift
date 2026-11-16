@@ -45,6 +45,12 @@ final class ArticleDetailModel {
         if let remote = await ArticleService.fetch(address: address) { apply(remote) } else { phase = .missing }
     }
 
+    /// Picks up a newer local version, such as an edit you just published.
+    func refreshLocal() async {
+        guard let current = article, let local = await ArticleService.article(at: current.address), local.createdAt > current.createdAt else { return }
+        apply(local)
+    }
+
     private func refreshLatest(_ address: ArticleAddress) async {
         guard let latest = await ArticleService.fetch(address: address), let current = article, latest.createdAt > current.createdAt else { return }
         apply(latest)
@@ -175,6 +181,9 @@ struct ArticleDetailView: View {
     @State private var highlightDraft: HighlightDraft?
     @State private var scrollTarget: String?
     @State private var reportTarget: ReportTarget?
+    @State private var confirmDelete = false
+    @State private var isDeleting = false
+    @State private var bus = DataBus.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .headline) private var authorAvatarSize: CGFloat = 40
@@ -204,6 +213,13 @@ struct ArticleDetailView: View {
         .toolbar { toolbar }
         .sensoryFeedback(.success, trigger: copied)
         .task { await model.load(articleId: articleId, naddr: naddr) }
+        .task(id: bus.feedVersion) { await model.refreshLocal() }
+        .confirmationDialog(L("articleDeleteTitle"), isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button(L("delete"), role: .destructive) { deleteArticle() }
+                .accessibilityIdentifier("article-delete-confirm")
+        } message: {
+            Text(L("articleDeleteMessage"))
+        }
         .onDisappear { store.persist() }
         .onChange(of: scenePhase) { if scenePhase != .active { store.persist() } }
         .sheet(item: $highlightDraft) { draft in
@@ -220,6 +236,21 @@ struct ArticleDetailView: View {
         }
         .reportSheet($reportTarget) { target in
             if MuteService.shared.isMuted(target.pubkey) { dismiss() }
+        }
+    }
+
+    private func deleteArticle() {
+        guard let article = model.article, !isDeleting else { return }
+        isDeleting = true
+        Task {
+            defer { isDeleting = false }
+            do {
+                try await ArticlePublisher.delete(article)
+                ToastCenter.shared.show(L("articleDeleted"), style: .success)
+                dismiss()
+            } catch {
+                ToastCenter.shared.show(coreMessage(error), style: .error)
+            }
         }
     }
 
@@ -267,7 +298,15 @@ struct ArticleDetailView: View {
                     }
                     Divider()
                     Button { Router.shared.push(.profile(article.pubkey)) } label: { Label(L("exploreViewAuthor"), systemImage: "person.crop.circle") }
-                    if article.pubkey != Session.shared.pubkey {
+                    if article.pubkey == Session.shared.pubkey {
+                        Section {
+                            Button(L("articleEdit"), systemImage: "pencil") { Router.shared.editArticle(article) }
+                                .accessibilityIdentifier("article-edit")
+                            Button(L("delete"), systemImage: "trash", role: .destructive) { confirmDelete = true }
+                                .disabled(isDeleting)
+                                .accessibilityIdentifier("article-delete")
+                        }
+                    } else {
                         Section {
                             Button(L("feedMuteAuthor"), systemImage: "speaker.slash", role: .destructive) { muteAuthor(article) }
                                 .accessibilityIdentifier("article-mute-author")

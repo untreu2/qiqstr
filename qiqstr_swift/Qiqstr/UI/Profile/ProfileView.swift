@@ -88,6 +88,7 @@ struct ProfileView: View {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             await model.reloadNotes()
+            await model.reloadArticles()
         }
         .task(id: bus.profileVersion) {
             guard model.hasLoadedNotes else { return }
@@ -122,7 +123,7 @@ struct ProfileView: View {
 
     private var tabPicker: some View {
         Picker(L("notes"), selection: $model.tab) {
-            ForEach(ProfileTab.allCases) { tab in
+            ForEach(model.visibleTabs) { tab in
                 Text(tab.title).tag(tab)
             }
         }
@@ -153,6 +154,48 @@ struct ProfileView: View {
                 loadingRow
             } else {
                 noteRows(model.likes, empty: L("profileNoLikes"), systemImage: "heart", id: "profile-likes")
+            }
+        case .articles:
+            articleRows
+        }
+    }
+
+    @ViewBuilder
+    private var articleRows: some View {
+        if model.isMe {
+            HStack(spacing: 10) {
+                Button { Router.shared.writeArticle() } label: {
+                    Label(L("articleWriteNew"), systemImage: "square.and.pencil")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("profile-write-article")
+                Button { Router.shared.push(.articleDrafts) } label: {
+                    Label(L("articleDrafts"), systemImage: "doc.text")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("profile-article-drafts")
+            }
+            .controlSize(.large)
+            .tint(AppColors.textPrimary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        if model.articles.isEmpty {
+            if !model.hasLoadedArticles {
+                loadingRow
+            } else {
+                EmptyStateView(systemImage: "doc.richtext", title: L("profileNoArticles"))
+                    .padding(.top, 12)
+                    .accessibilityIdentifier("profile-articles-empty")
+            }
+        } else {
+            ForEach(model.articles) { article in
+                ArticleCardView(article: article)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .accessibilityIdentifier("profile-article-row")
             }
         }
     }
@@ -201,6 +244,7 @@ struct ProfileView: View {
             case .replies: !model.replies.isEmpty
             case .photos: !model.media.isEmpty
             case .likes: !model.likes.isEmpty
+            case .articles: !model.articles.isEmpty
             }
         }()
         if hasItems && model.canLoadMoreCurrent {

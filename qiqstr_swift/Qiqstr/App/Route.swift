@@ -29,6 +29,7 @@ enum Route: Hashable {
     case discoverFeeds
     case discoverFeed(String)
     case followPack(String)
+    case articleDrafts
 }
 
 struct RouteDestination: View {
@@ -60,6 +61,7 @@ struct RouteDestination: View {
         case .discoverFeeds: DiscoverFeedsView()
         case .discoverFeed(let id): DiscoverFeedView(feedId: id)
         case .followPack(let id): FollowPackView(packId: id)
+        case .articleDrafts: ArticleDraftsView()
         }
     }
 }
@@ -182,9 +184,10 @@ enum AppSheet: Identifiable {
     case switchAccount
     case shareProfile(String)
     case url(URL)
+    case articleEditor(ArticleDraft)
     var requiresSigner: Bool {
         switch self {
-        case .zap, .zapProfile: true
+        case .zap, .zapProfile, .articleEditor: true
         default: false
         }
     }
@@ -196,6 +199,7 @@ enum AppSheet: Identifiable {
         case .switchAccount: "switch"
         case .shareProfile(let p): "share-\(p)"
         case .url(let u): u.absoluteString
+        case .articleEditor(let d): "article-\(d.id)"
         }
     }
 }

@@ -106,6 +106,7 @@ struct AppSheetView: View {
         case .switchAccount: SwitchAccountSheet()
         case .shareProfile(let pubkey): ShareProfileSheet(pubkey: pubkey)
         case .url(let url): SafariView(url: url).ignoresSafeArea()
+        case .articleEditor(let draft): ArticleEditorView(draft: draft)
         }
     }
 }

@@ -176,6 +176,7 @@ struct AppSheetView: View {
         case .zapProfile(let pubkey): ZapSheet(target: .profile(pubkey))
         case .switchAccount: SwitchAccountSheet()
         case .shareProfile(let pubkey): ShareProfileSheet(pubkey: pubkey)
+        case .articleEditor(let draft): ArticleEditorView(draft: draft).frame(minWidth: 720, minHeight: 680)
         case .url(let url):
             Color.clear.onAppear {
                 NSWorkspace.shared.open(url)

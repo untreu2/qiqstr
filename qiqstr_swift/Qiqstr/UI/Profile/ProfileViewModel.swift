@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 enum ProfileTab: String, CaseIterable, Identifiable {
-    case notes, replies, photos, likes
+    case notes, replies, photos, likes, articles
     var id: String { rawValue }
     var title: String { self == .photos ? L("media") : L(rawValue) }
 }
@@ -35,6 +35,8 @@ final class ProfileViewModel {
     private(set) var notes: [Note] = []
     private(set) var replies: [Note] = []
     private(set) var likes: [Note] = []
+    private(set) var articles: [Article] = []
+    private(set) var hasLoadedArticles = false
     private(set) var pinned: [Note] = []
     private(set) var pinnedIds: [String] = []
 
@@ -101,6 +103,23 @@ final class ProfileViewModel {
         if result != media { media = result }
     }
 
+    /// The Articles tab shows on your own profile, and on others once they have articles.
+    var visibleTabs: [ProfileTab] {
+        ProfileTab.allCases.filter { $0 != .articles || isMe || !articles.isEmpty }
+    }
+
+    func reloadArticles() async {
+        let loaded = await ArticleService.articles(authors: [pubkey], limit: 200)
+        if loaded != articles { articles = loaded }
+        hasLoadedArticles = true
+        if !visibleTabs.contains(tab) { tab = .notes }
+    }
+
+    private func syncArticles() async {
+        _ = await ArticleService.fetchOlder(authors: [pubkey], until: TimeFormat.now + 60)
+        await reloadArticles()
+    }
+
     var visibleNotes: [Note] {
         let pinnedSet = Set(pinned.map(\.id))
         return notes.filter { $0.isRepost || !pinnedSet.contains($0.id) }
@@ -114,7 +133,8 @@ final class ProfileViewModel {
         async let pinned: Void = loadPinned(remote: false)
         async let following: Void = loadFollowing(sync: false)
         async let badges: Void = loadBadges(remote: false)
-        _ = await (notes, pinned, following, badges)
+        async let articles: Void = reloadArticles()
+        _ = await (notes, pinned, following, badges, articles)
         Task { await syncAll(force: false) }
         Task { await ZapperDirectory.shared.verify(pubkey) }
     }
@@ -138,7 +158,8 @@ final class ProfileViewModel {
         async let counts: Void = loadCounts(force: force)
         async let score: Void = loadFollowScore()
         async let badgeSync: Void = loadBadges(remote: true)
-        _ = await (profileSync, notesSync, reactions, pinnedSync, counts, score, badgeSync)
+        async let articleSync: Void = syncArticles()
+        _ = await (profileSync, notesSync, reactions, pinnedSync, counts, score, badgeSync, articleSync)
     }
 
     private func syncProfile(force: Bool) async {
@@ -320,6 +341,8 @@ final class ProfileViewModel {
                 likesExhausted = true
             }
             await reloadLikes()
+        case .articles:
+            return
         }
     }
 
@@ -328,6 +351,7 @@ final class ProfileViewModel {
         case .notes, .photos: canLoadMoreNotes
         case .replies: canLoadMoreReplies
         case .likes: canLoadMoreLikes
+        case .articles: false
         }
     }
 

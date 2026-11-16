@@ -56,6 +56,9 @@ struct ExploreView: View {
             }
             #endif
             ToolbarItem(placement: .topBarTrailing) {
+                ArticleWriteMenu()
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink(value: Route.userSearch) { Label(L("users"), systemImage: "person.2") }
                     .accessibilityIdentifier("explore-user-search")
             }
