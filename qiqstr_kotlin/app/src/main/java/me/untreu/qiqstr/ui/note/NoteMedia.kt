@@ -46,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.ArrowCircleDown
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -74,6 +75,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -103,6 +106,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.untreu.qiqstr.core.AppColors
 import me.untreu.qiqstr.core.L
+import me.untreu.qiqstr.core.MediaPolicy
 import kotlin.math.abs
 
 @Composable
@@ -165,7 +169,8 @@ private fun Modifier.matchParentSize(): Modifier = this.fillMaxSize()
 @Composable
 private fun MediaTile(item: NoteMediaItem, modifier: Modifier, onClick: () -> Unit) {
     val description = item.alt ?: L("photos")
-    Box(modifier.clickable(onClick = onClick).semantics { contentDescription = description }.testTag("note-media-image")) {
+    val open = { if (MediaPolicy.loads(item.url)) onClick() else MediaPolicy.allow(item.url) }
+    Box(modifier.clickable(onClick = open).semantics { contentDescription = description }.testTag("note-media-image")) {
         NoteMediaImage(item, Modifier.fillMaxSize())
         item.alt?.let { NoteAltBadge(it, Modifier.align(Alignment.BottomStart).padding(8.dp)) }
     }
@@ -178,6 +183,13 @@ fun NoteMediaImage(item: NoteMediaItem, modifier: Modifier = Modifier) {
         NoteMediaPlaceholder(item.blurhash, modifier)
         return
     }
+    if (!MediaPolicy.loads(item.url)) {
+        Box(modifier, contentAlignment = Alignment.Center) {
+            NoteMediaPlaceholder(item.blurhash, Modifier.fillMaxSize())
+            MediaTapToLoadBadge()
+        }
+        return
+    }
     SubcomposeAsyncImage(
         model = ImageRequest.Builder(context).data(item.url).crossfade(200).build(),
         contentDescription = item.alt,
@@ -186,6 +198,16 @@ fun NoteMediaImage(item: NoteMediaItem, modifier: Modifier = Modifier) {
         error = { NoteMediaPlaceholder(item.blurhash, Modifier.fillMaxSize()) },
         modifier = modifier,
     )
+}
+
+@Composable
+fun MediaTapToLoadBadge(modifier: Modifier = Modifier) {
+    Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.55f), contentColor = Color.White, modifier = modifier.testTag("media-tap-to-load")) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Outlined.ArrowCircleDown, null, Modifier.size(16.dp))
+            Text(L("mediaTapToLoad"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        }
+    }
 }
 
 @Composable
@@ -390,8 +412,11 @@ fun NoteVideoView(item: NoteMediaItem, modifier: Modifier = Modifier) {
     var isMuted by remember { mutableStateOf(true) }
     var duration by remember { mutableStateOf<Double?>(null) }
     var fullScreen by remember { mutableStateOf(false) }
+    var autoplayed by remember { mutableStateOf(false) }
+    var isVisible by remember { mutableStateOf(false) }
     val inlineView = remember { arrayOfNulls<PlayerView>(1) }
-    LaunchedEffect(item.url) { duration = VideoDurations.duration(item.url) }
+    val loads = MediaPolicy.loads(item.url)
+    LaunchedEffect(item.url, loads) { if (loads) duration = VideoDurations.duration(item.url) }
     DisposableEffect(item.url) {
         onDispose {
             player?.release()
@@ -404,6 +429,7 @@ fun NoteVideoView(item: NoteMediaItem, modifier: Modifier = Modifier) {
         p.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), !muted)
     }
     val play = {
+        MediaPolicy.allow(item.url)
         val existing = player
         if (existing != null) {
             existing.play()
@@ -429,7 +455,22 @@ fun NoteVideoView(item: NoteMediaItem, modifier: Modifier = Modifier) {
     val ratio = (item.aspectRatio ?: (16f / 9f)).coerceIn(0.56f, 1.9f)
     Box(
         modifier.fillMaxWidth().heightIn(max = 460.dp).aspectRatio(ratio, matchHeightConstraintsFirst = false)
-            .clip(RoundedCornerShape(16.dp)).background(Color.Black),
+            .clip(RoundedCornerShape(16.dp)).background(Color.Black)
+            .onGloballyPositioned { coordinates ->
+                val bounds = coordinates.boundsInWindow()
+                val area = coordinates.size.width.toFloat() * coordinates.size.height
+                val visible = area > 0f && bounds.width * bounds.height >= area * 0.7f
+                if (visible == isVisible) return@onGloballyPositioned
+                isVisible = visible
+                if (visible) {
+                    if (MediaPolicy.autoplaysVideo && player == null && !autoplayed) {
+                        autoplayed = true
+                        play()
+                    }
+                } else if (isPlaying && !fullScreen) {
+                    player?.pause()
+                }
+            },
     ) {
         val current = player
         if (current != null) {
@@ -464,16 +505,18 @@ fun NoteVideoView(item: NoteMediaItem, modifier: Modifier = Modifier) {
         } else {
             NoteMediaPlaceholder(item.blurhash, Modifier.fillMaxSize())
             val thumbnail = item.poster
-            AsyncImage(
-                model = if (thumbnail != null) {
-                    ImageRequest.Builder(context).data(thumbnail).crossfade(200).build()
-                } else {
-                    ImageRequest.Builder(context).data(item.url).videoFrameMillis(500).crossfade(200).build()
-                },
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (loads) {
+                AsyncImage(
+                    model = if (thumbnail != null) {
+                        ImageRequest.Builder(context).data(thumbnail).crossfade(200).build()
+                    } else {
+                        ImageRequest.Builder(context).data(item.url).videoFrameMillis(500).crossfade(200).build()
+                    },
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             PlayButton(item, duration, play)
             duration?.let {
                 Surface(

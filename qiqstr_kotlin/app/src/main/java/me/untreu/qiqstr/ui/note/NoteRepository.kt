@@ -99,9 +99,9 @@ object NoteRepository {
     private val mutedPubkeys: List<String> get() = Session.mutedPubkeys
     private val mutedWords: List<String> get() = Session.mutedWords
 
-    suspend fun feed(authors: List<String>?, limit: Int, sort: FeedSortMode): List<Note> {
+    suspend fun feed(authors: List<String>?, limit: Int, sort: FeedSortMode, showReplies: Boolean = false): List<Note> {
         val me = me ?: return emptyList()
-        val raw = runCatching { dbGetHydratedFeedNotesSorted(me, authors, limit.toUInt(), true, me, sort.raw) }.getOrNull()
+        val raw = runCatching { dbGetHydratedFeedNotesSorted(me, authors, limit.toUInt(), !showReplies, me, sort.raw) }.getOrNull()
         return Note.parsed(raw)
     }
 

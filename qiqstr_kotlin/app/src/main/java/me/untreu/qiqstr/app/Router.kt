@@ -21,7 +21,7 @@ import me.untreu.qiqstr.domain.Note
 
 enum class FollowListMode { FOLLOWING, FOLLOWERS }
 
-enum class SettingsRoute { KEYS, RELAYS, MUTED, DISPLAY, DATABASE, EVENT_MANAGER, PAYMENTS, LANGUAGE, NOTIFICATIONS, SAFETY, DIAGNOSTICS }
+enum class SettingsRoute { KEYS, RELAYS, MUTED, DISPLAY, DATABASE, EVENT_MANAGER, PAYMENTS, LANGUAGE, NOTIFICATIONS, SAFETY, DIAGNOSTICS, MEDIA_SERVER }
 
 sealed interface Route {
     val key: String

@@ -39,10 +39,12 @@ import androidx.compose.material.icons.outlined.AutoAwesomeMosaic
 import androidx.compose.material.icons.outlined.DynamicFeed
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -92,6 +94,7 @@ import me.untreu.qiqstr.core.components.TextAction
 import me.untreu.qiqstr.data.services.ExploreService
 import me.untreu.qiqstr.data.services.FollowService
 import me.untreu.qiqstr.data.services.HashtagFollowService
+import me.untreu.qiqstr.data.services.MuteService
 import me.untreu.qiqstr.data.sync.DataBus
 import me.untreu.qiqstr.data.sync.Session
 import me.untreu.qiqstr.ui.note.FeedSortMode
@@ -114,7 +117,8 @@ fun FeedScreen() {
     LaunchedEffect(DataBus.listsVersion) { model.loadLists() }
     LaunchedEffect(DataBus.interactionVersion) { if (DataBus.interactionVersion > 0) NoteInteractionStore.refreshAll() }
     LaunchedEffect(Unit) {
-        snapshotFlow { Triple(Session.mutedPubkeys, Session.mutedWords, NoteInteractionStore.deletedIds) }.drop(1).collect { model.refilter() }
+        snapshotFlow { listOf(Session.mutedPubkeys, Session.mutedWords, MuteService.mutedHashtags, MuteService.mutedThreads, NoteInteractionStore.deletedIds) }
+            .drop(1).collect { model.refilter() }
     }
     LaunchedEffect(Unit) { snapshotFlow { HashtagFollowService.tags }.drop(1).collect { model.topicsChanged() } }
     LaunchedEffect(Unit) { snapshotFlow { ExploreService.pinnedFeeds }.drop(1).collect { model.pinnedFeedsChanged(it) } }
@@ -253,6 +257,12 @@ private fun FeedMenu(model: FeedViewModel, onManageTopics: () -> Unit, onDismiss
         onClick = { onDismiss(); onManageTopics() },
         modifier = Modifier.testTag("feed-manage-topics"),
     )
+    if (model.hasNoteFilters) {
+        HorizontalDivider()
+        header(L("feedShowSection"))
+        MenuToggle(L("feedShowReplies"), Icons.Outlined.Forum, model.showReplies, "feed-show-replies") { model.updateShowReplies(!model.showReplies) }
+        MenuToggle(L("feedShowReposts"), Icons.Outlined.Repeat, model.showReposts, "feed-show-reposts") { model.updateShowReposts(!model.showReposts) }
+    }
     if (!model.source.isTopicFeed && !model.source.isCurated) {
         HorizontalDivider()
         header(L("sortBy"))

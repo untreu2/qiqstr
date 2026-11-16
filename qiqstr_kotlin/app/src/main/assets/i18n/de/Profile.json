@@ -8,6 +8,7 @@
  "profileBadges": "Abzeichen",
  "profileBadgesCount": "{count} Abzeichen",
  "profileBadgesHint": "Zeigt Details zu den Abzeichen",
+ "profileClearSearch": "Suche löschen",
  "profileCopyLink": "Profillink kopieren",
  "profileCopyNpub": "npub kopieren",
  "profileCreateAndAdd": "Erstellen und hinzufügen",
@@ -49,6 +50,5 @@
  "profileSaved": "Profil aktualisiert",
  "profileScannerUnavailable": "QR-Scannen ist auf diesem Gerät nicht verfügbar",
  "profileShowQRCode": "QR-Code anzeigen",
- "profileViewImage": "Bild ansehen",
- "profileClearSearch": "Suche löschen"
+ "profileViewImage": "Bild ansehen"
 }

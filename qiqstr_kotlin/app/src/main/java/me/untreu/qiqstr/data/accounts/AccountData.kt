@@ -29,7 +29,7 @@ object AccountData {
         removeCredentials(pubkey)
         eraseHooks.forEach { runCatching { it(pubkey) } }
         val support = RelayConfig.supportDir
-        for (path in listOf("marmot/$pubkey", "Drafts/$pubkey.json", "WebOfTrust/$pubkey.json")) File(support, path).deleteRecursively()
+        for (path in listOf("marmot/$pubkey", "Drafts/$pubkey.json", "Scheduled/$pubkey.json", "WebOfTrust/$pubkey.json")) File(support, path).deleteRecursively()
         File(App.context.cacheDir, "decrypted_media").deleteRecursively()
         val npub = Nip19.npub(pubkey) ?: pubkey
         Prefs.keys().filter { it.contains(pubkey) || it.contains(npub) }.forEach(Prefs::remove)

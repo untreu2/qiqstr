@@ -19,8 +19,9 @@ object RelayConfig {
     val indexerRelays = listOf("wss://purplepag.es", "wss://nostr.mom", "wss://relay.primal.net")
     const val primalCacheUrl = "wss://cache2.primal.net/v1"
     const val vertexRelayUrl = "wss://relay.vertexlab.io"
-    const val blossomServer = "https://blossom.primal.net"
-    val encryptedMediaServers = listOf(blossomServer, "https://nostr.download")
+    const val defaultBlossomServer = "https://blossom.primal.net"
+    val blossomServer: String get() = MediaServerStore.current
+    val encryptedMediaServers: List<String> get() = listOf(blossomServer, defaultBlossomServer, "https://nostr.download").distinct()
 
     var mainRelays: List<String>
         get() {

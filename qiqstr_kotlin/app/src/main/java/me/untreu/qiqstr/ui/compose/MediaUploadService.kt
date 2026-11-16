@@ -57,8 +57,28 @@ object MediaUploadService {
                 val sha = json?.str("sha256") ?: hash
                 val remote = json?.str("url") ?: sha.takeIf { s -> s.isNotEmpty() }?.let { s -> "$base/$s" } ?: throw CoreError(L("mediaUploadFailed"))
                 val size = json?.long("size")?.toInt() ?: 0
-                UploadedMedia(remote, sha, json?.str("type") ?: mimeType, if (size == 0) bytes.size else size)
+                UploadedMedia(withExtension(remote, mimeType), sha, mimeType, if (size == 0) bytes.size else size)
             }
         }
+    }
+
+    private val extensions = mapOf(
+        "image/jpeg" to "jpg", "image/png" to "png", "image/gif" to "gif", "image/webp" to "webp",
+        "video/mp4" to "mp4", "video/quicktime" to "mov", "audio/mp4" to "m4a",
+    )
+
+    fun withExtension(url: String, mimeType: String): String {
+        val ext = extensions[mimeType] ?: return url
+        val scheme = url.indexOf("://")
+        if (scheme < 0) return url
+        val pathStart = url.indexOf('/', scheme + 3)
+        if (pathStart < 0) return url
+        val pathEnd = url.indexOfAny(charArrayOf('?', '#'), pathStart).let { if (it < 0) url.length else it }
+        val path = url.substring(pathStart, pathEnd)
+        if (path.endsWith("/")) return url
+        val name = path.substringAfterLast('/')
+        val dot = name.lastIndexOf('.')
+        if (dot > 0 && dot < name.length - 1) return url
+        return url.substring(0, pathEnd) + ".$ext" + url.substring(pathEnd)
     }
 }

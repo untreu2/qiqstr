@@ -31,22 +31,32 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RemoveCircle
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -75,6 +85,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -97,10 +108,12 @@ import kotlinx.coroutines.launch
 import me.untreu.qiqstr.app.ComposeContext
 import me.untreu.qiqstr.core.AppColors
 import me.untreu.qiqstr.core.L
+import me.untreu.qiqstr.core.TimeFormat
 import me.untreu.qiqstr.core.components.AvatarView
 import me.untreu.qiqstr.core.components.ProfileAvatar
 import me.untreu.qiqstr.core.components.RemoteImage
 import me.untreu.qiqstr.core.components.TextAction
+import me.untreu.qiqstr.data.services.VoiceRecorder
 import me.untreu.qiqstr.data.sync.ProfileCache
 import me.untreu.qiqstr.data.sync.Session
 import me.untreu.qiqstr.domain.Note
@@ -128,6 +141,9 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
     val model: ComposeViewModel = viewModel { ComposeViewModel(context) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var showsDrafts by remember { mutableStateOf(false) }
+    var showsGifs by remember { mutableStateOf(false) }
+    var showsRecorder by remember { mutableStateOf(false) }
+    var showsSchedule by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -135,6 +151,7 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(ComposeViewModel.MAX_ATTACHMENTS)) { uris: List<Uri> ->
         if (uris.isNotEmpty()) model.handlePicked(uris.take(remaining))
     }
+    val capture = rememberCameraCapture { mode, file -> model.addCaptured(mode, file) }
     val cancel = { if (model.hasContent) confirmDiscard = true else onDismiss() }
 
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
@@ -147,7 +164,7 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = cancel, modifier = Modifier.testTag("compose-cancel")) { Icon(Icons.Outlined.Close, L("cancel")) }
             Text(model.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 4.dp))
-            if (model.otherDrafts.isNotEmpty()) {
+            if (model.otherDrafts.isNotEmpty() || model.scheduledPosts.isNotEmpty()) {
                 IconButton(onClick = { showsDrafts = true }, modifier = Modifier.testTag("compose-drafts")) { Icon(Icons.Outlined.Inventory2, L("feedDrafts")) }
             }
             Button(
@@ -159,7 +176,12 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
                 if (model.isPosting) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = AppColors.background, strokeWidth = 2.dp)
                 } else {
-                    Text(if (context == ComposeContext.NewNote) L("feedPost") else model.title, fontWeight = FontWeight.SemiBold)
+                    val label = when {
+                        model.scheduledAt != null -> L("feedScheduleAction")
+                        context == ComposeContext.NewNote -> L("feedPost")
+                        else -> model.title
+                    }
+                    Text(label, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -174,6 +196,15 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
                 ComposeContentWarningField(model.contentWarningReason) { model.contentWarningReason = it }
             }
             if (model.attachments.isNotEmpty()) ComposeAttachmentStrip(model)
+            model.scheduledAt?.let { date ->
+                AssistChip(
+                    onClick = { showsSchedule = true },
+                    label = { Text(L("feedScheduledFor", "date" to TimeFormat.full(date))) },
+                    leadingIcon = { Icon(Icons.Outlined.Schedule, null, Modifier.size(AssistChipDefaults.IconSize)) },
+                    shape = CircleShape,
+                    modifier = Modifier.padding(start = 52.dp).testTag("compose-scheduled-chip"),
+                )
+            }
             if (context is ComposeContext.Quote) {
                 Box(
                     Modifier
@@ -190,9 +221,14 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
                 }
             }
         }
-        ComposeBottomBar(model, onPickMedia = {
-            picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-        })
+        ComposeBottomBar(
+            model,
+            onPickMedia = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+            onCapture = capture,
+            onGif = { showsGifs = true },
+            onVoice = { showsRecorder = true },
+            onSchedule = { showsSchedule = true },
+        )
     }
 
     if (confirmDiscard) {
@@ -225,15 +261,24 @@ private fun ComposeEditor(context: ComposeContext, onDismiss: () -> Unit) {
         ModalBottomSheet(onDismissRequest = { showsDrafts = false }, containerColor = AppColors.background) {
             ComposeDraftsSheet(
                 drafts = model.otherDrafts,
+                scheduled = model.scheduledPosts,
                 onSelect = { draft ->
                     showsDrafts = false
                     model.open(draft)
                 },
                 onDelete = { model.deleteDraft(it.id) },
+                onSelectScheduled = { post ->
+                    showsDrafts = false
+                    model.open(post)
+                },
+                onDeleteScheduled = { model.deleteScheduled(it.id) },
                 onDismiss = { showsDrafts = false },
             )
         }
     }
+    if (showsGifs) GifPickerSheet(onDismiss = { showsGifs = false }) { model.addGif(it) }
+    if (showsRecorder) VoiceRecorderSheet(onDismiss = { showsRecorder = false }) { model.addRecording(it) }
+    if (showsSchedule) ComposeScheduleSheet(model.scheduledAt, onChange = { model.scheduledAt = it }) { showsSchedule = false }
 }
 
 @Composable
@@ -263,58 +308,108 @@ private fun ComposeTextEditor(model: ComposeViewModel, focus: FocusRequester, is
 }
 
 @Composable
-private fun ComposeBottomBar(model: ComposeViewModel, onPickMedia: () -> Unit) {
+private fun ComposeBottomBar(
+    model: ComposeViewModel,
+    onPickMedia: () -> Unit,
+    onCapture: (CameraCaptureMode) -> Unit,
+    onGif: () -> Unit,
+    onVoice: () -> Unit,
+    onSchedule: () -> Unit,
+) {
+    var showsCameraModes by remember { mutableStateOf(false) }
+    var showsMore by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
         AnimatedVisibility(model.suggestions.isNotEmpty()) {
             ComposeMentionSuggestions(model.suggestions) { model.insertMention(it) }
         }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = AppColors.tile, contentColor = AppColors.textPrimary)
             FilledTonalIconButton(
                 onClick = onPickMedia,
-                enabled = model.attachments.size < ComposeViewModel.MAX_ATTACHMENTS,
+                enabled = model.canAttach,
                 colors = colors,
                 modifier = Modifier.testTag("compose-media"),
             ) { Icon(Icons.Outlined.AddPhotoAlternate, L("addMediaText")) }
-            val cwState = if (model.contentWarningEnabled) L("feedOn") else L("feedOff")
+            if (CameraCapture.isAvailable) {
+                Box {
+                    FilledTonalIconButton(
+                        onClick = { showsCameraModes = true },
+                        enabled = model.canAttach,
+                        colors = colors,
+                        modifier = Modifier.testTag("compose-camera"),
+                    ) { Icon(Icons.Outlined.PhotoCamera, L("feedCamera")) }
+                    DropdownMenu(expanded = showsCameraModes, onDismissRequest = { showsCameraModes = false }) {
+                        DropdownMenuItem(
+                            text = { Text(L("dmPhoto")) },
+                            leadingIcon = { Icon(Icons.Outlined.PhotoCamera, null) },
+                            onClick = {
+                                showsCameraModes = false
+                                onCapture(CameraCaptureMode.PHOTO)
+                            },
+                            modifier = Modifier.testTag("compose-camera-photo"),
+                        )
+                        DropdownMenuItem(
+                            text = { Text(L("dmVideo")) },
+                            leadingIcon = { Icon(Icons.Outlined.Videocam, null) },
+                            onClick = {
+                                showsCameraModes = false
+                                onCapture(CameraCaptureMode.VIDEO)
+                            },
+                            modifier = Modifier.testTag("compose-camera-video"),
+                        )
+                    }
+                }
+            }
+            val gifLabel = L("feedGif")
             FilledTonalIconButton(
-                onClick = { model.contentWarningEnabled = !model.contentWarningEnabled },
+                onClick = onGif,
+                enabled = model.canAttach,
                 colors = colors,
-                modifier = Modifier.semantics {
-                    stateDescription = cwState
-                    selected = model.contentWarningEnabled
-                }.testTag("compose-content-warning"),
-            ) {
-                Icon(
-                    if (model.contentWarningEnabled) Icons.Filled.Warning else Icons.Outlined.WarningAmber,
-                    L("feedContentWarning"),
-                    tint = if (model.contentWarningEnabled) AppColors.link else AppColors.textPrimary,
-                )
-            }
-            if (model.supportsPoll) {
-                val pollState = if (model.pollEnabled) L("feedOn") else L("feedOff")
-                FilledTonalIconButton(
-                    onClick = { model.togglePoll() },
-                    colors = colors,
-                    modifier = Modifier.semantics {
-                        stateDescription = pollState
-                        selected = model.pollEnabled
-                    }.testTag("compose-poll"),
-                ) {
-                    Icon(Icons.Outlined.BarChart, L("feedPoll"), tint = if (model.pollEnabled) AppColors.link else AppColors.textPrimary)
+                modifier = Modifier.semantics { contentDescription = gifLabel }.testTag("compose-gif"),
+            ) { Text("GIF", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+            FilledTonalIconButton(
+                onClick = onVoice,
+                enabled = model.canAttach,
+                colors = colors,
+                modifier = Modifier.testTag("compose-voice"),
+            ) { Icon(Icons.Outlined.Mic, L("voiceTitle")) }
+            Box {
+                val isActive = model.contentWarningEnabled || model.pollEnabled || model.scheduledAt != null
+                FilledTonalIconButton(onClick = { showsMore = true }, colors = colors, modifier = Modifier.testTag("compose-more")) {
+                    Icon(Icons.Outlined.MoreHoriz, L("feedMoreOptions"), tint = if (isActive) AppColors.link else AppColors.textPrimary)
+                }
+                DropdownMenu(expanded = showsMore, onDismissRequest = { showsMore = false }) {
+                    ComposeMenuToggle(L("feedContentWarning"), Icons.Outlined.WarningAmber, model.contentWarningEnabled, "compose-content-warning") {
+                        showsMore = false
+                        model.contentWarningEnabled = !model.contentWarningEnabled
+                    }
+                    if (model.supportsPoll) {
+                        ComposeMenuToggle(L("feedPoll"), Icons.Outlined.BarChart, model.pollEnabled, "compose-poll") {
+                            showsMore = false
+                            model.togglePoll()
+                        }
+                    }
+                    DropdownMenuItem(
+                        text = { Text(if (model.scheduledAt == null) L("feedSchedule") else L("feedScheduleChange")) },
+                        leadingIcon = { Icon(Icons.Outlined.Schedule, null) },
+                        onClick = {
+                            showsMore = false
+                            onSchedule()
+                        },
+                        modifier = Modifier.testTag("compose-schedule"),
+                    )
                 }
             }
-            if (model.isUploading) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (model.isUploading) {
                     CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = AppColors.textSecondary)
-                    Text(L("uploadingDotDotDot"), style = MaterialTheme.typography.bodySmall, color = AppColors.textSecondary)
+                    Text(L("uploadingDotDotDot"), style = MaterialTheme.typography.bodySmall, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Spacer(Modifier.weight(1f))
             Text(
                 "${model.text.length}",
                 style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
@@ -324,6 +419,21 @@ private fun ComposeBottomBar(model: ComposeViewModel, onPickMedia: () -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun ComposeMenuToggle(title: String, icon: ImageVector, isOn: Boolean, tag: String, onToggle: () -> Unit) {
+    val state = if (isOn) L("feedOn") else L("feedOff")
+    DropdownMenuItem(
+        text = { Text(title) },
+        leadingIcon = { Icon(icon, null) },
+        trailingIcon = { if (isOn) Icon(Icons.Filled.Check, null) },
+        onClick = onToggle,
+        modifier = Modifier.semantics {
+            stateDescription = state
+            selected = isOn
+        }.testTag(tag),
+    )
 }
 
 @Composable
@@ -454,8 +564,18 @@ private fun ComposeAttachmentTile(attachment: ComposeAttachment, onRemove: () ->
     Box(Modifier.size(110.dp)) {
         Box(Modifier.fillMaxSize().clip(shape).background(AppColors.tile), contentAlignment = Alignment.Center) {
             val preview = attachment.preview
+            val audio = attachment.audio
             when {
                 preview != null -> androidx.compose.foundation.Image(preview.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                audio != null -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Outlined.GraphicEq, null, Modifier.size(28.dp), tint = AppColors.textSecondary)
+                    Text(
+                        VoiceRecorder.format(audio.duration),
+                        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppColors.textSecondary,
+                    )
+                }
                 attachment.remoteURL != null && !attachment.isVideo -> RemoteImage(attachment.remoteURL, Modifier.fillMaxSize())
                 else -> Icon(if (attachment.isVideo) Icons.Outlined.Videocam else Icons.Outlined.Image, null, Modifier.size(28.dp), tint = AppColors.textSecondary)
             }
@@ -483,7 +603,7 @@ private fun ComposeAttachmentTile(attachment: ComposeAttachment, onRemove: () ->
         ) {
             Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Close, L("removeThisMediaFile"), Modifier.size(14.dp)) }
         }
-        if (!attachment.isVideo) {
+        if (!attachment.isVideo && !attachment.isAudio) {
             val label = if (attachment.trimmedAlt == null) L("feedAddAltText") else L("feedAltTextTitle")
             Surface(
                 onClick = onEditAlt,

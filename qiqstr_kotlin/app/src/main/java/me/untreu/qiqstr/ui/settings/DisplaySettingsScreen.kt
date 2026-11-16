@@ -1,5 +1,6 @@
 package me.untreu.qiqstr.ui.settings
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -9,11 +10,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DataSaverOn
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.UnfoldMore
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -35,9 +41,11 @@ import me.untreu.qiqstr.app.SettingsRoute
 import me.untreu.qiqstr.core.AppColors
 import me.untreu.qiqstr.core.AppLanguage
 import me.untreu.qiqstr.core.L
+import me.untreu.qiqstr.core.MediaPolicy
 import me.untreu.qiqstr.core.Prefs
 import me.untreu.qiqstr.core.ThemePreference
 import me.untreu.qiqstr.core.ThemeState
+import me.untreu.qiqstr.core.VideoAutoplay
 import me.untreu.qiqstr.ui.auth.localizedName
 import me.untreu.qiqstr.ui.auth.rememberHaptics
 
@@ -61,6 +69,7 @@ const val EXPANDED_NOTE_MODE_KEY = "expanded_note_mode"
 fun DisplaySettingsScreen() {
     val haptics = rememberHaptics()
     var expandedNotes by remember { mutableStateOf(Prefs.bool(EXPANDED_NOTE_MODE_KEY)) }
+    var pickingAutoplay by remember { mutableStateOf(false) }
     SettingsScaffold(L("displayTitle")) {
         settingsSection("appearance", L("settingsAppearance"), footer = L("displaySubtitle")) {
             ThemePreference.entries.forEach { option ->
@@ -80,6 +89,36 @@ fun DisplaySettingsScreen() {
                 haptics.selection()
                 expandedNotes = it
                 Prefs.set(EXPANDED_NOTE_MODE_KEY, it)
+            }
+        }
+        settingsSection("media", L("settingsMediaSection"), footer = L("settingsDataSaverFooter")) {
+            SettingsRow(
+                L("settingsAutoplay"),
+                Icons.Outlined.SmartDisplay,
+                modifier = Modifier.testTag("display-autoplay"),
+                trailing = {
+                    Box {
+                        Text(MediaPolicy.autoplay.title, color = AppColors.textSecondary)
+                        DropdownMenu(expanded = pickingAutoplay, onDismissRequest = { pickingAutoplay = false }) {
+                            VideoAutoplay.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.title) },
+                                    trailingIcon = { if (MediaPolicy.autoplay == option) Icon(Icons.Filled.Check, null) },
+                                    onClick = {
+                                        pickingAutoplay = false
+                                        if (MediaPolicy.autoplay != option) haptics.selection()
+                                        MediaPolicy.updateAutoplay(option)
+                                    },
+                                    modifier = Modifier.testTag("display-autoplay-${option.raw}"),
+                                )
+                            }
+                        }
+                    }
+                },
+            ) { pickingAutoplay = true }
+            SettingsToggle(L("settingsDataSaver"), Icons.Outlined.DataSaverOn, MediaPolicy.dataSaver, Modifier.testTag("display-data-saver")) {
+                haptics.selection()
+                MediaPolicy.updateDataSaver(it)
             }
         }
         settingsSection("language") {

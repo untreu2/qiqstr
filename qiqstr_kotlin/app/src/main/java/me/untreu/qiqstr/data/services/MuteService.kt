@@ -26,6 +26,7 @@ import me.untreu.qiqstr.data.accounts.AccountStore
 import me.untreu.qiqstr.data.sync.DataBus
 import me.untreu.qiqstr.data.sync.Session
 import me.untreu.qiqstr.data.sync.SyncService
+import me.untreu.qiqstr.domain.Note
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -33,6 +34,10 @@ object MuteService {
     var mutedPubkeys by mutableStateOf<List<String>>(emptyList())
         private set
     var mutedWords by mutableStateOf<List<String>>(emptyList())
+        private set
+    var mutedHashtags by mutableStateOf<List<String>>(emptyList())
+        private set
+    var mutedThreads by mutableStateOf<List<String>>(emptyList())
         private set
     var isLoaded by mutableStateOf(false)
         private set
@@ -48,6 +53,23 @@ object MuteService {
 
     fun isMuted(pubkey: String) = pubkey in mutedPubkeys
 
+    fun isHashtagMuted(tag: String) = normalizedHashtag(tag) in mutedHashtags
+
+    fun isThreadMuted(rootId: String) = rootId in mutedThreads
+
+    fun hides(note: Note): Boolean {
+        if (mutedThreads.isNotEmpty() && ((note.rootId ?: note.id) in mutedThreads || note.id in mutedThreads)) return true
+        if (mutedHashtags.isEmpty()) return false
+        return note.hashtags.any { it.lowercase() in mutedHashtags }
+    }
+
+    fun hidesNotification(target: String?, root: String?): Boolean {
+        if (mutedThreads.isEmpty()) return false
+        return listOfNotNull(target, root).any { it in mutedThreads }
+    }
+
+    fun normalizedHashtag(tag: String): String = tag.trim().lowercase().trim('#')
+
     fun containsMutedWord(content: String): Boolean {
         if (mutedWords.isEmpty()) return false
         val lower = content.lowercase()
@@ -60,6 +82,8 @@ object MuteService {
         pending = PendingMutes()
         mutedPubkeys = emptyList()
         mutedWords = emptyList()
+        mutedHashtags = emptyList()
+        mutedThreads = emptyList()
         isLoaded = false
         hasSyncedRemote = false
         syncToRust()
@@ -80,26 +104,51 @@ object MuteService {
 
     suspend fun mute(pubkey: String) {
         if (pubkey.isEmpty() || pubkey == Session.pubkey) return
-        perform { if (pubkey in mutedPubkeys) false else { pending.removedPubkeys.remove(pubkey); pending.addedPubkeys.add(pubkey); true } }
+        perform(true, MuteEntry.PUBKEY, pubkey)
     }
 
-    suspend fun unmute(pubkey: String) =
-        perform { if (pubkey !in mutedPubkeys) false else { pending.addedPubkeys.remove(pubkey); pending.removedPubkeys.add(pubkey); true } }
+    suspend fun unmute(pubkey: String) = perform(false, MuteEntry.PUBKEY, pubkey)
 
     suspend fun addWord(word: String) {
         val normalized = word.trim().lowercase()
         if (normalized.isEmpty()) return
-        perform { if (normalized in mutedWords) false else { pending.removedWords.remove(normalized); pending.addedWords.add(normalized); true } }
+        perform(true, MuteEntry.WORD, normalized)
     }
 
-    suspend fun removeWord(word: String) {
-        val normalized = word.trim().lowercase()
-        perform { if (normalized !in mutedWords) false else { pending.addedWords.remove(normalized); pending.removedWords.add(normalized); true } }
+    suspend fun removeWord(word: String) = perform(false, MuteEntry.WORD, word.trim().lowercase())
+
+    suspend fun muteHashtag(tag: String) {
+        val normalized = normalizedHashtag(tag)
+        if (normalized.isEmpty()) return
+        perform(true, MuteEntry.HASHTAG, normalized)
     }
 
-    private suspend fun perform(change: () -> Boolean) {
+    suspend fun unmuteHashtag(tag: String) = perform(false, MuteEntry.HASHTAG, normalizedHashtag(tag))
+
+    suspend fun muteThread(rootId: String) {
+        if (rootId.length != 64) return
+        perform(true, MuteEntry.THREAD, rootId)
+    }
+
+    suspend fun unmuteThread(rootId: String) = perform(false, MuteEntry.THREAD, rootId)
+
+    private fun current(entry: MuteEntry): List<String> = when (entry) {
+        MuteEntry.PUBKEY -> mutedPubkeys
+        MuteEntry.WORD -> mutedWords
+        MuteEntry.HASHTAG -> mutedHashtags
+        MuteEntry.THREAD -> mutedThreads
+    }
+
+    private suspend fun perform(adding: Boolean, entry: MuteEntry, value: String) {
         val me = Session.pubkey ?: return
-        if (!change()) return
+        if ((value in current(entry)) == adding) return
+        if (adding) {
+            pending.removed(entry).removeAll { it == value }
+            pending.added(entry).add(value)
+        } else {
+            pending.added(entry).removeAll { it == value }
+            pending.removed(entry).add(value)
+        }
         pending.store(me)
         recompute()
         enqueue { publishPending() }
@@ -118,22 +167,17 @@ object MuteService {
         val base = latestList(me, key) ?: return
         if (generation != this.generation || !base.isReadable) return
         val changes = pending.copy()
-        val removedPubkeys = changes.removedPubkeys.toSet()
-        val removedWords = changes.removedWords.toSet()
         val keep: (List<String>) -> Boolean = { tag ->
-            if (tag.size <= 1) true else when (tag[0]) {
-                "p" -> tag[1] !in removedPubkeys
-                "word" -> tag[1].lowercase() !in removedWords
-                else -> true
-            }
+            val entry = if (tag.size > 1) MuteEntry.from(tag[0]) else null
+            entry == null || entry.normalized(tag[1]) !in changes.removed[entry.raw].orEmpty()
         }
         val publicTags = base.publicTags.filter(keep)
         val privateTags = base.privateTags.filter(keep).toMutableList()
         val known = RemoteMuteList(publicTags, privateTags.toList())
-        val knownPubkeys = known.pubkeys.toSet()
-        val knownWords = known.words.toSet()
-        privateTags += changes.addedPubkeys.filter { it !in knownPubkeys }.map { listOf("p", it) }
-        privateTags += changes.addedWords.filter { it !in knownWords }.map { listOf("word", it) }
+        for (entry in MuteEntry.entries) {
+            val existing = known.values(entry).toSet()
+            privateTags += changes.added[entry.raw].orEmpty().filter { it !in existing }.map { listOf(entry.raw, it) }
+        }
         runCatching {
             val content = if (privateTags.isEmpty()) "" else nip44Encrypt(Json.string(privateTags), key, me)
             val event = createSignedEvent(10000u.toUShort(), content, publicTags, key)
@@ -189,14 +233,21 @@ object MuteService {
         if (content.contains("?iv=")) nip04Decrypt(content, privateKey, pubkey) else nip44Decrypt(content, privateKey, pubkey)
     }.getOrNull()
 
+    private fun merged(entry: MuteEntry): List<String> {
+        val removed = pending.removed[entry.raw].orEmpty().toSet()
+        return (remote.values(entry) + pending.added[entry.raw].orEmpty()).distinct().filter { it !in removed }
+    }
+
     private fun recompute() {
-        val removedPubkeys = pending.removedPubkeys.toSet()
-        val removedWords = pending.removedWords.toSet()
-        val pubkeys = (remote.pubkeys + pending.addedPubkeys).distinct().filter { it !in removedPubkeys }
-        val words = (remote.words + pending.addedWords).distinct().filter { it !in removedWords }
-        val changed = pubkeys != mutedPubkeys || words != mutedWords
+        val pubkeys = merged(MuteEntry.PUBKEY)
+        val words = merged(MuteEntry.WORD)
+        val hashtags = merged(MuteEntry.HASHTAG)
+        val threads = merged(MuteEntry.THREAD)
+        val changed = pubkeys != mutedPubkeys || words != mutedWords || hashtags != mutedHashtags || threads != mutedThreads
         mutedPubkeys = pubkeys
         mutedWords = words
+        mutedHashtags = hashtags
+        mutedThreads = threads
         isLoaded = true
         Session.mutedPubkeys = pubkeys
         Session.mutedWords = words
@@ -211,51 +262,78 @@ object MuteService {
     private fun syncToRust() = setActiveMuteList(mutedPubkeys, mutedWords)
 }
 
+enum class MuteEntry(val raw: String) {
+    PUBKEY("p"), WORD("word"), HASHTAG("t"), THREAD("e");
+
+    fun normalized(value: String): String = when (this) {
+        PUBKEY, THREAD -> value
+        WORD, HASHTAG -> value.lowercase()
+    }
+
+    companion object {
+        fun from(raw: String) = entries.firstOrNull { it.raw == raw }
+    }
+}
+
 private data class RemoteMuteList(
     val publicTags: List<List<String>> = emptyList(),
     val privateTags: List<List<String>> = emptyList(),
     val isReadable: Boolean = true,
 ) {
-    val pubkeys: List<String> get() = values("p")
-    val words: List<String> get() = values("word").map { it.lowercase() }
-
-    private fun values(name: String) = (publicTags + privateTags).filter { it.size > 1 && it[0] == name && it[1].isNotEmpty() }.map { it[1] }
+    fun values(entry: MuteEntry): List<String> =
+        (publicTags + privateTags).filter { it.size > 1 && it[0] == entry.raw && it[1].isNotEmpty() }.map { entry.normalized(it[1]) }
 }
 
-private data class PendingMutes(
-    val addedPubkeys: MutableList<String> = mutableListOf(),
-    val removedPubkeys: MutableList<String> = mutableListOf(),
-    val addedWords: MutableList<String> = mutableListOf(),
-    val removedWords: MutableList<String> = mutableListOf(),
+private class PendingMutes(
+    val added: MutableMap<String, MutableList<String>> = mutableMapOf(),
+    val removed: MutableMap<String, MutableList<String>> = mutableMapOf(),
 ) {
-    val isEmpty: Boolean get() = addedPubkeys.isEmpty() && removedPubkeys.isEmpty() && addedWords.isEmpty() && removedWords.isEmpty()
+    val isEmpty: Boolean get() = added.values.all { it.isEmpty() } && removed.values.all { it.isEmpty() }
 
-    fun copy() = PendingMutes(addedPubkeys.toMutableList(), removedPubkeys.toMutableList(), addedWords.toMutableList(), removedWords.toMutableList())
+    fun added(entry: MuteEntry): MutableList<String> = added.getOrPut(entry.raw) { mutableListOf() }
+
+    fun removed(entry: MuteEntry): MutableList<String> = removed.getOrPut(entry.raw) { mutableListOf() }
+
+    fun copy() = PendingMutes(
+        added.mapValuesTo(mutableMapOf()) { it.value.toMutableList() },
+        removed.mapValuesTo(mutableMapOf()) { it.value.toMutableList() },
+    )
 
     fun subtract(published: PendingMutes) {
-        addedPubkeys.removeAll(published.addedPubkeys)
-        removedPubkeys.removeAll(published.removedPubkeys)
-        addedWords.removeAll(published.addedWords)
-        removedWords.removeAll(published.removedWords)
+        for ((key, values) in published.added) added[key]?.removeAll(values)
+        for ((key, values) in published.removed) removed[key]?.removeAll(values)
     }
 
     fun store(pubkey: String) {
         if (isEmpty) { Prefs.remove(key(pubkey)); return }
-        val json = JSONObject()
-            .put("addedPubkeys", JSONArray(addedPubkeys)).put("removedPubkeys", JSONArray(removedPubkeys))
-            .put("addedWords", JSONArray(addedWords)).put("removedWords", JSONArray(removedWords))
-        Prefs.set(key(pubkey), json.toString())
+        Prefs.set(key(pubkey), JSONObject().put("added", encoded(added)).put("removed", encoded(removed)).toString())
     }
 
     companion object {
+        private val legacy = listOf(
+            Triple("addedPubkeys", MuteEntry.PUBKEY, true), Triple("removedPubkeys", MuteEntry.PUBKEY, false),
+            Triple("addedWords", MuteEntry.WORD, true), Triple("removedWords", MuteEntry.WORD, false),
+        )
+
         private fun key(pubkey: String) = "mute_pending_$pubkey"
+
+        private fun encoded(map: Map<String, List<String>>) = JSONObject().apply { map.forEach { (name, values) -> put(name, JSONArray(values)) } }
+
+        private fun decoded(json: JSONObject?): MutableMap<String, MutableList<String>> {
+            val result = mutableMapOf<String, MutableList<String>>()
+            if (json != null) for (name in json.keys()) result[name] = json.strings(name).toMutableList()
+            return result
+        }
 
         fun stored(pubkey: String): PendingMutes {
             val json = Json.obj(Prefs.string(key(pubkey))) ?: return PendingMutes()
-            return PendingMutes(
-                json.strings("addedPubkeys").toMutableList(), json.strings("removedPubkeys").toMutableList(),
-                json.strings("addedWords").toMutableList(), json.strings("removedWords").toMutableList(),
-            )
+            val pending = PendingMutes(decoded(json.optJSONObject("added")), decoded(json.optJSONObject("removed")))
+            for ((name, entry, isAdded) in legacy) {
+                val values = json.strings(name)
+                if (values.isEmpty()) continue
+                (if (isAdded) pending.added(entry) else pending.removed(entry)).addAll(values)
+            }
+            return pending
         }
     }
 }

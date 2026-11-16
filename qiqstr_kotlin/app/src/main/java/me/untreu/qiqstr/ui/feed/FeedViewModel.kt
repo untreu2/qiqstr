@@ -20,6 +20,7 @@ import me.untreu.qiqstr.data.services.ExploreSafety
 import me.untreu.qiqstr.data.services.ExploreSeenStore
 import me.untreu.qiqstr.data.services.ExploreService
 import me.untreu.qiqstr.data.services.HashtagFollowService
+import me.untreu.qiqstr.data.services.MuteService
 import me.untreu.qiqstr.data.services.TrendingService
 import me.untreu.qiqstr.data.sync.ProfileCache
 import me.untreu.qiqstr.data.sync.Session
@@ -91,6 +92,10 @@ class FeedViewModel : ViewModel() {
         private set
 
     var sort by mutableStateOf(FeedSortMode.from(Prefs.string("feed_sort_mode")))
+        private set
+    var showReplies by mutableStateOf(Prefs.bool("feed_show_replies"))
+        private set
+    var showReposts by mutableStateOf(Prefs.bool("feed_show_reposts", true))
         private set
     var includeTopics by mutableStateOf(Prefs.bool("feed_include_topics"))
         private set
@@ -165,6 +170,22 @@ class FeedViewModel : ViewModel() {
         resetForContextChange()
     }
 
+    fun updateShowReplies(value: Boolean) {
+        if (value == showReplies) return
+        showReplies = value
+        Prefs.set("feed_show_replies", value)
+        resetForContextChange()
+    }
+
+    fun updateShowReposts(value: Boolean) {
+        if (value == showReposts) return
+        showReposts = value
+        Prefs.set("feed_show_reposts", value)
+        resetForContextChange()
+    }
+
+    val hasNoteFilters: Boolean get() = !source.isCurated && !source.isTopicFeed
+
     fun updateIncludeTopics(value: Boolean) {
         if (value == includeTopics) return
         includeTopics = value
@@ -180,7 +201,7 @@ class FeedViewModel : ViewModel() {
         if (current is FeedSource.Discover) return discoverNotes(current.feed, force = false)
         val topics = activeTopics
         if (current.isTopicFeed) return topicNotes(topics, limit, includeReplies = true)
-        val home = NoteRepository.feed(authors, limit, sort)
+        val home = NoteRepository.feed(authors, limit, sort, showReplies)
         if (topics.isEmpty()) return home
         val extra = topicNotes(topics, limit, includeReplies = false)
         return interleave(home, extra, limit, sort)
@@ -323,9 +344,12 @@ class FeedViewModel : ViewModel() {
         val mutedPubkeys = Session.mutedPubkeys.toSet()
         val words = Session.mutedWords.map { it.lowercase() }.filter { it.isNotEmpty() }
         val deleted = NoteInteractionStore.deletedIds
+        val hidesReposts = hasNoteFilters && !showReposts
         val seen = HashSet<String>()
         return list.filter { note ->
             if (note.id in deleted || !seen.add(note.listId)) return@filter false
+            if (hidesReposts && note.isRepost) return@filter false
+            if (MuteService.hides(note) && !isSelectedTopic(note)) return@filter false
             if (note.pubkey in mutedPubkeys) return@filter false
             if (note.repostedBy?.let { it in mutedPubkeys } == true) return@filter false
             if (words.isNotEmpty()) {
@@ -334,6 +358,11 @@ class FeedViewModel : ViewModel() {
             }
             true
         }
+    }
+
+    private fun isSelectedTopic(note: Note): Boolean {
+        val tag = (source as? FeedSource.Topic)?.tag ?: return false
+        return !MuteService.isThreadMuted(note.rootId ?: note.id) && note.hashtags.any { it.lowercase() == tag.lowercase() }
     }
 
     fun refilter() {

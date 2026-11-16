@@ -8,6 +8,7 @@
  "profileBadges": "Rozetler",
  "profileBadgesCount": "{count} rozet",
  "profileBadgesHint": "Rozet ayrıntılarını gösterir",
+ "profileClearSearch": "Aramayı temizle",
  "profileCopyLink": "Profil bağlantısını kopyala",
  "profileCopyNpub": "npub'ı kopyala",
  "profileCreateAndAdd": "Oluştur ve ekle",
@@ -49,6 +50,5 @@
  "profileSaved": "Profil güncellendi",
  "profileScannerUnavailable": "Bu cihazda QR tarama kullanılamıyor",
  "profileShowQRCode": "QR kodunu göster",
- "profileViewImage": "Görseli görüntüle",
- "profileClearSearch": "Aramayı temizle"
+ "profileViewImage": "Görseli görüntüle"
 }

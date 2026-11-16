@@ -8,6 +8,7 @@
  "profileBadges": "Badges",
  "profileBadgesCount": "{count} badges",
  "profileBadgesHint": "Shows badge details",
+ "profileClearSearch": "Clear search",
  "profileCopyLink": "Copy profile link",
  "profileCopyNpub": "Copy npub",
  "profileCreateAndAdd": "Create and add",
@@ -49,6 +50,5 @@
  "profileSaved": "Profile updated",
  "profileScannerUnavailable": "QR scanning is not available on this device",
  "profileShowQRCode": "Show QR code",
- "profileViewImage": "View image",
- "profileClearSearch": "Clear search"
+ "profileViewImage": "View image"
 }

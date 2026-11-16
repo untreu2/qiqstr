@@ -13,6 +13,8 @@ import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tag
@@ -47,6 +49,7 @@ import me.untreu.qiqstr.core.components.TextAction
 import me.untreu.qiqstr.data.bridge.Nip19
 import me.untreu.qiqstr.data.services.BookmarkService
 import me.untreu.qiqstr.data.services.InteractionService
+import me.untreu.qiqstr.data.services.MuteService
 import me.untreu.qiqstr.data.services.PinnedNotesService
 import me.untreu.qiqstr.data.services.ToastCenter
 import me.untreu.qiqstr.data.services.ToastStyle
@@ -128,6 +131,15 @@ class NoteActionHandler {
         }
     }
 
+    fun toggleThreadMute(note: Note) {
+        val root = note.rootId ?: note.id
+        val wasMuted = MuteService.isThreadMuted(root)
+        App.scope.launch {
+            if (wasMuted) MuteService.unmuteThread(root) else MuteService.muteThread(root)
+            ToastCenter.show(if (wasMuted) L("feedConversationUnmuted") else L("feedConversationMuted"), ToastStyle.SUCCESS)
+        }
+    }
+
     fun confirmDelete(note: Note) {
         NoteInteractionStore.markDeleted(note.id, note.parentId)
         App.scope.launch {
@@ -177,6 +189,13 @@ fun ColumnScope.NoteMenuItems(note: Note, actions: NoteActionHandler, onDismiss:
     item(L("quotes"), Icons.Outlined.FormatQuote, false, "note-menu-quotes") { Router.push(Route.Quotes(note.id)) }
     item(L("verifySignature"), Icons.Outlined.VerifiedUser, false, "note-menu-verify") { actions.verify(note) }
     HorizontalDivider()
+    val threadMuted = MuteService.isThreadMuted(note.rootId ?: note.id)
+    item(
+        if (threadMuted) L("feedUnmuteConversation") else L("feedMuteConversation"),
+        if (threadMuted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+        false,
+        "note-menu-mute-conversation",
+    ) { actions.toggleThreadMute(note) }
     if (isMine) {
         item(L("delete"), Icons.Outlined.Delete, true, "note-menu-delete") { actions.pendingDelete = note }
     } else {

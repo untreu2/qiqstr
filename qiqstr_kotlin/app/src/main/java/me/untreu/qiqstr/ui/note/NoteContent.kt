@@ -45,6 +45,8 @@ data class NoteImeta(
     val blurhash: String?,
     val alt: String?,
     val poster: String?,
+    val duration: Double? = null,
+    val waveform: List<Int> = emptyList(),
 ) {
     val aspectRatio: Float? get() = if (width != null && height != null) (width / height).toFloat() else null
 
@@ -73,6 +75,8 @@ data class NoteImeta(
                 blurhash = fields["blurhash"]?.ifEmpty { null },
                 alt = fields["alt"]?.ifEmpty { null },
                 poster = fields["image"]?.ifEmpty { null } ?: fields["thumb"]?.ifEmpty { null },
+                duration = fields["duration"]?.toDoubleOrNull(),
+                waveform = fields["waveform"].orEmpty().split(" ").mapNotNull { it.toIntOrNull() },
             )
         }
 
@@ -88,6 +92,7 @@ class NoteContent(content: String, tags: List<List<String>>) {
     val segments: List<NoteContentSegment>
     val truncatedSegments: List<NoteContentSegment>?
     val media: List<NoteMediaItem>
+    val audio: List<NoteAudioItem>
     val linkUrls: List<String>
     val quoteIds: List<String>
     val articleIds: List<String>
@@ -109,6 +114,17 @@ class NoteContent(content: String, tags: List<List<String>>) {
                 }
             }
         }
+        val audioItems = mutableListOf<NoteAudioItem>()
+        for (url in parsed.linkUrls) {
+            if (!NoteAudioItem.isAudio(url, imeta[url]?.mimeType) || audioItems.any { it.url == url }) continue
+            audioItems.add(NoteAudioItem(url, imeta[url]?.duration, imeta[url]?.waveform ?: emptyList()))
+        }
+        audio = audioItems
+        if (audioItems.isNotEmpty()) {
+            val urls = audioItems.map { it.url }.toSet()
+            segments.removeAll { it is NoteContentSegment.Link && it.url in urls }
+            while ((segments.lastOrNull() as? NoteContentSegment.Text)?.text?.isBlank() == true) segments.removeAt(segments.lastIndex)
+        }
         this.segments = segments
         truncatedSegments = truncate(segments, TRUNCATION_LIMIT)
         media = parsed.mediaUrls.map { url ->
@@ -118,7 +134,7 @@ class NoteContent(content: String, tags: List<List<String>>) {
                 ?: (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".m4v") || lower.endsWith(".webm"))
             NoteMediaItem(url, isVideo, meta?.aspectRatio, meta?.blurhash, meta?.alt, meta?.poster)
         }
-        linkUrls = parsed.linkUrls
+        linkUrls = parsed.linkUrls.filter { url -> audioItems.none { it.url == url } }
         quoteIds = parsed.quoteIds.mapNotNull { Nip19.decode(it) }.distinct()
         articleIds = parsed.articleIds.distinct()
         mentionPubkeys = mentions

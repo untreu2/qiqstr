@@ -33,6 +33,7 @@ import me.untreu.qiqstr.data.sync.SyncService
 import me.untreu.qiqstr.domain.NotificationItem
 import me.untreu.qiqstr.domain.NotificationKind
 import me.untreu.qiqstr.ui.note.NoteInteractionStore
+import me.untreu.qiqstr.ui.note.NoteRepository
 
 enum class NotificationFilter(val raw: String) {
     ALL("all"), REPLIES("replies"), REACTIONS("reactions"), REPOSTS("reposts"), ZAPS("zaps");
@@ -108,6 +109,7 @@ class NotificationsViewModel : ViewModel() {
         private set
 
     private val olderIds = HashSet<String>()
+    private var mutedThreadItems by mutableStateOf<Set<String>>(emptySet())
     private var didInitialSync = false
     private var seenMarked = false
 
@@ -126,7 +128,10 @@ class NotificationsViewModel : ViewModel() {
             val hidden = NoteInteractionStore.deletedIds
             val me = me
             return merged
-                .filter { it.fromPubkey != me && it.kind != NotificationKind.UNKNOWN && it.id !in hidden && (it.targetNoteId ?: "") !in hidden }
+                .filter {
+                    it.fromPubkey != me && it.kind != NotificationKind.UNKNOWN && it.id !in hidden && (it.targetNoteId ?: "") !in hidden &&
+                        it.id !in mutedThreadItems
+                }
                 .sortedByDescending { it.createdAt }
         }
 
@@ -166,6 +171,7 @@ class NotificationsViewModel : ViewModel() {
             if (!isLoaded) errorMessage = coreErrorMessage(error)
         }
         isLoaded = true
+        applyMutedThreads()
         ProfileCache.load(all.map { it.fromPubkey }.distinct())
         if (!didInitialSync) {
             didInitialSync = true
@@ -176,6 +182,20 @@ class NotificationsViewModel : ViewModel() {
     suspend fun refresh() {
         SyncService.syncNotifications(force = true)
         reload()
+    }
+
+    suspend fun applyMutedThreads() {
+        if (MuteService.mutedThreads.isEmpty()) {
+            if (mutedThreadItems.isNotEmpty()) mutedThreadItems = emptySet()
+            return
+        }
+        val items = live + older
+        val ids = items.flatMap { listOf(it.id, it.targetNoteId ?: "") }.filter { it.length == 64 }.distinct()
+        val roots = HashMap<String, String>()
+        for (note in NoteRepository.notes(ids)) if (!roots.containsKey(note.id)) roots[note.id] = note.rootId ?: note.id
+        mutedThreadItems = items.filter { item ->
+            listOf(item.id, item.targetNoteId ?: "").any { id -> MuteService.isThreadMuted(id) || roots[id]?.let(MuteService::isThreadMuted) == true }
+        }.map { it.id }.toSet()
     }
 
     suspend fun loadMoreIfNeeded(group: NotificationGroup) {

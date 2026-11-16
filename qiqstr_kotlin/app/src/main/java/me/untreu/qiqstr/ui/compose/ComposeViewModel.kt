@@ -12,6 +12,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,16 +27,14 @@ import me.untreu.qiqstr.core.TimeFormat
 import me.untreu.qiqstr.core.coreErrorMessage
 import me.untreu.qiqstr.data.bridge.Nip19
 import me.untreu.qiqstr.data.services.FollowService
-import me.untreu.qiqstr.data.services.InteractionService
 import me.untreu.qiqstr.data.services.SearchService
 import me.untreu.qiqstr.data.services.ToastCenter
 import me.untreu.qiqstr.data.services.ToastStyle
-import me.untreu.qiqstr.data.sync.DataBus
+import me.untreu.qiqstr.data.services.VoiceRecording
 import me.untreu.qiqstr.data.sync.ProfileCache
 import me.untreu.qiqstr.domain.Note
 import me.untreu.qiqstr.domain.Profile
 import me.untreu.qiqstr.ui.note.BlurHash
-import me.untreu.qiqstr.ui.note.NoteInteractionStore
 import me.untreu.qiqstr.ui.note.NoteRepository
 
 sealed interface AttachmentStatus {
@@ -51,15 +50,19 @@ class ComposeAttachment(
     val height: Int?,
     val blurhash: String? = null,
     val remoteURL: String? = null,
+    val audio: ComposeAudio? = null,
 ) {
     val id: String = UUID.randomUUID().toString()
     var status by mutableStateOf<AttachmentStatus>(AttachmentStatus.Uploading)
     var altText by mutableStateOf("")
     var payload: Pair<ByteArray, String>? = null
 
+    val isAudio: Boolean get() = audio != null
     val trimmedAlt: String? get() = altText.trim().ifEmpty { null }
     val uploaded: UploadedMedia? get() = (status as? AttachmentStatus.Uploaded)?.media
 }
+
+data class ComposeAudio(val duration: Double, val waveform: List<Int>)
 
 class ComposePollOption(text: String = "") {
     val id: String = UUID.randomUUID().toString()
@@ -84,6 +87,7 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
     var pollMultiple by mutableStateOf(false)
     var pollHasEnd by mutableStateOf(false)
     var pollEndsAt by mutableStateOf(TimeFormat.now + 86400)
+    var scheduledAt by mutableStateOf<Long?>(null)
     var draftId by mutableStateOf(UUID.randomUUID().toString())
         private set
     val attachments = mutableStateListOf<ComposeAttachment>()
@@ -103,8 +107,14 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
     init {
         val pending = DraftStore.pendingDraftId?.let { DraftStore.draft(it) }
         DraftStore.pendingDraftId = null
-        val draft = if (pending?.contextKey == contextKey) pending else DraftStore.latest(contextKey)
-        if (draft != null) apply(draft)
+        val scheduled = ScheduledPostService.takePendingEdit()
+        if (scheduled != null) {
+            apply(scheduled.draft)
+            scheduledAt = scheduled.publishAt
+        } else {
+            val draft = if (pending?.contextKey == contextKey) pending else DraftStore.latest(contextKey)
+            if (draft != null) apply(draft)
+        }
     }
 
     val contextKey: String
@@ -140,7 +150,10 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
             }
             val media = attachments.mapNotNull { attachment ->
                 val item = attachment.uploaded ?: return@mapNotNull null
-                ComposeDraftMedia(item.url, item.sha256, item.mimeType, item.size, attachment.width?.toDouble(), attachment.height?.toDouble(), attachment.blurhash, attachment.altText, attachment.isVideo)
+                ComposeDraftMedia(
+                    item.url, item.sha256, item.mimeType, item.size, attachment.width?.toDouble(), attachment.height?.toDouble(),
+                    attachment.blurhash, attachment.altText, attachment.isVideo, attachment.audio?.duration, attachment.audio?.waveform,
+                )
             }
             val poll = if (pollEnabled) ComposeDraftPoll(pollOptions.map { it.text }, pollMultiple, if (pollHasEnd) pollEndsAt else null) else null
             return ComposeDraft(draftId, kind, target?.id, target?.pubkey, text, mentionMap.toMap(), media, contentWarningEnabled, contentWarningReason, poll, 0)
@@ -154,7 +167,8 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
         contentWarningReason = draft.contentWarningReason
         attachments.clear()
         attachments.addAll(draft.media.map { item ->
-            ComposeAttachment(null, item.isVideo, item.width?.toInt(), item.height?.toInt(), item.blurhash, item.url).apply {
+            val audio = if (item.isAudio) ComposeAudio(item.duration ?: 0.0, item.waveform ?: emptyList()) else null
+            ComposeAttachment(null, item.isVideo, item.width?.toInt(), item.height?.toInt(), item.blurhash, item.url, audio).apply {
                 status = AttachmentStatus.Uploaded(UploadedMedia(item.url, item.sha256, item.mimeType, item.size))
                 altText = item.altText
             }
@@ -198,8 +212,19 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
     fun saveDraft() {
         saveJob?.cancel()
         if (finished) return
-        if (hasContent) DraftStore.save(draftSnapshot.copy(updatedAt = System.currentTimeMillis()))
-        else DraftStore.delete(draftId)
+        if (!hasContent) {
+            DraftStore.delete(draftId)
+            return
+        }
+        val draft = draftSnapshot.copy(updatedAt = System.currentTimeMillis())
+        val at = scheduledAt
+        if (at != null && ScheduledPostService.contains(draftId)) {
+            ScheduledPostService.schedule(draft, at)
+            DraftStore.delete(draftId)
+        } else {
+            ScheduledPostService.cancel(draftId)
+            DraftStore.save(draft)
+        }
     }
 
     fun finishSaving() {
@@ -211,7 +236,23 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
         saveJob?.cancel()
         finished = true
         DraftStore.delete(draftId)
+        ScheduledPostService.cancel(draftId)
     }
+
+    val scheduledPosts: List<ScheduledPost> get() = ScheduledPostService.posts.filter { it.id != draftId }
+
+    fun open(post: ScheduledPost) {
+        saveDraft()
+        if (post.draft.contextKey == contextKey) {
+            apply(post.draft)
+            scheduledAt = post.publishAt
+            return
+        }
+        ScheduledPostService.edit(post)
+        open(post.draft)
+    }
+
+    fun deleteScheduled(id: String) = ScheduledPostService.cancel(id)
 
     fun deleteDraft(id: String) = DraftStore.delete(id)
 
@@ -228,6 +269,7 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
                     val id = draft.targetId
                     val note = id?.let { NoteRepository.ensureNote(it) }
                     if (note == null) {
+                        ScheduledPostService.takePendingEdit()
                         ToastCenter.show(L("eventNotFound"), ToastStyle.ERROR)
                         return@launch
                     }
@@ -349,42 +391,84 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
     private suspend fun add(uri: Uri) {
         val resolver = App.context.contentResolver
         val type = resolver.getType(uri)
-        val isVideo = type?.startsWith("video/") == true
-        var mime = type ?: if (isVideo) "video/mp4" else "image/jpeg"
-        var preview: Bitmap? = null
-        var width: Int? = null
-        var height: Int? = null
-        val payload: ByteArray
-        if (isVideo) {
-            if (fileSize(uri) > MAX_FILE_SIZE) {
-                ToastCenter.show(L("fileTooLarge"), ToastStyle.ERROR)
-                return
+        if (type?.startsWith("video/") == true) {
+            addVideo(uri, fileSize(uri))
+            return
+        }
+        val data = withContext(Dispatchers.IO) { runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() }
+        if (data == null) {
+            ToastCenter.show(L("errorSelectingMedia"), ToastStyle.ERROR)
+            return
+        }
+        addImage(data, type ?: "image/jpeg")
+    }
+
+    val canAttach: Boolean get() = attachments.size < MAX_ATTACHMENTS
+
+    fun addCaptured(mode: CameraCaptureMode, file: File) {
+        viewModelScope.launch {
+            try {
+                if (!canAttach) return@launch
+                when (mode) {
+                    CameraCaptureMode.PHOTO -> {
+                        val data = withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() }
+                        if (data != null) addImage(data, "image/jpeg") else ToastCenter.show(L("errorSelectingMedia"), ToastStyle.ERROR)
+                    }
+                    CameraCaptureMode.VIDEO -> addVideo(Uri.fromFile(file), file.length())
+                }
+            } finally {
+                file.delete()
             }
-            val stripped = MediaSanitizer.strippedVideo(uri)
-            if (stripped == null) {
-                ToastCenter.show(L("errorSelectingMedia"), ToastStyle.ERROR)
-                return
-            }
-            payload = stripped
-            mime = "video/mp4"
-        } else {
-            val data = withContext(Dispatchers.IO) { runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() }
+        }
+    }
+
+    fun addGif(gif: GifItem) {
+        if (!canAttach || attachments.any { it.remoteURL == gif.url }) return
+        val attachment = ComposeAttachment(null, false, gif.width, gif.height, gif.blurhash, gif.url)
+        attachment.status = AttachmentStatus.Uploaded(UploadedMedia(gif.url, gif.sha256 ?: "", "image/gif", 0))
+        attachment.altText = gif.title
+        attachments.add(attachment)
+    }
+
+    fun addRecording(recording: VoiceRecording) {
+        viewModelScope.launch {
+            val file = File(recording.path)
+            val data = if (canAttach) withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() } else null
+            file.delete()
             if (data == null) {
                 ToastCenter.show(L("errorSelectingMedia"), ToastStyle.ERROR)
-                return
+                return@launch
             }
-            val inputMime = mime
-            val prepared = withContext(Dispatchers.Default) { runCatching { MediaSanitizer.prepareImage(data, inputMime) }.getOrNull() }
-            if (prepared == null) {
-                ToastCenter.show(L("invalidMediaFileType"), ToastStyle.ERROR)
-                return
-            }
-            payload = prepared.bytes
-            mime = prepared.mimeType
-            preview = prepared.preview
-            width = prepared.width
-            height = prepared.height
+            val attachment = ComposeAttachment(null, false, null, null, audio = ComposeAudio(recording.duration, recording.waveform))
+            attachment.payload = data to "audio/mp4"
+            attachments.add(attachment)
+            upload(attachment)
         }
+    }
+
+    private suspend fun addVideo(uri: Uri, size: Long) {
+        if (size > MAX_FILE_SIZE) {
+            ToastCenter.show(L("fileTooLarge"), ToastStyle.ERROR)
+            return
+        }
+        val stripped = MediaSanitizer.strippedVideo(uri)
+        if (stripped == null) {
+            ToastCenter.show(L("errorSelectingMedia"), ToastStyle.ERROR)
+            return
+        }
+        attach(stripped, "video/mp4", isVideo = true, preview = null, width = null, height = null)
+    }
+
+    private suspend fun addImage(data: ByteArray, mime: String) {
+        val prepared = withContext(Dispatchers.Default) { runCatching { MediaSanitizer.prepareImage(data, mime) }.getOrNull() }
+        if (prepared == null) {
+            ToastCenter.show(L("invalidMediaFileType"), ToastStyle.ERROR)
+            return
+        }
+        attach(prepared.bytes, prepared.mimeType, isVideo = false, preview = prepared.preview, width = prepared.width, height = prepared.height)
+    }
+
+    private suspend fun attach(payload: ByteArray, mime: String, isVideo: Boolean, preview: Bitmap?, width: Int?, height: Int?) {
         if (payload.size > MAX_FILE_SIZE) {
             ToastCenter.show(L("fileTooLarge"), ToastStyle.ERROR)
             return
@@ -422,24 +506,9 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
         }
     }
 
-    private val contentWarningTags: List<List<String>>
-        get() {
-            if (!contentWarningEnabled) return emptyList()
-            val reason = contentWarningReason.trim()
-            return listOf(if (reason.isEmpty()) listOf("content-warning") else listOf("content-warning", reason))
-        }
-
     fun remove(attachment: ComposeAttachment) {
         attachments.removeAll { it.id == attachment.id }
         scheduleSave()
-    }
-
-    private fun finalContent(): String {
-        var content = text
-        for (key in mentionMap.keys.sortedByDescending { it.length }) {
-            mentionMap[key]?.let { content = content.replace(key, it) }
-        }
-        return content.trim()
     }
 
     suspend fun post(): Boolean {
@@ -453,34 +522,20 @@ class ComposeViewModel(val context: ComposeContext) : ViewModel() {
         }
         isPosting = true
         try {
-            val uploaded = attachments.filter { it.uploaded != null }
-            val urls = uploaded.mapNotNull { it.uploaded?.url }
-            val imeta = uploaded.mapNotNull { attachment ->
-                val item = attachment.uploaded ?: return@mapNotNull null
-                val tag = mutableListOf("imeta", "url ${item.url}", "m ${item.mimeType}")
-                if (item.sha256.isNotEmpty()) tag.add("x ${item.sha256}")
-                if (attachment.width != null && attachment.height != null) tag.add("dim ${attachment.width}x${attachment.height}")
-                attachment.blurhash?.let { tag.add("blurhash $it") }
-                attachment.trimmedAlt?.let { tag.add("alt $it") }
-                tag
+            val draft = draftSnapshot.copy(updatedAt = System.currentTimeMillis())
+            val at = scheduledAt
+            if (at != null && at > TimeFormat.now) {
+                saveJob?.cancel()
+                finished = true
+                DraftStore.delete(draftId)
+                ScheduledPostService.schedule(draft, at)
+                didPost++
+                ToastCenter.show(L("feedScheduledFor", "date" to TimeFormat.full(at)), ToastStyle.SUCCESS)
+                return true
             }
-            val extraTags = imeta + contentWarningTags
-            val content = finalContent()
-            when (val c = context) {
-                ComposeContext.NewNote -> if (isPollActive) {
-                    InteractionService.publishPoll(content, validPollOptions, pollMultiple, if (pollHasEnd) pollEndsAt else null, urls, extraTags)
-                } else {
-                    InteractionService.publishNote(content, urls, extraTags)
-                }
-                is ComposeContext.Reply -> {
-                    InteractionService.publishReply(c.note, content, urls, extraTags)
-                    NoteInteractionStore.markReplied(c.note.id)
-                }
-                is ComposeContext.Quote -> InteractionService.publishQuote(c.note, content, urls, extraTags)
-            }
+            ComposePublisher.publish(draft)
             didPost++
             deleteDraft()
-            DataBus.feedChanged()
             return true
         } catch (error: Throwable) {
             ToastCenter.show("${L("errorSharingNote")}: ${coreErrorMessage(error)}", ToastStyle.ERROR)

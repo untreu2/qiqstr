@@ -107,6 +107,7 @@ private class ActivityItem(
     val kind: Kind,
     val actor: String,
     val target: String?,
+    val root: String?,
     val content: String,
     val createdAt: Long,
     val sats: Long,
@@ -133,11 +134,13 @@ private class ActivityItem(
             var sats = 0L
             val kind: Kind
             val target: String?
+            var root: String? = null
             when (event.int("kind")) {
                 1 -> {
                     val threadTags = eventTags.filter { it.size < 4 || it[3] != "mention" }
                     kind = if (threadTags.isEmpty()) Kind.MENTION else Kind.REPLY
                     target = (threadTags.firstOrNull { it.size > 3 && it[3] == "root" } ?: threadTags.firstOrNull())?.get(1)
+                    root = target ?: id
                 }
                 6 -> {
                     kind = Kind.REPOST
@@ -161,7 +164,7 @@ private class ActivityItem(
                 else -> return null
             }
             if (actor.isEmpty() || actor == me) return null
-            return ActivityItem(id, kind, actor, target, content, event.long("created_at"), sats)
+            return ActivityItem(id, kind, actor, target, root, content, event.long("created_at"), sats)
         }
     }
 }
@@ -272,6 +275,7 @@ object LocalNotificationService : RealtimeNotificationHandler {
     override fun shouldBadge(event: JSONObject, me: String): Boolean {
         val item = ActivityItem.from(event, me) ?: return false
         if (item.actor == me || !accepts(item.actor, mutedPubkeys)) return false
+        if (MuteService.hidesNotification(item.target, item.root)) return false
         if (NoteInteractionStore.isDeleted(item.id) || item.target?.let(NoteInteractionStore::isDeleted) == true) return false
         if (!item.isTextual) return true
         val text = item.content.lowercase()
@@ -348,6 +352,7 @@ object LocalNotificationService : RealtimeNotificationHandler {
         val items = events.mapNotNull { ActivityItem.from(it, me) }
             .filter { item ->
                 if (item.createdAt <= since || !item.type.isEnabled || !accepts(item.actor, muted)) return@filter false
+                if (MuteService.hidesNotification(item.target, item.root)) return@filter false
                 if (item.isTextual) {
                     val text = item.content.lowercase()
                     if (words.any { text.contains(it) }) return@filter false

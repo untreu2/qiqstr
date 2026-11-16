@@ -21,7 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PersonOff
+import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,12 +35,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -53,8 +55,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,18 +79,31 @@ import me.untreu.qiqstr.data.services.ToastCenter
 import me.untreu.qiqstr.data.services.ToastStyle
 import me.untreu.qiqstr.data.sync.ProfileCache
 import me.untreu.qiqstr.data.sync.SyncService
+import me.untreu.qiqstr.domain.Note
 import me.untreu.qiqstr.domain.Profile
 import me.untreu.qiqstr.ui.auth.rememberHaptics
+import me.untreu.qiqstr.ui.note.NoteRepository
 
 class MutedSettingsModel : ViewModel() {
-    enum class Tab { USERS, WORDS;
+    enum class Tab(val raw: String) {
+        USERS("users"), WORDS("words"), HASHTAGS("hashtags"), THREADS("threads");
 
-        val title: String get() = if (this == USERS) L("mutedUsersTitle") else L("mutedWordsTitle")
+        val title: String
+            get() = when (this) {
+                USERS -> L("mutedUsersTitle")
+                WORDS -> L("mutedWordsTitle")
+                HASHTAGS -> L("mutedHashtagsTitle")
+                THREADS -> L("mutedThreadsTitle")
+            }
     }
 
     var tab by mutableStateOf(Tab.USERS)
     var newWord by mutableStateOf("")
     var showAddWord by mutableStateOf(false)
+    var newHashtag by mutableStateOf("")
+    var showAddHashtag by mutableStateOf(false)
+    var threadNotes by mutableStateOf<Map<String, Note>>(emptyMap())
+        private set
     var busy by mutableStateOf<Set<String>>(emptySet())
         private set
     var isRefreshing by mutableStateOf(false)
@@ -166,6 +183,41 @@ class MutedSettingsModel : ViewModel() {
     }
 
     fun isBusy(key: String) = key in busy
+
+    fun addHashtag() {
+        val tag = MuteService.normalizedHashtag(newHashtag)
+        newHashtag = ""
+        if (tag.isEmpty()) return
+        viewModelScope.launch {
+            MuteService.muteHashtag(tag)
+            feedback += 1
+        }
+    }
+
+    fun removeHashtag(tag: String) {
+        viewModelScope.launch {
+            MuteService.unmuteHashtag(tag)
+            feedback += 1
+        }
+    }
+
+    fun unmuteThread(id: String) {
+        viewModelScope.launch {
+            MuteService.unmuteThread(id)
+            feedback += 1
+        }
+    }
+
+    suspend fun loadThreads() {
+        val missing = MuteService.mutedThreads.filter { it !in threadNotes }
+        if (missing.isEmpty()) return
+        threadNotes = threadNotes + NoteRepository.notes(missing).associateBy { it.id }
+        for (id in missing) {
+            if (id in threadNotes) continue
+            NoteRepository.ensureNote(id)?.let { threadNotes = threadNotes + (id to it) }
+        }
+        ProfileCache.load(threadNotes.values.map { it.pubkey }.distinct())
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -175,6 +227,7 @@ fun MutedSettingsScreen() {
     val haptics = rememberHaptics()
     LaunchedEffect(Unit) { model.appear() }
     LaunchedEffect(model.feedback) { if (model.feedback > 0) haptics.success() }
+    LaunchedEffect(MuteService.mutedThreads) { model.loadThreads() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         containerColor = AppColors.background,
@@ -189,6 +242,11 @@ fun MutedSettingsScreen() {
                             Icon(Icons.Filled.Add, L("settingsAddWord"))
                         }
                     }
+                    if (model.tab == MutedSettingsModel.Tab.HASHTAGS) {
+                        IconButton(onClick = { model.newHashtag = ""; model.showAddHashtag = true }, modifier = Modifier.testTag("muted-hashtag-add")) {
+                            Icon(Icons.Filled.Add, L("settingsAddHashtag"))
+                        }
+                    }
                 },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = AppColors.background, scrolledContainerColor = AppColors.background),
@@ -198,18 +256,23 @@ fun MutedSettingsScreen() {
         PullToRefreshBox(isRefreshing = model.isRefreshing, onRefresh = { model.refresh() }, modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(Modifier.fillMaxSize()) {
                 item("tabs") {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("muted-tab")) {
-                            MutedSettingsModel.Tab.entries.forEachIndexed { index, tab ->
-                                val count = if (tab == MutedSettingsModel.Tab.USERS) MuteService.mutedPubkeys.size else MuteService.mutedWords.size
-                                SegmentedButton(
+                    Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PrimaryScrollableTabRow(
+                            selectedTabIndex = model.tab.ordinal,
+                            containerColor = AppColors.background,
+                            edgePadding = 0.dp,
+                            modifier = Modifier.fillMaxWidth().testTag("muted-tab"),
+                        ) {
+                            MutedSettingsModel.Tab.entries.forEach { tab ->
+                                Tab(
                                     selected = model.tab == tab,
                                     onClick = { model.tab = tab },
-                                    shape = SegmentedButtonDefaults.itemShape(index, MutedSettingsModel.Tab.entries.size),
-                                ) { Text("${tab.title} ($count)", maxLines = 1) }
+                                    text = { Text(tab.title, maxLines = 1) },
+                                    modifier = Modifier.testTag("muted-tab-${tab.raw}"),
+                                )
                             }
                         }
-                        Text(L("mutedSubtitle"), style = MaterialTheme.typography.bodySmall, color = AppColors.textSecondary)
+                        Text(L("mutedSubtitle"), style = MaterialTheme.typography.bodySmall, color = AppColors.textSecondary, modifier = Modifier.padding(horizontal = 16.dp))
                     }
                 }
                 when (model.tab) {
@@ -228,7 +291,25 @@ fun MutedSettingsScreen() {
                         }
                     } else {
                         items(MuteService.mutedWords, key = { "word-$it" }) { word ->
-                            MutedWordRow(word, model.isBusy("word:$word"), Modifier.animateItem()) { model.removeWord(word) }
+                            MutedTextRow(word, Icons.Outlined.TextFields, model.isBusy("word:$word"), Modifier.animateItem().testTag("muted-word-$word")) { model.removeWord(word) }
+                        }
+                    }
+                    MutedSettingsModel.Tab.HASHTAGS -> if (MuteService.mutedHashtags.isEmpty()) {
+                        item("hashtags-empty") {
+                            EmptyStateView(Icons.Outlined.Tag, L("settingsNoMutedHashtags"), L("settingsNoMutedHashtagsMessage"), modifier = Modifier.testTag("muted-hashtags-empty"))
+                        }
+                    } else {
+                        items(MuteService.mutedHashtags, key = { "hashtag-$it" }) { tag ->
+                            MutedTextRow("#$tag", Icons.Outlined.Tag, false, Modifier.animateItem().testTag("muted-hashtag-$tag")) { model.removeHashtag(tag) }
+                        }
+                    }
+                    MutedSettingsModel.Tab.THREADS -> if (MuteService.mutedThreads.isEmpty()) {
+                        item("threads-empty") {
+                            EmptyStateView(Icons.Outlined.NotificationsOff, L("settingsNoMutedThreads"), L("settingsNoMutedThreadsMessage"), modifier = Modifier.testTag("muted-threads-empty"))
+                        }
+                    } else {
+                        items(MuteService.mutedThreads, key = { "thread-$it" }) { id ->
+                            MutedThreadRow(id, model.threadNotes[id], Modifier.animateItem().testTag("muted-thread-$id")) { model.unmuteThread(id) }
                         }
                     }
                 }
@@ -247,6 +328,20 @@ fun MutedSettingsScreen() {
                 }
             },
             dismissButton = { TextAction(L("cancel"), { model.showAddWord = false; model.newWord = "" }) },
+        )
+    }
+
+    if (model.showAddHashtag) {
+        AlertDialog(
+            onDismissRequest = { model.showAddHashtag = false; model.newHashtag = "" },
+            title = { Text(L("settingsAddHashtag")) },
+            text = { QiqTextField(model.newHashtag, { model.newHashtag = it }, L("addHashtagToMuteHint"), Modifier.testTag("muted-hashtag-field")) },
+            confirmButton = {
+                Box(Modifier.testTag("muted-hashtag-add-confirm")) {
+                    TextAction(L("settingsAdd"), { model.showAddHashtag = false; model.addHashtag() }, enabled = MuteService.normalizedHashtag(model.newHashtag).isNotEmpty())
+                }
+            },
+            dismissButton = { TextAction(L("cancel"), { model.showAddHashtag = false; model.newHashtag = "" }) },
         )
     }
 }
@@ -314,7 +409,7 @@ private fun MutedUserRow(pubkey: String, isBusy: Boolean, modifier: Modifier, on
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun MutedWordRow(word: String, isBusy: Boolean, modifier: Modifier, onDelete: () -> Unit) {
+private fun MutedTextRow(title: String, icon: ImageVector, isBusy: Boolean, modifier: Modifier, onDelete: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val state = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
         if (value == SwipeToDismissBoxValue.EndToStart) onDelete()
@@ -328,12 +423,12 @@ private fun MutedWordRow(word: String, isBusy: Boolean, modifier: Modifier, onDe
                 Icon(Icons.Outlined.Delete, L("delete"), tint = MaterialTheme.colorScheme.onError)
             }
         },
-        modifier = modifier.testTag("muted-word-$word"),
+        modifier = modifier,
     ) {
         Box {
             SettingsRow(
-                word,
-                Icons.Outlined.TextFields,
+                title,
+                icon,
                 modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
                 trailing = if (isBusy) ({ CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }) else null,
             )
@@ -342,6 +437,56 @@ private fun MutedWordRow(word: String, isBusy: Boolean, modifier: Modifier, onDe
                     text = { Text(L("delete"), color = AppColors.error) },
                     leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = AppColors.error) },
                     onClick = { menu = false; onDelete() },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun MutedThreadRow(noteId: String, note: Note?, modifier: Modifier, onUnmute: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val state = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
+        if (value == SwipeToDismissBoxValue.EndToStart) onUnmute()
+        false
+    })
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Row(
+                Modifier.fillMaxSize().background(AppColors.error).padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Notifications, null, tint = MaterialTheme.colorScheme.onError)
+                Text(L("unmute"), color = MaterialTheme.colorScheme.onError)
+            }
+        },
+        modifier = modifier,
+    ) {
+        Box {
+            Column(
+                Modifier.fillMaxWidth().background(AppColors.background)
+                    .combinedClickable(onClick = { Router.push(Route.Thread(noteId)) }, onLongClick = { menu = true })
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                if (note != null) {
+                    val name = ProfileCache.profiles[note.pubkey]?.bestName ?: note.authorName ?: Profile.shortNpub(note.pubkey)
+                    Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(note.content.trim().replace("\n", " "), style = MaterialTheme.typography.bodyMedium, color = AppColors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                } else {
+                    Text(L("thread"), fontWeight = FontWeight.SemiBold)
+                    Text("${noteId.take(12)}…", style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace, color = AppColors.textSecondary)
+                }
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text(L("feedUnmuteConversation")) },
+                    leadingIcon = { Icon(Icons.Outlined.Notifications, null) },
+                    onClick = { menu = false; onUnmute() },
                 )
             }
         }

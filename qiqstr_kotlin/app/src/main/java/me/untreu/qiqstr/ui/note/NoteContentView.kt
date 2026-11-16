@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import me.untreu.qiqstr.core.AppColors
 import me.untreu.qiqstr.core.L
+import me.untreu.qiqstr.core.MediaPolicy
 import me.untreu.qiqstr.data.services.NotePoll
 import me.untreu.qiqstr.data.sync.ProfileCache
 import me.untreu.qiqstr.domain.Note
@@ -69,7 +70,8 @@ fun NoteContentView(
             }
             if (poll != null) NotePollView(poll, note.pubkey)
             if (content.media.isNotEmpty()) NoteMediaGrid(content.media)
-            content.previewLink?.let { NoteLinkPreview(it) }
+            content.audio.forEach { NoteAudioView(it) }
+            content.previewLink?.let { if (!MediaPolicy.defersMedia) NoteLinkPreview(it) }
             content.quoteIds.forEach { NoteQuoteCard(it) }
             content.articleIds.forEach { NoteArticleCard(it) }
         }

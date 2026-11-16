@@ -25,7 +25,11 @@ data class ComposeDraftMedia(
     val blurhash: String?,
     val altText: String,
     val isVideo: Boolean,
+    val duration: Double? = null,
+    val waveform: List<Int>? = null,
 ) {
+    val isAudio: Boolean get() = mimeType.startsWith("audio/")
+
     fun toJson(): JSONObject = JSONObject().apply {
         put("url", url)
         put("sha256", sha256)
@@ -36,6 +40,8 @@ data class ComposeDraftMedia(
         blurhash?.let { put("blurhash", it) }
         put("altText", altText)
         put("isVideo", isVideo)
+        duration?.let { put("duration", it) }
+        waveform?.let { put("waveform", JSONArray(it)) }
     }
 
     companion object {
@@ -51,6 +57,8 @@ data class ComposeDraftMedia(
             blurhash = j.str("blurhash"),
             altText = j.optString("altText", ""),
             isVideo = j.bool("isVideo"),
+            duration = if (j.has("duration")) j.optDouble("duration").takeIf { !it.isNaN() } else null,
+            waveform = j.optJSONArray("waveform")?.let { a -> (0 until a.length()).map { a.optInt(it) } },
             )
         }
     }

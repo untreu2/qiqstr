@@ -18,5 +18,6 @@ fun SettingsPageScreen(page: SettingsRoute) {
         SettingsRoute.NOTIFICATIONS -> NotificationSettingsScreen()
         SettingsRoute.SAFETY -> SafetySettingsScreen()
         SettingsRoute.DIAGNOSTICS -> DiagnosticsScreen()
+        SettingsRoute.MEDIA_SERVER -> MediaServerSettingsScreen()
     }
 }

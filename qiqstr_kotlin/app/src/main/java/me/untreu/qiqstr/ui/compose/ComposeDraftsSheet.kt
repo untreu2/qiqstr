@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -49,8 +50,17 @@ import me.untreu.qiqstr.core.components.EmptyStateView
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ComposeDraftsSheet(drafts: List<ComposeDraft>, onSelect: (ComposeDraft) -> Unit, onDelete: (ComposeDraft) -> Unit, onDismiss: () -> Unit) {
+internal fun ComposeDraftsSheet(
+    drafts: List<ComposeDraft>,
+    scheduled: List<ScheduledPost>,
+    onSelect: (ComposeDraft) -> Unit,
+    onDelete: (ComposeDraft) -> Unit,
+    onSelectScheduled: (ScheduledPost) -> Unit,
+    onDeleteScheduled: (ScheduledPost) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val items = remember { mutableStateListOf<ComposeDraft>().apply { addAll(drafts) } }
+    val posts = remember { mutableStateListOf<ScheduledPost>().apply { addAll(scheduled) } }
     Column(Modifier.fillMaxWidth().navigationBarsPadding().testTag("compose-drafts-sheet")) {
         CenterAlignedTopAppBar(
             title = { Text(L("feedDrafts")) },
@@ -59,29 +69,28 @@ internal fun ComposeDraftsSheet(drafts: List<ComposeDraft>, onSelect: (ComposeDr
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = AppColors.background),
         )
-        if (items.isEmpty()) {
+        if (items.isEmpty() && posts.isEmpty()) {
             EmptyStateView(icon = Icons.Outlined.Inbox, title = L("feedNoDrafts"))
         } else {
             LazyColumn(Modifier.fillMaxWidth()) {
-                items(items, key = { it.id }) { draft ->
-                    val state = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
-                        if (value == SwipeToDismissBoxValue.EndToStart) {
-                            onDelete(draft)
-                            items.removeAll { it.id == draft.id }
-                            true
-                        } else {
-                            false
+                if (posts.isNotEmpty()) {
+                    item(key = "scheduled-header") { DraftsSectionHeader(L("feedScheduledTitle")) }
+                    items(posts, key = { "scheduled-${it.id}" }) { post ->
+                        DraftSwipeToDelete(onDelete = {
+                            onDeleteScheduled(post)
+                            posts.removeAll { it.id == post.id }
+                        }) {
+                            ScheduledPostRow(post, Modifier.background(AppColors.background).clickable { onSelectScheduled(post) }.testTag("compose-scheduled-row"))
                         }
-                    })
-                    SwipeToDismissBox(
-                        state = state,
-                        enableDismissFromStartToEnd = false,
-                        backgroundContent = {
-                            Box(Modifier.fillMaxSize().background(AppColors.error).padding(horizontal = 20.dp), contentAlignment = Alignment.CenterEnd) {
-                                Icon(Icons.Outlined.Delete, L("delete"), tint = Color.White)
-                            }
-                        },
-                    ) {
+                        HorizontalDivider(Modifier.padding(start = 16.dp), color = AppColors.divider)
+                    }
+                    if (items.isNotEmpty()) item(key = "drafts-header") { DraftsSectionHeader(L("feedDrafts")) }
+                }
+                items(items, key = { it.id }) { draft ->
+                    DraftSwipeToDelete(onDelete = {
+                        onDelete(draft)
+                        items.removeAll { it.id == draft.id }
+                    }) {
                         ComposeDraftRow(draft, Modifier.background(AppColors.background).clickable { onSelect(draft) }.testTag("compose-draft-row"))
                     }
                     HorizontalDivider(Modifier.padding(start = 16.dp), color = AppColors.divider)
@@ -92,7 +101,66 @@ internal fun ComposeDraftsSheet(drafts: List<ComposeDraft>, onSelect: (ComposeDr
 }
 
 @Composable
-private fun ComposeDraftRow(draft: ComposeDraft, modifier: Modifier = Modifier) {
+private fun DraftsSectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = AppColors.textSecondary,
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DraftSwipeToDelete(onDelete: () -> Unit, content: @Composable () -> Unit) {
+    val state = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
+        if (value == SwipeToDismissBoxValue.EndToStart) {
+            onDelete()
+            true
+        } else {
+            false
+        }
+    })
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(Modifier.fillMaxSize().background(AppColors.error).padding(horizontal = 20.dp), contentAlignment = Alignment.CenterEnd) {
+                Icon(Icons.Outlined.Delete, L("delete"), tint = Color.White)
+            }
+        },
+    ) { content() }
+}
+
+@Composable
+private fun ScheduledPostRow(post: ScheduledPost, modifier: Modifier = Modifier) {
+    val error = post.lastError
+    val tint = if (error == null) AppColors.textSecondary else AppColors.error
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp), tint = tint)
+            Text(TimeFormat.full(post.publishAt), style = MaterialTheme.typography.labelLarge, color = tint)
+        }
+        ComposeDraftRow(post.draft, showsDate = false)
+        if (error != null) {
+            Text(
+                error,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColors.error,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComposeDraftRow(draft: ComposeDraft, modifier: Modifier = Modifier, showsDate: Boolean = true) {
     val (title, icon) = when (draft.kind) {
         ComposeDraft.Kind.NEW_NOTE -> L("newPost") to Icons.Outlined.EditNote
         ComposeDraft.Kind.REPLY -> L("reply") to Icons.AutoMirrored.Outlined.Reply
@@ -102,7 +170,7 @@ private fun ComposeDraftRow(draft: ComposeDraft, modifier: Modifier = Modifier) 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(icon, null, Modifier.size(16.dp), tint = AppColors.textSecondary)
             Text(title, style = MaterialTheme.typography.bodySmall, color = AppColors.textSecondary, modifier = Modifier.weight(1f))
-            Text(TimeFormat.relative(draft.updatedAt / 1000), style = MaterialTheme.typography.bodySmall, color = AppColors.textTertiary)
+            if (showsDate) Text(TimeFormat.relative(draft.updatedAt / 1000), style = MaterialTheme.typography.bodySmall, color = AppColors.textTertiary)
         }
         Text(
             draft.preview.ifEmpty { L("feedDraftEmpty") },

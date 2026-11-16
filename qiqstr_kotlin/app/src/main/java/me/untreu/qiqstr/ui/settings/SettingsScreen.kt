@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.PermMedia
 import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Translate
@@ -89,6 +90,7 @@ fun SettingsScreen() {
         settingsSection("security") {
             Link(L("keys"), Icons.Filled.Key, tile, "settings-row-KEYS") { open(SettingsRoute.KEYS) }
             Link(L("relays"), Icons.Filled.Hub, tile, "settings-row-RELAYS") { open(SettingsRoute.RELAYS) }
+            Link(L("settingsMediaServer"), Icons.Filled.PermMedia, tile, "settings-row-MEDIA_SERVER") { open(SettingsRoute.MEDIA_SERVER) }
             Link(
                 L("notifications"),
                 Icons.Filled.NotificationsActive,

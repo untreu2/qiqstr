@@ -11,10 +11,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -53,7 +58,9 @@ import me.untreu.qiqstr.core.TimeFormat
 import me.untreu.qiqstr.app.Router
 import me.untreu.qiqstr.core.components.EmptyStateView
 import me.untreu.qiqstr.data.services.HashtagFollowService
+import me.untreu.qiqstr.data.services.MuteService
 import me.untreu.qiqstr.data.services.ToastCenter
+import me.untreu.qiqstr.data.services.ToastStyle
 import me.untreu.qiqstr.data.sync.DataBus
 import me.untreu.qiqstr.data.sync.ProfileCache
 import me.untreu.qiqstr.data.sync.Session
@@ -86,6 +93,15 @@ class HashtagFeedViewModel(rawTag: String) : ViewModel() {
 
     val isFollowing: Boolean get() = HashtagFollowService.isFollowing(tag)
     val isFollowPending: Boolean get() = HashtagFollowService.isPending(tag)
+    val isMuted: Boolean get() = MuteService.isHashtagMuted(tag)
+
+    fun toggleMute() {
+        val muted = isMuted
+        viewModelScope.launch {
+            if (muted) MuteService.unmuteHashtag(tag) else MuteService.muteHashtag(tag)
+            ToastCenter.show(if (muted) L("feedHashtagUnmuted") else L("feedHashtagMuted"), ToastStyle.SUCCESS)
+        }
+    }
 
     fun toggleFollow() {
         followFeedback += 1
@@ -117,6 +133,7 @@ class HashtagFeedViewModel(rawTag: String) : ViewModel() {
         val ids = HashSet<String>()
         notes = result.filter { note ->
             if (!ids.add(note.listId) || note.id in deleted || note.pubkey in muted) return@filter false
+            if (MuteService.isThreadMuted(note.rootId ?: note.id)) return@filter false
             val content = note.content.lowercase()
             words.none { content.contains(it) }
         }
@@ -168,6 +185,7 @@ fun HashtagFeedScreen(tag: String) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var isRefreshing by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     LaunchedEffect(Unit) { model.sync() }
     LaunchedEffect(DataBus.feedVersion) {
@@ -199,8 +217,23 @@ fun HashtagFeedScreen(tag: String) {
                     }
                 },
                 actions = {
-                    Box(Modifier.padding(end = 8.dp)) {
-                        HashtagFollowButton(model.isFollowing, model.isFollowPending, model::toggleFollow)
+                    HashtagFollowButton(model.isFollowing, model.isFollowPending, model::toggleFollow)
+                    Box {
+                        IconButton(onClick = { showMenu = true }, modifier = Modifier.testTag("hashtag-more")) {
+                            Icon(Icons.Filled.MoreVert, L("profileMoreActions"))
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            val muted = model.isMuted
+                            DropdownMenuItem(
+                                text = { Text(if (muted) L("feedUnmuteHashtag", "tag" to model.tag) else L("feedMuteHashtag", "tag" to model.tag)) },
+                                leadingIcon = { Icon(if (muted) Icons.AutoMirrored.Outlined.VolumeUp else Icons.AutoMirrored.Outlined.VolumeOff, null) },
+                                onClick = {
+                                    showMenu = false
+                                    model.toggleMute()
+                                },
+                                modifier = Modifier.testTag("hashtag-mute"),
+                            )
+                        }
                     }
                 },
                 scrollBehavior = scrollBehavior,
