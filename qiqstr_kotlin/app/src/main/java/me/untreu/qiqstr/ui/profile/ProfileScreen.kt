@@ -133,11 +133,11 @@ fun ProfileScreen(pubkey: String) {
                 } else {
                     item(key = "tabs") {
                         PrimaryTabRow(
-                            selectedTabIndex = model.tab.ordinal,
+                            selectedTabIndex = model.tabs.indexOf(model.tab).coerceAtLeast(0),
                             containerColor = AppColors.background,
                             modifier = Modifier.padding(top = 18.dp, bottom = 8.dp).testTag("profile-tabs"),
                         ) {
-                            ProfileTab.entries.forEach { tab ->
+                            model.tabs.forEach { tab ->
                                 Tab(
                                     selected = model.tab == tab,
                                     onClick = {
@@ -163,6 +163,7 @@ fun ProfileScreen(pubkey: String) {
 @Composable
 private fun ProfileEffects(model: ProfileViewModel) {
     LaunchedEffect(Unit) { model.start() }
+    LaunchedEffect(DataBus.feedVersion) { model.reloadArticles() }
     LaunchedEffect(DataBus.feedVersion) {
         if (!model.hasLoadedNotes) return@LaunchedEffect
         delay(250)
@@ -201,7 +202,7 @@ private fun ProfileTopBar(model: ProfileViewModel, titleVisible: Boolean) {
             }
         },
         navigationIcon = { IconButton(onClick = { Router.pop() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, L("back")) } },
-        actions = { ProfileMenu(model) },
+        actions = { if (model.isMe) me.untreu.qiqstr.ui.articles.ArticleWriteMenu(); ProfileMenu(model) },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = container,
             navigationIconContentColor = iconColor,
@@ -213,6 +214,11 @@ private fun ProfileTopBar(model: ProfileViewModel, titleVisible: Boolean) {
 
 private fun LazyListScope.tabContent(model: ProfileViewModel, onOpenMedia: (Int) -> Unit) {
     when (model.tab) {
+        ProfileTab.ARTICLES -> {
+            if (model.isMe) item("article-write") { me.untreu.qiqstr.ui.articles.ArticleWriteMenu() }
+            if (model.articles.isEmpty()) item("articles-empty") { Text(L("profileNoArticles"), Modifier.padding(24.dp)) }
+            items(model.articles, key = { "article-${it.id}" }) { article -> me.untreu.qiqstr.ui.articles.ArticleCard(article, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+        }
         ProfileTab.NOTES -> {
             items(model.pinned, key = { "pinned-${it.id}" }) { note -> PinnedNoteRow(note, model.isMe) }
             noteRows(model, model.visibleNotes, L("noNotesFromThisUser"), Icons.Outlined.ChatBubbleOutline, "profile-notes")
@@ -268,6 +274,7 @@ private fun LazyListScope.footer(model: ProfileViewModel) {
         ProfileTab.REPLIES -> model.replies.isNotEmpty()
         ProfileTab.PHOTOS -> model.media.isNotEmpty()
         ProfileTab.LIKES -> model.likes.isNotEmpty()
+        ProfileTab.ARTICLES -> model.articles.isNotEmpty()
     }
     if (!hasItems || !model.canLoadMoreCurrent) return
     item(key = "load-more-${model.tab.raw}-${model.loadMoreCount}") {

@@ -190,6 +190,7 @@ private fun SidebarContent(onDismiss: () -> Unit) {
         SidebarGroup {
             SidebarRow(L("profile"), Icons.Outlined.Person, "sidebar-profile") { open(Route.Profile(me)) }
             SidebarRow(L("reads"), Icons.AutoMirrored.Outlined.Article, "sidebar-reads") { open(Route.Reads) }
+            SidebarRow(L("communities"), Icons.Outlined.People, "sidebar-communities") { open(Route.Communities()) }
             SidebarRow(L("liveTitle"), Icons.Outlined.Sensors, "sidebar-live") { open(Route.LiveStreams) }
             SidebarRow(L("listsTitle"), Icons.AutoMirrored.Outlined.List, "sidebar-lists") { open(Route.FollowSets) }
             SidebarRow(L("bookmarks"), Icons.Outlined.BookmarkBorder, "sidebar-bookmarks") { open(Route.Bookmarks) }

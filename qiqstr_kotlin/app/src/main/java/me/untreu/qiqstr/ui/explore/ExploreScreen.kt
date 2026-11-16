@@ -65,6 +65,7 @@ fun ExploreScreen() {
         subtitle = if (model.scope == ExploreScope.FOLLOWING) L("readsSubtitle") else L("exploreGlobalSubtitle"),
         modifier = Modifier.testTag("explore-list"),
         actions = {
+            me.untreu.qiqstr.ui.articles.ArticleWriteMenu()
             IconButton(onClick = { Router.push(Route.UserSearch) }, modifier = Modifier.testTag("explore-user-search")) {
                 Icon(Icons.Outlined.People, L("users"))
             }

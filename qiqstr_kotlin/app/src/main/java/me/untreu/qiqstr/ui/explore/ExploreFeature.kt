@@ -15,6 +15,7 @@ object ExploreFeature : FeatureHooks {
     override fun register() {
         SessionHooks.onTeardown {
             WebOfTrustService.reset()
+            me.untreu.qiqstr.ui.live.LivePlayback.stop()
             LiveService.reset()
             ExploreSeenStore.reset()
             ExploreService.reset()

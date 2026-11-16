@@ -35,8 +35,7 @@ class LiveStreamViewModel(val coordinate: String) : ViewModel() {
     var isSending by mutableStateOf(false)
         private set
     var draft by mutableStateOf("")
-    var isPlaying by mutableStateOf(true)
-        private set
+    val isPlaying: Boolean get() = LivePlayback.owns(coordinate) && LivePlayback.isPlaying
     private val seen = HashSet<String>()
 
     val canSend: Boolean get() = !isSending && draft.trim().isNotEmpty()
@@ -55,6 +54,7 @@ class LiveStreamViewModel(val coordinate: String) : ViewModel() {
             delay(60_000)
             val updated = LiveService.stream(coordinate) ?: continue
             stream = updated
+            LivePlayback.update(updated)
             if (updated.playbackURL != playbackURL) startPlayback()
         }
     }
@@ -113,6 +113,7 @@ class LiveStreamViewModel(val coordinate: String) : ViewModel() {
 
     suspend fun refreshProfiles() {
         ProfileCache.load((messages.map { it.pubkey } + listOfNotNull(stream?.host)).distinct(), fetchMissing = false)
+        stream?.let(LivePlayback::update)
     }
 
     fun send() {
@@ -145,16 +146,19 @@ class LiveStreamViewModel(val coordinate: String) : ViewModel() {
     }
 
     fun resume() {
-        isPlaying = true
+        if (LivePlayback.owns(coordinate)) LivePlayback.resume() else startPlayback()
     }
 
     fun stop() {
-        isPlaying = false
+        LivePlayback.stop(coordinate)
     }
+
+    override fun onCleared() { stop(); super.onCleared() }
 
     private fun startPlayback() {
         val current = stream
         val url = current?.playbackURL
         playbackURL = if (url != null && (current.isLive || current.canReplay)) url else null
+        if (current != null && playbackURL != null) LivePlayback.play(current, playbackURL!!) else stop()
     }
 }

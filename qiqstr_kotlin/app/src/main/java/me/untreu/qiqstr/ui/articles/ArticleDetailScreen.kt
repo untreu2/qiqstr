@@ -222,6 +222,8 @@ fun ArticleDetailScreen(articleId: String? = null, naddr: String? = null) {
 
 @Composable
 private fun ArticleToolbar(article: Article, model: ArticleDetailViewModel, onShowHighlights: () -> Unit) {
+    var deleting by remember { mutableStateOf(false) }
+    if (deleting) androidx.compose.material3.AlertDialog(onDismissRequest = { deleting = false }, title = { Text(L("articleDeleteTitle")) }, text = { Text(L("articleDeleteMessage")) }, confirmButton = { androidx.compose.material3.TextButton(onClick = { deleting = false; model.deleteArticle() }, modifier = Modifier.testTag("article-delete-confirm")) { Text(L("delete"), color = AppColors.error) } }, dismissButton = { androidx.compose.material3.TextButton(onClick = { deleting = false }) { Text(L("cancel")) } })
     var settings by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     var reportTarget by remember { mutableStateOf<ReportTarget?>(null) }
@@ -251,6 +253,11 @@ private fun ArticleToolbar(article: Article, model: ArticleDetailViewModel, onSh
             Icon(Icons.Outlined.MoreVert, L("exploreMoreOptions"))
         }
         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+            if (article.pubkey == Session.pubkey && Session.canSign) {
+                MenuItem(L("articleEdit"), Icons.Outlined.FindInPage, tag = "article-edit") { more = false; model.editArticle() }
+                MenuItem(L("delete"), Icons.Outlined.Flag, destructive = true, tag = "article-delete") { more = false; deleting = true }
+                HorizontalDivider()
+            }
             val highlightsTitle = if (model.highlights.isEmpty()) L("highlightsTitle") else L("highlightsCount", "count" to model.highlights.size)
             MenuItem(highlightsTitle, Icons.Outlined.Highlight) { more = false; onShowHighlights() }
             article.naddr?.let { naddr ->

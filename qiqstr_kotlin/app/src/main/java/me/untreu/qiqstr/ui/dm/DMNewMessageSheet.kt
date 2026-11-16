@@ -30,6 +30,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.remember
+import androidx.compose.material3.TextButton
+import me.untreu.qiqstr.data.sync.Session
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +75,7 @@ class DMUserPickerViewModel : ViewModel() {
 
     val directPubkey: String? get() = Nip19.pubkeyHex(trimmedQuery)
 
-    val recentPeers: List<String> get() = service.conversations.take(8).map { it.peer }
+    val recentPeers: List<String> get() = service.conversations.filterNot { DMService.isGroup(it.peer) }.take(8).map { it.peer }
 
     val results: List<Profile>
         get() {
@@ -125,6 +128,8 @@ class DMUserPickerViewModel : ViewModel() {
 @Composable
 fun DMNewMessageSheet(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     val model: DMUserPickerViewModel = viewModel()
+    var newGroup by remember { mutableStateOf(false) }
+    if (newGroup) { DMNewGroupScreen(onDismiss = { newGroup = false }, onCreated = onSelect); return }
     val clipboard = LocalClipboardManager.current
     LaunchedEffect(Unit) { model.loadFollowing() }
     LaunchedEffect(model.query) { model.search() }
@@ -165,6 +170,9 @@ fun DMNewMessageSheet(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
             val results = model.results
             val recent = model.recentPeers
             LazyColumn(Modifier.fillMaxSize()) {
+                if (model.trimmedQuery.isEmpty() && Session.canSign) item("new-group") {
+                    TextButton(onClick = { newGroup = true }, modifier = Modifier.fillMaxWidth().testTag("dm-new-group")) { Icon(Icons.Outlined.Group, null); Text(L("dmNewGroup"), Modifier.padding(12.dp)) }
+                }
                 if (direct != null) {
                     item(key = "direct-header") { SectionLabel(L("dmStartChat")) }
                     item(key = "direct") {
@@ -193,7 +201,7 @@ fun DMNewMessageSheet(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
                 item(key = "bottom") { Spacer(Modifier.height(24.dp)) }
             }
             if (direct == null && results.isEmpty()) {
-                val overlay = Modifier.align(Alignment.TopCenter).padding(top = 48.dp)
+                val overlay = Modifier.align(Alignment.TopCenter).padding(top = 108.dp)
                 when {
                     model.trimmedQuery.isEmpty() && model.isLoadingFollowing -> CircularProgressIndicator(overlay, color = AppColors.textPrimary)
                     model.trimmedQuery.isEmpty() && recent.isEmpty() -> EmptyStateView(Icons.Outlined.Group, L("startConversationBy"), L("searchByNameOrNpub"), modifier = overlay)

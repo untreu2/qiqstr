@@ -1,5 +1,6 @@
 package me.untreu.qiqstr.ui.dm
 
+import com.qiqstr.core.*
 import com.qiqstr.core.marmotClearPendingCommit
 import com.qiqstr.core.marmotClose
 import com.qiqstr.core.marmotCreateChat
@@ -29,6 +30,7 @@ import me.untreu.qiqstr.core.Json
 import me.untreu.qiqstr.core.L
 import me.untreu.qiqstr.core.bool
 import me.untreu.qiqstr.core.int
+import me.untreu.qiqstr.core.objects
 import me.untreu.qiqstr.core.long
 import me.untreu.qiqstr.core.str
 import me.untreu.qiqstr.core.strings
@@ -43,13 +45,20 @@ data class MarmotGroup(
     val state: String,
     val members: List<String>,
     val relays: List<String>,
+    val admins: List<String>,
     val lastMessageAt: Long,
 ) {
     val isActive: Boolean get() = state == "active"
 
+    val isGroupChat: Boolean get() = name.isNotEmpty() || members.size > 2
+    val conversationKey: String get() = DMService.GROUP_PREFIX + id
+    val displayName: String get() = name.ifEmpty { L("dmGroupUntitled") }
+    fun isAdmin(pubkey: String) = pubkey in admins
+    fun conversationKey(me: String): String? = if (me !in members) null else if (isGroupChat) conversationKey else peer(me)
+
     fun peer(me: String): String? {
         val others = members.filter { it != me }
-        if (me !in members || others.size != 1) return null
+        if (me !in members || others.size != 1 || isGroupChat) return null
         return others[0]
     }
 
@@ -57,7 +66,7 @@ data class MarmotGroup(
         fun from(j: JSONObject): MarmotGroup? {
             val id = j.str("id") ?: return null
             val nostrGroupId = j.str("nostrGroupId") ?: return null
-            return MarmotGroup(id, nostrGroupId, j.text("name"), j.text("state"), j.strings("members"), j.strings("relays"), j.long("lastMessageAt"))
+            return MarmotGroup(id, nostrGroupId, j.text("name"), j.text("state"), j.strings("members"), j.strings("relays"), j.strings("admins"), j.long("lastMessageAt"))
         }
     }
 }
@@ -149,6 +158,48 @@ object MarmotEngine {
         val j = Json.obj(raw) ?: JSONObject()
         val group = j.optJSONObject("group") ?: throw CoreError(L("dmSendFailed"))
         return MarmotCreatedChat(group.toString(), j.strings("welcomes"), j.strings("welcomeRelays"))
+    }
+
+    suspend fun createGroup(packages: List<String>, name: String, relays: List<String>): JSONObject =
+        Json.obj(serial { marmotCreateGroup(packages, name, "", relays) }) ?: throw CoreError(L("dmGroupCreateFailed"))
+
+    suspend fun addMembers(groupId: String, packages: List<String>, publish: suspend (String) -> Boolean): List<JSONObject> = serial {
+        val result = Json.obj(marmotAddMembers(groupId, packages)) ?: throw CoreError(L("dmGroupUpdateFailed"))
+        val commit = result.str("evolutionEvent") ?: throw CoreError(L("dmGroupUpdateFailed"))
+        mergePublished(groupId, commit, publish)
+        result.objects("welcomes")
+    }
+
+    private suspend fun mergePublished(groupId: String, event: String, publish: suspend (String) -> Boolean) {
+        try {
+            if (!publish(event)) throw CoreError(L("dmGroupUpdateFailed"))
+        } catch (error: Throwable) {
+            runCatching { marmotClearPendingCommit(groupId) }
+            throw error
+        }
+        marmotMergePendingCommit(groupId)
+    }
+
+    suspend fun commit(groupId: String, publish: suspend (String) -> Boolean, make: () -> String) = serial {
+        mergePublished(groupId, make(), publish)
+    }
+
+    suspend fun leave(groupId: String, publish: suspend (String) -> Boolean) = serial {
+        var finished = false
+        repeat(3) {
+            if (!finished) {
+                val step = Json.obj(marmotLeaveStep(groupId)) ?: throw CoreError(L("dmGroupUpdateFailed"))
+                val event = step.str("event")
+                if (step.bool("isCommit")) {
+                    mergePublished(groupId, event ?: throw CoreError(L("dmGroupUpdateFailed")), publish)
+                } else {
+                    if (event != null) publish(event)
+                    marmotDeleteGroup(groupId)
+                    finished = true
+                }
+            }
+        }
+        if (!finished) throw CoreError(L("dmGroupUpdateFailed"))
     }
 
     suspend fun send(groupId: String, kind: Int, content: String, tags: List<List<String>>): MarmotSent {

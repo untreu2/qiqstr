@@ -199,7 +199,13 @@ fun DMMediaBubble(message: DMMessage, shape: Shape, openMenu: () -> Unit) {
                 }
             }
         }
-        is MediaPhase.FileReady -> Row(
+        is MediaPhase.FileReady -> if (message.file?.isAudio == true) {
+            me.untreu.qiqstr.ui.note.AudioPlayerView(
+                url = current.file.path, duration = message.file.duration, waveform = message.file.waveform,
+                tint = foreground, playbackKey = message.id,
+                modifier = Modifier.width(260.dp).clip(shape).background(fill).then(longPress).padding(horizontal = 12.dp, vertical = 10.dp).testTag("dm-media-audio"),
+            )
+        } else Row(
             Modifier.clip(shape).background(fill).then(longPress).padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),

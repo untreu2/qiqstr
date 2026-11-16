@@ -51,6 +51,7 @@ class DMConversationsViewModel : ViewModel() {
         val q = trimmedQuery
         Nip19.pubkeyHex(q)?.let { return conversation.peer == it }
         if (q.startsWith("npub1") && Nip19.npub(conversation.peer)?.startsWith(q) == true) return true
+        if (service.group(conversation.peer)?.displayName?.lowercase()?.contains(q) == true) return true
         if (conversation.lastMessage.content.lowercase().contains(q)) return true
         val profile = ProfileCache.profile(conversation.peer) ?: return conversation.peer.startsWith(q)
         return profile.name.lowercase().contains(q) || profile.displayName.lowercase().contains(q) || profile.nip05.lowercase().contains(q)

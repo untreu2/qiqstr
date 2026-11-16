@@ -41,6 +41,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
+import androidx.compose.material.icons.outlined.Mic
+import me.untreu.qiqstr.ui.compose.VoiceRecorderSheet
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +71,8 @@ fun DMInputBar(
     placeholder: String = L("typeAMessage"),
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
+    var showsRecorder by remember { mutableStateOf(false) }
+    if (showsRecorder) VoiceRecorderSheet(onDismiss = { showsRecorder = false }) { showsRecorder = false; model.sendVoice(it) }
     val haptics = LocalHapticFeedback.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { uris -> model.handlePicked(uris) }
     LaunchedEffect(model.sentCount) { if (model.sentCount > 0) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
@@ -100,7 +105,9 @@ fun DMInputBar(
                         modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).onFocusChanged { onFocusChanged(it.isFocused) }.testTag("dm-input"),
                     )
                 }
-                IconButton(
+                if (!model.canSend && model.attachments.isEmpty()) {
+                    IconButton(onClick = { showsRecorder = true }, modifier = Modifier.size(40.dp).testTag("dm-voice")) { Icon(Icons.Outlined.Mic, L("voiceTitle")) }
+                } else IconButton(
                     onClick = model::send,
                     enabled = model.canSend,
                     colors = IconButtonDefaults.iconButtonColors(

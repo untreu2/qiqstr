@@ -31,6 +31,20 @@ class ArticleDetailViewModel : ViewModel() {
     private var blockTexts: List<String> = emptyList()
     private var highlightsAddress: ArticleAddress? = null
 
+    fun editArticle() {
+        val article = article ?: return
+        if (article.pubkey != me.untreu.qiqstr.data.sync.Session.pubkey) return
+        val draft = ArticleDraftStore.editing(article.dTag) ?: ArticleDraft.from(article).also { ArticleDraftStore.save(it) }
+        me.untreu.qiqstr.app.Router.push(me.untreu.qiqstr.app.Route.ArticleEditor(draft.id))
+    }
+    fun deleteArticle() {
+        val article = article ?: return
+        viewModelScope.launch {
+            try { ArticlePublisher.delete(article); ToastCenter.show(L("articleDeleted"), ToastStyle.SUCCESS); me.untreu.qiqstr.app.Router.pop() }
+            catch (error: Throwable) { ToastCenter.error(error) }
+        }
+    }
+
     suspend fun load(articleId: String?, naddr: String?) {
         if (article == null) phase = ArticlePhase.LOADING
         val address = naddr ?: articleId?.takeIf { Nip19.stripScheme(it).startsWith("naddr1") }

@@ -5,6 +5,10 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.qiqstr.core.*
+import me.untreu.qiqstr.data.services.EmojiChoice
+import me.untreu.qiqstr.data.services.CustomEmoji
+import me.untreu.qiqstr.core.objects
 import com.qiqstr.core.createBlossomAuthEvent
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.dbSearchProfiles
@@ -71,6 +75,9 @@ data class DMFileInfo(
 ) {
     val isEncrypted: Boolean get() = originalHash != null && imeta.any { it.startsWith("n ") }
     val isImage: Boolean get() = mimeType.lowercase().startsWith("image/")
+    val isAudio: Boolean get() = mimeType.lowercase().startsWith("audio/")
+    val duration: Double? get() = imeta.firstOrNull { it.startsWith("duration ") }?.substringAfter(" ")?.toDoubleOrNull()
+    val waveform: List<Int> get() = imeta.firstOrNull { it.startsWith("waveform ") }?.substringAfter(" ")?.split(" ")?.mapNotNull { it.toIntOrNull() }.orEmpty()
     val isVideo: Boolean get() = mimeType.lowercase().startsWith("video/")
     val fileExtension: String get() = DMMediaCrypto.fileExtension(mimeType)
     val imetaWithoutURL: List<String> get() = imeta.filter { !it.startsWith("url ") }
@@ -175,7 +182,16 @@ data class DMPreparedFile(
 
 private class CachedKeyPackage(val event: String?, val fetchedAt: Long)
 
+data class DMReaction(val id: String, val target: String, val sender: String, val emoji: String, val createdAt: Long, val emojiURL: String?)
+
 object DMService {
+    const val GROUP_PREFIX = "group:"
+    fun isGroup(key: String) = key.startsWith(GROUP_PREFIX)
+    var groupChats by mutableStateOf<Map<String, MarmotGroup>>(emptyMap())
+        private set
+    var reactions by mutableStateOf<Map<String, List<DMReaction>>>(emptyMap())
+        private set
+    private var joinedAt = HashMap<String, Long>()
     const val MAX_FILE_SIZE = 50 * 1024 * 1024
     private const val MESSAGE_KIND = 9
     private const val HISTORY_LIMIT = 500
@@ -250,6 +266,9 @@ object DMService {
     private var outboxReady = false
 
     fun reset() {
+        groupChats = emptyMap()
+        reactions = emptyMap()
+        joinedAt.clear()
         generation += 1
         welcomeTask?.cancel()
         welcomeTask = null
@@ -315,6 +334,7 @@ object DMService {
         loadReadState(me)
         hiddenIds = LinkedHashSet(Prefs.stringList(storeKey("marmot_hidden", me)).orEmpty())
         clearedAt = loadLongMap(storeKey("cleared", me))
+        joinedAt = loadLongMap(storeKey("group_joined", me))
         accepted = Prefs.stringList(storeKey("accepted", me)).orEmpty().toSet()
         isLoading = true
         val task = App.scope.launch { performStart(me, key, generation) }
@@ -391,12 +411,12 @@ object DMService {
         DataBus.dmChanged()
     }
 
-    fun isRequest(peer: String): Boolean = !isKnown(peer) && (messagesByPeer[peer]?.any { !it.isMine } ?: false)
+    fun isRequest(peer: String): Boolean = !isKnown(peer) && (isGroup(peer) || (messagesByPeer[peer]?.any { !it.isMine } ?: false))
 
     fun canLoadOlder(peer: String): Boolean {
         val me = me ?: return false
         return groups.values.any { group ->
-            group.peer(me) == peer && (historyLoaded[group.id] ?: 0) >= HISTORY_LIMIT && group.id !in historyComplete
+            group.conversationKey(me) == peer && (historyLoaded[group.id] ?: 0) >= HISTORY_LIMIT && group.id !in historyComplete
         }
     }
 
@@ -408,14 +428,14 @@ object DMService {
             val generation = this.generation
             val loaded = mutableListOf<DMMessage>()
             for (group in groups.values.toList()) {
-                if (group.peer(me) != peer || group.id in historyComplete) continue
+                if (group.conversationKey(me) != peer || group.id in historyComplete) continue
                 val offset = historyLoaded[group.id] ?: 0
                 val raw = runCatching { MarmotEngine.messages(group.id, HISTORY_PAGE, offset) }.getOrNull() ?: continue
                 if (generation != this.generation) return
                 val page = Json.array(raw)
                 historyLoaded[group.id] = offset + page.size
                 if (page.size < HISTORY_PAGE) historyComplete = historyComplete + group.id
-                loaded += page.reversed().flatMap { DMMessage.fromMarmot(it, me, peer) }
+                loaded += page.reversed().flatMap { absorb(it, me, peer) }
             }
             apply(loaded.sortedBy { it.createdAt })
         } finally {
@@ -442,7 +462,8 @@ object DMService {
     fun isFollowing(pubkey: String): Boolean = pubkey in following
 
     fun isKnown(peer: String): Boolean =
-        peer in following || peer in accepted || (messagesByPeer[peer]?.any { it.isMine } ?: false)
+        peer in following || peer in accepted || (messagesByPeer[peer]?.any { it.isMine } ?: false) ||
+            (groupChats[peer]?.let { it.isAdmin(me ?: "") || it.admins.any { admin -> admin in following } } ?: false)
 
     val unreadCount: Int get() = conversations.count { it.isUnread }
 
@@ -453,24 +474,150 @@ object DMService {
     fun status(peer: String): DMPeerStatus {
         val known = peerStatus[peer]
         if (preferredGroup(peer) != null) return DMPeerStatus.READY
+        if (isGroup(peer)) return DMPeerStatus.UNAVAILABLE
         return known ?: DMPeerStatus.UNKNOWN
     }
 
     fun chatRelays(peer: String): List<String> {
         val relays = mutableListOf<String>()
         for (group in groups.values) {
-            if (group.peer(me ?: "") != peer) continue
+            if (group.conversationKey(me ?: "") != peer) continue
             for (relay in group.relays) if (relay !in relays) relays.add(relay)
         }
         return relays
     }
 
     suspend fun checkPeer(peer: String) {
-        if (preferredGroup(peer) != null || peerStatus[peer] == DMPeerStatus.CHECKING) return
+        if (isGroup(peer) || preferredGroup(peer) != null || peerStatus[peer] == DMPeerStatus.CHECKING) return
         peerStatus = peerStatus + (peer to DMPeerStatus.CHECKING)
         val found = keyPackage(peer, fresh = false) != null
         if (me == null) return
         peerStatus = peerStatus + (peer to if (preferredGroup(peer) != null || found) DMPeerStatus.READY else DMPeerStatus.UNAVAILABLE)
+    }
+
+    fun group(key: String): MarmotGroup? = groupChats[key]
+    fun isAdmin(key: String) = groupChats[key]?.isAdmin(me ?: "") == true
+    fun reactions(message: DMMessage): List<DMReaction> = reactions[message.id.substringBefore(":")].orEmpty()
+
+    private fun absorb(j: JSONObject, me: String, peer: String): List<DMMessage> {
+        when (j.int("kind")) {
+            7 -> {
+                val id = j.str("id") ?: return emptyList()
+                val sender = j.str("pubkey") ?: return emptyList()
+                val target = j.tags().lastOrNull { it.size > 1 && it[0] == "e" }?.get(1) ?: return emptyList()
+                if (j.text("state") in listOf("deleted", "epoch_invalidated") || id in hiddenIds) return emptyList()
+                val content = j.text("content").trim()
+                val emoji = if (content.isEmpty() || content == "+") "❤️" else content
+                val url = CustomEmoji.shortcode(emoji)?.let { CustomEmoji.map(j.tags())[it] }
+                val list = reactions[target].orEmpty()
+                if (list.none { it.id == id }) reactions = reactions + (target to (list.filterNot { it.sender == sender && it.emoji == emoji } + DMReaction(id, target, sender, emoji, j.long("createdAt"), url)).sortedBy { it.createdAt })
+            }
+            5 -> {
+                val sender = j.str("pubkey") ?: return emptyList()
+                val ids = j.tags().filter { it.size > 1 && it[0] == "e" }.map { it[1] }.toSet()
+                reactions = reactions.mapValues { (_, list) -> list.filterNot { it.id in ids && it.sender == sender } }
+            }
+            else -> return DMMessage.fromMarmot(j, me, peer)
+        }
+        return emptyList()
+    }
+
+    suspend fun react(message: DMMessage, choice: EmojiChoice) {
+        val me = me ?: throw CoreError(L("dmNotSignedIn"))
+        val group = preferredGroup(message.peer) ?: throw CoreError(L("dmGroupGone"))
+        if (message.state != DMDeliveryState.SENT) return
+        val target = message.id.substringBefore(":")
+        val existing = reactions[target]?.firstOrNull { it.sender == me && it.emoji == choice.content }
+        if (existing != null) {
+            val sent = MarmotEngine.send(group.id, 5, "", listOf(listOf("e", existing.id)))
+            if (publish(sent.eventJSON, relays(group.id)).isNullOrEmpty()) throw CoreError(L("dmSendFailed"))
+            reactions = reactions + (target to reactions[target].orEmpty().filterNot { it.id == existing.id })
+            hide(listOf(existing.id))
+            return
+        }
+        val tags = mutableListOf(listOf("e", target), listOf("p", message.sender), listOf("k", "9"))
+        if (choice is EmojiChoice.Custom) tags.add(listOf("emoji", choice.emoji.shortcode, choice.emoji.url))
+        val sent = MarmotEngine.send(group.id, 7, choice.content, tags)
+        if (publish(sent.eventJSON, relays(group.id)).isNullOrEmpty()) {
+            Json.obj(sent.messageJSON)?.str("id")?.let { hide(listOf(it)) }
+            throw CoreError(L("dmSendFailed"))
+        }
+        Json.obj(sent.messageJSON)?.let { absorb(it, me, message.peer) }
+    }
+
+    private suspend fun packages(members: List<String>): List<String> {
+        val found = members.distinct().associateWith { keyPackage(it, fresh = true) }
+        val missing = found.filterValues { it == null }.keys
+        if (missing.isNotEmpty()) throw CoreError(L("dmGroupMembersUnavailable", "names" to missing.joinToString(", ") { ProfileCache.profile(it)?.bestName ?: Profile.shortNpub(it) }))
+        return found.values.filterNotNull()
+    }
+
+    private suspend fun sendWelcomes(welcomes: List<JSONObject>) {
+        for (welcome in welcomes) {
+            val pubkey = welcome.str("pubkey") ?: continue
+            val wrap = welcome.str("wrap") ?: continue
+            val targets = (welcome.strings("relays") + inboxRelays(pubkey) + RelayConfig.discoveryRelays).distinct()
+            if (publish(wrap, targets).isNullOrEmpty()) savePendingWelcome(wrap, targets)
+        }
+    }
+
+    suspend fun createGroup(name: String, members: List<String>): String {
+        val me = me ?: throw CoreError(L("dmNotSignedIn"))
+        val gen = generation
+        val others = members.distinct().filter { it != me }
+        if (others.isEmpty()) throw CoreError(L("dmGroupNeedsMembers"))
+        val packages = packages(others)
+        if (gen != generation) throw CancellationException()
+        val result = MarmotEngine.createGroup(packages, name.trim(), RelayConfig.mainRelays)
+        if (gen != generation) throw CancellationException()
+        val group = result.optJSONObject("group")?.let(MarmotGroup::from) ?: throw CoreError(L("dmGroupCreateFailed"))
+        groups[group.id] = group
+        groupChats = groupChats + (group.conversationKey to group)
+        joinedAt[group.conversationKey] = TimeFormat.now
+        saveLongMap(storeKey("group_joined", me), joinedAt)
+        accept(group.conversationKey)
+        startGroupRealtime(generation)
+        sendWelcomes(result.objects("welcomes"))
+        rebuildConversations()
+        return group.conversationKey
+    }
+
+    suspend fun addMembers(members: List<String>, key: String) {
+        val group = preferredGroup(key) ?: throw CoreError(L("dmGroupGone"))
+        val gen = generation
+        val fresh = members.filter { it !in group.members && it != me }
+        if (fresh.isEmpty()) return
+        val packages = packages(fresh)
+        if (gen != generation) throw CancellationException()
+        val welcomes = MarmotEngine.addMembers(group.id, packages) { !publish(it, relays(group.id)).isNullOrEmpty() }
+        if (gen != generation) return
+        sendWelcomes(welcomes)
+        reloadGroups(false, gen)
+    }
+
+    suspend fun removeMember(member: String, key: String) {
+        val group = preferredGroup(key) ?: throw CoreError(L("dmGroupGone"))
+        val gen = generation
+        MarmotEngine.commit(group.id, { !publish(it, relays(group.id)).isNullOrEmpty() }) { marmotRemoveMembers(group.id, listOf(member)) }
+        if (gen == generation) reloadGroups(false, gen)
+    }
+
+    suspend fun renameGroup(key: String, name: String) {
+        val group = preferredGroup(key) ?: throw CoreError(L("dmGroupGone"))
+        val gen = generation
+        MarmotEngine.commit(group.id, { !publish(it, relays(group.id)).isNullOrEmpty() }) { marmotRenameGroup(group.id, name.trim()) }
+        if (gen == generation) reloadGroups(false, gen)
+    }
+
+    suspend fun leaveGroup(key: String) {
+        val group = preferredGroup(key) ?: throw CoreError(L("dmGroupGone"))
+        val gen = generation
+        MarmotEngine.leave(group.id) { !publish(it, relays(group.id)).isNullOrEmpty() }
+        if (gen != generation) return
+        groups.remove(group.id)
+        groupChats = groupChats - key
+        deleteConversation(key)
+        startGroupRealtime(gen)
     }
 
     private fun storeKey(name: String, me: String) = "dm_${name}_$me"
@@ -480,19 +627,23 @@ object DMService {
         val list = runCatching { MarmotEngine.groups() }.getOrNull() ?: return
         if (generation != this.generation) return
         val active = HashMap<String, MarmotGroup>()
-        for (group in list) if (group.isActive && group.peer(me) != null) active[group.id] = group
+        for (group in list) if (group.isActive && group.conversationKey(me) != null) active[group.id] = group
         val previous = groups.keys.toSet()
         groups = active
+        groupChats = active.values.filter { it.isGroupChat }.associateBy { it.conversationKey }
+        groupChats.keys.forEach { joinedAt.putIfAbsent(it, TimeFormat.now) }
+        saveLongMap(storeKey("group_joined", me), joinedAt)
+        ProfileCache.load(active.values.filter { it.isGroupChat }.flatMap { it.members }.distinct())
         val targets = if (loadingAll) active.keys.toList() else active.keys.filter { it !in previous }
         val loaded = mutableListOf<DMMessage>()
         for (id in targets) {
             val group = active[id] ?: continue
-            val peer = group.peer(me) ?: continue
+            val peer = group.conversationKey(me) ?: continue
             val raw = runCatching { MarmotEngine.messages(id, HISTORY_LIMIT) }.getOrNull() ?: continue
             val page = Json.array(raw)
             historyLoaded[id] = page.size
             historyComplete = if (page.size < HISTORY_LIMIT) historyComplete + id else historyComplete - id
-            loaded += page.reversed().flatMap { DMMessage.fromMarmot(it, me, peer) }
+            loaded += page.reversed().flatMap { absorb(it, me, peer) }
         }
         if (generation != this.generation) return
         val ordered = loaded.withIndex()
@@ -507,10 +658,11 @@ object DMService {
         apply(ordered)
         val statuses = peerStatus.toMutableMap()
         for (group in active.values) {
-            val peer = group.peer(me) ?: continue
+            val peer = group.conversationKey(me) ?: continue
             if (statuses[peer] != DMPeerStatus.READY) statuses[peer] = DMPeerStatus.READY
         }
         if (statuses != peerStatus) peerStatus = statuses
+        rebuildConversations()
         if (active.values.map { it.nostrGroupId }.toSet() != subscribedGroups) startGroupRealtime(generation)
     }
 
@@ -611,12 +763,12 @@ object DMService {
             }
             when (outcome.type) {
                 "message" -> {
-                    val peer = outcome.groupId?.let { groups[it] }?.peer(me)
+                    val peer = outcome.groupId?.let { groups[it] }?.conversationKey(me)
                     if (peer == null) {
                         groupsChanged = true
                         continue
                     }
-                    Json.obj(outcome.messageJSON)?.let { incoming += DMMessage.fromMarmot(it, me, peer) }
+                    Json.obj(outcome.messageJSON)?.let { incoming += absorb(it, me, peer) }
                 }
                 "welcome" -> {
                     groupsChanged = true
@@ -687,7 +839,7 @@ object DMService {
         commit(work)
         activePeerState?.let { if (it in changedPeers) markReadSilently(it) }
         rebuildConversations()
-        val missing = changedPeers.filter { ProfileCache.profile(it) == null }
+        val missing = (changedPeers.filterNot(::isGroup) + changedPeers.filter(::isGroup).flatMap { messagesByPeer[it].orEmpty().map { msg -> msg.sender } }).distinct().filter { ProfileCache.profile(it) == null }
         if (missing.isNotEmpty()) App.scope.launch { ProfileCache.load(missing) }
         DataBus.dmChanged()
     }
@@ -730,16 +882,24 @@ object DMService {
 
     private fun preferredGroup(peer: String): MarmotGroup? {
         val me = me ?: return null
+        if (isGroup(peer)) return groups[peer.removePrefix(GROUP_PREFIX)]
         return groups.values.filter { it.peer(me) == peer }.maxWithOrNull(compareBy<MarmotGroup>({ it.lastMessageAt }, { it.id }))
     }
 
     private fun rebuildConversations() {
         val blocked = Session.mutedPubkeys.toSet()
-        conversations = messagesByPeer.mapNotNull { (peer, list) ->
+        val list = messagesByPeer.mapNotNull { (peer, list) ->
+            if (isGroup(peer) && peer !in groupChats) return@mapNotNull null
             if (peer in blocked) return@mapNotNull null
             val last = list.lastOrNull { it.state == DMDeliveryState.SENT } ?: list.lastOrNull() ?: return@mapNotNull null
             DMConversation(peer, last, isUnread(peer, list))
-        }.sortedByDescending { it.timestamp }
+        }.toMutableList()
+        groupChats.forEach { (key, group) ->
+            if (messagesByPeer[key].isNullOrEmpty() && key !in clearedAt) {
+                list.add(DMConversation(key, DMMessage("group-start-${group.id}", me ?: "", key, L("dmGroupStarted"), maxOf(joinedAt[key] ?: 0L, group.lastMessageAt), false, 0), false))
+            }
+        }
+        conversations = list.sortedByDescending { it.timestamp }
         updateBadge()
     }
 
@@ -841,12 +1001,12 @@ object DMService {
         }
     }
 
-    suspend fun sendFile(data: ByteArray, mimeType: String, peer: String) {
-        val prepared = prepareFile(data, mimeType, peer)
+    suspend fun sendFile(data: ByteArray, mimeType: String, peer: String, extraImeta: List<String> = emptyList()) {
+        val prepared = prepareFile(data, mimeType, peer, extraImeta)
         sendPrepared(prepared, peer)
     }
 
-    suspend fun prepareFile(data: ByteArray, mimeType: String, peer: String): DMPreparedFile {
+    suspend fun prepareFile(data: ByteArray, mimeType: String, peer: String, extraImeta: List<String> = emptyList()): DMPreparedFile {
         if (data.size > MAX_FILE_SIZE) throw CoreError(L("fileTooLarge"))
         val key = privateKey ?: throw CoreError(L("dmNotSignedIn"))
         val groupId = ensureChat(peer)
@@ -879,7 +1039,7 @@ object DMService {
             } catch (_: Throwable) {
                 throw CoreError(L("failedToUploadEncryptedMedia"))
             }
-            return DMPreparedFile(url, encrypted.mimeType, groupId, encrypted.imeta, encrypted.originalHash, encrypted.filename, encrypted.size)
+            return DMPreparedFile(url, encrypted.mimeType, groupId, encrypted.imeta + extraImeta, encrypted.originalHash, encrypted.filename, encrypted.size)
         } finally {
             withContext(Dispatchers.IO) { encrypted.file.delete() }
         }
@@ -988,7 +1148,7 @@ object DMService {
     private suspend fun deliver(sent: MarmotSent, groupId: String, peer: String, pendingId: String) {
         val me = me ?: throw CoreError(L("dmNotSignedIn"))
         val generation = this.generation
-        val messages = Json.obj(sent.messageJSON)?.let { DMMessage.fromMarmot(it, me, peer) }.orEmpty()
+        val messages = Json.obj(sent.messageJSON)?.let { absorb(it, me, peer) }.orEmpty()
         Json.obj(sent.eventJSON)?.str("id")?.let { seenEvents.add(it) }
         val accepted = publish(sent.eventJSON, relays(groupId))
         if (generation != this.generation) return
@@ -1028,6 +1188,7 @@ object DMService {
 
     private suspend fun ensureChat(peer: String): String {
         preferredGroup(peer)?.let { return it.id }
+        if (isGroup(peer)) throw CoreError(L("dmGroupGone"))
         chatCreation[peer]?.let { return it.await() }
         val task = App.scope.async { createChat(peer) }
         chatCreation[peer] = task

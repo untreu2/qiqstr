@@ -185,14 +185,15 @@ object AudioPlayback {
         private set
     var duration by mutableDoubleStateOf(0.0)
         private set
+    private var currentKey: String? = null
     private var player: ExoPlayer? = null
     private var ticker: Job? = null
 
-    fun isCurrent(url: String) = currentURL == url
+    fun isCurrent(key: String) = currentKey == key
 
-    fun toggle(url: String) {
+    fun toggle(url: String, key: String = url) {
         val existing = player
-        if (currentURL == url && existing != null) {
+        if (currentKey == key && existing != null) {
             val resumes = !isPlaying
             if (resumes) existing.play() else existing.pause()
             isPlaying = resumes
@@ -220,6 +221,7 @@ object AudioPlayback {
         created.play()
         player = created
         currentURL = url
+        currentKey = key
         progress = 0.0
         duration = 0.0
         isPlaying = true
@@ -235,9 +237,9 @@ object AudioPlayback {
         }
     }
 
-    fun seek(url: String, fraction: Double) {
+    fun seek(key: String, fraction: Double) {
         val existing = player ?: return
-        if (currentURL != url || duration <= 0) return
+        if (currentKey != key || duration <= 0) return
         val clamped = fraction.coerceIn(0.0, 1.0)
         existing.seekTo((duration * clamped * 1000).toLong())
         progress = clamped
@@ -249,6 +251,7 @@ object AudioPlayback {
         player?.release()
         player = null
         currentURL = null
+        currentKey = null
         isPlaying = false
         progress = 0.0
         duration = 0.0

@@ -84,6 +84,7 @@ dependencies {
 
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
+    implementation("androidx.media3:media3-session:1.5.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
 
     implementation("com.google.zxing:core:3.5.3")
@@ -92,4 +93,5 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.17.0@aar")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

@@ -85,3 +85,20 @@ fun StreamPlayer(url: String, modifier: Modifier = Modifier, playing: Boolean = 
         }
     }
 }
+
+@OptIn(UnstableApi::class)
+@Composable
+fun LiveStreamPlayer(modifier: Modifier = Modifier) {
+    val player = LivePlayback.player
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var visible by remember { mutableStateOf(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) }
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) visible = true
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) visible = false
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    AndroidView(factory = { PlayerView(it).apply { useController = true } }, update = { it.player = if (visible) player else null }, onRelease = { it.player = null }, modifier = modifier)
+}

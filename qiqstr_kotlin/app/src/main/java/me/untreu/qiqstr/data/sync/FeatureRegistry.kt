@@ -10,5 +10,5 @@ import me.untreu.qiqstr.ui.profile.ProfileFeature
 import me.untreu.qiqstr.ui.wallet.WalletFeature
 
 object FeatureRegistry {
-    val all: List<FeatureHooks> = listOf(ProfileFeature, NotesFeature, ComposeFeature, ExploreFeature, ArticlesFeature, AuthFeature, DMFeature, WalletFeature)
+    val all: List<FeatureHooks> = listOf(me.untreu.qiqstr.ui.communities.CommunitiesFeature, ProfileFeature, NotesFeature, ComposeFeature, ExploreFeature, ArticlesFeature, AuthFeature, DMFeature, WalletFeature)
 }

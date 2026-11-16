@@ -59,6 +59,7 @@ class DMBubbleActions(
     val onDiscard: (DMMessage) -> Unit,
     val onQuote: (DMMessage) -> Unit,
     val onInfo: (DMMessage) -> Unit,
+    val onReact: ((DMMessage, me.untreu.qiqstr.data.services.EmojiChoice) -> Unit)? = null,
 )
 
 fun dmBubbleShape(mine: Boolean, isFirstInGroup: Boolean, isLastInGroup: Boolean): RoundedCornerShape {
@@ -80,7 +81,11 @@ fun DMMessageBubble(
     actions: DMBubbleActions,
     searchQuery: String = "",
     isCurrentMatch: Boolean = false,
+    senderName: String? = null,
+    reactions: List<DMReaction> = emptyList(),
 ) {
+    var showsPicker by remember { mutableStateOf(false) }
+    if (showsPicker) me.untreu.qiqstr.core.components.EmojiPickerSheet(onDismiss = { showsPicker = false }) { actions.onReact?.invoke(message, it) }
     val mine = message.isMine
     val shape = dmBubbleShape(mine, isFirstInGroup, isLastInGroup)
     var menuOpen by remember { mutableStateOf(false) }
@@ -97,13 +102,35 @@ fun DMMessageBubble(
         if (mine) Spacer(Modifier.width(48.dp))
         if (message.state == DMDeliveryState.FAILED) FailedBadge(message, actions)
         Column(Modifier.weight(1f, fill = false), horizontalAlignment = if (mine) Alignment.End else Alignment.Start, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (senderName != null && isFirstInGroup && !mine) Text(senderName, style = MaterialTheme.typography.labelMedium, color = AppColors.textSecondary, modifier = Modifier.padding(horizontal = 12.dp).testTag("dm-message-sender"))
             Box {
                 val highlight = if (isCurrentMatch) Modifier.border(2.dp, AppColors.link, shape) else Modifier
                 Box(highlight) {
                     Bubble(message, shape, searchQuery, openMenu)
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (message.state == DMDeliveryState.SENT && actions.onReact != null) {
+                        Row {
+                            listOf("❤️", "😂", "😮", "😢", "🔥", "👍").forEach { emoji ->
+                                androidx.compose.material3.TextButton(onClick = { menuOpen = false; actions.onReact.invoke(message, me.untreu.qiqstr.data.services.EmojiChoice.Unicode(emoji)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp), modifier = Modifier.size(40.dp)) { Text(emoji) }
+                            }
+                        }
+                        DropdownMenuItem(text = { Text(L("emojiMore")) }, onClick = { menuOpen = false; showsPicker = true }, modifier = Modifier.testTag("dm-react"))
+                    }
                     MenuItems(message, actions) { menuOpen = false }
+                }
+            }
+            if (reactions.isNotEmpty()) Row(Modifier.testTag("dm-reactions"), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                reactions.groupBy { it.emoji }.entries.sortedWith(compareByDescending<Map.Entry<String, List<DMReaction>>> { it.value.size }.thenBy { it.key }).forEach { (emoji, items) ->
+                    val custom = items.firstOrNull()?.emojiURL
+                    val choice = if (custom != null) me.untreu.qiqstr.data.services.EmojiChoice.Custom(me.untreu.qiqstr.data.services.CustomEmoji(emoji.trim(':'), custom)) else me.untreu.qiqstr.data.services.EmojiChoice.Unicode(emoji)
+                    val mineReaction = items.any { it.sender == me.untreu.qiqstr.data.sync.Session.pubkey }
+                    androidx.compose.material3.Surface(onClick = { actions.onReact?.invoke(message, choice) }, enabled = actions.onReact != null && message.state == DMDeliveryState.SENT, shape = RoundedCornerShape(50), color = if (mineReaction) AppColors.link.copy(alpha = 0.18f) else AppColors.tile) {
+                        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            if (custom != null) me.untreu.qiqstr.core.components.CustomEmojiImage(custom, 16.dp) else Text(emoji, style = MaterialTheme.typography.bodySmall)
+                            if (items.size > 1) Text("${items.size}", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             }
             if (isLastInGroup || message.state != DMDeliveryState.SENT) Footer(message, actions)

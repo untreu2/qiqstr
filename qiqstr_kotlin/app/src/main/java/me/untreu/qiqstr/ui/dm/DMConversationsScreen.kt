@@ -343,7 +343,7 @@ private fun ConversationItem(conversation: DMConversation, model: DMConversation
                     leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Chat, null) },
                     onClick = { menuOpen = false; Router.push(Route.DMChat(conversation.peer)) },
                 )
-                DropdownMenuItem(
+                if (!DMService.isGroup(conversation.peer)) DropdownMenuItem(
                     text = { Text(L("dmViewProfile")) },
                     leadingIcon = { Icon(Icons.Outlined.AccountCircle, null) },
                     onClick = { menuOpen = false; Router.push(Route.Profile(conversation.peer)) },
@@ -355,7 +355,7 @@ private fun ConversationItem(conversation: DMConversation, model: DMConversation
                         onClick = { menuOpen = false; model.toggleRead(conversation) },
                     )
                 }
-                DropdownMenuItem(
+                if (!DMService.isGroup(conversation.peer)) DropdownMenuItem(
                     text = { Text(L("dmCopyNpub")) },
                     leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
                     onClick = { menuOpen = false; model.copyNpub(conversation.peer) },
@@ -369,7 +369,7 @@ private fun ConversationItem(conversation: DMConversation, model: DMConversation
 @Composable
 fun DMConversationRow(conversation: DMConversation, modifier: Modifier = Modifier) {
     val profile = ProfileCache.profiles[conversation.peer]
-    val name = profile?.bestName ?: Profile.shortNpub(conversation.peer)
+    val name = DMService.group(conversation.peer)?.displayName ?: profile?.bestName ?: Profile.shortNpub(conversation.peer)
     Row(
         modifier.fillMaxWidth().padding(start = 6.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -381,7 +381,7 @@ fun DMConversationRow(conversation: DMConversation, modifier: Modifier = Modifie
                 Box(Modifier.size(10.dp).graphicsLayer { scaleX = dot; scaleY = dot; alpha = dot }.background(AppColors.accent, CircleShape).testTag("dm-unread-dot"))
             }
         }
-        ProfileAvatar(conversation.peer, size = 52.dp)
+        if (DMService.isGroup(conversation.peer)) DMGroupAvatar(DMService.group(conversation.peer), 52.dp) else ProfileAvatar(conversation.peer, size = 52.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(

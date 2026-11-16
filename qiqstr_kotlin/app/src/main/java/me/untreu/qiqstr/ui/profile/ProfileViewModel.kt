@@ -29,7 +29,7 @@ import me.untreu.qiqstr.domain.Note
 import me.untreu.qiqstr.domain.Profile
 
 enum class ProfileTab(val raw: String) {
-    NOTES("notes"), REPLIES("replies"), PHOTOS("photos"), LIKES("likes");
+    NOTES("notes"), REPLIES("replies"), PHOTOS("photos"), LIKES("likes"), ARTICLES("articles");
 
     val title: String get() = if (this == PHOTOS) L("media") else L(raw)
 }
@@ -51,6 +51,20 @@ class ProfileViewModel(val pubkey: String) : ViewModel() {
         private set
     var badges by mutableStateOf<List<ProfileBadge>>(BadgeService.cached(pubkey) ?: emptyList())
         private set
+    var articles by mutableStateOf<List<me.untreu.qiqstr.domain.Article>>(emptyList())
+        private set
+    private var articlesLimit = 50
+    var canLoadMoreArticles by mutableStateOf(false)
+        private set
+    val tabs: List<ProfileTab> get() = ProfileTab.entries.filter { it != ProfileTab.ARTICLES || isMe || articles.isNotEmpty() }
+    suspend fun reloadArticles() {
+        articles = me.untreu.qiqstr.ui.articles.ArticleService.articles(listOf(pubkey), articlesLimit)
+        canLoadMoreArticles = articles.size >= articlesLimit
+    }
+    private suspend fun syncArticles(force: Boolean) {
+        me.untreu.qiqstr.ui.articles.ArticleService.sync(listOf(pubkey), force)
+        reloadArticles()
+    }
     var media by mutableStateOf<List<ProfileMediaEntry>>(emptyList())
         private set
 
@@ -133,6 +147,7 @@ class ProfileViewModel(val pubkey: String) : ViewModel() {
             ProfileTab.NOTES, ProfileTab.PHOTOS -> canLoadMoreNotes
             ProfileTab.REPLIES -> canLoadMoreReplies
             ProfileTab.LIKES -> canLoadMoreLikes
+            ProfileTab.ARTICLES -> canLoadMoreArticles
         }
 
     fun start() {
@@ -142,6 +157,7 @@ class ProfileViewModel(val pubkey: String) : ViewModel() {
             reloadProfile()
             coroutineScope {
                 launch { reloadNotes() }
+                launch { reloadArticles() }
                 launch { loadPinned(remote = false) }
                 launch { loadFollowing(sync = false) }
                 launch { loadBadges(remote = false) }
@@ -161,6 +177,7 @@ class ProfileViewModel(val pubkey: String) : ViewModel() {
     }
 
     private suspend fun syncAll(force: Boolean) = coroutineScope {
+        launch { syncArticles(force) }
         launch { syncProfile(force) }
         launch { syncNotes(force) }
         launch { syncLikes() }
@@ -328,6 +345,17 @@ class ProfileViewModel(val pubkey: String) : ViewModel() {
             try {
                 val page = ProfileDataSource.PAGE_SIZE
                 when (tab) {
+                    ProfileTab.ARTICLES -> {
+                        if (!canLoadMoreArticles) return@launch
+                        val previous = articles.size
+                        articlesLimit += page
+                        reloadArticles()
+                        if (articles.size <= previous) {
+                            me.untreu.qiqstr.ui.articles.ArticleService.fetchOlder(listOf(pubkey), articles.lastOrNull()?.createdAt ?: TimeFormat.now)
+                            reloadArticles()
+                        }
+                        if (articles.size <= previous) canLoadMoreArticles = false
+                    }
                     ProfileTab.NOTES, ProfileTab.PHOTOS -> {
                         if (!canLoadMoreNotes) return@launch
                         notesLimit += page

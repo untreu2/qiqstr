@@ -78,13 +78,14 @@ object DMFormat {
         if (!message.isFile) return null to message.content.replace("\n", " ")
         val file = message.file
         if (file?.isImage == true) return Icons.Outlined.Image to L("dmPhoto")
+        if (file?.isAudio == true) return Icons.Outlined.AttachFile to L("voiceTitle")
         if (file?.isVideo == true) return Icons.Outlined.Videocam to L("dmVideo")
         return Icons.Outlined.AttachFile to L("dmAttachment")
     }
 }
 
 val DMMessage.spokenSender: String
-    get() = if (isMine) L("dmYou") else ProfileCache.profile(peer)?.bestName ?: Profile.shortNpub(peer)
+    get() = if (isMine) L("dmYou") else ProfileCache.profile(sender)?.bestName ?: Profile.shortNpub(sender)
 
 object DMText {
     private val imageExtensions = setOf("jpg", "jpeg", "png", "gif", "webp")

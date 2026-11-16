@@ -126,7 +126,7 @@ fun DMChatScreen(pubkey: String) {
     var unseenCount by remember { mutableIntStateOf(0) }
     var viewportHeight by remember { mutableIntStateOf(0) }
     val profile = ProfileCache.profiles[pubkey]
-    val name = profile?.bestName ?: Profile.shortNpub(pubkey)
+    val name = model.group?.displayName ?: profile?.bestName ?: Profile.shortNpub(pubkey)
     val messages = model.messages
     val rows = remember(messages) { model.rows(messages).asReversed() }
     val thresholdPx = with(density) { 360.dp.toPx() }
@@ -199,6 +199,7 @@ fun DMChatScreen(pubkey: String) {
             onDiscard = model::discard,
             onQuote = model::quote,
             onInfo = model::showInfo,
+            onReact = if (Session.canSign) model::react else null,
         )
     }
 
@@ -276,6 +277,8 @@ fun DMChatScreen(pubkey: String) {
                                     actions = actions,
                                     searchQuery = model.trimmedSearch,
                                     isCurrentMatch = model.currentMatchId == row.message.id,
+                                    senderName = if (model.isGroup) ProfileCache.profile(row.message.sender)?.bestName ?: Profile.shortNpub(row.message.sender) else null,
+                                    reactions = model.reactions(row.message),
                                 )
                             }
                         }
@@ -302,6 +305,8 @@ fun DMChatScreen(pubkey: String) {
 @Composable
 private fun ChatTopBar(pubkey: String, name: String, model: DMChatViewModel, safety: DMSafetyModel, onSearch: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
+    var groupInfo by remember { mutableStateOf(false) }
+    if (groupInfo) DMGroupInfoSheet(pubkey, onDismiss = { groupInfo = false }, onLeft = { Router.pop() })
     TopAppBar(
         navigationIcon = { IconButton(onClick = { Router.pop() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, L("back")) } },
         title = {
@@ -309,13 +314,13 @@ private fun ChatTopBar(pubkey: String, name: String, model: DMChatViewModel, saf
                 Modifier
                     .widthIn(max = 260.dp)
                     .clip(CircleShape)
-                    .clickable { Router.push(Route.Profile(pubkey)) }
+                    .clickable { if (model.isGroup) groupInfo = true else Router.push(Route.Profile(pubkey)) }
                     .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
                     .testTag("dm-chat-header"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                ProfileAvatar(pubkey, size = 30.dp)
+                if (model.isGroup) DMGroupAvatar(model.group, 30.dp) else ProfileAvatar(pubkey, size = 30.dp)
                 Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         },
@@ -329,12 +334,13 @@ private fun ChatTopBar(pubkey: String, name: String, model: DMChatViewModel, saf
                         enabled = model.messages.isNotEmpty(),
                         onClick = { menuOpen = false; onSearch() },
                     )
-                    DropdownMenuItem(
+                    if (model.isGroup) DropdownMenuItem(text = { Text(L("dmGroupInfo")) }, onClick = { menuOpen = false; groupInfo = true }, modifier = Modifier.testTag("dm-group-info-open"))
+                    if (!model.isGroup) DropdownMenuItem(
                         text = { Text(L("dmViewProfile")) },
                         leadingIcon = { Icon(Icons.Outlined.AccountCircle, null) },
                         onClick = { menuOpen = false; Router.push(Route.Profile(pubkey)) },
                     )
-                    DropdownMenuItem(
+                    if (!model.isGroup) DropdownMenuItem(
                         text = { Text(L("dmCopyNpub")) },
                         leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
                         onClick = {
@@ -412,9 +418,9 @@ private fun RequestBanner(name: String, model: DMChatViewModel, safety: DMSafety
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(L("dmRequestNotice", "name" to name), style = MaterialTheme.typography.bodyMedium, color = AppColors.textSecondary, textAlign = TextAlign.Center)
+            Text(L(if (model.isGroup) "dmGroupRequestNotice" else "dmRequestNotice", "name" to name), style = MaterialTheme.typography.bodyMedium, color = AppColors.textSecondary, textAlign = TextAlign.Center)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
+                if (!model.isGroup) OutlinedButton(
                     onClick = { safety.blockTarget = pubkey },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.error),
                     modifier = Modifier.heightIn(min = 48.dp).testTag("dm-request-block"),
@@ -481,7 +487,7 @@ private fun EmptyChat(pubkey: String, name: String, model: DMChatViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            ProfileAvatar(pubkey, size = 84.dp)
+            if (model.isGroup) DMGroupAvatar(model.group, 84.dp) else ProfileAvatar(pubkey, size = 84.dp)
             Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             if (model.isPeerUnavailable) {
                 Row(Modifier.padding(horizontal = 32.dp).testTag("dm-chat-peer-unavailable"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

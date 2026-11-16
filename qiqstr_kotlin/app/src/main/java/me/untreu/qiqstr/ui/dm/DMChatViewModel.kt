@@ -71,6 +71,24 @@ class DMChatViewModel(val peer: String) : ViewModel() {
     private val service = DMService
     private val groupWindow = 300L
 
+    val group: MarmotGroup? get() = service.group(peer)
+    val isGroup: Boolean get() = DMService.isGroup(peer)
+    fun reactions(message: DMMessage) = service.reactions(message)
+    fun react(message: DMMessage, choice: me.untreu.qiqstr.data.services.EmojiChoice) {
+        viewModelScope.launch { runCatching { service.react(message, choice) }.onFailure { ToastCenter.error(it) } }
+    }
+    fun sendVoice(recording: me.untreu.qiqstr.data.services.VoiceRecording) {
+        if (!ReadOnlyGate.check()) return
+        viewModelScope.launch {
+            try {
+                val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { java.io.File(recording.path).readBytes() }
+                service.sendFile(bytes, "audio/mp4", peer, listOf("duration ${recording.duration}", "waveform ${recording.waveform.joinToString(" ")}"))
+                sentCount += 1
+            } catch (error: Throwable) { ToastCenter.error(error); failureCount += 1 }
+            finally { java.io.File(recording.path).delete() }
+        }
+    }
+
     val messages: List<DMMessage> get() = service.messages(peer)
     val isLoading: Boolean get() = !service.hasLoaded && messages.isEmpty()
     val isPreparingAttachment: Boolean get() = attachments.any { it.state == DMAttachmentState.Preparing }
@@ -162,7 +180,7 @@ class DMChatViewModel(val peer: String) : ViewModel() {
     fun chatRelays(): List<String> = service.chatRelays(peer)
 
     private fun grouped(a: DMMessage, b: DMMessage): Boolean =
-        a.isMine == b.isMine && b.createdAt - a.createdAt < groupWindow && DMFormat.sameDay(a.createdAt, b.createdAt) && a.state == b.state
+        a.sender == b.sender && b.createdAt - a.createdAt < groupWindow && DMFormat.sameDay(a.createdAt, b.createdAt) && a.state == b.state
 
     suspend fun appeared() {
         service.activePeer = peer

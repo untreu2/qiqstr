@@ -115,7 +115,7 @@ fun LiveChatRow(message: LiveChatMessage) {
                     Text(liveHostName(message.pubkey), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Text(TimeFormat.relative(message.createdAt), style = MaterialTheme.typography.labelSmall, color = AppColors.textTertiary)
                 }
-                SelectionContainer { Text(message.content, style = MaterialTheme.typography.bodyMedium) }
+                SelectionContainer { ChatText(message.content) }
             }
         }
     }
@@ -157,4 +157,9 @@ fun LiveChatInput(text: String, onTextChange: (String) -> Unit, canSend: Boolean
             }
         }
     }
+}
+
+@Composable
+fun ChatText(text: String, modifier: Modifier = Modifier) {
+    Text(me.untreu.qiqstr.ui.dm.DMText.attributed(text, false, "", AppColors.link, AppColors.link), style = MaterialTheme.typography.bodyMedium, color = AppColors.textPrimary, modifier = modifier)
 }

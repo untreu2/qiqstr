@@ -68,18 +68,19 @@ fun AudioPlayerView(
     duration: Double? = null,
     waveform: List<Int> = emptyList(),
     tint: Color = AppColors.textPrimary,
+    playbackKey: String = url,
 ) {
-    val isCurrent = AudioPlayback.isCurrent(url)
+    val isCurrent = AudioPlayback.isCurrent(playbackKey)
     val isPlaying = isCurrent && AudioPlayback.isPlaying
     val progress = if (isCurrent) AudioPlayback.progress else 0.0
     val total = if (isCurrent && AudioPlayback.duration > 0) AudioPlayback.duration else duration
     val label = if (isPlaying) L("voicePause") else L("voicePlay")
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
-            onClick = { AudioPlayback.toggle(url) },
+            onClick = { AudioPlayback.toggle(url, playbackKey) },
             shape = CircleShape,
             color = tint,
-            contentColor = AppColors.background,
+            contentColor = if (tint == AppColors.textPrimary) AppColors.background else AppColors.textPrimary,
             modifier = Modifier.size(40.dp).semantics { contentDescription = label }.testTag("audio-play"),
         ) {
             Box(contentAlignment = Alignment.Center) { Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, null) }
@@ -89,12 +90,12 @@ fun AudioPlayerView(
             progress = progress,
             tint = tint,
             modifier = Modifier.weight(1f).height(32.dp)
-                .pointerInput(url) { detectTapGestures { AudioPlayback.seek(url, it.x.toDouble() / maxOf(1, size.width)) } }
-                .pointerInput(url) {
+                .pointerInput(playbackKey) { detectTapGestures { AudioPlayback.seek(playbackKey, it.x.toDouble() / maxOf(1, size.width)) } }
+                .pointerInput(playbackKey) {
                     var position = 0f
                     detectHorizontalDragGestures(
                         onDragStart = { position = it.x },
-                        onDragEnd = { AudioPlayback.seek(url, position.toDouble() / maxOf(1, size.width)) },
+                        onDragEnd = { AudioPlayback.seek(playbackKey, position.toDouble() / maxOf(1, size.width)) },
                     ) { change, _ -> position = change.position.x }
                 },
         )

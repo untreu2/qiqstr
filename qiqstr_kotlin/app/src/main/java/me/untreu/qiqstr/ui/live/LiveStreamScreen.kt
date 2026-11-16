@@ -49,7 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import me.untreu.qiqstr.app.Router
@@ -84,10 +84,7 @@ fun LiveStreamScreen(coordinate: String) {
     LaunchedEffect(stream?.coordinate) { model.runChat() }
     LaunchedEffect(DataBus.profileVersion) { model.refreshProfiles() }
     LaunchedEffect(Session.mutedPubkeys) { model.applyMutes() }
-    LifecycleResumeEffect(Unit) {
-        model.resume()
-        onPauseOrDispose { model.stop() }
-    }
+    DisposableEffect(model) { onDispose { if ((context as? android.app.Activity)?.isChangingConfigurations != true) model.stop() } }
 
     Scaffold(
         modifier = Modifier.fillMaxSize().testTag("live-stream"),
@@ -160,7 +157,9 @@ fun LiveStreamScreen(coordinate: String) {
 fun LivePlayerArea(stream: LiveStream, playbackURL: String?, playing: Boolean) {
     Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black).testTag("live-player"), contentAlignment = Alignment.Center) {
         if (playbackURL != null) {
-            StreamPlayer(playbackURL, Modifier.fillMaxSize(), playing)
+            if (LivePlayback.failed) {
+                androidx.compose.material3.TextButton(onClick = { Router.openUrl(playbackURL) }) { Text(L("exploreOpenInBrowser"), color = Color.White) }
+            } else LiveStreamPlayer(Modifier.fillMaxSize())
         } else {
             if (stream.image != null) RemoteImage(stream.image, Modifier.fillMaxSize().alpha(0.35f))
             Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {

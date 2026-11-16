@@ -32,9 +32,15 @@ sealed interface Route {
     data class NoteStatistics(val noteId: String) : Route { override val key get() = "stats/$noteId" }
     data class FollowList(val pubkey: String, val mode: FollowListMode) : Route { override val key get() = "follows/$pubkey/$mode" }
     data class Hashtag(val tag: String) : Route { override val key get() = "hashtag/$tag" }
+    data class Communities(val relay: String? = null) : Route { override val key get() = "communities/${relay.orEmpty()}" }
+    data class RelayGroup(val id: String) : Route { override val key get() = "relayGroup/$id" }
+    data class Community(val coordinate: String) : Route { override val key get() = "community/$coordinate" }
+    data class PublicChannel(val id: String) : Route { override val key get() = "channel/$id" }
     object Reads : Route { override val key get() = "reads" }
     data class Article(val articleId: String) : Route { override val key get() = "article/$articleId" }
     data class ArticleAddress(val naddr: String) : Route { override val key get() = "naddr/$naddr" }
+    data class ArticleEditor(val draftId: String? = null) : Route { override val key get() = "articleEditor/${draftId ?: "new"}" }
+    object ArticleDrafts : Route { override val key get() = "articleDrafts" }
     object EditProfile : Route { override val key get() = "editProfile" }
     object Settings : Route { override val key get() = "settings" }
     data class SettingsPage(val page: SettingsRoute) : Route { override val key get() = "settings/$page" }
@@ -142,11 +148,15 @@ object Router {
     }
 
     fun openUrl(url: String) {
+        me.untreu.qiqstr.ui.communities.RelayGroup.link(url)?.let { push(Route.RelayGroup(it.id)); return }
+        if (url.startsWith("wss://") || url.startsWith("ws://")) me.untreu.qiqstr.ui.communities.normalizedRelay(url)?.let { push(Route.Communities(it)); return }
+
         val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return
         open(uri)
     }
 
     fun open(uri: Uri) {
+        if (uri.scheme?.lowercase() in setOf("wss", "ws")) { me.untreu.qiqstr.ui.communities.normalizedRelay(uri.toString())?.let { push(Route.Communities(it)) }; return }
         val scheme = uri.scheme?.lowercase()
         if (scheme == "qiqstr" && uri.host?.lowercase() != "nwc") {
             openAppUri(uri)

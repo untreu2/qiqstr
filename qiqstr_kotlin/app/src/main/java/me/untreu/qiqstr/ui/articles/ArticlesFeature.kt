@@ -5,6 +5,6 @@ import me.untreu.qiqstr.data.sync.SessionHooks
 
 object ArticlesFeature : FeatureHooks {
     override fun register() {
-        SessionHooks.onTeardown { ReadingProgressStore.persist() }
+        SessionHooks.onTeardown { ReadingProgressStore.persist(); ArticleDraftStore.reset() }
     }
 }

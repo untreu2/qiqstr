@@ -95,11 +95,12 @@ private object DMModeration {
     }
 }
 
-private fun displayName(pubkey: String) = ProfileCache.profile(pubkey)?.bestName ?: Profile.shortNpub(pubkey)
+private fun displayName(pubkey: String) = DMService.group(pubkey)?.displayName ?: ProfileCache.profile(pubkey)?.bestName ?: Profile.shortNpub(pubkey)
 
 @Composable
 fun DMSafetyMenuItems(peer: String, safety: DMSafetyModel, onDismiss: () -> Unit) {
     HorizontalDivider()
+    if (!DMService.isGroup(peer)) {
     if (peer in MuteService.mutedPubkeys) {
         DropdownMenuItem(
             text = { Text(L("dmUnblock")) },
@@ -124,6 +125,7 @@ fun DMSafetyMenuItems(peer: String, safety: DMSafetyModel, onDismiss: () -> Unit
         onClick = { onDismiss(); safety.reportTarget = peer },
         modifier = Modifier.testTag("dm-report"),
     )
+    }
     DropdownMenuItem(
         text = { Text(L("dmDeleteConversation"), color = AppColors.error) },
         leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = AppColors.error) },

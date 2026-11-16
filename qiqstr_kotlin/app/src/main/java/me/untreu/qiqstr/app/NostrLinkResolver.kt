@@ -29,8 +29,13 @@ object NostrLinkResolver {
                 val id = Nip19.decode(link.entity) ?: return
                 val relays = hintRelays(link.entity)
                 App.scope.launch {
-                    val kind = locateEvent(id, relays)
-                    Router.push(if (kind == 30023) Route.Article(id) else Route.Thread(id))
+                    val event = locateEvent(id, relays)
+                    Router.push(when (event?.int("kind")) {
+                        30023 -> Route.Article(id)
+                        40 -> Route.PublicChannel(id)
+                        41, 42 -> me.untreu.qiqstr.ui.communities.channelRoot(event)?.let { Route.PublicChannel(it) } ?: Route.Thread(id)
+                        else -> Route.Thread(id)
+                    })
                 }
             }
             is NostrLink.Address -> {
@@ -39,6 +44,7 @@ object NostrLinkResolver {
                 val pubkey = tlv?.str("pubkey")
                 val identifier = tlv?.optString("identifier")
                 when {
+                    kind?.toInt() == 34550 && pubkey != null && identifier != null -> Router.push(Route.Community("34550:$pubkey:$identifier"))
                     kind?.toInt() == 30311 && pubkey != null && identifier != null -> Router.push(Route.LiveStream("30311:$pubkey:$identifier"))
                     kind == null || kind.toInt() == 30023 || kind.toInt() == 30024 -> Router.push(Route.ArticleAddress(link.entity))
                     else -> Router.browse(Uri.parse("https://njump.me/${link.entity}"))
@@ -50,13 +56,13 @@ object NostrLinkResolver {
     private fun hintRelays(entity: String): List<String> =
         Nip19.decodeTLV(entity)?.strings("relays").orEmpty().filter { it.startsWith("wss://") || it.startsWith("ws://") }.distinct().take(5)
 
-    private suspend fun locateEvent(id: String, relays: List<String>): Int? {
-        runCatching { dbGetEvent(id) }.getOrNull()?.let { raw -> Json.obj(raw)?.let { return it.int("kind") } }
-        if (relays.isEmpty()) return null
+    private suspend fun locateEvent(id: String, relays: List<String>): org.json.JSONObject? {
+        runCatching { dbGetEvent(id) }.getOrNull()?.let { raw -> Json.obj(raw)?.let { return it } }
+        val targets = relays.ifEmpty { me.untreu.qiqstr.data.services.RelayConfig.mainRelays }
         val filter = Json.string(mapOf("ids" to listOf(id), "limit" to 1))
-        val raw = runCatching { fetchEventsFromRelays(filter, relays, 4u) }.getOrNull() ?: return null
+        val raw = runCatching { fetchEventsFromRelays(filter, targets, 4u) }.getOrNull() ?: return null
         runCatching { dbSaveEvents(raw) }
-        return Json.array(raw).firstOrNull()?.int("kind")
+        return Json.array(raw).firstOrNull()
     }
 
     private suspend fun prefetchProfile(pubkey: String, relays: List<String>) {
