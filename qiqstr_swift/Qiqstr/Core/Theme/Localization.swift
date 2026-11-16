@@ -2,14 +2,29 @@ import Foundation
 import SwiftUI
 
 nonisolated enum AppLanguage: String, CaseIterable, Identifiable {
-    case en, tr, de
+    case en, tr, de, es
+    case ptBR = "pt-BR"
+    case fr, it, nl, pl
     var id: String { rawValue }
     var displayName: String {
         switch self {
         case .en: "English"
         case .tr: "Türkçe"
         case .de: "Deutsch"
+        case .es: "Español"
+        case .ptBR: "Português (Brasil)"
+        case .fr: "Français"
+        case .it: "Italiano"
+        case .nl: "Nederlands"
+        case .pl: "Polski"
         }
+    }
+
+    /// The app language for a code such as "pt-PT", "es-MX" or "fr", matching on the language part.
+    static func matching(_ code: String) -> AppLanguage? {
+        if let exact = AppLanguage(rawValue: code) { return exact }
+        let base = String(code.prefix { $0 != "-" && $0 != "_" }).lowercased()
+        return base == "pt" ? .ptBR : AppLanguage(rawValue: base)
     }
 
     static var locale: Locale {
@@ -22,6 +37,13 @@ nonisolated final class Localizer: @unchecked Sendable {
     static let shared = Localizer()
     private let lock = NSLock()
     private var bundle: Bundle = .main
+    private var activeCode = "en"
+
+    /// The language the UI is showing, such as "pl" or "pt-BR".
+    var languageCode: String {
+        lock.lock(); defer { lock.unlock() }
+        return activeCode
+    }
 
     private init() {
         apply(UserDefaults.standard.string(forKey: "app_language"))
@@ -29,8 +51,9 @@ nonisolated final class Localizer: @unchecked Sendable {
 
     func apply(_ code: String?) {
         lock.lock(); defer { lock.unlock() }
-        let preferred = code ?? Locale.preferredLanguages.first.map { String($0.prefix(2)) } ?? "en"
-        let lang = AppLanguage(rawValue: preferred)?.rawValue ?? "en"
+        let preferred = code ?? Locale.preferredLanguages.first ?? "en"
+        let lang = AppLanguage.matching(preferred)?.rawValue ?? "en"
+        activeCode = lang
         if let path = Bundle.main.path(forResource: lang, ofType: "lproj"), let b = Bundle(path: path) {
             bundle = b
         } else {
@@ -79,10 +102,24 @@ nonisolated enum ICUPlural {
             let body = String(result[range.upperBound..<end])
             let count = Int(args[name]?.description ?? "") ?? 0
             let choices = parseChoices(body)
-            let chosen = choices["=\(count)"] ?? (count == 1 ? choices["one"] : nil) ?? choices["other"] ?? ""
+            let chosen = choices["=\(count)"] ?? choices[category(count, language: Localizer.shared.languageCode)] ?? choices["other"] ?? ""
             result.replaceSubrange(range.lowerBound...end, with: chosen.replacingOccurrences(of: "#", with: "\(count)"))
         }
         return result
+    }
+
+    /// The CLDR plural category of a whole number in the app's languages.
+    static func category(_ n: Int, language: String) -> String {
+        switch language {
+        case "pl":
+            if n == 1 { return "one" }
+            let (tens, hundreds) = (n % 10, n % 100)
+            return (2...4).contains(tens) && !(12...14).contains(hundreds) ? "few" : "many"
+        case "fr", "pt-BR":
+            return n == 0 || n == 1 ? "one" : "other"
+        default:
+            return n == 1 ? "one" : "other"
+        }
     }
 
     private static func matchingBrace(in s: String, from start: String.Index) -> String.Index? {

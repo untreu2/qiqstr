@@ -1,0 +1,7 @@
+"localNotifyDeniedFooter" = "Meldingen voor qiqstr zijn uitgeschakeld in Systeeminstellingen.";
+"localNotifyDeliveryFooter" = "qiqstr toont meldingen over nieuwe activiteit zolang de app draait, ook als het venster op de achtergrond staat. Na het afsluiten wordt niets meer gecontroleerd.";
+"diagnosticsFooter" = "macOS verzamelt crash- en prestatierapporten voor qiqstr op deze Mac. Ze blijven hier en worden nooit geüpload. Deel een rapport en voeg het toe aan een hulpverzoek om een probleem te helpen oplossen. Rapporten bevatten technische appgegevens, geen notities, berichten of sleutels.";
+"diagnosticsEmptyMessage" = "macOS levert ongeveer dagelijks rapporten als er iets te melden is.";
+"macGoMenu" = "Ga";
+"macLibrary" = "Bibliotheek";
+"macBack" = "Terug";

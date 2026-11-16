@@ -73,18 +73,17 @@ enum SecureClipboard {
 }
 
 extension AppLanguage {
+    /// The language's name in the app's current language, such as "German" or "Almanca".
     var localizedName: String {
-        switch self {
-        case .en: L("english")
-        case .tr: L("turkish")
-        case .de: L("german")
-        }
+        let name = AppLanguage.current.locale.localizedString(forIdentifier: rawValue) ?? displayName
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 
+    var locale: Locale { Locale(identifier: rawValue) }
+
     static var current: AppLanguage {
-        let stored = UserDefaults.standard.string(forKey: "app_language")
-        let code = stored ?? Locale.preferredLanguages.first.map { String($0.prefix(2)) } ?? "en"
-        return AppLanguage(rawValue: code) ?? .en
+        let code = UserDefaults.standard.string(forKey: "app_language") ?? Locale.preferredLanguages.first ?? "en"
+        return AppLanguage.matching(code) ?? .en
     }
 }
 

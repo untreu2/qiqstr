@@ -1,0 +1,5 @@
+"NSCameraUsageDescription" = "qiqstr gebruikt de camera om QR-codes te scannen en foto's en video's voor je berichten te maken.";
+"NSPhotoLibraryUsageDescription" = "qiqstr heeft toegang tot je foto's nodig om media aan notities en berichten toe te voegen.";
+"NSPhotoLibraryAddUsageDescription" = "qiqstr bewaart foto's en video's die je wilt houden in je fotobibliotheek.";
+"NSFaceIDUsageDescription" = "qiqstr gebruikt Face ID om toegang tot je privésleutels te beveiligen.";
+"NSMicrophoneUsageDescription" = "qiqstr gebruikt de microfoon om spraakberichten en geluid bij je video's op te nemen.";

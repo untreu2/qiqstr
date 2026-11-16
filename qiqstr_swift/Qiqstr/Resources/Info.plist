@@ -55,6 +55,12 @@
 		<string>en</string>
 		<string>tr</string>
 		<string>de</string>
+		<string>es</string>
+		<string>pt-BR</string>
+		<string>fr</string>
+		<string>it</string>
+		<string>nl</string>
+		<string>pl</string>
 	</array>
 </dict>
 </plist>

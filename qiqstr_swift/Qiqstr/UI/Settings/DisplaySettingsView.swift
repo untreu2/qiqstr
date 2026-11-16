@@ -121,10 +121,6 @@ struct LanguageSettingsView: View {
     }
 
     private func localizedName(_ lang: AppLanguage) -> String {
-        switch lang {
-        case .en: L("english")
-        case .tr: L("turkish")
-        case .de: L("german")
-        }
+        lang.localizedName
     }
 }

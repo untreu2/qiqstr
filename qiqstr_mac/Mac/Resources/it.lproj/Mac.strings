@@ -1,0 +1,7 @@
+"localNotifyDeniedFooter" = "Le notifiche di qiqstr sono disattivate nelle Impostazioni di Sistema.";
+"localNotifyDeliveryFooter" = "qiqstr mostra notifiche per le nuove attività mentre è in esecuzione, anche con la finestra in background. Non controlla nulla dopo che chiudi l’app.";
+"diagnosticsFooter" = "macOS raccoglie report di arresti anomali e prestazioni di qiqstr su questo Mac. Restano qui e non vengono mai caricati. Per aiutare a risolvere un problema, condividi un report allegandolo a una richiesta di assistenza. Contengono dettagli tecnici sull’app, non post, messaggi o chiavi.";
+"diagnosticsEmptyMessage" = "macOS fornisce report circa una volta al giorno quando c’è qualcosa da segnalare.";
+"macGoMenu" = "Vai";
+"macLibrary" = "Libreria";
+"macBack" = "Indietro";
