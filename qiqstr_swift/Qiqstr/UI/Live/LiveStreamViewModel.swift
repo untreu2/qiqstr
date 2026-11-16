@@ -37,6 +37,7 @@ final class LiveStreamViewModel {
             try? await Task.sleep(for: .seconds(60))
             guard !Task.isCancelled, let updated = await service.stream(coordinate: coordinate) else { continue }
             stream = updated
+            LivePlayback.shared.update(updated)
             if updated.playbackURL != playingURL { startPlayback() }
         }
     }
@@ -121,31 +122,22 @@ final class LiveStreamViewModel {
     }
 
     func resume() {
-        if player == nil { startPlayback() } else { player?.play() }
+        if player == nil || LivePlayback.shared.player !== player { startPlayback() } else { LivePlayback.shared.resume() }
     }
 
     func stop() {
-        player?.pause()
-        PlaybackAudio.release()
+        guard let player, LivePlayback.shared.player === player else { return }
+        LivePlayback.shared.stop()
+        self.player = nil
+        playingURL = nil
     }
 
     private func startPlayback() {
-        guard let url = stream?.playbackURL, stream?.isLive == true || stream?.canReplay == true else {
-            player?.pause()
-            player = nil
-            playingURL = nil
+        guard let stream, let url = stream.playbackURL, stream.isLive || stream.canReplay else {
+            stop()
             return
         }
-        if url == playingURL, let player {
-            player.play()
-            return
-        }
-        PlaybackAudio.prepare(muted: false)
-        let next = AVPlayer(url: url)
-        next.automaticallyWaitsToMinimizeStalling = true
-        player?.pause()
-        player = next
+        player = LivePlayback.shared.play(stream, url: url)
         playingURL = url
-        next.play()
     }
 }

@@ -93,12 +93,14 @@ struct LiveStreamView: View {
 struct LivePlayerArea: View {
     let stream: LiveStream
     let player: AVPlayer?
+    @State private var playback = LivePlayback.shared
 
     var body: some View {
         ZStack {
             Color.black
             if let player {
-                VideoPlayer(player: player)
+                // Let go of the player in the background so its audio can keep playing.
+                VideoPlayer(player: playback.isVideoDetached ? nil : player)
             } else {
                 RemoteImage(url: stream.image, maxPixel: 900) { Color.black }
                     .opacity(0.35)

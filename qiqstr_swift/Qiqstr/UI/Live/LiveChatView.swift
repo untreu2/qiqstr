@@ -58,8 +58,9 @@ struct LiveChatRow: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
-                Text(message.content)
+                Text(ChatText.attributed(message.content))
                     .font(.subheadline)
+                    .environment(\.openURL, OpenURLAction { NoteLink.handle($0) })
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
