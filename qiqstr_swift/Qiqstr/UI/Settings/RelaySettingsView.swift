@@ -53,7 +53,7 @@ struct RelaySettingsView: View {
                     .accessibilityIdentifier("relays-broadcast-progress")
                 }
             } footer: {
-                Text(L("manageYourRelayConnections"))
+                Text(L("manageYourRelayConnections")).wrapsInFooter()
             }
 
             Section {
@@ -111,7 +111,7 @@ struct RelaySettingsView: View {
                 .pickerStyle(.navigationLink)
                 .accessibilityIdentifier("relays-gossip-mode")
             } footer: {
-                Text(L("gossipModeDescription"))
+                Text(L("gossipModeDescription")).wrapsInFooter()
             }
 
             Section {
@@ -275,11 +275,18 @@ struct SettingsRelayRow: View {
                         .fill(statusColor)
                         .frame(width: 9, height: 9)
                         .overlay(Circle().stroke(AppColors.surface, lineWidth: 2))
-                        .offset(x: 3, y: 3)
+                        .offset(x: Self.statusDotOffset, y: 3)
                 }
         }
         .animation(.smooth, value: status)
     }
+
+    // A macOS list puts the title right against the icon, so the dot stays inside it there.
+    #if os(macOS)
+    private static let statusDotOffset: CGFloat = -5
+    #else
+    private static let statusDotOffset: CGFloat = 3
+    #endif
 
     private var statusText: String {
         switch status?.status {

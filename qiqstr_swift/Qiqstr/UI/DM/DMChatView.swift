@@ -35,8 +35,7 @@ struct DMChatView: View {
                         DMInputBar(model: model, focus: $inputFocused, placeholder: L("dmMessagePlaceholder", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]))
                     } else {
                         Button(L("readOnlyAddKey")) { ReadOnlyGate.shared.addKey() }
-                            .buttonStyle(.glassProminent)
-                            .foregroundStyle(AppColors.background)
+                            .prominentButtonStyle()
                             .padding(.vertical, 12)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("dm-read-only-add-key")
@@ -67,6 +66,7 @@ struct DMChatView: View {
                     .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) { moreMenu }
             }
+            .hidesMacToolbarTitle()
             .task { await model.appeared() }
             .task { await model.poll() }
             .task(id: pubkey) { await cache.load([pubkey]) }
@@ -203,8 +203,7 @@ struct DMChatView: View {
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("dm-request-block")
                 Button(L("dmRequestAccept")) { model.acceptRequest() }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
                     .accessibilityIdentifier("dm-request-accept")
             }
             .controlSize(.large)

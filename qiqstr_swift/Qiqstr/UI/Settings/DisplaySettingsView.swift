@@ -38,7 +38,7 @@ struct DisplaySettingsView: View {
             } header: {
                 Text(L("settingsAppearance"))
             } footer: {
-                Text(L("displaySubtitle"))
+                Text(L("displaySubtitle")).wrapsInFooter()
             }
             Section {
                 Toggle(isOn: $expandedNotes) {
@@ -47,7 +47,7 @@ struct DisplaySettingsView: View {
                 .tint(AppColors.switchActive)
                 .accessibilityIdentifier("display-expanded-notes")
             } footer: {
-                Text(L("settingsExpandedNotesFooter"))
+                Text(L("settingsExpandedNotesFooter")).wrapsInFooter()
             }
             Section {
                 NavigationLink(value: Route.settingsPage(.language)) {

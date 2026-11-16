@@ -166,8 +166,7 @@ struct ZapSheet: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
                     .buttonBorderShape(.capsule)
                     .controlSize(.extraLarge)
                     .disabled(!model.canSubmit)
@@ -286,8 +285,7 @@ struct ZapSheet: View {
                     Label(L("walletConnectWallet"), systemImage: "wallet.bifold")
                         .font(.headline)
                 }
-                .buttonStyle(.glassProminent)
-                .foregroundStyle(AppColors.background)
+                .prominentButtonStyle()
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .padding(.top, 4)

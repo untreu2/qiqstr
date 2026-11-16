@@ -4,3 +4,4 @@
 "diagnosticsEmptyMessage" = "macOS, bildirecek bir şey olduğunda raporları günde yaklaşık bir kez iletir.";
 "macGoMenu" = "Git";
 "macLibrary" = "Kitaplık";
+"macBack" = "Geri";

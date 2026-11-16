@@ -112,13 +112,13 @@ struct ConnectWalletSheet: View {
                             .accessibilityIdentifier("wallet-connect-replace-warning")
                     }
                 }
-                if !model.isValid {
+                if !model.isValid, !WalletProvider.oneTap.isEmpty {
                     Section {
                         ForEach(WalletProvider.oneTap) { WalletProviderRow(provider: $0) }
                     } header: {
                         Text(L("walletConnectWithApp"))
                     } footer: {
-                        Text(L("walletConnectWithAppFooter"))
+                        Text(L("walletConnectWithAppFooter")).wrapsInFooter()
                     }
                 }
                 Section {
@@ -156,8 +156,7 @@ struct ConnectWalletSheet: View {
                             Text(L("nwcConnect")).fontWeight(.semibold)
                         }
                     }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
                     .disabled(!model.canConnect || model.isConnecting)
                     .accessibilityIdentifier("wallet-connect-submit")
                 }

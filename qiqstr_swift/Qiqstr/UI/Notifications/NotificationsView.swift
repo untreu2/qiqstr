@@ -192,6 +192,8 @@ struct NotificationFilterPicker: View {
                     .accessibilityIdentifier("notifications-filter-\(filter.rawValue)")
             }
         }
+        .pickerStyle(.inline)
+        .labelsHidden()
     }
 }
 

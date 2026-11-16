@@ -285,7 +285,7 @@ struct EventManagerSettingsView: View {
                     .accessibilityIdentifier("events-broadcast-progress")
                 }
             } footer: {
-                Text(L("yourDataOnRelaysDescription"))
+                Text(L("yourDataOnRelaysDescription")).wrapsInFooter()
             }
             Section {
                 Button { model.rebroadcast() } label: {
@@ -336,7 +336,7 @@ struct EventManagerSettingsView: View {
                     .disabled(model.isBusy)
                     .accessibilityIdentifier("events-delete-account")
                 } footer: {
-                    Text(L("settingsVanishFooter"))
+                    Text(L("settingsVanishFooter")).wrapsInFooter()
                 }
             }
         }

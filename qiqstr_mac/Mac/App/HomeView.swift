@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var session = Session.shared
     @State private var cache = ProfileCache.shared
     @State private var feedModel = FeedViewModel()
+    @State private var sidebarRefresh = 0
 
     private var me: String { session.pubkey ?? "" }
 
@@ -27,8 +28,10 @@ struct HomeView: View {
             ComposeView(context: router.composeContext ?? .newNote)
                 .frame(minWidth: 560, minHeight: 420)
         }
-        .sheet(isPresented: $router.showSidebar) {
-            SidebarView().frame(minWidth: 420, minHeight: 560)
+        .onChange(of: router.showSidebar) { _, shows in
+            guard shows else { return }
+            router.showSidebar = false
+            router.selectedTab = .profile
         }
         .sheet(item: sheetSelection) { sheet in
             AppSheetView(sheet: sheet).frame(minWidth: 480, minHeight: 520)
@@ -44,6 +47,7 @@ struct HomeView: View {
                 WidgetBridge.markRead()
             }
         }
+        .menuIndicator(.hidden)
         .readOnlyGate()
         .zapRetryToast()
         .task {
@@ -71,6 +75,7 @@ struct HomeView: View {
             }
         }
         .listStyle(.sidebar)
+        .id(sidebarRefresh)
         .safeAreaInset(edge: .bottom) { accountBar }
     }
 
@@ -99,7 +104,14 @@ struct HomeView: View {
         Binding(
             get: { router.selectedTab },
             set: { tab in
-                guard let tab else { return }
+                // Clicking the selected row deselects it on macOS. Treat that as a
+                // reselect: pop to the section's root and rebuild the list so the row
+                // stays highlighted.
+                guard let tab else {
+                    router.popToRoot(router.selectedTab)
+                    sidebarRefresh += 1
+                    return
+                }
                 if tab == router.selectedTab { router.popToRoot(tab) }
                 router.selectedTab = tab
             }
@@ -112,7 +124,7 @@ struct HomeView: View {
                 HStack(spacing: 10) {
                     AvatarView(url: cache.profile(me)?.picture, size: 28)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(cache.profile(me)?.bestName ?? L("profile")).font(.callout.weight(.semibold)).lineLimit(1)
+                        Text(cache.profile(me)?.bestName ?? L("anonymous")).font(.callout.weight(.semibold)).lineLimit(1)
                         Text(L("switchAccount")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Spacer(minLength: 0)

@@ -240,8 +240,7 @@ struct SendSheet: View {
                                 focusedAmount = false
                                 model.submit()
                             }
-                            .buttonStyle(.glassProminent)
-                            .foregroundStyle(AppColors.background)
+                            .prominentButtonStyle()
                             .disabled(!model.canSubmit)
                             .accessibilityIdentifier("send-submit")
                         }

@@ -72,13 +72,13 @@ struct ReportSheet: View {
                         .accessibilityIdentifier("report-reason-\(item.rawValue)")
                     }
                 } footer: {
-                    Text(L("reportUserDescription"))
+                    Text(L("reportUserDescription")).wrapsInFooter()
                 }
                 Section {
                     Toggle(L("reportAlsoMute"), isOn: $muteAuthor)
                         .accessibilityIdentifier("report-also-mute")
                 } footer: {
-                    Text(L("muteUserDescription"))
+                    Text(L("muteUserDescription")).wrapsInFooter()
                 }
             }
             .navigationTitle(L("reportUser", ["user": name]))
@@ -90,8 +90,7 @@ struct ReportSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("report")) { submit() }
-                        .buttonStyle(.glassProminent)
-                        .foregroundStyle(AppColors.background)
+                        .prominentButtonStyle()
                         .disabled(reason == nil || isWorking)
                         .accessibilityIdentifier("report-submit")
                 }

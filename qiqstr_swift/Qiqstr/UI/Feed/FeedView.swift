@@ -40,6 +40,7 @@ struct FeedView: View {
         .navigationTitle(model.source.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
+        .hidesMacToolbarTitle()
         .scrollEdgeEffectStyle(.soft, for: .top)
         .task { model.start() }
         .task(id: bus.feedVersion) { await model.reload() }
@@ -82,6 +83,8 @@ struct FeedView: View {
                 Label(set.title, systemImage: "list.bullet").tag(FeedSource.list(set))
             }
         }
+        .pickerStyle(.inline)
+        .labelsHidden()
         .accessibilityIdentifier("feed-selector")
         Button(L("feedAddFeed"), systemImage: "plus") { Router.shared.push(.followSets) }
             .accessibilityIdentifier("feed-add-list")
@@ -288,8 +291,7 @@ struct FeedFollowPrompt: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L("suggestedFollows")) { Router.shared.push(.suggestedFollows) }
-                .buttonStyle(.glassProminent)
-                .foregroundStyle(AppColors.background)
+                .prominentButtonStyle()
                 .buttonBorderShape(.capsule)
                 .accessibilityIdentifier("feed-follow-prompt-open")
         }
@@ -312,8 +314,7 @@ struct FeedEmptyState: View {
             Text(L("followSomeoneToSeePosts"))
         } actions: {
             Button(L("suggestedFollows")) { Router.shared.push(.suggestedFollows) }
-                .buttonStyle(.glassProminent)
-                .foregroundStyle(AppColors.background)
+                .prominentButtonStyle()
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .accessibilityIdentifier("feed-empty-suggested")

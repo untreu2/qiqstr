@@ -107,8 +107,7 @@ struct LiveChatInput: View {
                     }
                     .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.glassProminent)
-                .foregroundStyle(AppColors.background)
+                .prominentButtonStyle()
                 .buttonBorderShape(.circle)
                 .disabled(!canSend)
                 .accessibilityLabel(L("liveSend"))

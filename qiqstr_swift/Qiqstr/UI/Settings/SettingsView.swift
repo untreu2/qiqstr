@@ -88,7 +88,7 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("settings-delete-account")
                 } footer: {
-                    Text(L("settingsDeleteAccountFooter"))
+                    Text(L("settingsDeleteAccountFooter")).wrapsInFooter()
                 }
             }
         }

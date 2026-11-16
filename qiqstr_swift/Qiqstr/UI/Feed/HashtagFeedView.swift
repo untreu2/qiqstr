@@ -147,6 +147,7 @@ struct HashtagFeedView: View {
                 }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .hidesMacToolbarTitle()
         .task { await model.sync() }
         .task(id: bus.feedVersion) {
             await model.reload()
@@ -183,8 +184,7 @@ struct HashtagFollowButton: View {
                     .secondaryGlassStyle()
             } else {
                 Button(action: action) { Text(L("follow")).font(.subheadline.weight(.semibold)) }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
             }
         }
         .buttonBorderShape(.capsule)

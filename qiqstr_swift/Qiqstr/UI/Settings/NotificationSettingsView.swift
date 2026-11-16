@@ -50,7 +50,7 @@ struct NotificationSettingsView: View {
                 .tint(AppColors.switchActive)
                 .accessibilityIdentifier("notify-only-known")
             } footer: {
-                Text(L("localNotifyOnlyKnownFooter"))
+                Text(L("localNotifyOnlyKnownFooter")).wrapsInFooter()
             }
             Section {
                 #if os(iOS)
@@ -63,7 +63,7 @@ struct NotificationSettingsView: View {
                 }
                 #endif
             } footer: {
-                Text(L("localNotifyDeliveryFooter"))
+                Text(L("localNotifyDeliveryFooter")).wrapsInFooter()
             }
         }
         .settingsListStyle()
@@ -139,8 +139,7 @@ struct NotificationPromptSheet: View {
                 } label: {
                     Text(L("localNotifyPromptAllow")).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glassProminent)
-                .foregroundStyle(AppColors.background)
+                .prominentButtonStyle()
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .disabled(isRequesting)

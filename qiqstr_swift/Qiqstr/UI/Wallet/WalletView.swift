@@ -222,8 +222,7 @@ struct WalletOnboardingView: View {
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
                     .buttonBorderShape(.capsule)
                     .controlSize(.large)
                     .accessibilityIdentifier("wallet-connect")
@@ -241,7 +240,8 @@ struct WalletOnboardingView: View {
                 .listRowInsets(EdgeInsets())
             } footer: {
                 Text(L("nwcDisclaimer"))
-                    .padding(.top, 8)
+                    .wrapsInFooter()
+                    .padding(.vertical, 8)
             }
         }
         .listStyle(.insetGrouped)

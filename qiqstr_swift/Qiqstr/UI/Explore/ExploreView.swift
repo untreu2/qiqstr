@@ -28,6 +28,8 @@ struct ExploreView: View {
                     Label(scope.title, systemImage: scope == .following ? "person.2" : "globe").tag(scope)
                 }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
             .accessibilityIdentifier("explore-scope-picker")
         }
         .searchable(text: $model.query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: L("exploreSearchPrompt"))
@@ -35,6 +37,24 @@ struct ExploreView: View {
         .autocorrectionDisabled()
         .refreshable { await model.refresh() }
         .toolbar {
+            #if os(macOS)
+            // macOS has no title menu, so the scope picker gets its own button.
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker(L("reads"), selection: $model.scope) {
+                        ForEach(ExploreScope.allCases) { scope in
+                            Label(scope.title, systemImage: scope == .following ? "person.2" : "globe").tag(scope)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                } label: {
+                    Label(model.scope.title, systemImage: "line.3.horizontal.decrease")
+                }
+                .help(model.scope.title)
+                .accessibilityIdentifier("explore-scope-menu")
+            }
+            #endif
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink(value: Route.userSearch) { Label(L("users"), systemImage: "person.2") }
                     .accessibilityIdentifier("explore-user-search")

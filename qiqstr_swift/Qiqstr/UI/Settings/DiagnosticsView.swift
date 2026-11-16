@@ -28,7 +28,7 @@ struct DiagnosticsView: View {
                     .accessibilityIdentifier("diagnostics-report")
                 }
             } footer: {
-                Text(L("diagnosticsFooter"))
+                Text(L("diagnosticsFooter")).wrapsInFooter()
             }
         }
         .settingsListStyle()

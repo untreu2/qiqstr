@@ -210,8 +210,7 @@ struct AuthLoginView: View {
                 Image(systemName: "doc.on.clipboard")
                     .font(.body.weight(.semibold))
             }
-            .buttonStyle(.glassProminent)
-            .foregroundStyle(AppColors.background)
+            .prominentButtonStyle()
             .buttonBorderShape(.circle)
             .controlSize(.small)
             .accessibilityLabel(L("authPaste"))

@@ -115,7 +115,7 @@ struct KeysSettingsView: View {
             } header: {
                 Text(L("publicKeyNpub"))
             } footer: {
-                Text(L("shareThisToReceiveMessages"))
+                Text(L("shareThisToReceiveMessages")).wrapsInFooter()
             }
 
             Section {
@@ -129,7 +129,7 @@ struct KeysSettingsView: View {
             } header: {
                 Text(L("seedPhrase"))
             } footer: {
-                Text(L("useThisToRecoverAccount"))
+                Text(L("useThisToRecoverAccount")).wrapsInFooter()
             }
 
             if model.privateKeyHex != nil {
@@ -143,7 +143,7 @@ struct KeysSettingsView: View {
                 } header: {
                     Text(L("keysBackupHeader"))
                 } footer: {
-                    Text(L("keysBackupFooter"))
+                    Text(L("keysBackupFooter")).wrapsInFooter()
                 }
             }
 
@@ -175,7 +175,7 @@ struct KeysSettingsView: View {
             } header: {
                 if model.showAdvanced { Text(L("privateKeyNsec")) }
             } footer: {
-                if model.showAdvanced { Text(L("keepThisSecret")) }
+                if model.showAdvanced { Text(L("keepThisSecret")).wrapsInFooter() }
             }
         }
         .settingsListStyle()

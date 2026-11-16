@@ -35,7 +35,7 @@ struct HighlightComposerSheet: View {
                 } header: {
                     Text(L("highlightPassage"))
                 } footer: {
-                    Text(L("highlightSelectHint"))
+                    Text(L("highlightSelectHint")).wrapsInFooter()
                 }
                 Section(L("highlightPreview")) {
                     Text(quote)
@@ -51,7 +51,7 @@ struct HighlightComposerSheet: View {
                 } header: {
                     Text(L("highlightComment"))
                 } footer: {
-                    Text(L("highlightPublicNotice"))
+                    Text(L("highlightPublicNotice")).wrapsInFooter()
                 }
             }
             .navigationTitle(L("highlightNew"))
@@ -65,8 +65,7 @@ struct HighlightComposerSheet: View {
                         ProgressView()
                     } else {
                         Button(L("highlightAction"), systemImage: "highlighter") { confirming = true }
-                            .buttonStyle(.glassProminent)
-                            .foregroundStyle(AppColors.background)
+                            .prominentButtonStyle()
                             .disabled(quote.isEmpty)
                             .accessibilityIdentifier("highlight-publish")
                     }

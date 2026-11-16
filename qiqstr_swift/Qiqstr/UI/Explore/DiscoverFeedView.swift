@@ -247,8 +247,7 @@ struct FollowPackView: View {
                                 Text(remaining.isEmpty ? L("following") : L("authFollowAll")).fontWeight(.semibold)
                             }
                         }
-                        .buttonStyle(.glassProminent)
-                        .foregroundStyle(AppColors.background)
+                        .prominentButtonStyle()
                         .buttonBorderShape(.capsule)
                         .disabled(remaining.isEmpty || isFollowing)
                         .accessibilityIdentifier("pack-follow-all")

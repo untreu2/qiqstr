@@ -93,6 +93,7 @@ struct TopicsManagerView: View {
             Section {
                 if model.isLoaded {
                     ContentUnavailableView(L("feedNoTopics"), systemImage: "number", description: Text(L("feedNoTopicsMessage")))
+                        .frame(maxWidth: .infinity)
                 } else {
                     ForEach(0..<3, id: \.self) { _ in
                         Label(String("#placeholder"), systemImage: "number")

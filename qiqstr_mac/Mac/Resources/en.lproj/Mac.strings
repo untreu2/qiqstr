@@ -4,3 +4,4 @@
 "diagnosticsEmptyMessage" = "macOS delivers reports about once a day when there is something to report.";
 "macGoMenu" = "Go";
 "macLibrary" = "Library";
+"macBack" = "Back";

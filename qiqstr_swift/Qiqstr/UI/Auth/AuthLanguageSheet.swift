@@ -37,7 +37,7 @@ struct AuthLanguageSheet: View {
                         .accessibilityIdentifier("language-\(option.rawValue)")
                     }
                 } footer: {
-                    Text(L("languageSubtitle"))
+                    Text(L("languageSubtitle")).wrapsInFooter()
                 }
             }
             .navigationTitle(L("language"))

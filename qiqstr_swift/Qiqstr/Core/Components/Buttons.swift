@@ -15,8 +15,7 @@ struct PrimaryButton: View {
             .font(.headline)
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.glassProminent)
-        .foregroundStyle(AppColors.background)
+        .prominentButtonStyle()
         .buttonBorderShape(.capsule)
         .controlSize(.extraLarge)
         .disabled(!isEnabled || isLoading)
@@ -54,8 +53,7 @@ struct PillButton: View {
     var body: some View {
         if filled {
             Button(action: action) { label }
-                .buttonStyle(.glassProminent)
-                .foregroundStyle(AppColors.background)
+                .prominentButtonStyle()
                 .buttonBorderShape(.capsule)
         } else {
             Button(action: action) { label }
@@ -88,6 +86,28 @@ struct GlassIconButton: View {
         .buttonBorderShape(.circle)
         .accessibilityLabel(accessibilityLabel ?? systemImage)
     }
+}
+
+private struct ProminentButtonModifier: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        // macOS draws a disabled prominent button light gray, so a white label disappears.
+        content
+            .buttonStyle(.glassProminent)
+            .foregroundStyle(isEnabled ? AnyShapeStyle(AppColors.background) : AnyShapeStyle(.secondary))
+        #else
+        content
+            .buttonStyle(.glassProminent)
+            .foregroundStyle(AppColors.background)
+        #endif
+    }
+}
+
+extension View {
+    /// The app's filled button: `.glassProminent` with a background-colored label.
+    func prominentButtonStyle() -> some View { modifier(ProminentButtonModifier()) }
 }
 
 struct PressableStyle: ButtonStyle {

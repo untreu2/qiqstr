@@ -35,7 +35,7 @@ struct PaymentsSettingsView: View {
             } header: {
                 Text(L("paymentsSubtitle"))
             } footer: {
-                Text(L("nwcDescription"))
+                Text(L("nwcDescription")).wrapsInFooter()
             }
 
             if AppStorePolicy.allowsContentZaps {
@@ -46,7 +46,7 @@ struct PaymentsSettingsView: View {
                     .tint(AppColors.switchActive)
                     .accessibilityIdentifier("payments-one-tap-zap")
                 } footer: {
-                    Text(L("oneTapZapDescription"))
+                    Text(L("oneTapZapDescription")).wrapsInFooter()
                 }
             }
 
@@ -89,7 +89,7 @@ struct PaymentsSettingsView: View {
                 .tint(AppColors.switchActive)
                 .accessibilityIdentifier("payments-show-fiat")
             } footer: {
-                Text(L("walletShowFiatDescription"))
+                Text(L("walletShowFiatDescription")).wrapsInFooter()
             }
         }
         .settingsListStyle()

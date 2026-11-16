@@ -94,7 +94,7 @@ struct DatabaseSettingsView: View {
                 stat(title: L("databaseSize"), systemImage: "internaldrive", value: "\(model.sizeMB) MB", identifier: "database-size")
                 stat(title: L("totalEvents"), systemImage: "square.stack.3d.up", value: Sats.compact(model.totalEvents), identifier: "database-total")
             } footer: {
-                Text(L("databaseCacheSubtitle"))
+                Text(L("databaseCacheSubtitle")).wrapsInFooter()
             }
             .redacted(reason: model.hasLoaded ? [] : .placeholder)
             Section {
@@ -113,7 +113,7 @@ struct DatabaseSettingsView: View {
                 .disabled(model.isCleaning || model.isWiping)
                 .accessibilityIdentifier("database-smart-cleanup")
             } footer: {
-                Text(L("settingsSmartCleanupFooter"))
+                Text(L("settingsSmartCleanupFooter")).wrapsInFooter()
             }
             Section {
                 Button(role: .destructive) { model.showWipeConfirm = true } label: {
@@ -127,7 +127,7 @@ struct DatabaseSettingsView: View {
                 .disabled(model.isCleaning || model.isWiping)
                 .accessibilityIdentifier("database-wipe")
             } footer: {
-                Text(L("settingsWipeFooter"))
+                Text(L("settingsWipeFooter")).wrapsInFooter()
             }
         }
         .settingsListStyle()

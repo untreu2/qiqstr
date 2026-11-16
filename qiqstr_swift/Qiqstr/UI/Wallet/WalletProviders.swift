@@ -22,7 +22,14 @@ struct WalletProvider: Identifiable, Hashable {
         WalletProvider(id: "zeus", name: "ZEUS", detailKey: "walletProviderZeus", systemImage: "bolt.horizontal.circle", fallback: URL(string: "https://apps.apple.com/app/id1456038895")!),
     ]
 
-    static var oneTap: [WalletProvider] { all.filter(\.supportsOneTap) }
+    static var oneTap: [WalletProvider] {
+        #if os(macOS)
+        // The one-tap wallets are phone apps; a Mac can't open their connect links.
+        []
+        #else
+        all.filter(\.supportsOneTap)
+        #endif
+    }
 
     var connectURL: URL? {
         guard let connectScheme else { return nil }

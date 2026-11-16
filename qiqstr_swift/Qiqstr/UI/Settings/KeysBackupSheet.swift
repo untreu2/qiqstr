@@ -245,7 +245,7 @@ struct KeysBackupSheet: View {
         } header: {
             Text(L("keysBackupResultHeader"))
         } footer: {
-            Text(L("keysBackupResultFooter"))
+            Text(L("keysBackupResultFooter")).wrapsInFooter()
         }
     }
 

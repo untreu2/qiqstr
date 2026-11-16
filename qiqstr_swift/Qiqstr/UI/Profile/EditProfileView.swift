@@ -65,8 +65,7 @@ struct EditProfileView: View {
                     ProgressView()
                 } else {
                     Button(L("save")) { save() }
-                        .buttonStyle(.glassProminent)
-                        .foregroundStyle(AppColors.background)
+                        .prominentButtonStyle()
                         .disabled(!model.canSave)
                         .accessibilityIdentifier("edit-profile-save")
                 }

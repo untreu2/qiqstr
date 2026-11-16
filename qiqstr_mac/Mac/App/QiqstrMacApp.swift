@@ -76,6 +76,15 @@ struct QiqstrCommands: Commands {
                 .keyboardShortcut(",")
         }
         CommandMenu(L("macGoMenu")) {
+            Button(L("macBack")) {
+                guard ready else { return }
+                let router = Router.shared
+                guard var path = router.paths[router.selectedTab], !path.isEmpty else { return }
+                path.removeLast()
+                router.paths[router.selectedTab] = path
+            }
+            .keyboardShortcut("[")
+            Divider()
             go(.feed, L("home"), "1")
             go(.dm, L("messages"), "2")
             go(.notifications, L("notifications"), "3")

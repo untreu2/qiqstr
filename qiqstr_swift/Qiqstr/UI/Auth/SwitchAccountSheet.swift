@@ -37,7 +37,7 @@ struct SwitchAccountSheet: View {
                         }
                         .accessibilityIdentifier("switch-add-key")
                     } footer: {
-                        Text(L("readOnlyMessage"))
+                        Text(L("readOnlyMessage")).wrapsInFooter()
                     }
                 }
                 Section {

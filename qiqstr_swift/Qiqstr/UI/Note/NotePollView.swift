@@ -42,9 +42,8 @@ struct NotePollView: View {
                         Text(L("feedPollVote")).font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.glassProminent)
+                .prominentButtonStyle()
                 .buttonBorderShape(.capsule)
-                .foregroundStyle(AppColors.background)
                 .disabled(voting)
                 .accessibilityIdentifier("poll-vote")
             }

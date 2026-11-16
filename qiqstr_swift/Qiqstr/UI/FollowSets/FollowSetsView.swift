@@ -17,7 +17,7 @@ struct FollowSetsView: View {
                 } header: {
                     Text(L("exploreMyLists"))
                 } footer: {
-                    if query.isEmpty { Text(L("listsSubtitle")) }
+                    if query.isEmpty { Text(L("listsSubtitle")).wrapsInFooter() }
                 }
             }
             if !followed.isEmpty {

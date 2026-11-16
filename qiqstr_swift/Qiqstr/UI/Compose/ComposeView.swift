@@ -85,8 +85,7 @@ struct ComposeEditor: View {
                                 .fontWeight(.semibold)
                         }
                     }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
                     .disabled(!model.canPost)
                     .keyboardShortcut(.return, modifiers: .command)
                     .accessibilityIdentifier("compose-post")
@@ -319,7 +318,7 @@ struct ComposeAltTextSheet: View {
                         .focused($focused)
                         .accessibilityIdentifier("compose-alt-text-field")
                 } footer: {
-                    Text(L("feedAltTextFooter"))
+                    Text(L("feedAltTextFooter")).wrapsInFooter()
                 }
             }
             .navigationTitle(L("feedAltTextTitle"))
@@ -334,8 +333,7 @@ struct ComposeAltTextSheet: View {
                         attachment.altText = draft.trimmingCharacters(in: .whitespacesAndNewlines)
                         dismiss()
                     }
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
                     .accessibilityIdentifier("compose-alt-done")
                 }
             }

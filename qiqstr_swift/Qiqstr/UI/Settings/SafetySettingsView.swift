@@ -47,7 +47,7 @@ struct SafetySettingsView: View {
             } header: {
                 Text(L("safetyTrustedNetwork"))
             } footer: {
-                Text(L("safetyNetworkFooter"))
+                Text(L("safetyNetworkFooter")).wrapsInFooter()
             }
             if AppStorePolicy.allowsSensitiveContentToggle {
                 Section {
@@ -59,7 +59,7 @@ struct SafetySettingsView: View {
                 } header: {
                     Text(L("safetyContent"))
                 } footer: {
-                    Text(L("safetySensitiveFooter"))
+                    Text(L("safetySensitiveFooter")).wrapsInFooter()
                 }
             }
         }

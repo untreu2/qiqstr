@@ -27,11 +27,12 @@ struct EmptyStateView: View {
         } actions: {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.glassProminent)
-                    .foregroundStyle(AppColors.background)
+                    .prominentButtonStyle()
                     .buttonBorderShape(.capsule)
             }
         }
+        // A List row on macOS sizes to its content, which would push this to the leading edge.
+        .frame(maxWidth: .infinity)
     }
 }
 

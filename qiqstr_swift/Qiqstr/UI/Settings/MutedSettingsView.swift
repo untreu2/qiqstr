@@ -97,7 +97,7 @@ struct MutedSettingsView: View {
                 .listRowInsets(EdgeInsets())
                 .accessibilityIdentifier("muted-tab")
             } footer: {
-                Text(L("mutedSubtitle"))
+                Text(L("mutedSubtitle")).wrapsInFooter()
             }
             switch model.tab {
             case .users: usersSection
@@ -152,6 +152,7 @@ struct MutedSettingsView: View {
                 }
             } else if service.mutedPubkeys.isEmpty {
                 ContentUnavailableView(L("noMutedUsers"), systemImage: "person.slash", description: Text(L("youHaventMutedAnyUsersYet")))
+                    .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("muted-users-empty")
             } else {
                 ForEach(service.mutedPubkeys, id: \.self) { pubkey in
@@ -174,6 +175,7 @@ struct MutedSettingsView: View {
         Section {
             if service.mutedWords.isEmpty {
                 ContentUnavailableView(L("settingsNoMutedWords"), systemImage: "text.badge.minus")
+                    .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("muted-words-empty")
             } else {
                 ForEach(service.mutedWords, id: \.self) { word in
