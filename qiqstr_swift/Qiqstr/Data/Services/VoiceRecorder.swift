@@ -145,6 +145,7 @@ final class AudioPlayback {
     static let shared = AudioPlayback()
 
     private(set) var currentURL: String?
+    private(set) var currentKey: String?
     private(set) var isPlaying = false
     private(set) var progress: Double = 0
     private(set) var duration: Double = 0
@@ -152,10 +153,12 @@ final class AudioPlayback {
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
 
-    func isCurrent(_ url: String) -> Bool { currentURL == url }
+    func isCurrent(_ key: String) -> Bool { currentKey == key }
 
-    func toggle(_ url: String) {
-        if currentURL == url, let player {
+    /// `key` identifies the bubble that is playing, so two messages with the same file don't both show as playing.
+    func toggle(_ url: String, key: String? = nil) {
+        let key = key ?? url
+        if currentKey == key, let player {
             if isPlaying {
                 player.pause()
                 isPlaying = false
@@ -172,6 +175,7 @@ final class AudioPlayback {
         let player = AVPlayer(url: remote)
         self.player = player
         currentURL = url
+        currentKey = key
         progress = 0
         duration = 0
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [weak self] time in
@@ -191,8 +195,8 @@ final class AudioPlayback {
         isPlaying = true
     }
 
-    func seek(_ url: String, to fraction: Double) {
-        guard currentURL == url, let player, duration > 0 else { return }
+    func seek(_ key: String, to fraction: Double) {
+        guard currentKey == key, let player, duration > 0 else { return }
         player.seek(to: CMTime(seconds: duration * min(1, max(0, fraction)), preferredTimescale: 600))
         progress = fraction
     }
@@ -206,6 +210,7 @@ final class AudioPlayback {
         if player != nil { PlaybackAudio.release() }
         player = nil
         currentURL = nil
+        currentKey = nil
         isPlaying = false
         progress = 0
         duration = 0

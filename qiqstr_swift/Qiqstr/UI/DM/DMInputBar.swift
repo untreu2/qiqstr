@@ -5,6 +5,7 @@ struct DMInputBar: View {
     @Bindable var model: DMChatViewModel
     var focus: FocusState<Bool>.Binding
     var placeholder: String = L("typeAMessage")
+    @State private var showsRecorder = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -37,6 +38,19 @@ struct DMInputBar: View {
                     #endif
                     .accessibilityIdentifier("dm-input")
 
+                if !model.canSend, model.attachments.isEmpty {
+                    Button { showsRecorder = true } label: {
+                        Image(systemName: "mic")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 40, height: 40)
+                            .background(AppColors.tile, in: Circle())
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L("voiceTitle"))
+                    .accessibilityIdentifier("dm-voice")
+                } else {
                 Button(action: model.send) {
                     Image(systemName: "arrow.up")
                         .font(.body.weight(.semibold))
@@ -50,6 +64,7 @@ struct DMInputBar: View {
                 .opacity(model.canSend ? 1 : 0.3)
                 .accessibilityLabel(L("sendMessage"))
                 .accessibilityIdentifier("dm-send")
+                }
             }
             .padding(8)
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 28, style: .continuous))
@@ -58,6 +73,9 @@ struct DMInputBar: View {
         .padding(.top, 6)
         .padding(.bottom, 8)
         .animation(.snappy(duration: 0.25), value: model.attachments.map(\.id))
+        .sheet(isPresented: $showsRecorder) {
+            VoiceRecorderSheet { model.sendVoice($0) }
+        }
         .animation(.snappy(duration: 0.2), value: model.canSend)
         .onChange(of: model.pickerItems) { if !model.pickerItems.isEmpty { model.handlePicked() } }
         .sensoryFeedback(.impact(weight: .light), trigger: model.sentCount)

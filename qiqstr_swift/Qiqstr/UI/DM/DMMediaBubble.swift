@@ -89,6 +89,14 @@ struct DMMediaBubble<Menu: View>: View {
                     menu()
                 }
                 .accessibilityIdentifier("dm-media-video")
+            case .file(let url) where file?.isAudio == true:
+                AudioPlayerView(url: url.path, duration: file?.duration, waveform: file?.waveform ?? [], tint: foreground, playbackKey: message.id)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(width: 260)
+                    .background(fill, in: shape)
+                    .contextMenu { menu() }
+                    .accessibilityIdentifier("dm-media-audio")
             case .file(let url):
                 ShareLink(item: url) {
                     HStack(spacing: 10) {

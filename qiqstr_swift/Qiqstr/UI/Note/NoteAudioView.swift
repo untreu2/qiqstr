@@ -20,19 +20,22 @@ struct AudioPlayerView: View {
     var duration: Double?
     var waveform: [Int] = []
     var tint: Color = AppColors.textPrimary
+    /// Identifies this player when several show the same file (for example, the same voice note sent twice).
+    var playbackKey: String?
     @State private var playback = AudioPlayback.shared
 
-    private var isCurrent: Bool { playback.isCurrent(url) }
+    private var key: String { playbackKey ?? url }
+    private var isCurrent: Bool { playback.isCurrent(key) }
     private var progress: Double { isCurrent ? playback.progress : 0 }
     private var total: Double? { isCurrent && playback.duration > 0 ? playback.duration : duration }
 
     var body: some View {
         HStack(spacing: 12) {
-            Button { playback.toggle(url) } label: {
+            Button { playback.toggle(url, key: key) } label: {
                 Image(systemName: isCurrent && playback.isPlaying ? "pause.fill" : "play.fill")
                     .font(.body.weight(.semibold))
                     .contentTransition(.symbolEffect(.replace))
-                    .foregroundStyle(AppColors.background)
+                    .foregroundStyle(tint == AppColors.textPrimary ? AppColors.background : AppColors.textPrimary)
                     .frame(width: 40, height: 40)
                     .background(tint, in: .circle)
             }
@@ -44,7 +47,7 @@ struct AudioPlayerView: View {
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onEnded { value in
                     guard isCurrent else { return }
-                    playback.seek(url, to: value.location.x / max(1, waveformWidth))
+                    playback.seek(key, to: value.location.x / max(1, waveformWidth))
                 })
                 .background(GeometryReader { proxy in Color.clear.onAppear { waveformWidth = proxy.size.width }.onChange(of: proxy.size.width) { _, width in waveformWidth = width } })
             Text(VoiceRecorder.format(isCurrent ? progress * (total ?? 0) : (total ?? 0)))

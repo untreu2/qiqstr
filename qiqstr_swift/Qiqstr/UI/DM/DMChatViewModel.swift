@@ -182,6 +182,42 @@ final class DMChatViewModel {
         }
     }
 
+    var isGroup: Bool { DMService.isGroup(peer) }
+    var group: MarmotGroup? { service.group(for: peer) }
+    var isAdmin: Bool { service.isAdmin(of: peer) }
+
+    func reactions(for message: DMMessage) -> [DMReaction] { service.reactions(for: message) }
+
+    func react(_ message: DMMessage, with choice: EmojiChoice) {
+        guard ReadOnlyGate.check() else { return }
+        RecentEmojiStore.shared.record(choice)
+        Task { await perform { try await self.service.react(to: message, with: choice) } }
+    }
+
+    func sendVoice(_ recording: VoiceRecording) {
+        guard ReadOnlyGate.check() else { return }
+        sentCount += 1
+        Task {
+            await perform {
+                defer { try? FileManager.default.removeItem(at: recording.url) }
+                let data = try Data(contentsOf: recording.url)
+                var extra = ["duration \(Int(recording.duration.rounded()))"]
+                if !recording.waveform.isEmpty { extra.append("waveform \(recording.waveform.map(String.init).joined(separator: " "))") }
+                try await self.service.sendFile(data, mimeType: "audio/mp4", to: self.peer, extraImeta: extra)
+            }
+        }
+    }
+
+    func leaveGroup() async -> Bool {
+        do {
+            try await service.leaveGroup(peer)
+            return true
+        } catch {
+            ToastCenter.shared.error(error)
+            return false
+        }
+    }
+
     func retry(_ message: DMMessage) {
         Task { await perform { try await self.service.retry(message) } }
     }

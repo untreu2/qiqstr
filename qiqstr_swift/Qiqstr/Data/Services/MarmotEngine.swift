@@ -7,10 +7,20 @@ nonisolated struct MarmotGroup: Hashable, Sendable {
     var name: String
     var state: String
     var members: [String]
+    var admins: [String]
     var relays: [String]
     var lastMessageAt: Int
 
     var isActive: Bool { state == "active" }
+    var isGroupChat: Bool { !name.isEmpty || members.count > 2 }
+    var conversationKey: String { DMService.groupPrefix + id }
+
+    func conversationKey(for me: String) -> String? {
+        guard members.contains(me) else { return nil }
+        return isGroupChat ? conversationKey : peer(for: me)
+    }
+
+    func isAdmin(_ pubkey: String) -> Bool { admins.contains(pubkey) }
 
     init?(json j: JSONObject) {
         guard let id = j.str("id"), let nostrGroupId = j.str("nostrGroupId") else { return nil }
@@ -19,13 +29,14 @@ nonisolated struct MarmotGroup: Hashable, Sendable {
         name = (j["name"] as? String) ?? ""
         state = (j["state"] as? String) ?? ""
         members = j.strings("members")
+        admins = j.strings("admins")
         relays = j.strings("relays")
         lastMessageAt = j.int("lastMessageAt")
     }
 
     func peer(for me: String) -> String? {
         let others = members.filter { $0 != me }
-        guard members.contains(me), others.count == 1 else { return nil }
+        guard members.contains(me), others.count == 1, !isGroupChat else { return nil }
         return others[0]
     }
 }
@@ -58,6 +69,19 @@ nonisolated struct MarmotCreatedChat: Sendable {
     var groupJSON: String
     var welcomes: [String]
     var welcomeRelays: [String]
+}
+
+nonisolated struct MarmotWelcome: Sendable {
+    var pubkey: String
+    var wrap: String
+    var relays: [String]
+
+    init?(json j: JSONObject) {
+        guard let pubkey = j.str("pubkey"), let wrap = j.str("wrap") else { return nil }
+        self.pubkey = pubkey
+        self.wrap = wrap
+        relays = j.strings("relays")
+    }
 }
 
 nonisolated struct MarmotSent: Sendable {
@@ -158,6 +182,59 @@ actor MarmotEngine {
             welcomes: (j["welcomes"] as? [String]) ?? [],
             welcomeRelays: j.strings("welcomeRelays")
         )
+    }
+
+    func createGroup(keyPackages: [String], name: String, relays: [String]) async throws -> (group: MarmotGroup, welcomes: [MarmotWelcome]) {
+        let raw = try await serial { try marmotCreateGroup(keyPackagesJson: keyPackages, name: name, description: "", relays: relays) }
+        let j = JSON.object(raw) ?? [:]
+        guard let group = (j["group"] as? JSONObject).flatMap(MarmotGroup.init(json:)) else { throw CoreError(L("dmGroupCreateFailed")) }
+        return (group, ((j["welcomes"] as? [JSONObject]) ?? []).compactMap(MarmotWelcome.init(json:)))
+    }
+
+    func addMembers(groupId: String, keyPackages: [String], publish: @escaping @Sendable (String) async -> Bool) async throws -> [MarmotWelcome] {
+        try await serial {
+            let raw = try marmotAddMembers(groupIdHex: groupId, keyPackagesJson: keyPackages)
+            let j = JSON.object(raw) ?? [:]
+            guard let commit = j.str("evolutionEvent") else { throw CoreError(L("dmGroupUpdateFailed")) }
+            guard await publish(commit) else {
+                try? marmotClearPendingCommit(groupIdHex: groupId)
+                throw CoreError(L("dmGroupUpdateFailed"))
+            }
+            try marmotMergePendingCommit(groupIdHex: groupId)
+            return ((j["welcomes"] as? [JSONObject]) ?? []).compactMap(MarmotWelcome.init(json:))
+        }
+    }
+
+    func commit(groupId: String, publish: @escaping @Sendable (String) async -> Bool, make: @escaping @Sendable () throws -> String) async throws {
+        try await serial {
+            let commit = try make()
+            guard await publish(commit) else {
+                try? marmotClearPendingCommit(groupIdHex: groupId)
+                throw CoreError(L("dmGroupUpdateFailed"))
+            }
+            try marmotMergePendingCommit(groupIdHex: groupId)
+        }
+    }
+
+    func leave(groupId: String, publish: @escaping @Sendable (String) async -> Bool) async throws {
+        try await serial {
+            for _ in 0..<3 {
+                let step = JSON.object(try marmotLeaveStep(groupIdHex: groupId)) ?? [:]
+                let event = step.str("event")
+                if step.bool("isCommit") {
+                    guard let event, await publish(event) else {
+                        try? marmotClearPendingCommit(groupIdHex: groupId)
+                        throw CoreError(L("dmGroupUpdateFailed"))
+                    }
+                    try marmotMergePendingCommit(groupIdHex: groupId)
+                    continue
+                }
+                if let event { _ = await publish(event) }
+                try marmotDeleteGroup(groupIdHex: groupId)
+                return
+            }
+            throw CoreError(L("dmGroupUpdateFailed"))
+        }
     }
 
     func send(groupId: String, kind: UInt16, content: String, tags: [[String]]) async throws -> MarmotSent {

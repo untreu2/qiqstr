@@ -35,6 +35,7 @@ enum DMFormat {
         let file = message.file
         if file?.isImage == true { return ("photo", L("dmPhoto")) }
         if file?.isVideo == true { return ("video", L("dmVideo")) }
+        if file?.isAudio == true { return ("waveform", L("dmVoiceMessage")) }
         return ("paperclip", L("dmAttachment"))
     }
 }
@@ -42,6 +43,6 @@ enum DMFormat {
 extension DMMessage {
     @MainActor
     var spokenSender: String {
-        isMine ? L("dmYou") : ProfileCache.shared.profile(peer)?.bestName ?? Profile.shortNpub(peer)
+        isMine ? L("dmYou") : ProfileCache.shared.profile(sender)?.bestName ?? Profile.shortNpub(sender)
     }
 }

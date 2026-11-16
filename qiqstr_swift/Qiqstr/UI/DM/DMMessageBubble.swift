@@ -12,7 +12,11 @@ struct DMMessageBubble: View {
     var onInfo: (DMMessage) -> Void = { _ in }
     var searchQuery = ""
     var isCurrentMatch = false
+    var senderName: String? = nil
+    var reactions: [DMReaction] = []
+    var onReact: ((DMMessage, EmojiChoice) -> Void)? = nil
     @State private var cache = ProfileCache.shared
+    @State private var showsEmojiPicker = false
 
     private var mine: Bool { message.isMine }
 
@@ -21,6 +25,14 @@ struct DMMessageBubble: View {
             if mine { Spacer(minLength: 56) }
             if message.state == .failed { failedBadge }
             VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
+                if let senderName, isFirstInGroup, !mine {
+                    Text(senderName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .accessibilityIdentifier("dm-message-sender")
+                }
                 bubble
                     .overlay {
                         if isCurrentMatch {
@@ -28,11 +40,15 @@ struct DMMessageBubble: View {
                         }
                     }
                     .animation(.smooth(duration: 0.2), value: isCurrentMatch)
+                if !reactions.isEmpty { reactionRow }
                 if isLastInGroup || message.state != .sent { footer }
             }
             if !mine { Spacer(minLength: 56) }
         }
         .padding(.top, isFirstInGroup ? 10 : 2)
+        .sheet(isPresented: $showsEmojiPicker) {
+            EmojiPickerSheet { onReact?(message, $0) }
+        }
         .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
         .accessibilityIdentifier("dm-message-\(message.id)")
     }
@@ -96,8 +112,44 @@ struct DMMessageBubble: View {
         return trimmed
     }
 
+    private var reactionGroups: [DMReactionGroup] {
+        let me = Session.shared.pubkey
+        let grouped = Dictionary(grouping: reactions, by: \.emoji)
+        let list: [DMReactionGroup] = grouped.map { emoji, items in
+            DMReactionGroup(emoji: emoji, count: items.count, url: items.first?.emojiURL, mine: items.contains { $0.sender == me })
+        }
+        return list.sorted { $0.count == $1.count ? $0.emoji < $1.emoji : $0.count > $1.count }
+    }
+
+    private var reactionRow: some View {
+        HStack(spacing: 4) {
+            ForEach(reactionGroups) { group in
+                DMReactionChip(group: group, enabled: onReact != nil && message.state == .sent) {
+                    if let url = group.url, let code = CustomEmoji.shortcode(in: group.emoji) {
+                        onReact?(message, .custom(CustomEmoji(shortcode: code, url: url)))
+                    } else {
+                        onReact?(message, .unicode(group.emoji))
+                    }
+                }
+            }
+        }
+        .padding(.top, -2)
+        .accessibilityIdentifier("dm-reactions")
+    }
+
     @ViewBuilder
     private var menuItems: some View {
+        if onReact != nil, message.state == .sent {
+            Menu {
+                ForEach(ReactionPicker.emojis, id: \.self) { emoji in
+                    Button(emoji) { onReact?(message, .unicode(emoji)) }
+                }
+                Button(L("emojiMore"), systemImage: "face.smiling") { showsEmojiPicker = true }
+            } label: {
+                Label(L("dmReact"), systemImage: "face.smiling")
+            }
+            .accessibilityIdentifier("dm-react")
+        }
         if !message.isFile {
             Button {
                 onCopy(message)
@@ -260,5 +312,45 @@ enum DMText {
             result += AttributedString(ns.substring(from: cursor))
         }
         return result
+    }
+}
+
+struct DMReactionGroup: Identifiable, Hashable {
+    var id: String { emoji }
+    let emoji: String
+    let count: Int
+    let url: String?
+    let mine: Bool
+}
+
+struct DMReactionChip: View {
+    let group: DMReactionGroup
+    let enabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                if let url = group.url {
+                    CustomEmojiImage(url: url, size: 16)
+                } else {
+                    Text(group.emoji).font(.footnote)
+                }
+                if group.count > 1 {
+                    Text("\(group.count)").font(.caption2.weight(.semibold).monospacedDigit())
+                }
+            }
+            .foregroundStyle(AppColors.textPrimary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(group.mine ? AppColors.link.opacity(0.18) : AppColors.tile, in: .capsule)
+            .overlay {
+                if group.mine { Capsule().stroke(AppColors.link.opacity(0.6), lineWidth: 1) }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel("\(group.emoji) \(group.count)")
+        .accessibilityAddTraits(group.mine ? .isSelected : [])
     }
 }

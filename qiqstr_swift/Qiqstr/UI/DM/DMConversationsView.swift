@@ -229,8 +229,14 @@ struct DMConversationRow: View {
     let conversation: DMConversation
     @State private var cache = ProfileCache.shared
 
+    @State private var service = DMService.shared
+
     private var profile: Profile? { cache.profile(conversation.peer) }
-    private var name: String { profile?.bestName ?? Profile.shortNpub(conversation.peer) }
+    private var group: MarmotGroup? { service.group(for: conversation.peer) }
+    private var name: String {
+        if conversation.isGroup { return group?.displayName ?? L("dmGroupUntitled") }
+        return profile?.bestName ?? Profile.shortNpub(conversation.peer)
+    }
 
     private var nameText: some View {
         Text(name)
@@ -260,7 +266,11 @@ struct DMConversationRow: View {
             }
             .frame(width: 10, height: 10)
             .padding(.top, 20)
-            ProfileAvatar(pubkey: conversation.peer, size: 52)
+            if conversation.isGroup {
+                DMGroupAvatar(group: group, size: 52)
+            } else {
+                ProfileAvatar(pubkey: conversation.peer, size: 52)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 if typeSize.isAccessibilitySize {
                     nameText
@@ -289,7 +299,8 @@ struct DMConversationRow: View {
     private var preview: Text {
         let message = conversation.lastMessage
         let (icon, text) = DMFormat.preview(message)
-        let prefix = message.isMine ? Text(L("dmYouPrefix")).fontWeight(.semibold) : Text(verbatim: "")
+        let sender = conversation.isGroup && !message.isMine && message.kind != 0 ? (cache.profile(message.sender)?.bestName ?? Profile.shortNpub(message.sender)) : nil
+        let prefix = message.isMine ? Text(L("dmYouPrefix")).fontWeight(.semibold) : sender.map { Text("\($0): ").fontWeight(.semibold) } ?? Text(verbatim: "")
         let symbol = icon.map { Text("\(Image(systemName: $0)) ") } ?? Text(verbatim: "")
         return Text("\(prefix)\(symbol)\(text)")
     }

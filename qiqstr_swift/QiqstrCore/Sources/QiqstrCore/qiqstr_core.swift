@@ -3063,6 +3063,15 @@ public func isEventNewAndTrack(eventId: String) -> Bool  {
     )
 })
 }
+public func marmotAddMembers(groupIdHex: String, keyPackagesJson: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_add_members(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterSequenceString.lower(keyPackagesJson),uniffiCallStatus
+    )
+})
+}
 public func marmotClearPendingCommit(groupIdHex: String)throws   {try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
     uniffi_qiqstr_core_fn_func_marmot_clear_pending_commit(
@@ -3085,6 +3094,17 @@ public func marmotCreateChat(peerKeyPackageJson: String, relays: [String])throws
     )
 })
 }
+public func marmotCreateGroup(keyPackagesJson: [String], name: String, description: String, relays: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_create_group(
+        FfiConverterSequenceString.lower(keyPackagesJson),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(description),
+        FfiConverterSequenceString.lower(relays),uniffiCallStatus
+    )
+})
+}
 public func marmotDecryptMedia(groupIdHex: String, imeta: [String], data: Data)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
@@ -3094,6 +3114,13 @@ public func marmotDecryptMedia(groupIdHex: String, imeta: [String], data: Data)t
         FfiConverterData.lower(data),uniffiCallStatus
     )
 })
+}
+public func marmotDeleteGroup(groupIdHex: String)throws   {try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_delete_group(
+        FfiConverterString.lower(groupIdHex),uniffiCallStatus
+    )
+}
 }
 public func marmotEncryptMedia(groupIdHex: String, data: Data, mimeType: String, filename: String, outputPath: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
@@ -3135,6 +3162,14 @@ public func marmotKeyPackageRelaysEvent(relays: [String])throws  -> String  {
         uniffiCallStatus in
     uniffi_qiqstr_core_fn_func_marmot_key_package_relays_event(
         FfiConverterSequenceString.lower(relays),uniffiCallStatus
+    )
+})
+}
+public func marmotLeaveStep(groupIdHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_leave_step(
+        FfiConverterString.lower(groupIdHex),uniffiCallStatus
     )
 })
 }
@@ -3187,6 +3222,24 @@ public func marmotProcessEvent(eventJson: String)throws  -> String  {
         uniffiCallStatus in
     uniffi_qiqstr_core_fn_func_marmot_process_event(
         FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+public func marmotRemoveMembers(groupIdHex: String, pubkeysHex: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_remove_members(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterSequenceString.lower(pubkeysHex),uniffiCallStatus
+    )
+})
+}
+public func marmotRenameGroup(groupIdHex: String, name: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_rename_group(
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterString.lower(name),uniffiCallStatus
     )
 })
 }
@@ -4155,6 +4208,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_is_event_new_and_track() != 37807) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_marmot_add_members() != 21949) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_marmot_clear_pending_commit() != 55021) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4164,7 +4220,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_marmot_create_chat() != 15064) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_marmot_create_group() != 38843) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_marmot_decrypt_media() != 7309) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_delete_group() != 31608) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_marmot_encrypt_media() != 53480) {
@@ -4180,6 +4242,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_marmot_key_package_relays_event() != 39096) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_leave_step() != 34420) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_marmot_merge_pending_commit() != 13465) {
@@ -4198,6 +4263,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_marmot_process_event() != 59435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_remove_members() != 63510) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_marmot_rename_group() != 37918) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_marmot_self_update() != 13696) {

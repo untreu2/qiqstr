@@ -14,6 +14,13 @@ nonisolated struct DMFileInfo: Hashable, Sendable, Codable {
     var isEncrypted: Bool { originalHash != nil && imeta.contains { $0.hasPrefix("n ") } }
     var isImage: Bool { mimeType.lowercased().hasPrefix("image/") }
     var isVideo: Bool { mimeType.lowercased().hasPrefix("video/") }
+    var isAudio: Bool { mimeType.lowercased().hasPrefix("audio/") }
+    var duration: Double? { field("duration").flatMap(Double.init) }
+    var waveform: [Int] { (field("waveform") ?? "").split(separator: " ").compactMap { Int($0) } }
+
+    private func field(_ key: String) -> String? {
+        imeta.first { $0.hasPrefix("\(key) ") }.map { String($0.dropFirst(key.count + 1)) }
+    }
     var fileExtension: String { DMMediaCrypto.fileExtension(for: mimeType) }
 
     init(url: String, mimeType: String, groupId: String, imeta: [String], originalHash: String?, filename: String, size: Int?) {
@@ -83,12 +90,22 @@ nonisolated struct DMMessage: Identifiable, Hashable, Sendable, Codable {
     }
 }
 
+nonisolated struct DMReaction: Identifiable, Hashable, Sendable {
+    var id: String
+    var target: String
+    var sender: String
+    var emoji: String
+    var createdAt: Int
+    var emojiURL: String?
+}
+
 nonisolated struct DMConversation: Identifiable, Hashable, Sendable {
     var peer: String
     var lastMessage: DMMessage
     var isUnread: Bool
     var id: String { peer }
     var timestamp: Int { lastMessage.createdAt }
+    var isGroup: Bool { DMService.isGroup(peer) }
 }
 
 nonisolated struct DMPreparedFile: Hashable, Sendable {
@@ -107,6 +124,10 @@ nonisolated struct DMPreparedFile: Hashable, Sendable {
 @Observable
 final class DMService {
     static let shared = DMService()
+    nonisolated static let groupPrefix = "group:"
+
+    nonisolated static func isGroup(_ key: String) -> Bool { key.hasPrefix(groupPrefix) }
+    nonisolated static func groupId(_ key: String) -> String? { isGroup(key) ? String(key.dropFirst(groupPrefix.count)) : nil }
 
     static let maxFileSize = 50 * 1024 * 1024
     private static let messageKind: UInt16 = 9
@@ -118,6 +139,8 @@ final class DMService {
     private static let giftWrapJitter = 3 * 86_400
 
     private(set) var conversations: [DMConversation] = []
+    private(set) var groupChats: [String: MarmotGroup] = [:]
+    private(set) var reactions: [String: [DMReaction]] = [:]
     private(set) var messagesByPeer: [String: [DMMessage]] = [:]
     private(set) var following: Set<String> = []
     private(set) var isLoading = false
@@ -177,9 +200,12 @@ final class DMService {
         me = nil
         privateKey = nil
         groups.removeAll()
+        groupChats = [:]
+        reactions = [:]
         seenEvents.removeAll()
         hiddenIds.removeAll()
         clearedAt.removeAll()
+        joinedAt.removeAll()
         keyPackages.removeAll()
         inboxRelayCache.removeAll()
         remoteRelaysFetchedAt = .distantPast
@@ -228,6 +254,7 @@ final class DMService {
         hiddenIds = Set(defaults.stringArray(forKey: storeKey("marmot_hidden", me)) ?? [])
         clearedAt = (defaults.dictionary(forKey: storeKey("cleared", me)) as? [String: Int]) ?? [:]
         accepted = Set(defaults.stringArray(forKey: storeKey("accepted", me)) ?? [])
+        joinedAt = (defaults.dictionary(forKey: storeKey("group_joined", me)) as? [String: Int]) ?? [:]
         isLoading = true
         let task = Task { await self.performStart(me, key: key, generation: generation) }
         startTask = task
@@ -300,7 +327,7 @@ final class DMService {
     func canLoadOlder(_ peer: String) -> Bool {
         guard let me else { return false }
         return groups.values.contains { group in
-            group.peer(for: me) == peer && (historyLoaded[group.id] ?? 0) >= Self.historyLimit && !historyComplete.contains(group.id)
+            group.conversationKey(for: me) == peer && (historyLoaded[group.id] ?? 0) >= Self.historyLimit && !historyComplete.contains(group.id)
         }
     }
 
@@ -310,14 +337,14 @@ final class DMService {
         defer { loadingOlder.remove(peer) }
         let generation = self.generation
         var loaded: [DMMessage] = []
-        for group in groups.values where group.peer(for: me) == peer && !historyComplete.contains(group.id) {
+        for group in groups.values where group.conversationKey(for: me) == peer && !historyComplete.contains(group.id) {
             let offset = historyLoaded[group.id] ?? 0
             guard let raw = try? await engine.messages(groupId: group.id, limit: Self.historyPage, offset: offset) else { continue }
             guard generation == self.generation else { return }
             let page = JSON.array(raw)
             historyLoaded[group.id] = offset + page.count
             if page.count < Self.historyPage { historyComplete.insert(group.id) }
-            loaded += page.reversed().flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
+            loaded += page.reversed().flatMap { absorb($0, me: me, peer: peer) }
         }
         apply(loaded.sorted { $0.createdAt < $1.createdAt })
     }
@@ -341,7 +368,9 @@ final class DMService {
     func isFollowing(_ pubkey: String) -> Bool { following.contains(pubkey) }
 
     func isKnown(_ peer: String) -> Bool {
-        following.contains(peer) || accepted.contains(peer) || (messagesByPeer[peer]?.contains(where: \.isMine) ?? false)
+        if following.contains(peer) || accepted.contains(peer) || (messagesByPeer[peer]?.contains(where: \.isMine) ?? false) { return true }
+        guard let group = groupChats[peer], let me else { return false }
+        return group.isAdmin(me) || group.admins.contains(where: following.contains)
     }
 
     var unreadCount: Int { conversations.filter(\.isUnread).count }
@@ -352,19 +381,20 @@ final class DMService {
 
     func status(for peer: String) -> DMPeerStatus {
         if preferredGroup(for: peer) != nil { return .ready }
+        if Self.isGroup(peer) { return .unavailable }
         return peerStatus[peer] ?? .unknown
     }
 
     func chatRelays(for peer: String) -> [String] {
         var relays: [String] = []
-        for group in groups.values where group.peer(for: me ?? "") == peer {
+        for group in groups.values where group.conversationKey(for: me ?? "") == peer {
             for relay in group.relays where !relays.contains(relay) { relays.append(relay) }
         }
         return relays
     }
 
     func checkPeer(_ peer: String) async {
-        guard preferredGroup(for: peer) == nil, peerStatus[peer] != .checking else { return }
+        guard !Self.isGroup(peer), preferredGroup(for: peer) == nil, peerStatus[peer] != .checking else { return }
         peerStatus[peer] = .checking
         let found = await keyPackage(for: peer, fresh: false) != nil
         guard me != nil else { return }
@@ -373,22 +403,205 @@ final class DMService {
 
     private func storeKey(_ name: String, _ me: String) -> String { "dm_\(name)_\(me)" }
 
+    @ObservationIgnored private var joinedAt: [String: Int] = [:]
+
+    private func persistJoined() {
+        guard let me else { return }
+        defaults.set(joinedAt, forKey: storeKey("group_joined", me))
+    }
+
+    private func absorb(_ j: JSONObject, me: String, peer: String) -> [DMMessage] {
+        switch j.int("kind") {
+        case 7:
+            guard let id = j.str("id"), let sender = j.str("pubkey"),
+                  let target = j.tags().last(where: { $0.count > 1 && $0[0] == "e" })?[1] else { return [] }
+            let state = (j["state"] as? String) ?? ""
+            guard state != "deleted", state != "epoch_invalidated", !hiddenIds.contains(id) else { return [] }
+            let emoji = ((j["content"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let custom = CustomEmoji.shortcode(in: emoji).flatMap { CustomEmoji.map(j.tags())[$0] }
+            let reaction = DMReaction(id: id, target: target, sender: sender, emoji: emoji.isEmpty || emoji == "+" ? "❤️" : emoji, createdAt: j.int("createdAt"), emojiURL: custom)
+            var list = reactions[target] ?? []
+            guard !list.contains(where: { $0.id == id }) else { return [] }
+            list.removeAll { $0.sender == sender && $0.emoji == reaction.emoji }
+            list.append(reaction)
+            reactions[target] = list.sorted { $0.createdAt < $1.createdAt }
+            return []
+        case 5:
+            guard let sender = j.str("pubkey") else { return [] }
+            let ids = Set(j.tags().filter { $0.count > 1 && $0[0] == "e" }.map { $0[1] })
+            for (target, list) in reactions where list.contains(where: { ids.contains($0.id) && $0.sender == sender }) {
+                reactions[target] = list.filter { !(ids.contains($0.id) && $0.sender == sender) }
+            }
+            return []
+        default:
+            return DMMessage.fromMarmot(j, me: me, peer: peer)
+        }
+    }
+
+    func reactions(for message: DMMessage) -> [DMReaction] {
+        reactions[Self.rumorId(message.id)] ?? []
+    }
+
+    nonisolated static func rumorId(_ messageId: String) -> String {
+        String(messageId.split(separator: ":").first ?? Substring(messageId))
+    }
+
+    func react(to message: DMMessage, with choice: EmojiChoice) async throws {
+        let emoji = choice.content
+        guard let me, message.state == .sent, let group = preferredGroup(for: message.peer) else { throw CoreError(L("dmSendFailed")) }
+        let target = Self.rumorId(message.id)
+        if let existing = reactions[target]?.first(where: { $0.sender == me && $0.emoji == emoji }) {
+            reactions[target]?.removeAll { $0.id == existing.id }
+            hide([existing.id])
+            do {
+                let sent = try await engine.send(groupId: group.id, kind: 5, content: "", tags: [["e", existing.id]])
+                _ = await Self.publish(sent.eventJSON, relays: relays(forGroup: group.id))
+            } catch {
+                reactions[target, default: []].append(existing)
+                throw error
+            }
+            return
+        }
+        var tags = [["e", target], ["p", message.sender], ["k", "9"]]
+        if case .custom(let custom) = choice { tags.append(["emoji", custom.shortcode, custom.url]) }
+        let sent = try await engine.send(groupId: group.id, kind: 7, content: emoji, tags: tags)
+        if let id = JSON.object(sent.eventJSON)?.str("id") { seenEvents.insert(id) }
+        if let raw = JSON.object(sent.messageJSON) { _ = absorb(raw, me: me, peer: message.peer) }
+        guard let accepted = await Self.publish(sent.eventJSON, relays: relays(forGroup: group.id)), !accepted.isEmpty else {
+            if let raw = JSON.object(sent.messageJSON), let id = raw.str("id") {
+                reactions[target]?.removeAll { $0.id == id }
+                hide([id])
+            }
+            throw CoreError(L("dmSendFailed"))
+        }
+    }
+
+    func group(for key: String) -> MarmotGroup? { groupChats[key] }
+
+    func isAdmin(of key: String) -> Bool {
+        guard let me, let group = groupChats[key] else { return false }
+        return group.isAdmin(me)
+    }
+
+    private func packages(for members: [String]) async throws -> [String] {
+        var found: [String] = []
+        var missing: [String] = []
+        await withTaskGroup(of: (String, String?).self) { group in
+            for member in members { group.addTask { (member, await self.keyPackage(for: member, fresh: true)) } }
+            for await (member, package) in group {
+                if let package { found.append(package) } else { missing.append(member) }
+            }
+        }
+        guard missing.isEmpty else {
+            let names = missing.map { ProfileCache.shared.profile($0)?.bestName ?? Profile.shortNpub($0) }.joined(separator: ", ")
+            throw CoreError(L("dmGroupMembersUnavailable", ["names": names]))
+        }
+        return found
+    }
+
+    private func sendWelcomes(_ welcomes: [MarmotWelcome]) async {
+        for welcome in welcomes {
+            let inbox = await inboxRelays(for: welcome.pubkey)
+            var targets = welcome.relays
+            for relay in inbox + RelayConfig.discoveryRelays where !targets.contains(relay) { targets.append(relay) }
+            let accepted = await Self.publish(welcome.wrap, relays: targets) ?? []
+            if accepted.isEmpty { savePendingWelcome(welcome.wrap, relays: targets) }
+        }
+    }
+
+    func createGroup(name: String, members: [String]) async throws -> String {
+        guard let me else { throw CoreError(L("dmNotSignedIn")) }
+        let generation = self.generation
+        let others = Array(Set(members)).filter { $0 != me }
+        guard !others.isEmpty else { throw CoreError(L("dmGroupNeedsMembers")) }
+        let keyPackages = try await packages(for: others)
+        guard generation == self.generation else { throw CancellationError() }
+        let created = try await engine.createGroup(keyPackages: keyPackages, name: name, relays: RelayConfig.mainRelays)
+        guard generation == self.generation else { throw CancellationError() }
+        groups[created.group.id] = created.group
+        let key = created.group.conversationKey
+        groupChats[key] = created.group
+        joinedAt[key] = TimeFormat.now
+        persistJoined()
+        accept(key)
+        startGroupRealtime(generation: generation)
+        await sendWelcomes(created.welcomes)
+        rebuildConversations()
+        DataBus.shared.dmChanged()
+        return key
+    }
+
+    func addMembers(_ members: [String], to key: String) async throws {
+        guard let me, let group = preferredGroup(for: key) else { throw CoreError(L("dmGroupGone")) }
+        let generation = self.generation
+        let fresh = members.filter { $0 != me && !group.members.contains($0) }
+        guard !fresh.isEmpty else { return }
+        let keyPackages = try await packages(for: fresh)
+        let relays = relays(forGroup: group.id)
+        let welcomes = try await engine.addMembers(groupId: group.id, keyPackages: keyPackages) { commit in
+            !(await Self.publish(commit, relays: relays) ?? []).isEmpty
+        }
+        guard generation == self.generation else { return }
+        await sendWelcomes(welcomes)
+        await reloadGroups(loadingAll: false, generation: generation)
+    }
+
+    func removeMember(_ member: String, from key: String) async throws {
+        guard let group = preferredGroup(for: key) else { throw CoreError(L("dmGroupGone")) }
+        let generation = self.generation
+        let relays = relays(forGroup: group.id)
+        let id = group.id
+        try await engine.commit(groupId: id, publish: { !(await Self.publish($0, relays: relays) ?? []).isEmpty }) {
+            try marmotRemoveMembers(groupIdHex: id, pubkeysHex: [member])
+        }
+        guard generation == self.generation else { return }
+        await reloadGroups(loadingAll: false, generation: generation)
+    }
+
+    func renameGroup(_ key: String, to name: String) async throws {
+        guard let group = preferredGroup(for: key) else { throw CoreError(L("dmGroupGone")) }
+        let generation = self.generation
+        let relays = relays(forGroup: group.id)
+        let id = group.id
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        try await engine.commit(groupId: id, publish: { !(await Self.publish($0, relays: relays) ?? []).isEmpty }) {
+            try marmotRenameGroup(groupIdHex: id, name: trimmed)
+        }
+        guard generation == self.generation else { return }
+        await reloadGroups(loadingAll: false, generation: generation)
+    }
+
+    func leaveGroup(_ key: String) async throws {
+        guard let group = preferredGroup(for: key) else { throw CoreError(L("dmGroupGone")) }
+        let generation = self.generation
+        let relays = relays(forGroup: group.id)
+        try await engine.leave(groupId: group.id) { !(await Self.publish($0, relays: relays) ?? []).isEmpty }
+        guard generation == self.generation else { return }
+        groups[group.id] = nil
+        groupChats[key] = nil
+        deleteConversation(with: key)
+        startGroupRealtime(generation: generation)
+    }
+
     private func reloadGroups(loadingAll: Bool, generation: Int) async {
         guard let me, let list = try? await engine.groups() else { return }
         guard generation == self.generation else { return }
         var active: [String: MarmotGroup] = [:]
-        for group in list where group.isActive && group.peer(for: me) != nil { active[group.id] = group }
+        for group in list where group.isActive && group.conversationKey(for: me) != nil { active[group.id] = group }
         let previous = Set(groups.keys)
         groups = active
+        groupChats = Dictionary(active.values.filter(\.isGroupChat).map { ($0.conversationKey, $0) }, uniquingKeysWith: { first, _ in first })
+        for key in groupChats.keys where joinedAt[key] == nil { joinedAt[key] = TimeFormat.now }
+        persistJoined()
         let targets = loadingAll ? Array(active.keys) : active.keys.filter { !previous.contains($0) }
         var loaded: [DMMessage] = []
         for id in targets {
-            guard let group = active[id], let peer = group.peer(for: me),
+            guard let group = active[id], let peer = group.conversationKey(for: me),
                   let raw = try? await engine.messages(groupId: id, limit: Self.historyLimit) else { continue }
             let page = JSON.array(raw)
             historyLoaded[id] = page.count
             if page.count < Self.historyLimit { historyComplete.insert(id) } else { historyComplete.remove(id) }
-            loaded += page.reversed().flatMap { DMMessage.fromMarmot($0, me: me, peer: peer) }
+            loaded += page.reversed().flatMap { absorb($0, me: me, peer: peer) }
         }
         guard generation == self.generation else { return }
         let ordered = loaded.enumerated()
@@ -400,8 +613,11 @@ final class DMService {
             .map(\.element)
         apply(ordered)
         for group in active.values {
-            if let peer = group.peer(for: me), peerStatus[peer] != .ready { peerStatus[peer] = .ready }
+            if let peer = group.conversationKey(for: me), peerStatus[peer] != .ready { peerStatus[peer] = .ready }
         }
+        let members = Set(active.values.filter(\.isGroupChat).flatMap(\.members)).filter { ProfileCache.shared.profile($0) == nil }
+        if !members.isEmpty { Task { await ProfileCache.shared.load(Array(members)) } }
+        rebuildConversations()
         if Set(active.values.map(\.nostrGroupId)) != subscribedGroups { startGroupRealtime(generation: generation) }
     }
 
@@ -493,11 +709,11 @@ final class DMService {
             }
             switch outcome.type {
             case "message":
-                guard let groupId = outcome.groupId, let group = groups[groupId], let peer = group.peer(for: me) else {
+                guard let groupId = outcome.groupId, let group = groups[groupId], let peer = group.conversationKey(for: me) else {
                     groupsChanged = true
                     continue
                 }
-                if let message = JSON.object(outcome.messageJSON) { incoming += DMMessage.fromMarmot(message, me: me, peer: peer) }
+                if let message = JSON.object(outcome.messageJSON) { incoming += absorb(message, me: me, peer: peer) }
             case "welcome":
                 groupsChanged = true
                 if outcome.isNewWelcome { joined = true }
@@ -562,7 +778,8 @@ final class DMService {
         guard !changedPeers.isEmpty else { return }
         if let activePeer, changedPeers.contains(activePeer) { markReadSilently(activePeer) }
         rebuildConversations()
-        let missing = changedPeers.filter { ProfileCache.shared.profile($0) == nil }
+        let senders = changedPeers.filter(Self.isGroup).flatMap { messagesByPeer[$0]?.map(\.sender) ?? [] }
+        let missing = Set(changedPeers.filter { !Self.isGroup($0) } + senders).filter { ProfileCache.shared.profile($0) == nil }
         if !missing.isEmpty { Task { await ProfileCache.shared.load(Array(missing)) } }
         DataBus.shared.dmChanged()
     }
@@ -585,6 +802,7 @@ final class DMService {
 
     private func preferredGroup(for peer: String) -> MarmotGroup? {
         guard let me else { return nil }
+        if let id = Self.groupId(peer) { return groups[id] }
         return groups.values
             .filter { $0.peer(for: me) == peer }
             .max { ($0.lastMessageAt, $0.id) < ($1.lastMessageAt, $1.id) }
@@ -592,11 +810,18 @@ final class DMService {
 
     private func rebuildConversations() {
         let blocked = Set(Session.shared.mutedPubkeys)
-        conversations = messagesByPeer.compactMap { peer, list in
+        var list = messagesByPeer.compactMap { peer, list -> DMConversation? in
             guard !blocked.contains(peer), let last = list.last(where: { $0.state == .sent }) ?? list.last else { return nil }
+            if Self.isGroup(peer), groupChats[peer] == nil { return nil }
             return DMConversation(peer: peer, lastMessage: last, isUnread: isUnread(peer: peer, list: list))
         }
-        .sorted { $0.timestamp > $1.timestamp }
+        for (key, group) in groupChats where messagesByPeer[key]?.isEmpty ?? true {
+            let started = max(joinedAt[key] ?? 0, clearedAt[key].map { $0 + 1 } ?? 0, group.lastMessageAt)
+            guard clearedAt[key] == nil || started > (clearedAt[key] ?? 0) else { continue }
+            let note = DMMessage(id: "group-start-\(group.id)", sender: me ?? "", peer: key, content: L("dmGroupStarted"), createdAt: started, isMine: false, kind: 0)
+            list.append(DMConversation(peer: key, lastMessage: note, isUnread: false))
+        }
+        conversations = list.sorted { $0.timestamp > $1.timestamp }
         updateBadge()
     }
 
@@ -682,12 +907,12 @@ final class DMService {
         }
     }
 
-    func sendFile(_ data: Data, mimeType: String, to peer: String) async throws {
-        let prepared = try await prepareFile(data, mimeType: mimeType, for: peer)
+    func sendFile(_ data: Data, mimeType: String, to peer: String, extraImeta: [String] = []) async throws {
+        let prepared = try await prepareFile(data, mimeType: mimeType, for: peer, extraImeta: extraImeta)
         try await sendPrepared(prepared, to: peer)
     }
 
-    func prepareFile(_ data: Data, mimeType: String, for peer: String) async throws -> DMPreparedFile {
+    func prepareFile(_ data: Data, mimeType: String, for peer: String, extraImeta: [String] = []) async throws -> DMPreparedFile {
         guard data.count <= Self.maxFileSize else { throw CoreError(L("fileTooLarge")) }
         guard let key = privateKey else { throw CoreError(L("dmNotSignedIn")) }
         let groupId = try await ensureChat(with: peer)
@@ -712,7 +937,7 @@ final class DMService {
         } catch {
             throw CoreError(L("failedToUploadEncryptedMedia"))
         }
-        return DMPreparedFile(url: url, mimeType: encrypted.mimeType, groupId: groupId, imeta: encrypted.imeta, originalHash: encrypted.originalHash, filename: encrypted.filename, size: encrypted.size)
+        return DMPreparedFile(url: url, mimeType: encrypted.mimeType, groupId: groupId, imeta: encrypted.imeta + extraImeta, originalHash: encrypted.originalHash, filename: encrypted.filename, size: encrypted.size)
     }
 
     func sendPrepared(_ file: DMPreparedFile, to peer: String) async throws {
@@ -846,6 +1071,7 @@ final class DMService {
 
     private func ensureChat(with peer: String) async throws -> String {
         if let group = preferredGroup(for: peer) { return group.id }
+        if Self.isGroup(peer) { throw CoreError(L("dmGroupGone")) }
         if let task = chatCreation[peer] { return try await task.value }
         let task = Task { try await self.createChat(with: peer) }
         chatCreation[peer] = task

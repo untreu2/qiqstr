@@ -113,6 +113,34 @@ fn group_json(mdk: &MDK<MdkSqliteStorage>, group: &group_types::Group) -> Value 
     })
 }
 
+fn remember_media_secret(m: &Marmot, group_id: &GroupId) {
+    use mdk_storage_traits::groups::GroupStorage;
+    let storage = m.mdk.provider.storage();
+    let mls_id = openmls::group::GroupId::from_slice(group_id.as_slice());
+    let Ok(Some(group)) = openmls::group::MlsGroup::load(storage, &mls_id) else {
+        return;
+    };
+    let epoch = group.epoch().as_u64();
+    if matches!(
+        storage.get_group_mip04_exporter_secret(group_id, epoch),
+        Ok(Some(_))
+    ) {
+        return;
+    }
+    let Ok(secret) = group.export_secret(m.mdk.provider.crypto(), "marmot", b"encrypted-media", 32)
+    else {
+        return;
+    };
+    let Ok(secret): std::result::Result<[u8; 32], _> = secret.try_into() else {
+        return;
+    };
+    let _ = storage.save_group_mip04_exporter_secret(group_types::GroupExporterSecret {
+        mls_group_id: group_id.clone(),
+        epoch,
+        secret: mdk_storage_traits::Secret::new(secret),
+    });
+}
+
 fn signed(keys: &Keys, builder: EventBuilder) -> Result<Event> {
     Ok(builder.sign_with_keys(keys)?)
 }
@@ -185,11 +213,17 @@ pub fn marmot_open(data_dir: String, private_key_hex: String) -> Result<String> 
         EncryptionConfig::new(database_key(&keys)),
     )
     .map_err(|e| anyhow!("Failed to open messaging storage: {e}"))?;
-    *guard = Some(Marmot {
+    let marmot = Marmot {
         keys,
         dir,
         mdk: MDK::new(storage),
-    });
+    };
+    if let Ok(groups) = marmot.mdk.get_groups() {
+        for group in groups {
+            remember_media_secret(&marmot, &group.mls_group_id);
+        }
+    }
+    *guard = Some(marmot);
     Ok(pubkey)
 }
 
@@ -298,6 +332,7 @@ pub fn marmot_create_chat(peer_key_package_json: String, relays: Vec<String>) ->
             vec![me, peer],
         );
         let result = m.mdk.create_group(&me, vec![key_package.clone()], config)?;
+        remember_media_secret(m, &result.group.mls_group_id);
         let mut welcomes = Vec::new();
         for rumor in result.welcome_rumors {
             let wrap = block_on(EventBuilder::gift_wrap(&m.keys, &peer, rumor, []))??;
@@ -313,6 +348,206 @@ pub fn marmot_create_chat(peer_key_package_json: String, relays: Vec<String>) ->
             "welcomeRelays": welcome_relays,
         })
         .to_string())
+    })
+}
+
+fn parse_key_packages(m: &Marmot, events_json: &[String]) -> Result<Vec<Event>> {
+    let me = m.keys.public_key();
+    let mut seen = BTreeSet::new();
+    let mut packages = Vec::new();
+    for raw in events_json {
+        let event = Event::from_json(raw)?;
+        event.verify()?;
+        if event.pubkey == me || !seen.insert(event.pubkey) {
+            continue;
+        }
+        packages.push(event);
+    }
+    if packages.is_empty() {
+        return Err(anyhow!("Add at least one other person"));
+    }
+    Ok(packages)
+}
+
+fn wrap_welcomes(m: &Marmot, rumors: Vec<UnsignedEvent>, packages: &[Event]) -> Result<Vec<Value>> {
+    let mut welcomes = Vec::new();
+    for rumor in rumors {
+        let package = rumor
+            .tags
+            .iter()
+            .find_map(|tag| match tag.as_standardized() {
+                Some(TagStandard::Event { event_id, .. }) => {
+                    packages.iter().find(|event| event.id == *event_id)
+                }
+                _ => None,
+            })
+            .ok_or_else(|| anyhow!("Welcome without a matching member"))?;
+        let wrap = block_on(EventBuilder::gift_wrap(&m.keys, &package.pubkey, rumor, []))??;
+        welcomes.push(json!({
+            "pubkey": package.pubkey.to_hex(),
+            "wrap": wrap.as_json(),
+            "relays": key_package_relays(package),
+        }));
+    }
+    Ok(welcomes)
+}
+
+fn is_admin(m: &Marmot, group_id: &GroupId) -> Result<bool> {
+    let group = m
+        .mdk
+        .get_group(group_id)?
+        .ok_or_else(|| anyhow!("Group not found"))?;
+    Ok(group.admin_pubkeys.contains(&m.keys.public_key()))
+}
+
+/// Creates a named group chat with the given members' key packages.
+///
+/// Returns JSON `{ "group", "welcomes": [ { "pubkey", "wrap", "relays" } ] }`.
+pub fn marmot_create_group(
+    key_packages_json: Vec<String>,
+    name: String,
+    description: String,
+    relays: Vec<String>,
+) -> Result<String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(anyhow!("Give the group a name"));
+    }
+    with_marmot(|m| {
+        let me = m.keys.public_key();
+        let packages = parse_key_packages(m, &key_packages_json)?;
+        let mut group_relays = relays.clone();
+        for package in &packages {
+            group_relays.extend(key_package_relays(package));
+        }
+        let relay_urls: Vec<RelayUrl> = parse_relays(&group_relays).into_iter().take(6).collect();
+        if relay_urls.is_empty() {
+            return Err(anyhow!("No relays for the group"));
+        }
+        let config = NostrGroupConfigData::new(
+            name,
+            description.trim().to_string(),
+            None,
+            None,
+            None,
+            relay_urls,
+            vec![me],
+        );
+        let result = m.mdk.create_group(&me, packages.clone(), config)?;
+        remember_media_secret(m, &result.group.mls_group_id);
+        let welcomes = wrap_welcomes(m, result.welcome_rumors, &packages)?;
+        Ok(json!({
+            "group": group_json(&m.mdk, &result.group),
+            "welcomes": welcomes,
+        })
+        .to_string())
+    })
+}
+
+/// Adds members to a group. Publish `evolutionEvent`, merge the pending commit, then send the welcomes.
+///
+/// Returns JSON `{ "evolutionEvent", "welcomes": [ { "pubkey", "wrap", "relays" } ] }`.
+pub fn marmot_add_members(group_id_hex: String, key_packages_json: Vec<String>) -> Result<String> {
+    let group_id = parse_group_id(&group_id_hex)?;
+    with_marmot(|m| {
+        let members = m.mdk.get_members(&group_id)?;
+        let packages: Vec<Event> = parse_key_packages(m, &key_packages_json)?
+            .into_iter()
+            .filter(|event| !members.contains(&event.pubkey))
+            .collect();
+        if packages.is_empty() {
+            return Err(anyhow!("Everyone you picked is already in the group"));
+        }
+        let result = m.mdk.add_members(&group_id, &packages)?;
+        let welcomes = wrap_welcomes(m, result.welcome_rumors.unwrap_or_default(), &packages)?;
+        Ok(json!({
+            "evolutionEvent": result.evolution_event.as_json(),
+            "welcomes": welcomes,
+        })
+        .to_string())
+    })
+}
+
+/// Removes members from a group (admins only). Returns the commit event to publish before merging.
+pub fn marmot_remove_members(group_id_hex: String, pubkeys_hex: Vec<String>) -> Result<String> {
+    let group_id = parse_group_id(&group_id_hex)?;
+    let pubkeys: Vec<PublicKey> = pubkeys_hex
+        .iter()
+        .map(|pk| PublicKey::from_hex(pk))
+        .collect::<std::result::Result<_, _>>()?;
+    with_marmot(|m| {
+        Ok(m.mdk
+            .remove_members(&group_id, &pubkeys)?
+            .evolution_event
+            .as_json())
+    })
+}
+
+/// Renames a group (admins only). Returns the commit event to publish before merging.
+pub fn marmot_rename_group(group_id_hex: String, name: String) -> Result<String> {
+    let group_id = parse_group_id(&group_id_hex)?;
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(anyhow!("Give the group a name"));
+    }
+    with_marmot(|m| {
+        Ok(m.mdk
+            .update_group_data(&group_id, NostrGroupDataUpdate::new().name(name))?
+            .evolution_event
+            .as_json())
+    })
+}
+
+/// Returns the next step for leaving a group.
+///
+/// JSON `{ "event": String?, "isCommit": bool, "done": bool }`. Publish `event`; when `isCommit`, merge the
+/// pending commit and call again. When `done`, publish the event (if any) and then call `marmot_delete_group`.
+pub fn marmot_leave_step(group_id_hex: String) -> Result<String> {
+    let group_id = parse_group_id(&group_id_hex)?;
+    with_marmot(|m| {
+        let me = m.keys.public_key();
+        let others: Vec<PublicKey> = m
+            .mdk
+            .get_members(&group_id)?
+            .into_iter()
+            .filter(|pk| *pk != me)
+            .collect();
+        if others.is_empty() {
+            return Ok(json!({ "event": null, "isCommit": false, "done": true }).to_string());
+        }
+        if !is_admin(m, &group_id)? {
+            let event = m.mdk.leave_group(&group_id)?.evolution_event.as_json();
+            return Ok(json!({ "event": event, "isCommit": false, "done": true }).to_string());
+        }
+        let group = m
+            .mdk
+            .get_group(&group_id)?
+            .ok_or_else(|| anyhow!("Group not found"))?;
+        let other_admins = group
+            .admin_pubkeys
+            .iter()
+            .any(|pk| *pk != me && others.contains(pk));
+        let update = if other_admins {
+            m.mdk.self_demote(&group_id)?
+        } else {
+            m.mdk
+                .update_group_data(&group_id, NostrGroupDataUpdate::new().admins(others))?
+        };
+        Ok(
+            json!({ "event": update.evolution_event.as_json(), "isCommit": true, "done": false })
+                .to_string(),
+        )
+    })
+}
+
+/// Deletes a group and its messages from this device.
+pub fn marmot_delete_group(group_id_hex: String) -> Result<()> {
+    let group_id = parse_group_id(&group_id_hex)?;
+    with_marmot(|m| {
+        let _ = m.mdk.delete_messages_for_group(&group_id);
+        m.mdk.delete_group(&group_id)?;
+        reject_group(&m.dir, &group_id_hex);
+        Ok(())
     })
 }
 
@@ -362,6 +597,7 @@ fn process_gift_wrap(m: &Marmot, event: &Event) -> Result<Value> {
     if !accepted && welcome.state == welcome_types::WelcomeState::Pending {
         m.mdk.accept_welcome(&welcome)?;
     }
+    remember_media_secret(m, &welcome.mls_group_id);
     let members = m.mdk.get_members(&welcome.mls_group_id).unwrap_or_default();
     if !welcome_is_authentic(&members, &m.keys.public_key(), &unwrapped.sender) {
         reject_group(&m.dir, &group_id);
@@ -522,6 +758,7 @@ pub fn marmot_encrypt_media(
 ) -> Result<String> {
     let group_id = parse_group_id(&group_id_hex)?;
     with_marmot(|m| {
+        remember_media_secret(m, &group_id);
         let manager = m.mdk.media_manager(group_id);
         let upload = manager
             .encrypt_for_upload(&data, &mime_type, &filename)
@@ -609,8 +846,182 @@ mod tests {
         dir.to_string_lossy().to_string()
     }
 
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn process(event: String) -> Value {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        serde_json::from_str(
+            &runtime
+                .block_on(async { marmot_process_event(event) })
+                .unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn three_people_share_a_group() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let relays = vec!["wss://relay.example.com".to_string()];
+        let (alice, bob, carol) = (Keys::generate(), Keys::generate(), Keys::generate());
+        let (alice_dir, bob_dir, carol_dir) = (temp_dir("ga"), temp_dir("gb"), temp_dir("gc"));
+
+        marmot_open(bob_dir.clone(), bob.secret_key().to_secret_hex()).unwrap();
+        let bob_package = marmot_key_package_event(relays.clone()).unwrap();
+        marmot_open(carol_dir.clone(), carol.secret_key().to_secret_hex()).unwrap();
+        let carol_package = marmot_key_package_event(relays.clone()).unwrap();
+
+        marmot_open(alice_dir.clone(), alice.secret_key().to_secret_hex()).unwrap();
+        assert!(marmot_create_group(
+            vec![bob_package.clone()],
+            "  ".into(),
+            String::new(),
+            relays.clone()
+        )
+        .is_err());
+        let created: Value = serde_json::from_str(
+            &marmot_create_group(
+                vec![bob_package],
+                "Weekend".into(),
+                String::new(),
+                relays.clone(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let group_id = created["group"]["id"].as_str().unwrap().to_string();
+        assert_eq!(created["group"]["name"], "Weekend");
+        let bob_welcome = created["welcomes"][0]["wrap"].as_str().unwrap().to_string();
+        assert_eq!(created["welcomes"][0]["pubkey"], bob.public_key().to_hex());
+
+        let added: Value = serde_json::from_str(
+            &marmot_add_members(group_id.clone(), vec![carol_package]).unwrap(),
+        )
+        .unwrap();
+        let add_commit = added["evolutionEvent"].as_str().unwrap().to_string();
+        marmot_merge_pending_commit(group_id.clone()).unwrap();
+        let carol_welcome = added["welcomes"][0]["wrap"].as_str().unwrap().to_string();
+        let hello: Value = serde_json::from_str(
+            &marmot_send_message(group_id.clone(), 9, "hello all".into(), "[]".into()).unwrap(),
+        )
+        .unwrap();
+        let hello_event = hello["event"].as_str().unwrap().to_string();
+        let hello_id = hello["message"]["id"].as_str().unwrap().to_string();
+
+        marmot_open(bob_dir.clone(), bob.secret_key().to_secret_hex()).unwrap();
+        assert_eq!(process(bob_welcome)["type"], "welcome");
+        assert_eq!(process(add_commit)["type"], "commit");
+        assert_eq!(
+            process(hello_event.clone())["message"]["content"],
+            "hello all"
+        );
+        let reaction: Value = serde_json::from_str(
+            &marmot_send_message(
+                group_id.clone(),
+                7,
+                "🔥".into(),
+                serde_json::to_string(&vec![vec!["e".to_string(), hello_id.clone()]]).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let reaction_event = reaction["event"].as_str().unwrap().to_string();
+        let leave: Value =
+            serde_json::from_str(&marmot_leave_step(group_id.clone()).unwrap()).unwrap();
+        assert_eq!(leave["done"], true);
+        assert_eq!(leave["isCommit"], false);
+        let leave_event = leave["event"].as_str().unwrap().to_string();
+        marmot_delete_group(group_id.clone()).unwrap();
+        let groups: Value = serde_json::from_str(&marmot_groups().unwrap()).unwrap();
+        assert!(groups.as_array().unwrap().is_empty());
+
+        marmot_open(carol_dir, carol.secret_key().to_secret_hex()).unwrap();
+        let joined = process(carol_welcome);
+        assert_eq!(joined["type"], "welcome");
+        let groups: Value = serde_json::from_str(&marmot_groups().unwrap()).unwrap();
+        assert_eq!(groups[0]["members"].as_array().unwrap().len(), 3);
+        assert_eq!(groups[0]["name"], "Weekend");
+        let got = process(reaction_event);
+        assert_eq!(got["message"]["kind"], 7);
+        assert_eq!(got["message"]["content"], "🔥");
+
+        marmot_open(alice_dir, alice.secret_key().to_secret_hex()).unwrap();
+        let proposal = process(leave_event);
+        assert_eq!(proposal["type"], "proposal");
+        assert!(proposal["evolutionEvent"].is_string());
+        marmot_merge_pending_commit(group_id.clone()).unwrap();
+        let groups: Value = serde_json::from_str(&marmot_groups().unwrap()).unwrap();
+        assert_eq!(groups[0]["members"].as_array().unwrap().len(), 2);
+        let step: Value =
+            serde_json::from_str(&marmot_leave_step(group_id.clone()).unwrap()).unwrap();
+        assert_eq!(step["isCommit"], true);
+        assert!(marmot_rename_group(group_id.clone(), "".into()).is_err());
+        marmot_close();
+    }
+
+    #[test]
+    fn media_survives_a_self_update() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let relays = vec!["wss://relay.example.com".to_string()];
+        let (alice, bob) = (Keys::generate(), Keys::generate());
+        let (alice_dir, bob_dir) = (temp_dir("ma"), temp_dir("mb"));
+        marmot_open(bob_dir.clone(), bob.secret_key().to_secret_hex()).unwrap();
+        let kp = marmot_key_package_event(relays.clone()).unwrap();
+        marmot_open(alice_dir, alice.secret_key().to_secret_hex()).unwrap();
+        let chat: Value =
+            serde_json::from_str(&marmot_create_chat(kp, relays.clone()).unwrap()).unwrap();
+        let gid = chat["group"]["id"].as_str().unwrap().to_string();
+        let welcome = chat["welcomes"][0].as_str().unwrap().to_string();
+        let out =
+            std::env::temp_dir().join(format!("{}.enc", Keys::generate().public_key().to_hex()));
+        let up: Value = serde_json::from_str(
+            &marmot_encrypt_media(
+                gid.clone(),
+                b"voice bytes".to_vec(),
+                "audio/mp4".into(),
+                "v.m4a".into(),
+                out.to_string_lossy().to_string(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut imeta = vec!["url https://media.example.com/a".to_string()];
+        imeta.extend(
+            up["imeta"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap().to_string()),
+        );
+        let mut tag = vec!["imeta".to_string()];
+        tag.extend(imeta.iter().cloned());
+        let sent: Value = serde_json::from_str(
+            &marmot_send_message(
+                gid.clone(),
+                9,
+                String::new(),
+                serde_json::to_string(&vec![tag]).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let enc = std::fs::read(&out).unwrap();
+
+        marmot_open(bob_dir, bob.secret_key().to_secret_hex()).unwrap();
+        assert_eq!(process(welcome)["type"], "welcome");
+        process(sent["event"].as_str().unwrap().to_string());
+        marmot_self_update(gid.clone()).unwrap();
+        marmot_merge_pending_commit(gid.clone()).unwrap();
+        let plain = marmot_decrypt_media(gid, imeta, enc).unwrap();
+        assert_eq!(plain, b"voice bytes".to_vec());
+        marmot_close();
+    }
+
     #[test]
     fn two_users_exchange_messages() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let relays = vec!["wss://relay.example.com".to_string()];
         let alice = Keys::generate();
         let bob = Keys::generate();

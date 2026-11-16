@@ -10,6 +10,7 @@ struct DMChatView: View {
     @State private var unseenCount = 0
     @State private var searchPresented = false
     @State private var safety = DMSafetyModel()
+    @State private var showsGroupInfo = false
     @Environment(\.dismiss) private var dismiss
     @FocusState private var inputFocused: Bool
 
@@ -28,11 +29,13 @@ struct DMChatView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if model.isSearching {
                     matchNavigator
+                } else if model.isRequest, model.isGroup {
+                    groupRequestBanner
                 } else if model.isRequest {
                     requestBanner
                 } else {
                     if Session.shared.canSign {
-                        DMInputBar(model: model, focus: $inputFocused, placeholder: L("dmMessagePlaceholder", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]))
+                        DMInputBar(model: model, focus: $inputFocused, placeholder: L("dmMessagePlaceholder", ["name": chatName]))
                     } else {
                         Button(L("readOnlyAddKey")) { ReadOnlyGate.shared.addKey() }
                             .prominentButtonStyle()
@@ -69,7 +72,10 @@ struct DMChatView: View {
             .hidesMacToolbarTitle()
             .task { await model.appeared() }
             .task { await model.poll() }
-            .task(id: pubkey) { await cache.load([pubkey]) }
+            .task(id: pubkey) { if !model.isGroup { await cache.load([pubkey]) } }
+            .sheet(isPresented: $showsGroupInfo) {
+                DMGroupInfoSheet(key: pubkey) { dismiss() }
+            }
             .onDisappear { model.disappeared() }
             .onChange(of: lastMessage?.id) { old, new in
                 guard old != nil, new != nil else {
@@ -96,16 +102,59 @@ struct DMChatView: View {
 
     private var lastIncomingId: String? { model.messages.last { !$0.isMine }?.id }
 
+    private var chatName: String {
+        model.isGroup ? (model.group?.displayName ?? L("dmGroupUntitled")) : profile?.bestName ?? Profile.shortNpub(pubkey)
+    }
+
+    private var groupRequestBanner: some View {
+        VStack(spacing: 12) {
+            Text(L("dmGroupRequestNotice", ["name": chatName]))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(6)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button(L("dmGroupLeave"), role: .destructive) {
+                    Task { if await model.leaveGroup() { dismiss() } }
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("dm-group-request-leave")
+                Button(L("dmRequestAccept")) { model.acceptRequest() }
+                    .prominentButtonStyle()
+                    .accessibilityIdentifier("dm-request-accept")
+            }
+            .controlSize(.large)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+
     private var header: some View {
         Button {
-            router.push(.profile(pubkey))
+            if model.isGroup { showsGroupInfo = true } else { router.push(.profile(pubkey)) }
         } label: {
             HStack(spacing: 8) {
-                ProfileAvatar(pubkey: pubkey, size: 30)
-                Text(profile?.bestName ?? Profile.shortNpub(pubkey))
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                if model.isGroup {
+                    DMGroupAvatar(group: model.group, size: 30)
+                } else {
+                    ProfileAvatar(pubkey: pubkey, size: 30)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(chatName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if model.isGroup {
+                        Text(L("dmGroupMembersCount", ["count": model.group?.members.count ?? 0]))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
             .padding(.leading, 4)
             .padding(.trailing, 16)
@@ -115,7 +164,7 @@ struct DMChatView: View {
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)
-        .accessibilityLabel(L("dmViewProfile"))
+        .accessibilityLabel(model.isGroup ? L("dmGroupInfo") : L("dmViewProfile"))
         .accessibilityIdentifier("dm-chat-header")
     }
 
@@ -123,12 +172,17 @@ struct DMChatView: View {
         Menu {
             Button(L("dmSearchInChat"), systemImage: "magnifyingglass") { searchPresented = true }
                 .disabled(model.messages.isEmpty)
-            Button(L("dmViewProfile"), systemImage: "person.crop.circle") { router.push(.profile(pubkey)) }
-            Button(L("dmCopyNpub"), systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = Nip19.npub(pubkey)
-                ToastCenter.shared.show(L("copiedToClipboard"), style: .success)
+            if model.isGroup {
+                Button(L("dmGroupInfo"), systemImage: "person.3") { showsGroupInfo = true }
+                    .accessibilityIdentifier("dm-group-info-open")
+            } else {
+                Button(L("dmViewProfile"), systemImage: "person.crop.circle") { router.push(.profile(pubkey)) }
+                Button(L("dmCopyNpub"), systemImage: "doc.on.doc") {
+                    UIPasteboard.general.string = Nip19.npub(pubkey)
+                    ToastCenter.shared.show(L("copiedToClipboard"), style: .success)
+                }
+                DMSafetyMenuItems(peer: pubkey, safety: safety)
             }
-            DMSafetyMenuItems(peer: pubkey, safety: safety)
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -258,10 +312,14 @@ struct DMChatView: View {
         } else if model.messages.isEmpty {
             ScrollView {
                 VStack(spacing: 14) {
-                    ProfileAvatar(pubkey: pubkey, size: 84)
-                    Text(profile?.bestName ?? Profile.shortNpub(pubkey))
+                    if model.isGroup {
+                        DMGroupAvatar(group: model.group, size: 84)
+                    } else {
+                        ProfileAvatar(pubkey: pubkey, size: 84)
+                    }
+                    Text(chatName)
                         .font(.title3.weight(.semibold))
-                    if model.isPeerUnavailable {
+                    if model.isPeerUnavailable, !model.isGroup {
                         Label(L("dmPeerNotOnMarmot", ["name": profile?.bestName ?? Profile.shortNpub(pubkey)]), systemImage: "exclamationmark.lock")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -341,7 +399,10 @@ struct DMChatView: View {
                 onQuote: model.quote,
                 onInfo: model.showInfo,
                 searchQuery: model.trimmedSearch,
-                isCurrentMatch: model.currentMatchId == message.id
+                isCurrentMatch: model.currentMatchId == message.id,
+                senderName: model.isGroup ? (cache.profile(message.sender)?.bestName ?? Profile.shortNpub(message.sender)) : nil,
+                reactions: model.reactions(for: message),
+                onReact: Session.shared.canSign ? { model.react($0, with: $1) } : nil
             )
         }
     }

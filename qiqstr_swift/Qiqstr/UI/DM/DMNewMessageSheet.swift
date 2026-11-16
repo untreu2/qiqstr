@@ -79,11 +79,21 @@ final class DMUserPickerViewModel {
 struct DMNewMessageSheet: View {
     let onSelect: (String) -> Void
     @State private var model = DMUserPickerViewModel()
+    @State private var showsNewGroup = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
+                if model.trimmedQuery.isEmpty, Session.shared.canSign {
+                    Section {
+                        Button { showsNewGroup = true } label: {
+                            Label(L("dmNewGroup"), systemImage: "person.3")
+                                .foregroundStyle(AppColors.textPrimary)
+                        }
+                        .accessibilityIdentifier("dm-new-group")
+                    }
+                }
                 if let pubkey = model.directPubkey {
                     Section {
                         Button { onSelect(pubkey) } label: {
@@ -132,6 +142,9 @@ struct DMNewMessageSheet: View {
             .autocorrectionDisabled()
             .task { await model.loadFollowing() }
             .task(id: model.query) { await model.search() }
+            .navigationDestination(isPresented: $showsNewGroup) {
+                DMNewGroupView { onSelect($0) }
+            }
             .navigationTitle(L("newMessage"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

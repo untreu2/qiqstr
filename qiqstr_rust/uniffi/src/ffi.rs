@@ -410,6 +410,24 @@ pub fn marmot_pick_key_package(events_json: String, pubkey_hex: String) -> Resul
 pub fn marmot_create_chat(peer_key_package_json: String, relays: Vec<String>) -> Result<String, QiqError> { api::marmot::marmot_create_chat(peer_key_package_json, relays).map_err(Into::into) }
 
 #[uniffi::export]
+pub fn marmot_create_group(key_packages_json: Vec<String>, name: String, description: String, relays: Vec<String>) -> Result<String, QiqError> { api::marmot::marmot_create_group(key_packages_json, name, description, relays).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_add_members(group_id_hex: String, key_packages_json: Vec<String>) -> Result<String, QiqError> { api::marmot::marmot_add_members(group_id_hex, key_packages_json).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_remove_members(group_id_hex: String, pubkeys_hex: Vec<String>) -> Result<String, QiqError> { api::marmot::marmot_remove_members(group_id_hex, pubkeys_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_rename_group(group_id_hex: String, name: String) -> Result<String, QiqError> { api::marmot::marmot_rename_group(group_id_hex, name).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_leave_step(group_id_hex: String) -> Result<String, QiqError> { api::marmot::marmot_leave_step(group_id_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn marmot_delete_group(group_id_hex: String) -> Result<(), QiqError> { api::marmot::marmot_delete_group(group_id_hex).map_err(Into::into) }
+
+#[uniffi::export]
 pub fn marmot_send_message(group_id_hex: String, kind: u16, content: String, tags_json: String) -> Result<String, QiqError> { api::marmot::marmot_send_message(group_id_hex, kind, content, tags_json).map_err(Into::into) }
 
 #[uniffi::export]
