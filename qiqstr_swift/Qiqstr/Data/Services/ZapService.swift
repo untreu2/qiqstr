@@ -35,6 +35,45 @@ struct ZapFailure: Identifiable, Equatable {
     var mayHaveSettled = false
 }
 
+struct ZapSplit: Hashable, Sendable {
+    var pubkey: String
+    var weight: Double
+
+    static func parse(_ tags: [[String]]) -> [ZapSplit] {
+        let entries = tags.filter { $0.count > 1 && $0[0] == "zap" && $0[1].count == 64 }
+        guard !entries.isEmpty else { return [] }
+        let weighted = entries.contains { $0.count > 3 && Double($0[3]) != nil }
+        var result: [ZapSplit] = []
+        for tag in entries {
+            let weight = weighted ? (tag.count > 3 ? Double(tag[3]) ?? 0 : 0) : 1
+            guard weight > 0, weight.isFinite, !result.contains(where: { $0.pubkey == tag[1] }) else { continue }
+            result.append(ZapSplit(pubkey: tag[1], weight: weight))
+        }
+        return result
+    }
+
+    static func shares(_ amountSats: Int, splits: [ZapSplit]) -> [(pubkey: String, sats: Int)] {
+        let total = splits.reduce(0) { $0 + $1.weight }
+        guard total > 0, amountSats > 0 else { return [] }
+        var shares = splits.map { (pubkey: $0.pubkey, sats: Int((Double(amountSats) * $0.weight / total).rounded(.down))) }
+        var remainder = amountSats - shares.reduce(0) { $0 + $1.sats }
+        for index in shares.indices.sorted(by: { splits[$0].weight > splits[$1].weight }) where remainder > 0 {
+            shares[index].sats += 1
+            remainder -= 1
+        }
+        return shares.filter { $0.sats > 0 }
+    }
+
+    static func percent(_ split: ZapSplit, of splits: [ZapSplit]) -> Int {
+        let total = splits.reduce(0) { $0 + $1.weight }
+        return total > 0 ? Int((split.weight / total * 100).rounded()) : 0
+    }
+}
+
+extension Note {
+    var zapSplits: [ZapSplit] { ZapSplit.parse(tags) }
+}
+
 struct ZapRecipient: Hashable, Sendable {
     var pubkey: String
     var name: String
@@ -145,13 +184,41 @@ final class ZapService {
 
     func zap(note: Note?, pubkey: String, amountSats: Int, comment: String) async throws {
         guard canZap else { throw ZapError.noWallet }
-        guard let amountMsat = SatsAmount.msat(amountSats) else { throw ZapError.invalidAmount }
+        guard SatsAmount.msat(amountSats) != nil else { throw ZapError.invalidAmount }
         if let note {
             guard pendingSats[note.id] == nil else { throw ZapError.inProgress }
             pendingSats[note.id] = amountSats
         }
         defer { if let note { pendingSats[note.id] = nil } }
         let privateKey = try Session.shared.requireSigner()
+        let splits = note?.zapSplits ?? []
+        var targets = ZapSplit.shares(amountSats, splits: splits)
+        if targets.isEmpty { targets = [(pubkey: pubkey, sats: amountSats)] }
+        var paid = 0
+        var lastError: Error?
+        for target in targets {
+            do {
+                try await pay(target.pubkey, sats: target.sats, comment: comment, note: note, privateKey: privateKey)
+                paid += target.sats
+            } catch WalletError.paymentPending {
+                throw WalletError.paymentPending
+            } catch {
+                lastError = error
+            }
+        }
+        if paid == 0, let lastError { throw lastError }
+        if paid < amountSats {
+            ToastCenter.shared.show(L("zapSplitPartial", ["sent": Sats.format(paid), "total": Sats.format(amountSats)]), style: .error)
+        }
+        if let note {
+            zappedSats[note.id, default: 0] += paid
+            zappedNoteIds.insert(note.id)
+            scheduleReceiptSync(note.id)
+        }
+    }
+
+    private func pay(_ pubkey: String, sats: Int, comment: String, note: Note?, privateKey: String) async throws {
+        guard let amountMsat = SatsAmount.msat(sats) else { throw ZapError.invalidAmount }
         let recipient = await recipient(pubkey)
         let params: LnurlPayParams
         if let address = recipient.lightningAddress {
@@ -171,16 +238,11 @@ final class ZapService {
         ]
         if let note {
             tags.append(["e", note.id])
-            tags.append(["k", "1"])
+            tags.append(["k", String(note.kind)])
         }
         let zapRequest = try createZapRequestEvent(tags: tags, content: comment.trimmingCharacters(in: .whitespacesAndNewlines), privateKeyHex: privateKey)
         let invoice = try await Lnurl.requestInvoice(params, amountMsat: amountMsat, zapRequest: zapRequest)
         try await WalletService.shared.payBolt11(invoice)
-        if let note {
-            zappedSats[note.id, default: 0] += amountSats
-            zappedNoteIds.insert(note.id)
-            scheduleReceiptSync(note.id)
-        }
     }
 
     private func scheduleReceiptSync(_ noteId: String) {

@@ -78,12 +78,17 @@ final class ComposeViewModel {
     var pollHasEnd = false
     var pollEndsAt = Date().addingTimeInterval(86400)
     var scheduledAt: Date?
+    var goalEnabled = false
+    var goalAmount = ""
+    var goalHasEnd = false
+    var goalEndsAt = Date().addingTimeInterval(7 * 86400)
     private(set) var draftId = UUID().uuidString
     private(set) var attachments: [ComposeAttachment] = []
     private(set) var suggestions: [Profile] = []
     private(set) var isPosting = false
     private(set) var didPost = 0
     @ObservationIgnored private var mentionMap: [String: String] = [:]
+    @ObservationIgnored private var emojiMap: [String: String] = [:]
     @ObservationIgnored private var mentionRange: Range<String.Index>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var lastQuery: String?
@@ -153,12 +158,13 @@ final class ComposeViewModel {
             return ComposeDraftMedia(url: item.url, sha256: item.sha256, mimeType: item.mimeType, size: item.size, width: attachment.dimensions.map { Double($0.width) }, height: attachment.dimensions.map { Double($0.height) }, blurhash: attachment.blurhash, altText: attachment.altText, isVideo: attachment.isVideo, duration: attachment.audio?.duration, waveform: attachment.audio?.waveform)
         }
         let poll = pollEnabled ? ComposeDraftPoll(options: pollOptions.map(\.text), multiple: pollMultiple, endsAt: pollHasEnd ? pollEndsAt : nil) : nil
-        return ComposeDraft(id: draftId, kind: kind, targetId: target?.id, targetPubkey: target?.pubkey, text: text, mentions: mentionMap, media: media, contentWarningEnabled: contentWarningEnabled, contentWarningReason: contentWarningReason, poll: poll, updatedAt: .distantPast)
+        return ComposeDraft(id: draftId, kind: kind, targetId: target?.id, targetPubkey: target?.pubkey, text: text, mentions: mentionMap, media: media, contentWarningEnabled: contentWarningEnabled, contentWarningReason: contentWarningReason, poll: poll, updatedAt: .distantPast, emojis: emojiMap.isEmpty ? nil : emojiMap, goal: isGoalActive ? ComposeDraftGoal(amountSats: goalSats ?? 0, closesAt: goalHasEnd ? goalEndsAt : nil) : nil)
     }
 
     private func apply(_ draft: ComposeDraft) {
         draftId = draft.id
         mentionMap = draft.mentions
+        emojiMap = draft.emojis ?? [:]
         text = draft.text
         selection = nil
         contentWarningEnabled = draft.contentWarningEnabled
@@ -184,6 +190,16 @@ final class ComposeViewModel {
             pollOptions = [ComposePollOption(), ComposePollOption()]
             pollMultiple = false
             pollHasEnd = false
+        }
+        if let goal = draft.goal, supportsPoll {
+            goalEnabled = true
+            goalAmount = goal.amountSats > 0 ? String(goal.amountSats) : ""
+            goalHasEnd = goal.closesAt != nil
+            goalEndsAt = goal.closesAt ?? Date().addingTimeInterval(7 * 86400)
+        } else {
+            goalEnabled = false
+            goalAmount = ""
+            goalHasEnd = false
         }
         clearSuggestions()
     }
@@ -271,6 +287,19 @@ final class ComposeViewModel {
 
     func togglePoll() {
         pollEnabled.toggle()
+        if pollEnabled { goalEnabled = false }
+    }
+
+    func toggleGoal() {
+        goalEnabled.toggle()
+        if goalEnabled { pollEnabled = false }
+    }
+
+    var isGoalActive: Bool { goalEnabled && supportsPoll }
+
+    var goalSats: Int? {
+        guard let value = Int(goalAmount.filter(\.isNumber)), value > 0, SatsAmount.msat(value) != nil else { return nil }
+        return value
     }
 
     func addPollOption() {
@@ -303,6 +332,9 @@ final class ComposeViewModel {
         if isPollActive {
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && validPollOptions.count >= Self.minPollOptions && (!pollHasEnd || pollEndsAt > Date())
         }
+        if isGoalActive {
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && goalSats != nil && (!goalHasEnd || goalEndsAt > Date())
+        }
         if case .quote = context { return true }
         return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachments.contains { $0.uploaded != nil }
     }
@@ -317,6 +349,7 @@ final class ComposeViewModel {
 
     var placeholder: String {
         if isPollActive { return L("feedPollQuestion") }
+        if isGoalActive { return L("zapGoalPlaceholder") }
         switch context {
         case .newNote, .quote: return L("hintText")
         case .reply: return L("addAReply")
@@ -363,6 +396,20 @@ final class ComposeViewModel {
         lastQuery = nil
         searchTask?.cancel()
         if !suggestions.isEmpty { suggestions = [] }
+    }
+
+    func insert(_ choice: EmojiChoice) {
+        let position = min(cursor(), text.endIndex)
+        let offset = text.distance(from: text.startIndex, to: position)
+        let inserted: String
+        switch choice {
+        case .unicode(let emoji): inserted = emoji
+        case .custom(let emoji):
+            emojiMap[emoji.shortcode] = emoji.url
+            inserted = emoji.token
+        }
+        text.insert(contentsOf: inserted, at: position)
+        selection = TextSelection(insertionPoint: text.index(text.startIndex, offsetBy: offset + inserted.count))
     }
 
     func insertMention(_ profile: Profile) {

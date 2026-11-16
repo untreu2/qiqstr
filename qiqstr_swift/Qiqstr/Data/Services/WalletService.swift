@@ -375,7 +375,7 @@ final class WalletService {
         list.sorted { $0.createdAt > $1.createdAt }
     }
 
-    private func prepareCashu() throws {
+    func prepareCashu() throws {
         guard let pubkey = Session.shared.pubkey else { throw WalletError.noAccount }
         let directory = RelayConfig.databaseURL.deletingLastPathComponent()
             .appendingPathComponent("cashu", isDirectory: true)

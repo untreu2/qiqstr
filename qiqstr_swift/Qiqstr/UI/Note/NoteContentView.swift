@@ -31,6 +31,9 @@ struct NoteContentView: View {
             if let poll = NotePoll(id: note.id, tags: note.tags) {
                 NotePollView(poll: poll, author: note.pubkey)
             }
+            if let goal = ZapGoal(note: note) {
+                ZapGoalView(goal: goal, note: note)
+            }
             if !content.media.isEmpty {
                 NoteMediaGridView(media: content.media)
             }
@@ -57,7 +60,7 @@ struct NoteContentView: View {
 
     @ViewBuilder
     private func textView(_ content: NoteContent, truncated: Bool) -> some View {
-        let text = Text(content.attributed(truncated ? (content.truncatedSegments ?? content.segments) : content.segments, font: font, cache: cache))
+        let text = content.text(truncated ? (content.truncatedSegments ?? content.segments) : content.segments, font: font, cache: cache, emojis: InlineEmojiStore.shared)
             .font(font)
             .foregroundStyle(AppColors.textPrimary)
             .lineSpacing(2)

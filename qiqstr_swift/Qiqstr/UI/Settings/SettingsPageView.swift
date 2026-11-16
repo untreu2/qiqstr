@@ -17,6 +17,8 @@ struct SettingsPageView: View {
         case .safety: SafetySettingsView()
         case .diagnostics: DiagnosticsView()
         case .mediaServer: MediaServerSettingsView()
+        case .emojiPacks: EmojiPacksSettingsView()
+        case .nutzaps: CashuMintsSettingsView()
         }
     }
 }

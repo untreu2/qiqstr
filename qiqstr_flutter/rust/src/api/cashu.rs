@@ -23,6 +23,55 @@ pub async fn cashu_melt_all(lightning_target: String) -> Result<String> {
     qiqstr::api::cashu::cashu_melt_all(lightning_target).await
 }
 
+/// Looks up a mint and returns JSON `{ "url", "name", "description" }`.
+pub async fn cashu_mint_info(mint_url: String) -> Result<String> {
+    qiqstr::api::cashu::cashu_mint_info(mint_url).await
+}
+
+/// Works out what must be paid before `amount_sats` can be sent from a mint.
+///
+/// Returns JSON `{ "needs_payment": bool, "quote_id", "invoice", "pay_sats", "balance_sats" }`.
+/// When the wallet already holds enough at that mint, `needs_payment` is false.
+pub async fn cashu_fund_quote(mint_url: String, amount_sats: u64) -> Result<String> {
+    qiqstr::api::cashu::cashu_fund_quote(mint_url, amount_sats).await
+}
+
+/// Mints the ecash for a paid funding quote.
+///
+/// Returns JSON `{ "minted_sats": u64 }`. Fails while the invoice is unpaid.
+pub async fn cashu_fund_complete(mint_url: String, quote_id: String) -> Result<String> {
+    qiqstr::api::cashu::cashu_fund_complete(mint_url, quote_id).await
+}
+
+/// Takes `amount_sats` out of the wallet as a token, optionally locked to a key (NUT-11).
+///
+/// Returns JSON `{ "token": String, "proofs": [String], "mint_url", "amount_sats", "fee_sats" }`.
+pub async fn cashu_create_token(
+    mint_url: String,
+    amount_sats: u64,
+    p2pk_pubkey_hex: Option<String>,
+) -> Result<String> {
+    qiqstr::api::cashu::cashu_create_token(mint_url, amount_sats, p2pk_pubkey_hex).await
+}
+
+/// Claims key-locked proofs (a nutzap) and, when a Lightning target is given, melts them to it.
+///
+/// Returns JSON `{ "received_sats": u64, "melted_sats": u64 }`.
+pub async fn cashu_redeem_proofs(
+    mint_url: String,
+    proofs_json: Vec<String>,
+    p2pk_private_key_hex: String,
+    lightning_target: String,
+) -> Result<String> {
+    qiqstr::api::cashu::cashu_redeem_proofs(
+        mint_url,
+        proofs_json,
+        p2pk_private_key_hex,
+        lightning_target,
+    )
+    .await
+}
+
 /// Decodes a Cashu token: returns mint URL and amount.
 ///
 /// Returns JSON `{ "mint_url": String, "amount_sats": u64 }`

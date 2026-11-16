@@ -23,6 +23,11 @@ nonisolated struct ComposeDraftPoll: Codable, Hashable, Sendable {
     var endsAt: Date?
 }
 
+nonisolated struct ComposeDraftGoal: Codable, Hashable, Sendable {
+    var amountSats: Int
+    var closesAt: Date?
+}
+
 nonisolated struct ComposeDraft: Codable, Identifiable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable {
         case newNote, reply, quote
@@ -39,6 +44,8 @@ nonisolated struct ComposeDraft: Codable, Identifiable, Hashable, Sendable {
     var contentWarningReason: String
     var poll: ComposeDraftPoll?
     var updatedAt: Date
+    var emojis: [String: String]?
+    var goal: ComposeDraftGoal?
 
     var contextKey: String {
         switch kind {

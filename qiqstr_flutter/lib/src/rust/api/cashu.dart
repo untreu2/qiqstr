@@ -28,6 +28,61 @@ Future<String> cashuMeltAll({required String lightningTarget}) => RustLib
     .api
     .crateApiCashuCashuMeltAll(lightningTarget: lightningTarget);
 
+/// Looks up a mint and returns JSON `{ "url", "name", "description" }`.
+Future<String> cashuMintInfo({required String mintUrl}) =>
+    RustLib.instance.api.crateApiCashuCashuMintInfo(mintUrl: mintUrl);
+
+/// Works out what must be paid before `amount_sats` can be sent from a mint.
+///
+/// Returns JSON `{ "needs_payment": bool, "quote_id", "invoice", "pay_sats", "balance_sats" }`.
+/// When the wallet already holds enough at that mint, `needs_payment` is false.
+Future<String> cashuFundQuote({
+  required String mintUrl,
+  required BigInt amountSats,
+}) => RustLib.instance.api.crateApiCashuCashuFundQuote(
+  mintUrl: mintUrl,
+  amountSats: amountSats,
+);
+
+/// Mints the ecash for a paid funding quote.
+///
+/// Returns JSON `{ "minted_sats": u64 }`. Fails while the invoice is unpaid.
+Future<String> cashuFundComplete({
+  required String mintUrl,
+  required String quoteId,
+}) => RustLib.instance.api.crateApiCashuCashuFundComplete(
+  mintUrl: mintUrl,
+  quoteId: quoteId,
+);
+
+/// Takes `amount_sats` out of the wallet as a token, optionally locked to a key (NUT-11).
+///
+/// Returns JSON `{ "token": String, "proofs": [String], "mint_url", "amount_sats", "fee_sats" }`.
+Future<String> cashuCreateToken({
+  required String mintUrl,
+  required BigInt amountSats,
+  String? p2PkPubkeyHex,
+}) => RustLib.instance.api.crateApiCashuCashuCreateToken(
+  mintUrl: mintUrl,
+  amountSats: amountSats,
+  p2PkPubkeyHex: p2PkPubkeyHex,
+);
+
+/// Claims key-locked proofs (a nutzap) and, when a Lightning target is given, melts them to it.
+///
+/// Returns JSON `{ "received_sats": u64, "melted_sats": u64 }`.
+Future<String> cashuRedeemProofs({
+  required String mintUrl,
+  required List<String> proofsJson,
+  required String p2PkPrivateKeyHex,
+  required String lightningTarget,
+}) => RustLib.instance.api.crateApiCashuCashuRedeemProofs(
+  mintUrl: mintUrl,
+  proofsJson: proofsJson,
+  p2PkPrivateKeyHex: p2PkPrivateKeyHex,
+  lightningTarget: lightningTarget,
+);
+
 /// Decodes a Cashu token: returns mint URL and amount.
 ///
 /// Returns JSON `{ "mint_url": String, "amount_sats": u64 }`

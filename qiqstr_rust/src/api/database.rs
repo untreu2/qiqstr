@@ -1161,6 +1161,20 @@ pub async fn db_has_user_reposted(note_id: String, user_pubkey_hex: String) -> R
     Ok(count > 0)
 }
 
+fn custom_emoji_url(event: &Event) -> Option<String> {
+    let content = event.content.trim();
+    let shortcode = content.strip_prefix(':')?.strip_suffix(':')?;
+    if shortcode.is_empty() {
+        return None;
+    }
+    event.tags.iter().find_map(|tag| {
+        let values = tag.as_slice();
+        (values.len() >= 3 && values[0] == "emoji" && values[1] == shortcode)
+            .then(|| values[2].clone())
+            .filter(|url| url.starts_with("https://"))
+    })
+}
+
 pub async fn db_get_detailed_interactions(note_id: String) -> Result<String> {
     let client = get_client_pub().await?;
     let id = EventId::from_hex(&note_id)?;
@@ -1179,6 +1193,7 @@ pub async fn db_get_detailed_interactions(note_id: String) -> Result<String> {
                     "type": "reaction",
                     "pubkey": event.pubkey.to_hex(),
                     "content": event.content,
+                    "emojiUrl": custom_emoji_url(event),
                     "createdAt": event.created_at.as_secs(),
                 }));
             }
@@ -1637,6 +1652,7 @@ async fn hydrate_notes(
     for event in events {
         let is_repost = event.kind == Kind::Repost;
 
+        let mut kind = event.kind.as_u16();
         let mut id = event.id.to_hex();
         let mut pubkey = event.pubkey.to_hex();
         let mut content = event.content.clone();
@@ -1724,6 +1740,7 @@ async fn hydrate_notes(
                 if let Some(ca) = parsed["created_at"].as_u64() {
                     created_at = ca;
                 }
+                kind = parsed["kind"].as_u64().unwrap_or(1) as u16;
 
                 if let Some(parsed_tags) = parsed["tags"].as_array() {
                     let embedded_tags = json_tags_to_vecs(parsed_tags);
@@ -1762,6 +1779,7 @@ async fn hydrate_notes(
 
         notes.push(serde_json::json!({
             "id": id,
+            "kind": kind,
             "pubkey": pubkey,
             "author": pubkey,
             "content": content,
@@ -2264,7 +2282,12 @@ pub async fn db_get_hydrated_feed_notes(
     };
     let filter = Filter::new()
         .authors(authors)
-        .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
+        .kinds([
+            Kind::TextNote,
+            Kind::Repost,
+            Kind::Custom(1068),
+            Kind::Custom(1222),
+        ])
         .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
 
@@ -2301,7 +2324,12 @@ pub async fn db_get_hydrated_profile_notes(
     for _ in 0..8 {
         let mut filter = Filter::new()
             .author(pk)
-            .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
+            .kinds([
+                Kind::TextNote,
+                Kind::Repost,
+                Kind::Custom(1068),
+                Kind::Custom(1222),
+            ])
             .limit(batch_limit);
         if let Some(until) = cursor {
             filter = filter.until(Timestamp::from(until));
@@ -3427,7 +3455,12 @@ pub async fn db_get_hydrated_feed_notes_sorted(
     };
     let filter = Filter::new()
         .authors(authors)
-        .kinds([Kind::TextNote, Kind::Repost, Kind::Custom(1068)])
+        .kinds([
+            Kind::TextNote,
+            Kind::Repost,
+            Kind::Custom(1068),
+            Kind::Custom(1222),
+        ])
         .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
 

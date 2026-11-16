@@ -163,3 +163,10 @@
 "settingsMediaServerFooter" = "Eklediğin fotoğraflar, videolar ve sesli mesajlar bu Blossom sunucusuna yüklenir. Seçimin, diğer uygulamaların da kullanabilmesi için rölelerinde yayımlanır.";
 "settingsMediaServerAdd" = "Sunucu ekle";
 "settingsMediaServerInvalid" = "Geçerli bir https sunucu adresi gir.";
+"emojiPacksTitle" = "Emoji paketleri";
+"emojiYourPacks" = "Paketlerin";
+"emojiPacksFooter" = "Bu paketlerdeki özel emojiler, gönderiler ve tepkiler için emoji seçicide görünür. Listen rölelerine kaydedilir.";
+"emojiDiscover" = "Keşfet";
+"emojiNoSuggestions" = "Şu anda paket bulunamadı.";
+"emojiRemovePack" = "Paketi kaldır";
+"emojiNoPacksHere" = "Gönderilerde ve tepkilerde özel emoji kullanmak için aşağıdaki Keşfet bölümünden bir paket ekle.";

@@ -26,6 +26,8 @@ enum ServiceRegistry {
             ExploreSafety.shared.reset()
             ScheduledPostService.shared.reset()
             MediaServerStore.shared.reset()
+            EmojiPackService.shared.reset()
+            NutzapService.shared.reset()
         }
         SessionHooks.onBootstrap { pubkey in
             NoteInteractionStore.shared.prepareForAccount()
@@ -39,12 +41,16 @@ enum ServiceRegistry {
             Session.shared.mutedPubkeys = MuteService.shared.mutedPubkeys
             Session.shared.mutedWords = MuteService.shared.mutedWords
             Task { await DMService.shared.start() }
-            Task { await WalletService.shared.load() }
+            Task {
+                await WalletService.shared.load()
+                await NutzapService.shared.load()
+            }
             Task { await HashtagFollowService.shared.load() }
             Task { await WebOfTrustService.shared.load(for: pubkey) }
             Task { await ZapperDirectory.shared.verify(pubkey) }
             ScheduledPostService.shared.start()
             Task { await MediaServerStore.shared.load() }
+            Task { await EmojiPackService.shared.load() }
         }
     }
 }

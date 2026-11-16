@@ -16,6 +16,21 @@ struct NoteReactionGroup: Identifiable {
     var id: String { emoji }
     var emoji: String
     var items: [NoteInteractionDetail]
+
+    var emojiURL: String? { items.lazy.compactMap(\.emojiURL).first }
+}
+
+struct NoteReactionEmoji: View {
+    let group: NoteReactionGroup
+    var size: CGFloat = 22
+
+    var body: some View {
+        if let url = group.emojiURL {
+            CustomEmojiImage(url: url, size: size)
+        } else {
+            Text(group.emoji).font(.title3)
+        }
+    }
 }
 
 @MainActor
@@ -80,11 +95,15 @@ struct NoteStatisticsView: View {
                 ForEach(model.reactionGroups) { group in
                     Section {
                         ForEach(group.items) { item in
-                            NoteInteractionUserRow(detail: item, trailing: AnyView(Text(group.emoji).font(.title3)))
+                            NoteInteractionUserRow(detail: item, trailing: AnyView(NoteReactionEmoji(group: group)))
                         }
                     } header: {
                         HStack(spacing: 6) {
-                            Text(group.emoji)
+                            if group.emojiURL != nil {
+                                NoteReactionEmoji(group: group, size: 16)
+                            } else {
+                                Text(group.emoji)
+                            }
                             Text("\(group.items.count)").monospacedDigit()
                         }
                     }

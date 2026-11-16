@@ -1396,6 +1396,20 @@ public func buildThreadStructure(rootNoteJson: String, repliesJson: String)async
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
+public func cashuCreateToken(mintUrl: String, amountSats: UInt64, p2pkPubkeyHex: String?)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_cashu_create_token(FfiConverterString.lower(mintUrl),FfiConverterUInt64.lower(amountSats),FfiConverterOptionString.lower(p2pkPubkeyHex)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_qiqstr_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
+}
 public func cashuDecodeToken(token: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
@@ -1403,6 +1417,34 @@ public func cashuDecodeToken(token: String)throws  -> String  {
         FfiConverterString.lower(token),uniffiCallStatus
     )
 })
+}
+public func cashuFundComplete(mintUrl: String, quoteId: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_cashu_fund_complete(FfiConverterString.lower(mintUrl),FfiConverterString.lower(quoteId)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_qiqstr_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
+}
+public func cashuFundQuote(mintUrl: String, amountSats: UInt64)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_cashu_fund_quote(FfiConverterString.lower(mintUrl),FfiConverterUInt64.lower(amountSats)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_qiqstr_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
 }
 public func cashuGetBalance()async throws  -> String  {
     return
@@ -1432,11 +1474,39 @@ public func cashuMeltAll(lightningTarget: String)async throws  -> String  {
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
+public func cashuMintInfo(mintUrl: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_cashu_mint_info(FfiConverterString.lower(mintUrl)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_qiqstr_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
+}
 public func cashuReceiveAndMelt(token: String, lightningTarget: String)async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_qiqstr_core_fn_func_cashu_receive_and_melt(FfiConverterString.lower(token),FfiConverterString.lower(lightningTarget)
+                )
+            },
+            pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_qiqstr_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_qiqstr_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeQiqError_lift
+        )
+}
+public func cashuRedeemProofs(mintUrl: String, proofsJson: [String], p2pkPrivateKeyHex: String, lightningTarget: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_qiqstr_core_fn_func_cashu_redeem_proofs(FfiConverterString.lower(mintUrl),FfiConverterSequenceString.lower(proofsJson),FfiConverterString.lower(p2pkPrivateKeyHex),FfiConverterString.lower(lightningTarget)
                 )
             },
             pollFunc: ffi_qiqstr_core_rust_future_poll_rust_buffer,
@@ -3698,7 +3768,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_build_thread_structure() != 10477) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_cashu_create_token() != 42083) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_cashu_decode_token() != 61676) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_cashu_fund_complete() != 47121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_cashu_fund_quote() != 29714) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_cashu_get_balance() != 33053) {
@@ -3707,7 +3786,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_cashu_melt_all() != 48293) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_cashu_mint_info() != 38198) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_cashu_receive_and_melt() != 51126) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_cashu_redeem_proofs() != 29828) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_cashu_set_account() != 47618) {

@@ -26,6 +26,10 @@ final class ZapViewModel {
     var comment = ""
     private(set) var recipient: ZapRecipient?
     private(set) var isLoadingRecipient = true
+    private(set) var nutzapInfo: NutzapInfo?
+    var method: ZapMethod = .lightning
+
+    var splits: [ZapSplit] { target.note?.zapSplits ?? [] }
     private(set) var isZapping = false
     private(set) var mayHaveSettled = false
     private(set) var zappedTick = 0
@@ -53,10 +57,14 @@ final class ZapViewModel {
     }
 
     var hasPayDestination: Bool { recipient?.lightningAddress != nil || recipient?.lnurl != nil }
-    var canSubmit: Bool { canZap && amount != nil && !isZapping && !mayHaveSettled && hasPayDestination }
+    var canNutzap: Bool { nutzapInfo != nil }
+    var hasAnyDestination: Bool { hasPayDestination || canNutzap }
+    var usesNutzap: Bool { canNutzap && (method == .nutzap || !hasPayDestination) }
+    var canSubmit: Bool { canZap && amount != nil && !isZapping && !mayHaveSettled && hasAnyDestination }
 
     var recipientName: String {
-        recipient?.name ?? ProfileCache.shared.profile(target.pubkey)?.bestName ?? Profile.shortNpub(target.pubkey)
+        let fallback = ProfileCache.shared.profile(target.pubkey)?.bestName ?? Profile.shortNpub(target.pubkey)
+        return splits.isEmpty ? recipient?.name ?? fallback : fallback
     }
 
     func select(_ preset: Int) {
@@ -66,7 +74,10 @@ final class ZapViewModel {
 
     func load() async {
         async let price: Void = BitcoinPriceService.shared.refreshIfNeeded()
-        recipient = await ZapService.shared.recipient(target.pubkey)
+        let splitPubkeys = splits.map(\.pubkey)
+        if !splitPubkeys.isEmpty { await ProfileCache.shared.load(splitPubkeys) }
+        recipient = await ZapService.shared.recipient(splitPubkeys.first ?? target.pubkey)
+        if AppStorePolicy.allowsCashu, splitPubkeys.isEmpty { nutzapInfo = await NutzapService.shared.info(for: target.pubkey) }
         isLoadingRecipient = false
         await price
     }
@@ -76,7 +87,11 @@ final class ZapViewModel {
         isZapping = true
         defer { isZapping = false }
         do {
-            try await ZapService.shared.zap(note: target.note, pubkey: target.pubkey, amountSats: amount, comment: comment)
+            if usesNutzap {
+                try await NutzapService.shared.send(to: target.pubkey, note: target.note, amountSats: amount, comment: comment)
+            } else {
+                try await ZapService.shared.zap(note: target.note, pubkey: target.pubkey, amountSats: amount, comment: comment)
+            }
             zappedTick += 1
             ZapService.lastAmount = amount
             ToastCenter.shared.show(L("walletZapped", ["sats": Sats.format(amount), "user": recipientName]), style: .success)
@@ -99,6 +114,28 @@ final class ZapViewModel {
     }
 }
 
+enum ZapMethod: String, CaseIterable, Identifiable {
+    case lightning, nutzap
+    var id: String { rawValue }
+    var title: String { self == .lightning ? L("zapMethodLightning") : L("zapMethodNutzap") }
+}
+
+struct ZapSplitRow: View {
+    let split: ZapSplit
+    let percent: Int
+    @State private var cache = ProfileCache.shared
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ProfileAvatar(pubkey: split.pubkey, size: 26)
+            Text(cache.profile(split.pubkey)?.bestName ?? Profile.shortNpub(split.pubkey)).lineLimit(1)
+            Spacer(minLength: 8)
+            Text("\(percent)%").monospacedDigit().foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct ZapSheet: View {
     let target: ZapTarget
     @Environment(\.dismiss) private var dismiss
@@ -117,13 +154,29 @@ struct ZapSheet: View {
                 Section { header }
                 if !model.canZap {
                     connectCTA
-                } else if !model.isLoadingRecipient && !model.hasPayDestination {
+                } else if !model.isLoadingRecipient && !model.hasAnyDestination {
                     Section {
                         Label(L("userNoLightningAddress"), systemImage: "bolt.slash")
                             .foregroundStyle(AppColors.error)
                             .accessibilityIdentifier("zap-no-address")
                     }
                 } else {
+                    if model.hasPayDestination, model.canNutzap {
+                        Section {
+                            Picker(L("zapMethod"), selection: $model.method) {
+                                ForEach(ZapMethod.allCases) { method in
+                                    Text(method.title).tag(method)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                            .accessibilityIdentifier("zap-method")
+                        } footer: {
+                            if model.method == .nutzap { Text(L("zapMethodNutzapFooter")).wrapsInFooter() }
+                        }
+                    }
                     Section {
                         amounts
                         LabeledContent(L("walletCustomAmount")) {
@@ -150,11 +203,23 @@ struct ZapSheet: View {
                             .focused($focused)
                             .accessibilityIdentifier("zap-comment")
                     }
+                    if !model.splits.isEmpty {
+                        Section {
+                            ForEach(model.splits, id: \.pubkey) { split in
+                                ZapSplitRow(split: split, percent: ZapSplit.percent(split, of: model.splits))
+                            }
+                        } header: {
+                            Text(L("zapSplitTitle"))
+                        } footer: {
+                            Text(L("zapSplitFooter")).wrapsInFooter()
+                        }
+                        .accessibilityIdentifier("zap-splits")
+                    }
                 }
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) {
-                if model.canZap && model.hasPayDestination {
+                if model.canZap && model.hasAnyDestination {
                     Button {
                         focused = false
                         Task { if await model.zap() { dismiss() } }

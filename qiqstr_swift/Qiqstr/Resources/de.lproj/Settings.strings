@@ -163,3 +163,10 @@
 "settingsMediaServerFooter" = "Fotos, Videos und Sprachnachrichten, die du anhängst, werden auf diesen Blossom-Server hochgeladen. Deine Auswahl wird auf deinen Relays veröffentlicht, damit auch andere Apps sie nutzen können.";
 "settingsMediaServerAdd" = "Server hinzufügen";
 "settingsMediaServerInvalid" = "Gib eine gültige https-Serveradresse ein.";
+"emojiPacksTitle" = "Emoji-Pakete";
+"emojiYourPacks" = "Deine Pakete";
+"emojiPacksFooter" = "Eigene Emojis aus diesen Paketen erscheinen in der Emoji-Auswahl für Beiträge und Reaktionen. Deine Liste wird auf deinen Relays gespeichert.";
+"emojiDiscover" = "Entdecken";
+"emojiNoSuggestions" = "Im Moment wurden keine Pakete gefunden.";
+"emojiRemovePack" = "Paket entfernen";
+"emojiNoPacksHere" = "Füge unten unter „Entdecken“ ein Paket hinzu, um eigene Emojis in Beiträgen und Reaktionen zu verwenden.";

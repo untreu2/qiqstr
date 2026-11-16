@@ -40,11 +40,13 @@ struct NoteInteractionDetail: Identifiable, Hashable, Sendable {
     var content: String
     var zapAmount: Int
     var createdAt: Int
+    var emojiURL: String?
 
     init?(json j: JSONObject) {
         guard let kind = NoteInteractionKind(rawValue: j.str("type") ?? ""), let pubkey = j.str("pubkey") else { return nil }
         self.kind = kind
         self.pubkey = pubkey
+        emojiURL = j.str("emojiUrl")
         content = (j["content"] as? String) ?? ""
         zapAmount = j.int("zapAmount")
         createdAt = j.int("createdAt")
@@ -81,10 +83,16 @@ final class InteractionService {
         (try? await getRelayList())?.first ?? RelayConfig.mainRelays.first ?? ""
     }
 
-    func react(to note: Note, content: String = "+") async throws {
+    func react(to note: Note, content: String = "+", emoji: CustomEmoji? = nil) async throws {
         let key = try signingKey()
         let relay = await primaryRelay()
-        let event = try createReactionEvent(targetEventId: note.id, targetAuthor: note.pubkey, content: content, privateKeyHex: key, relayUrl: relay, targetKind: 1)
+        let event: String
+        if let emoji {
+            let tags = [["e", note.id, relay, note.pubkey], ["p", note.pubkey, relay], ["k", String(note.kind)], ["emoji", emoji.shortcode, emoji.url]]
+            event = try createSignedEvent(kind: 7, content: emoji.token, tags: tags, privateKeyHex: key)
+        } else {
+            event = try createReactionEvent(targetEventId: note.id, targetAuthor: note.pubkey, content: content, privateKeyHex: key, relayUrl: relay, targetKind: UInt16(clamping: note.kind))
+        }
         try await sync.publish(event)
     }
 
@@ -200,6 +208,21 @@ final class InteractionService {
         tags = Self.merge(tags, Self.contentTags(body, mediaUrls: mediaUrls) + extraTags)
         let event = try createSignedEvent(kind: NotePoll.kind, content: body, tags: tags, privateKeyHex: key)
         return try await publishReturningId(event)
+    }
+
+    func publishGoal(description: String, amountSats: Int, closesAt: Date?, mediaUrls: [String], extraTags: [[String]] = []) async throws {
+        let key = try signingKey()
+        guard let msats = SatsAmount.msat(amountSats) else { throw CoreError(L("enterValidAmount")) }
+        let relays = Array(((try? await getRelayList()) ?? RelayConfig.mainRelays).filter { $0.hasPrefix("wss://") }.prefix(5))
+        var tags: [[String]] = [["amount", String(msats)], ["relays"] + relays]
+        if let closesAt { tags.append(["closed_at", String(Int(closesAt.timeIntervalSince1970))]) }
+        let body = Self.composeContent(description, mediaUrls: mediaUrls)
+        tags = Self.merge(tags, Self.contentTags(body, mediaUrls: mediaUrls) + extraTags)
+        let goal = try await sync.publish(try createSignedEvent(kind: UInt16(ZapGoal.kind), content: body, tags: tags, privateKeyHex: key))
+        guard let id = goal.str("id"), let me = Session.shared.pubkey, let reference = Nip19.nevent(id, author: me) ?? Nip19.note(id) else { return }
+        let relay = await primaryRelay()
+        let announcement = try createQuoteEvent(content: "\(body)\nnostr:\(reference)", quotedEventId: id, quotedEventPubkey: me, relayUrl: relay, privateKeyHex: key, additionalTags: Self.merge(Self.contentTags(body, mediaUrls: mediaUrls), extraTags).filter { $0.first != "q" })
+        try await sync.publish(announcement)
     }
 
     func publishPollResponse(pollId: String, optionIds: [String], relays: [String]) async throws {

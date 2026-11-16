@@ -21,6 +21,7 @@ struct ComposeEditor: View {
     @State private var showsRecorder = false
     @State private var showsCamera = false
     @State private var showsSchedule = false
+    @State private var showsEmoji = false
     @State private var scheduled = ScheduledPostService.shared
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -40,6 +41,10 @@ struct ComposeEditor: View {
                     editor
                     if model.isPollActive {
                         ComposePollEditor(model: model)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    if model.isGoalActive {
+                        ComposeGoalEditor(model: model)
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     if model.contentWarningEnabled {
@@ -137,6 +142,9 @@ struct ComposeEditor: View {
             .sheet(isPresented: $showsSchedule) {
                 ComposeScheduleSheet(scheduledAt: $model.scheduledAt)
             }
+            .sheet(isPresented: $showsEmoji) {
+                EmojiPickerSheet { model.insert($0) }
+            }
             #if os(iOS)
             .fullScreenCover(isPresented: $showsCamera) {
                 CameraCaptureView { capture in
@@ -226,14 +234,24 @@ struct ComposeEditor: View {
                             Label(L("feedPoll"), systemImage: "chart.bar.xaxis")
                         }
                         .accessibilityIdentifier("compose-poll")
+                        if AppStorePolicy.allowsContentZaps {
+                            Toggle(isOn: Binding(get: { model.goalEnabled }, set: { _ in withAnimation(.snappy(duration: 0.25)) { model.toggleGoal() } })) {
+                                Label(L("zapGoalTitle"), systemImage: "target")
+                            }
+                            .accessibilityIdentifier("compose-goal")
+                        }
                     }
+                    Button { showsEmoji = true } label: {
+                        Label(L("emojiTitle"), systemImage: "face.smiling")
+                    }
+                    .accessibilityIdentifier("compose-emoji")
                     Button { showsSchedule = true } label: {
                         Label(model.scheduledAt == nil ? L("feedSchedule") : L("feedScheduleChange"), systemImage: "calendar.badge.clock")
                     }
                     .accessibilityIdentifier("compose-schedule")
                 } label: {
                     Image(systemName: "ellipsis")
-                        .foregroundStyle(model.contentWarningEnabled || model.pollEnabled || model.scheduledAt != nil ? AppColors.link : AppColors.textPrimary)
+                        .foregroundStyle(model.contentWarningEnabled || model.pollEnabled || model.goalEnabled || model.scheduledAt != nil ? AppColors.link : AppColors.textPrimary)
                 }
                 .secondaryGlassStyle()
                 .buttonBorderShape(.circle)

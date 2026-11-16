@@ -12,10 +12,16 @@ enum ComposePublisher {
             extraTags.append(reason.isEmpty ? ["content-warning"] : ["content-warning", reason])
         }
         let content = finalContent(draft)
+        for (shortcode, url) in (draft.emojis ?? [:]).sorted(by: { $0.key < $1.key }) where content.contains(":\(shortcode):") {
+            extraTags.append(["emoji", shortcode, url])
+        }
         let service = InteractionService.shared
         switch draft.kind {
         case .newNote:
-            if let poll = draft.poll {
+            if let goal = draft.goal {
+                guard goal.amountSats > 0 else { throw CoreError(L("enterValidAmount")) }
+                try await service.publishGoal(description: content, amountSats: goal.amountSats, closesAt: goal.closesAt, mediaUrls: urls, extraTags: extraTags)
+            } else if let poll = draft.poll {
                 let options = pollOptions(poll)
                 guard options.count >= 2 else { throw CoreError(L("feedPollNeedsOptions")) }
                 _ = try await service.publishPoll(question: content, options: options, multiple: poll.multiple, endsAt: poll.endsAt, mediaUrls: urls, extraTags: extraTags)

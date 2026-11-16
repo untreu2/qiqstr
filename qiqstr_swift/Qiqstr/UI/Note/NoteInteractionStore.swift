@@ -9,6 +9,7 @@ final class NoteCountsModel {
     var isReacting = false
     var isReposting = false
     var myReaction: String?
+    var myReactionEmoji: CustomEmoji?
     @ObservationIgnored var lastUserAction: Date?
 
     init(noteId: String, counts: InteractionCounts) {
@@ -134,36 +135,39 @@ final class NoteInteractionStore {
         if next != old { model.counts = next }
     }
 
-    func toggleReaction(_ note: Note, content: String = "+") async {
+    func toggleReaction(_ note: Note, content: String = "+", emoji: CustomEmoji? = nil) async {
         let model = model(for: note)
         guard !model.isReacting else { return }
         model.isReacting = true
         defer { model.isReacting = false }
         let wasReacted = model.counts.hasReacted
         let previousReaction = model.myReaction
+        let previousEmoji = model.myReactionEmoji
         model.lastUserAction = Date()
         model.counts.hasReacted = !wasReacted
         model.myReaction = wasReacted ? nil : content
+        model.myReactionEmoji = wasReacted ? nil : emoji
         model.counts.reactions = max(0, model.counts.reactions + (wasReacted ? -1 : 1))
         do {
-            if wasReacted { try await service.unreact(note) } else { try await service.react(to: note, content: content) }
+            if wasReacted { try await service.unreact(note) } else { try await service.react(to: note, content: content, emoji: emoji) }
         } catch {
             model.counts.hasReacted = wasReacted
             model.myReaction = previousReaction
+            model.myReactionEmoji = previousEmoji
             model.counts.reactions = max(0, model.counts.reactions + (wasReacted ? 1 : -1))
             model.lastUserAction = nil
             ToastCenter.shared.error(error)
         }
     }
 
-    func react(_ note: Note, with content: String) async {
+    func react(_ note: Note, with content: String, emoji: CustomEmoji? = nil) async {
         let model = model(for: note)
         if model.counts.hasReacted {
             guard model.myReaction != content else { return }
             await toggleReaction(note)
             guard !model.counts.hasReacted else { return }
         }
-        await toggleReaction(note, content: content)
+        await toggleReaction(note, content: content, emoji: emoji)
     }
 
     func toggleRepost(_ note: Note) async {

@@ -163,3 +163,10 @@
 "settingsMediaServerFooter" = "Photos, videos and voice messages you attach are uploaded to this Blossom server. Your choice is published to your relays so other apps can use it too.";
 "settingsMediaServerAdd" = "Add server";
 "settingsMediaServerInvalid" = "Enter a valid https server address.";
+"emojiPacksTitle" = "Emoji packs";
+"emojiYourPacks" = "Your packs";
+"emojiPacksFooter" = "Custom emoji from these packs appear in the emoji picker for posts and reactions. Your list is saved to your relays.";
+"emojiDiscover" = "Discover";
+"emojiNoSuggestions" = "No packs found right now.";
+"emojiRemovePack" = "Remove pack";
+"emojiNoPacksHere" = "Add a pack from Discover below to use custom emoji in posts and reactions.";

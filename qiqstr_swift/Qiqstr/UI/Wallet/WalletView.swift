@@ -4,6 +4,7 @@ enum WalletSheet: Identifiable {
     case connect(String?)
     case send(String?)
     case cashu(String?)
+    case cashuSend
     case payment(WalletTransaction)
 
     var id: String {
@@ -11,6 +12,7 @@ enum WalletSheet: Identifiable {
         case .connect: "connect"
         case .send: "send"
         case .cashu: "cashu"
+        case .cashuSend: "cashu-send"
         case .payment(let tx): "payment-\(tx.id)"
         }
     }
@@ -117,6 +119,7 @@ struct WalletView: View {
             case .connect(let uri): ConnectWalletSheet(initialURI: uri)
             case .send(let input): SendSheet(initialInput: input)
             case .cashu(let token): CashuRedeemSheet(initialToken: token)
+            case .cashuSend: CashuSendSheet()
             case .payment(let tx): PaymentDetailSheet(transaction: tx)
             }
         }
@@ -156,6 +159,8 @@ struct WalletView: View {
             if AppStorePolicy.allowsCashu {
                 Button { model.sheet = .cashu(nil) } label: { Label(L("walletReceiveCashu"), systemImage: "banknote") }
                     .accessibilityIdentifier("wallet-menu-cashu")
+                Button { model.sheet = .cashuSend } label: { Label(L("cashuSendTitle"), systemImage: "paperplane") }
+                    .accessibilityIdentifier("wallet-menu-cashu-send")
             }
             if wallet.cashuBalanceSats > 0 {
                 Button { model.showMeltConfirm = true } label: { Label(L("cashuMeltAll"), systemImage: "bolt") }

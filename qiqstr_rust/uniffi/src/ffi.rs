@@ -50,6 +50,21 @@ pub async fn cashu_receive_and_melt(token: String, lightning_target: String) -> 
 pub async fn cashu_melt_all(lightning_target: String) -> Result<String, QiqError> { on_rt(async move { api::cashu::cashu_melt_all(lightning_target).await }).await }
 
 #[uniffi::export]
+pub async fn cashu_mint_info(mint_url: String) -> Result<String, QiqError> { on_rt(async move { api::cashu::cashu_mint_info(mint_url).await }).await }
+
+#[uniffi::export]
+pub async fn cashu_fund_quote(mint_url: String, amount_sats: u64) -> Result<String, QiqError> { on_rt(async move { api::cashu::cashu_fund_quote(mint_url, amount_sats).await }).await }
+
+#[uniffi::export]
+pub async fn cashu_fund_complete(mint_url: String, quote_id: String) -> Result<String, QiqError> { on_rt(async move { api::cashu::cashu_fund_complete(mint_url, quote_id).await }).await }
+
+#[uniffi::export]
+pub async fn cashu_create_token(mint_url: String, amount_sats: u64, p2pk_pubkey_hex: Option<String>) -> Result<String, QiqError> { on_rt(async move { api::cashu::cashu_create_token(mint_url, amount_sats, p2pk_pubkey_hex).await }).await }
+
+#[uniffi::export]
+pub async fn cashu_redeem_proofs(mint_url: String, proofs_json: Vec<String>, p2pk_private_key_hex: String, lightning_target: String) -> Result<String, QiqError> { on_rt(async move { api::cashu::cashu_redeem_proofs(mint_url, proofs_json, p2pk_private_key_hex, lightning_target).await }).await }
+
+#[uniffi::export]
 pub fn cashu_decode_token(token: String) -> Result<String, QiqError> { api::cashu::cashu_decode_token(token).map_err(Into::into) }
 
 #[uniffi::export]

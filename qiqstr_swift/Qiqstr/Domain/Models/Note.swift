@@ -2,6 +2,7 @@ import Foundation
 
 nonisolated struct Note: Identifiable, Hashable, Sendable {
     var id: String
+    var kind: Int
     var pubkey: String
     var content: String
     var createdAt: Int
@@ -32,6 +33,7 @@ nonisolated struct Note: Identifiable, Hashable, Sendable {
 
     init(json j: JSONObject) {
         id = j.str("id") ?? ""
+        kind = j["kind"] is NSNumber ? j.int("kind") : 1
         pubkey = j.str("pubkey") ?? j.str("author") ?? ""
         content = (j["content"] as? String) ?? ""
         createdAt = j.int("created_at") != 0 ? j.int("created_at") : j.int("createdAt")

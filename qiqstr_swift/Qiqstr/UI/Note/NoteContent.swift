@@ -6,6 +6,7 @@ enum NoteContentSegment: Hashable, Sendable {
     case link(String)
     case hashtag(String)
     case mention(String)
+    case emoji(String, String)
 }
 
 struct NoteMediaItem: Hashable, Sendable, Identifiable {
@@ -81,9 +82,10 @@ final class NoteContent {
         contentWarning = Note.contentWarning(content: content, tags: tags)
         var segments: [NoteContentSegment] = []
         var mentions: [String] = []
+        let emojis = CustomEmoji.map(tags)
         for part in parsed.parts {
             switch part {
-            case .text(let text): segments.append(contentsOf: Self.split(text))
+            case .text(let text): segments.append(contentsOf: Self.split(text, emojis: emojis))
             case .mention(let bech):
                 segments.append(.mention(bech))
                 if let hex = Nip19.pubkeyHex(from: bech), !mentions.contains(hex) { mentions.append(hex) }
@@ -133,7 +135,7 @@ final class NoteContent {
             switch segment {
             case .text(let text): text
             case .hashtag(let tag): "#\(tag)"
-            case .link, .mention: nil
+            case .link, .mention, .emoji: nil
             }
         }
         .joined()
@@ -145,7 +147,13 @@ final class NoteContent {
     private static let linkRegex = try? NSRegularExpression(pattern: "https?://[^\\s<>\"']+", options: [.caseInsensitive])
     private static let hashtagRegex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_/#&])#[\\p{L}\\p{N}_]+")
 
-    private static func split(_ text: String) -> [NoteContentSegment] {
+    private static let emojiRegex = try? NSRegularExpression(pattern: ":([A-Za-z0-9_-]{1,64}):")
+
+    var hasCustomEmoji: Bool {
+        segments.contains { if case .emoji = $0 { return true } else { return false } }
+    }
+
+    private static func split(_ text: String, emojis: [String: String] = [:]) -> [NoteContentSegment] {
         guard let linkRegex, let hashtagRegex else { return [.text(text)] }
         let ns = text as NSString
         let full = NSRange(location: 0, length: ns.length)
@@ -157,6 +165,12 @@ final class NoteContent {
         }
         for match in hashtagRegex.matches(in: text, range: full) where !tokens.contains(where: { NSIntersectionRange($0.0, match.range).length > 0 }) {
             tokens.append((match.range, .hashtag(String(ns.substring(with: match.range).dropFirst()))))
+        }
+        if !emojis.isEmpty, let emojiRegex {
+            for match in emojiRegex.matches(in: text, range: full) where !tokens.contains(where: { NSIntersectionRange($0.0, match.range).length > 0 }) {
+                let code = ns.substring(with: match.range(at: 1))
+                if let url = emojis[code] { tokens.append((match.range, .emoji(code, url))) }
+            }
         }
         tokens.sort { $0.0.location < $1.0.location }
         var result: [NoteContentSegment] = []
@@ -180,6 +194,7 @@ final class NoteContent {
             case .link(let l): cost = min(l.count, 34)
             case .hashtag(let h): cost = h.count + 1
             case .mention: cost = 8
+            case .emoji: cost = 2
             }
             if length + cost <= limit {
                 result.append(segment)
@@ -256,8 +271,29 @@ final class NoteContent {
                 part.foregroundColor = AppColors.link
                 part.font = font.weight(.medium)
                 result += part
+            case .emoji(let code, _):
+                result += AttributedString(":\(code):")
             }
         }
+        return result
+    }
+
+    func text(_ segments: [NoteContentSegment], font: Font = .body, cache: ProfileCache, emojis: InlineEmojiStore) -> Text {
+        guard hasCustomEmoji else { return Text(attributed(segments, font: font, cache: cache)) }
+        var result = Text(verbatim: "")
+        var pending: [NoteContentSegment] = []
+        for segment in segments {
+            if case .emoji(_, let url) = segment, let image = emojis.image(url) {
+                if !pending.isEmpty {
+                    result = Text("\(result)\(Text(attributed(pending, font: font, cache: cache)))")
+                    pending = []
+                }
+                result = Text("\(result)\(Text(Image(uiImage: image)).baselineOffset(-4))")
+            } else {
+                pending.append(segment)
+            }
+        }
+        if !pending.isEmpty { result = Text("\(result)\(Text(attributed(pending, font: font, cache: cache)))") }
         return result
     }
 }

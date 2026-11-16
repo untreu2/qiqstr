@@ -31,6 +31,7 @@ struct SettingsView: View {
             Section {
                 link(.display, L("display"), "circle.lefthalf.filled", fill: AppColors.settingsTile)
                 link(.language, L("language"), "character.bubble", fill: AppColors.settingsTile, value: currentLanguageName)
+                link(.emojiPacks, L("emojiPacksTitle"), "face.smiling", fill: AppColors.settingsTile)
                 link(.payments, L("payments"), "bolt.fill", fill: AppColors.settingsTile)
             }
             Section {

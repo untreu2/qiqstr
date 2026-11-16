@@ -6,8 +6,11 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use cdk::cdk_database::WalletDatabase;
-use cdk::nuts::{CurrencyUnit, PaymentMethod, Token};
-use cdk::wallet::{ReceiveOptions, Wallet};
+use cdk::nuts::{
+    CurrencyUnit, MintQuoteState, PaymentMethod, Proof, Proofs, PublicKey, SecretKey,
+    SpendingConditions, Token,
+};
+use cdk::wallet::{ReceiveOptions, SendOptions, Wallet};
 use cdk_sqlite::wallet::WalletSqliteDatabase;
 use rand::RngCore;
 use tokio::sync::Mutex;
@@ -360,6 +363,223 @@ async fn get_quote(
     }
 }
 
+fn normalize_mint_url(mint_url: &str) -> Result<String> {
+    let trimmed = mint_url.trim().trim_end_matches('/');
+    if !trimmed.starts_with("https://") || trimmed.len() < 12 || trimmed.contains(' ') {
+        return Err(anyhow!("Enter a valid https mint address"));
+    }
+    Ok(trimmed.to_string())
+}
+
+async fn wallet_at(mint_url: &str) -> Result<Arc<Wallet>> {
+    let url = normalize_mint_url(mint_url)?;
+    let store = store().await?;
+    let mut guard = store.lock().await;
+    guard.wallet_for(&url).await
+}
+
+async fn balance_of(wallet: &Wallet) -> Result<u64> {
+    wallet
+        .total_balance()
+        .await
+        .map(u64::from)
+        .context("Failed to get Cashu balance")
+}
+
+async fn fee_reserve(wallet: &Wallet) -> u64 {
+    let ppk = wallet
+        .get_active_keyset()
+        .await
+        .map(|keyset| keyset.input_fee_ppk)
+        .unwrap_or(0);
+    ppk.saturating_mul(64).div_ceil(1000)
+}
+
+fn parse_p2pk_pubkey(pubkey_hex: &str) -> Result<PublicKey> {
+    let hex = pubkey_hex.trim().to_lowercase();
+    let full = match hex.len() {
+        64 => format!("02{hex}"),
+        66 => hex,
+        _ => return Err(anyhow!("Invalid Cashu lock key")),
+    };
+    PublicKey::from_hex(full).map_err(|_| anyhow!("Invalid Cashu lock key"))
+}
+
+/// Looks up a mint and returns JSON `{ "url", "name", "description" }`.
+pub async fn cashu_mint_info(mint_url: String) -> Result<String> {
+    let url = normalize_mint_url(&mint_url)?;
+    let wallet = wallet_at(&url).await?;
+    let info = wallet
+        .load_mint_info()
+        .await
+        .map_err(|e| anyhow!("Could not reach the mint: {}", e))?;
+    Ok(serde_json::json!({
+        "url": url,
+        "name": info.name,
+        "description": info.description,
+    })
+    .to_string())
+}
+
+/// Works out what must be paid before `amount_sats` can be sent from a mint.
+///
+/// Returns JSON `{ "needs_payment": bool, "quote_id", "invoice", "pay_sats", "balance_sats" }`.
+/// When the wallet already holds enough at that mint, `needs_payment` is false.
+pub async fn cashu_fund_quote(mint_url: String, amount_sats: u64) -> Result<String> {
+    if amount_sats == 0 {
+        return Err(anyhow!("Amount must be greater than zero"));
+    }
+    let wallet = wallet_at(&mint_url).await?;
+    let balance = balance_of(&wallet).await?;
+    let needed = amount_sats
+        .checked_add(fee_reserve(&wallet).await)
+        .ok_or_else(|| anyhow!("Amount is too large"))?;
+    if balance >= needed {
+        return Ok(serde_json::json!({
+            "needs_payment": false,
+            "pay_sats": 0,
+            "balance_sats": balance,
+        })
+        .to_string());
+    }
+    let pay = needed - balance;
+    let quote = wallet
+        .mint_quote(
+            PaymentMethod::BOLT11,
+            Some(cdk::Amount::from(pay)),
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| anyhow!("The mint did not issue an invoice: {}", e))?;
+    Ok(serde_json::json!({
+        "needs_payment": true,
+        "quote_id": quote.id,
+        "invoice": quote.request,
+        "pay_sats": pay,
+        "balance_sats": balance,
+    })
+    .to_string())
+}
+
+/// Mints the ecash for a paid funding quote.
+///
+/// Returns JSON `{ "minted_sats": u64 }`. Fails while the invoice is unpaid.
+pub async fn cashu_fund_complete(mint_url: String, quote_id: String) -> Result<String> {
+    let wallet = wallet_at(&mint_url).await?;
+    let quote = wallet
+        .check_mint_quote(&quote_id)
+        .await
+        .map_err(|e| anyhow!("Could not check the invoice: {}", e))?;
+    let minted = match quote.state {
+        MintQuoteState::Unpaid => return Err(anyhow!("The invoice has not been paid yet")),
+        MintQuoteState::Issued => 0,
+        _ => {
+            let proofs = wallet
+                .mint(&quote_id, cdk::amount::SplitTarget::default(), None)
+                .await
+                .map_err(|e| anyhow!("Minting failed: {}", e))?;
+            proofs.iter().map(|proof| u64::from(proof.amount)).sum()
+        }
+    };
+    Ok(serde_json::json!({ "minted_sats": minted }).to_string())
+}
+
+/// Takes `amount_sats` out of the wallet as a token, optionally locked to a key (NUT-11).
+///
+/// Returns JSON `{ "token": String, "proofs": [String], "mint_url", "amount_sats", "fee_sats" }`.
+pub async fn cashu_create_token(
+    mint_url: String,
+    amount_sats: u64,
+    p2pk_pubkey_hex: Option<String>,
+) -> Result<String> {
+    if amount_sats == 0 {
+        return Err(anyhow!("Amount must be greater than zero"));
+    }
+    let url = normalize_mint_url(&mint_url)?;
+    let wallet = wallet_at(&url).await?;
+    let conditions = match p2pk_pubkey_hex
+        .as_deref()
+        .filter(|key| !key.trim().is_empty())
+    {
+        Some(key) => Some(SpendingConditions::new_p2pk(parse_p2pk_pubkey(key)?, None)),
+        None => None,
+    };
+    let options = SendOptions {
+        conditions,
+        include_fee: true,
+        ..Default::default()
+    };
+    let prepared = wallet
+        .prepare_send(cdk::Amount::from(amount_sats), options)
+        .await
+        .map_err(|e| anyhow!("Not enough ecash at this mint: {}", e))?;
+    let fee = u64::from(prepared.fee());
+    let token = prepared
+        .confirm(None)
+        .await
+        .map_err(|e| anyhow!("Could not create the token: {}", e))?;
+    let keysets = wallet
+        .load_mint_keysets()
+        .await
+        .context("Failed to load mint keysets")?;
+    let proofs = token
+        .proofs(&keysets)
+        .map_err(|e| anyhow!("Could not read the token: {}", e))?;
+    let encoded: Vec<String> = proofs
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<std::result::Result<_, _>>()?;
+    Ok(serde_json::json!({
+        "token": token.to_string(),
+        "proofs": encoded,
+        "mint_url": url,
+        "amount_sats": amount_sats,
+        "fee_sats": fee,
+    })
+    .to_string())
+}
+
+/// Claims key-locked proofs (a nutzap) and, when a Lightning target is given, melts them to it.
+///
+/// Returns JSON `{ "received_sats": u64, "melted_sats": u64 }`.
+pub async fn cashu_redeem_proofs(
+    mint_url: String,
+    proofs_json: Vec<String>,
+    p2pk_private_key_hex: String,
+    lightning_target: String,
+) -> Result<String> {
+    if proofs_json.is_empty() {
+        return Err(anyhow!("No proofs to redeem"));
+    }
+    let proofs: Proofs = proofs_json
+        .iter()
+        .map(|raw| serde_json::from_str::<Proof>(raw))
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|_| anyhow!("Invalid Cashu proof"))?;
+    let key = SecretKey::from_hex(p2pk_private_key_hex.trim())
+        .map_err(|_| anyhow!("Invalid Cashu unlock key"))?;
+    let wallet = wallet_at(&mint_url).await?;
+    let options = ReceiveOptions {
+        p2pk_signing_keys: vec![key],
+        ..Default::default()
+    };
+    let received = wallet
+        .receive_proofs(proofs, options, None, None)
+        .await
+        .map(u64::from)
+        .map_err(|e| anyhow!("Failed to redeem: {}", e))?;
+    let target = lightning_target.trim();
+    let mut melted = 0u64;
+    if !target.is_empty() {
+        let balance = balance_of(&wallet).await?;
+        if let Ok(amount) = melt_with_retry(&wallet, target, balance).await {
+            melted = amount;
+        }
+    }
+    Ok(serde_json::json!({ "received_sats": received, "melted_sats": melted }).to_string())
+}
+
 /// Decodes a Cashu token: returns mint URL and amount.
 ///
 /// Returns JSON `{ "mint_url": String, "amount_sats": u64 }`
@@ -434,6 +654,107 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn lock_keys_accept_nostr_and_compressed_forms() {
+        let key = SecretKey::generate().public_key();
+        let compressed = key.to_hex();
+        let x_only = key.x_only_public_key().to_string();
+        assert_eq!(
+            parse_p2pk_pubkey(&x_only).unwrap().to_hex(),
+            format!("02{x_only}")
+        );
+        assert_eq!(parse_p2pk_pubkey(&compressed).unwrap().to_hex(), compressed);
+        assert!(parse_p2pk_pubkey("abcd").is_err());
+    }
+
+    #[test]
+    fn mint_addresses_must_be_https() {
+        assert_eq!(
+            normalize_mint_url(" https://mint.example.com/ ").unwrap(),
+            "https://mint.example.com"
+        );
+        assert!(normalize_mint_url("http://mint.example.com").is_err());
+        assert!(normalize_mint_url("mint.example.com").is_err());
+    }
+
+    #[tokio::test]
+    #[ignore = "uses the public test mint at testnut.cashu.space"]
+    async fn locked_token_round_trip_on_the_test_mint() {
+        let directory = TestDirectory::new();
+        *db_path_state().write().await = Some(
+            directory
+                .0
+                .join("nostr-lmdb")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let mint = "https://testnut.cashu.space".to_string();
+        let sender = "a".repeat(64);
+        let receiver = "b".repeat(64);
+
+        cashu_set_account(sender.clone()).unwrap();
+        let quote: serde_json::Value =
+            serde_json::from_str(&cashu_fund_quote(mint.clone(), 64).await.unwrap()).unwrap();
+        assert_eq!(quote["needs_payment"], true);
+        let quote_id = quote["quote_id"].as_str().unwrap().to_string();
+        let mut funded = false;
+        for _ in 0..20 {
+            if cashu_fund_complete(mint.clone(), quote_id.clone())
+                .await
+                .is_ok()
+            {
+                funded = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+        assert!(funded, "the test mint did not settle the invoice");
+        let again: serde_json::Value =
+            serde_json::from_str(&cashu_fund_quote(mint.clone(), 21).await.unwrap()).unwrap();
+        assert_eq!(again["needs_payment"], false);
+
+        let key = SecretKey::generate();
+        let lock = key.public_key().x_only_public_key().to_string();
+        let created: serde_json::Value = serde_json::from_str(
+            &cashu_create_token(mint.clone(), 21, Some(lock.clone()))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let proofs: Vec<String> = created["proofs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|proof| proof.as_str().unwrap().to_string())
+            .collect();
+        assert!(!proofs.is_empty());
+
+        cashu_set_account(receiver).unwrap();
+        let wrong = SecretKey::generate().to_secret_hex();
+        assert!(
+            cashu_redeem_proofs(mint.clone(), proofs.clone(), wrong, String::new())
+                .await
+                .is_err()
+        );
+        let redeemed: serde_json::Value = serde_json::from_str(
+            &cashu_redeem_proofs(mint.clone(), proofs, key.to_secret_hex(), String::new())
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(redeemed["received_sats"].as_u64().unwrap() >= 20);
+
+        cashu_set_account(sender).unwrap();
+        let plain: serde_json::Value =
+            serde_json::from_str(&cashu_create_token(mint.clone(), 10, None).await.unwrap())
+                .unwrap();
+        let decoded: serde_json::Value = serde_json::from_str(
+            &cashu_decode_token(plain["token"].as_str().unwrap().to_string()).unwrap(),
+        )
+        .unwrap();
+        assert!(decoded["amount_sats"].as_u64().unwrap() >= 10);
     }
 
     #[test]

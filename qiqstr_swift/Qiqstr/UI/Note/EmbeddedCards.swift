@@ -96,7 +96,7 @@ struct NoteQuoteCard: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 if !parsed.isEmptyText {
-                    Text(parsed.attributed(parsed.truncatedSegments ?? parsed.segments, font: .subheadline, cache: cache))
+                    parsed.text(parsed.truncatedSegments ?? parsed.segments, font: .subheadline, cache: cache, emojis: InlineEmojiStore.shared)
                         .font(.subheadline)
                         .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(6)
@@ -105,6 +105,9 @@ struct NoteQuoteCard: View {
                 }
                 if let poll = NotePoll(id: note.id, tags: note.tags) {
                     NotePollView(poll: poll, author: note.pubkey, interactive: false)
+                }
+                if let goal = ZapGoal(note: note) {
+                    ZapGoalView(goal: goal, note: note)
                 }
                 if let first = parsed.images.first {
                     NoteMediaImage(item: first, maxPixel: 800)

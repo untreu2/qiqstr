@@ -38,6 +38,17 @@ struct PaymentsSettingsView: View {
                 Text(L("nwcDescription")).wrapsInFooter()
             }
 
+            if AppStorePolicy.allowsCashu {
+                Section {
+                    NavigationLink(value: Route.settingsPage(.nutzaps)) {
+                        SettingsRowLabel(title: L("nutzapTitle"), systemImage: "banknote", value: NutzapService.shared.isReceiving ? L("feedOn") : L("feedOff"))
+                    }
+                    .accessibilityIdentifier("payments-nutzaps")
+                } footer: {
+                    Text(L("nutzapSettingsFooter")).wrapsInFooter()
+                }
+            }
+
             if AppStorePolicy.allowsContentZaps {
                 Section {
                     Toggle(isOn: $oneTapZap) {

@@ -11,6 +11,7 @@ struct InteractionBarView: View {
     @State private var likeTick = 0
     @State private var unlikeTick = 0
     @State private var showReactions = false
+    @State private var showEmojiPicker = false
     @State private var longPressAt: Date?
 
     private static let likeContent = "+"
@@ -85,7 +86,7 @@ struct InteractionBarView: View {
     }
 
     private var likeEmoji: String? {
-        guard model.counts.hasReacted, let reaction = model.myReaction, reaction != Self.likeContent, reaction != "❤️" else { return nil }
+        guard model.counts.hasReacted, model.myReactionEmoji == nil, let reaction = model.myReaction, reaction != Self.likeContent, reaction != "❤️" else { return nil }
         return reaction
     }
 
@@ -94,6 +95,7 @@ struct InteractionBarView: View {
             InteractionLabel(
                 symbol: model.counts.hasReacted ? "heart.fill" : "heart",
                 emoji: likeEmoji,
+                emojiURL: model.counts.hasReacted ? model.myReactionEmoji?.url : nil,
                 count: model.counts.reactions,
                 tint: model.counts.hasReacted ? AppColors.reaction : nil,
                 compact: compact,
@@ -109,11 +111,24 @@ struct InteractionBarView: View {
             }
         )
         .popover(isPresented: $showReactions, attachmentAnchor: .point(.top), arrowEdge: .bottom) {
-            ReactionPicker(selected: model.counts.hasReacted ? (model.myReaction ?? Self.likeContent) : nil) { emoji in
+            ReactionPicker(selected: model.counts.hasReacted ? (model.myReaction ?? Self.likeContent) : nil, onMore: {
+                showReactions = false
+                showEmojiPicker = true
+            }) { emoji in
                 showReactions = false
                 pick(emoji)
             }
             .presentationCompactAdaptation(.popover)
+        }
+        .sheet(isPresented: $showEmojiPicker) {
+            EmojiPickerSheet { choice in
+                switch choice {
+                case .unicode(let emoji): pick(emoji)
+                case .custom(let emoji):
+                    likeTick += 1
+                    Task { await store.react(note, with: emoji.token, emoji: emoji) }
+                }
+            }
         }
         .disabled(model.isReacting)
         .accessibilityLabel(L("reaction"))
@@ -179,6 +194,7 @@ struct InteractionPressStyle: ButtonStyle {
 struct InteractionLabel: View {
     let symbol: String
     var emoji: String? = nil
+    var emojiURL: String? = nil
     let count: Int
     let tint: Color?
     var compact = false
@@ -220,7 +236,10 @@ struct InteractionLabel: View {
     @ViewBuilder
     private var icon: some View {
         Group {
-            if let emoji {
+            if let emojiURL {
+                CustomEmojiImage(url: emojiURL, size: compact ? 18 : 20)
+                    .transition(.scale(scale: 0.3).combined(with: .opacity))
+            } else if let emoji {
                 Text(emoji)
                     .font(compact ? .callout : .body)
                     .transition(.scale(scale: 0.3).combined(with: .opacity))
@@ -394,6 +413,7 @@ struct ZapBarLabel: View {
 
 struct ReactionPicker: View {
     let selected: String?
+    var onMore: (() -> Void)? = nil
     let onPick: (String) -> Void
     @State private var appeared = false
     @State private var pickTick = 0
@@ -430,6 +450,22 @@ struct ReactionPicker: View {
                 .accessibilityLabel(emoji)
                 .accessibilityAddTraits(isSelected(emoji) ? .isSelected : [])
                 .accessibilityIdentifier("reaction-\(index)")
+            }
+            if let onMore {
+                Button(action: onMore) {
+                    Image(systemName: "plus")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 34, height: 34)
+                        .background(.quaternary, in: .circle)
+                        .frame(width: 42, height: 46)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.2).delay(0.2), value: appeared)
+                .accessibilityLabel(L("emojiMore"))
+                .accessibilityIdentifier("reaction-more")
             }
         }
         .padding(.horizontal, 6)
