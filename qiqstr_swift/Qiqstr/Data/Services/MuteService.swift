@@ -8,6 +8,8 @@ final class MuteService {
     static let shared = MuteService()
     private(set) var mutedPubkeys: [String] = []
     private(set) var mutedWords: [String] = []
+    private(set) var mutedHashtags: [String] = []
+    private(set) var mutedThreads: [String] = []
     private(set) var isLoaded = false
     private(set) var hasSyncedRemote = false
     private var generation = 0
@@ -16,10 +18,29 @@ final class MuteService {
     @ObservationIgnored private var pending = PendingMutes()
 
     private enum Change {
-        case mute(String), unmute(String), addWord(String), removeWord(String)
+        case add(MuteEntry, String), remove(MuteEntry, String)
     }
 
     func isMuted(_ pubkey: String) -> Bool { mutedPubkeys.contains(pubkey) }
+
+    func isHashtagMuted(_ tag: String) -> Bool { mutedHashtags.contains(Self.normalizedHashtag(tag)) }
+
+    func isThreadMuted(_ rootId: String) -> Bool { mutedThreads.contains(rootId) }
+
+    func hides(_ note: Note) -> Bool {
+        if !mutedThreads.isEmpty, mutedThreads.contains(note.rootId ?? note.id) || mutedThreads.contains(note.id) { return true }
+        guard !mutedHashtags.isEmpty else { return false }
+        return note.hashtags.contains { mutedHashtags.contains($0.lowercased()) }
+    }
+
+    func hidesNotification(target: String?, root: String?) -> Bool {
+        guard !mutedThreads.isEmpty else { return false }
+        return [target, root].compactMap { $0 }.contains(where: mutedThreads.contains)
+    }
+
+    static func normalizedHashtag(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+    }
 
     func containsMutedWord(_ content: String) -> Bool {
         guard !mutedWords.isEmpty else { return false }
@@ -34,6 +55,8 @@ final class MuteService {
         pending = PendingMutes()
         mutedPubkeys = []
         mutedWords = []
+        mutedHashtags = []
+        mutedThreads = []
         isLoaded = false
         hasSyncedRemote = false
         syncToRust()
@@ -54,42 +77,62 @@ final class MuteService {
 
     func mute(_ pubkey: String) async throws {
         guard !pubkey.isEmpty, pubkey != Session.shared.pubkey else { return }
-        await perform(.mute(pubkey))
+        await perform(.add(.pubkey, pubkey))
     }
 
     func unmute(_ pubkey: String) async throws {
-        await perform(.unmute(pubkey))
+        await perform(.remove(.pubkey, pubkey))
     }
 
     func addWord(_ word: String) async throws {
         let normalized = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return }
-        await perform(.addWord(normalized))
+        await perform(.add(.word, normalized))
     }
 
     func removeWord(_ word: String) async throws {
-        await perform(.removeWord(word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()))
+        await perform(.remove(.word, word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()))
+    }
+
+    func muteHashtag(_ tag: String) async {
+        let normalized = Self.normalizedHashtag(tag)
+        guard !normalized.isEmpty else { return }
+        await perform(.add(.hashtag, normalized))
+    }
+
+    func unmuteHashtag(_ tag: String) async {
+        await perform(.remove(.hashtag, Self.normalizedHashtag(tag)))
+    }
+
+    func muteThread(_ rootId: String) async {
+        guard rootId.count == 64 else { return }
+        await perform(.add(.thread, rootId))
+    }
+
+    func unmuteThread(_ rootId: String) async {
+        await perform(.remove(.thread, rootId))
+    }
+
+    private func current(_ entry: MuteEntry) -> [String] {
+        switch entry {
+        case .pubkey: mutedPubkeys
+        case .word: mutedWords
+        case .hashtag: mutedHashtags
+        case .thread: mutedThreads
+        }
     }
 
     private func perform(_ change: Change) async {
         guard let me = Session.shared.pubkey else { return }
         switch change {
-        case .mute(let pubkey):
-            guard !mutedPubkeys.contains(pubkey) else { return }
-            pending.removedPubkeys.removeAll { $0 == pubkey }
-            pending.addedPubkeys.append(pubkey)
-        case .unmute(let pubkey):
-            guard mutedPubkeys.contains(pubkey) else { return }
-            pending.addedPubkeys.removeAll { $0 == pubkey }
-            pending.removedPubkeys.append(pubkey)
-        case .addWord(let word):
-            guard !mutedWords.contains(word) else { return }
-            pending.removedWords.removeAll { $0 == word }
-            pending.addedWords.append(word)
-        case .removeWord(let word):
-            guard mutedWords.contains(word) else { return }
-            pending.addedWords.removeAll { $0 == word }
-            pending.removedWords.append(word)
+        case .add(let entry, let value):
+            guard !current(entry).contains(value) else { return }
+            pending.removed[entry.rawValue, default: []].removeAll { $0 == value }
+            pending.added[entry.rawValue, default: []].append(value)
+        case .remove(let entry, let value):
+            guard current(entry).contains(value) else { return }
+            pending.added[entry.rawValue, default: []].removeAll { $0 == value }
+            pending.removed[entry.rawValue, default: []].append(value)
         }
         pending.store(for: me)
         recompute()
@@ -114,23 +157,17 @@ final class MuteService {
         let generation = self.generation
         guard let base = await latestList(me, key: key), generation == self.generation, base.isReadable else { return }
         let changes = pending
-        let removedPubkeys = Set(changes.removedPubkeys)
-        let removedWords = Set(changes.removedWords)
         let keep: ([String]) -> Bool = { tag in
-            guard tag.count > 1 else { return true }
-            switch tag[0] {
-            case "p": return !removedPubkeys.contains(tag[1])
-            case "word": return !removedWords.contains(tag[1].lowercased())
-            default: return true
-            }
+            guard tag.count > 1, let entry = MuteEntry(rawValue: tag[0]) else { return true }
+            return !(changes.removed[entry.rawValue] ?? []).contains(entry.normalized(tag[1]))
         }
         let publicTags = base.publicTags.filter(keep)
         var privateTags = base.privateTags.filter(keep)
         let known = RemoteMuteList(publicTags: publicTags, privateTags: privateTags)
-        let knownPubkeys = Set(known.pubkeys)
-        let knownWords = Set(known.words)
-        privateTags += changes.addedPubkeys.filter { !knownPubkeys.contains($0) }.map { ["p", $0] }
-        privateTags += changes.addedWords.filter { !knownWords.contains($0) }.map { ["word", $0] }
+        for entry in MuteEntry.allCases {
+            let existing = Set(known.values(entry))
+            privateTags += (changes.added[entry.rawValue] ?? []).filter { !existing.contains($0) }.map { [entry.rawValue, $0] }
+        }
         do {
             let content = privateTags.isEmpty ? "" : try nip44Encrypt(content: JSON.string(privateTags), senderSkHex: key, receiverPkHex: me)
             let event = try createSignedEvent(kind: 10000, content: content, tags: publicTags, privateKeyHex: key)
@@ -195,14 +232,21 @@ final class MuteService {
         return try? nip44Decrypt(payload: content, receiverSkHex: privateKey, senderPkHex: pubkey)
     }
 
+    private func merged(_ entry: MuteEntry) -> [String] {
+        let removed = Set(pending.removed[entry.rawValue] ?? [])
+        return Self.unique(remote.values(entry) + (pending.added[entry.rawValue] ?? [])).filter { !removed.contains($0) }
+    }
+
     private func recompute() {
-        let removedPubkeys = Set(pending.removedPubkeys)
-        let removedWords = Set(pending.removedWords)
-        let pubkeys = Self.unique(remote.pubkeys + pending.addedPubkeys).filter { !removedPubkeys.contains($0) }
-        let words = Self.unique(remote.words + pending.addedWords).filter { !removedWords.contains($0) }
-        let changed = pubkeys != mutedPubkeys || words != mutedWords
+        let pubkeys = merged(.pubkey)
+        let words = merged(.word)
+        let hashtags = merged(.hashtag)
+        let threads = merged(.thread)
+        let changed = pubkeys != mutedPubkeys || words != mutedWords || hashtags != mutedHashtags || threads != mutedThreads
         mutedPubkeys = pubkeys
         mutedWords = words
+        mutedHashtags = hashtags
+        mutedThreads = threads
         isLoaded = true
         Session.shared.mutedPubkeys = pubkeys
         Session.shared.mutedWords = words
@@ -224,32 +268,59 @@ final class MuteService {
     }
 }
 
+enum MuteEntry: String, CaseIterable {
+    case pubkey = "p", word = "word", hashtag = "t", thread = "e"
+
+    func normalized(_ value: String) -> String {
+        switch self {
+        case .pubkey, .thread: value
+        case .word, .hashtag: value.lowercased()
+        }
+    }
+}
+
 private struct RemoteMuteList {
     var publicTags: [[String]] = []
     var privateTags: [[String]] = []
     var isReadable = true
 
-    var pubkeys: [String] { values("p") }
-    var words: [String] { values("word").map { $0.lowercased() } }
-
-    private func values(_ name: String) -> [String] {
-        (publicTags + privateTags).filter { $0.count > 1 && $0[0] == name && !$0[1].isEmpty }.map { $0[1] }
+    func values(_ entry: MuteEntry) -> [String] {
+        (publicTags + privateTags).filter { $0.count > 1 && $0[0] == entry.rawValue && !$0[1].isEmpty }.map { entry.normalized($0[1]) }
     }
 }
 
 private struct PendingMutes: Codable {
-    var addedPubkeys: [String] = []
-    var removedPubkeys: [String] = []
-    var addedWords: [String] = []
-    var removedWords: [String] = []
+    var added: [String: [String]] = [:]
+    var removed: [String: [String]] = [:]
 
-    var isEmpty: Bool { addedPubkeys.isEmpty && removedPubkeys.isEmpty && addedWords.isEmpty && removedWords.isEmpty }
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case added, removed, addedPubkeys, removedPubkeys, addedWords, removedWords
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        added = try c.decodeIfPresent([String: [String]].self, forKey: .added) ?? [:]
+        removed = try c.decodeIfPresent([String: [String]].self, forKey: .removed) ?? [:]
+        let legacy: [(CodingKeys, MuteEntry, Bool)] = [(.addedPubkeys, .pubkey, true), (.removedPubkeys, .pubkey, false), (.addedWords, .word, true), (.removedWords, .word, false)]
+        for (key, entry, isAdded) in legacy {
+            guard let values = try c.decodeIfPresent([String].self, forKey: key), !values.isEmpty else { continue }
+            if isAdded { added[entry.rawValue, default: []] += values } else { removed[entry.rawValue, default: []] += values }
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(added, forKey: .added)
+        try c.encode(removed, forKey: .removed)
+    }
+
+    var isEmpty: Bool { added.values.allSatisfy(\.isEmpty) && removed.values.allSatisfy(\.isEmpty) }
 
     mutating func subtract(_ published: PendingMutes) {
-        addedPubkeys.removeAll(where: published.addedPubkeys.contains)
-        removedPubkeys.removeAll(where: published.removedPubkeys.contains)
-        addedWords.removeAll(where: published.addedWords.contains)
-        removedWords.removeAll(where: published.removedWords.contains)
+        for (key, values) in published.added { added[key]?.removeAll(where: values.contains) }
+        for (key, values) in published.removed { removed[key]?.removeAll(where: values.contains) }
     }
 
     static func stored(for pubkey: String) -> PendingMutes {

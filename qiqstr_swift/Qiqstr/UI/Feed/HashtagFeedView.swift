@@ -51,9 +51,11 @@ final class HashtagFeedViewModel {
         let muted = Set(Session.shared.mutedPubkeys)
         let words = Session.shared.mutedWords.map { $0.lowercased() }.filter { !$0.isEmpty }
         let deleted = NoteInteractionStore.shared.deletedIds
+        let mutes = MuteService.shared
         var ids: Set<String> = []
         notes = result.filter { note in
             guard ids.insert(note.listId).inserted, !deleted.contains(note.id), !muted.contains(note.pubkey) else { return false }
+            if mutes.isThreadMuted(note.rootId ?? note.id) { return false }
             let content = note.content.lowercased()
             return !words.contains { content.contains($0) }
         }
@@ -97,6 +99,7 @@ struct HashtagFeedView: View {
     let tag: String
     @State private var model: HashtagFeedViewModel
     @State private var bus = DataBus.shared
+    @State private var mutes = MuteService.shared
 
     init(tag: String) {
         self.tag = tag
@@ -144,6 +147,22 @@ struct HashtagFeedView: View {
                         HashtagFollowButton(isFollowing: model.isFollowing, isPending: model.isFollowPending, action: model.toggleFollow)
                     }
                     .sharedBackgroundVisibility(.hidden)
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            let muted = mutes.isHashtagMuted(model.tag)
+                            Button(muted ? L("feedUnmuteHashtag", ["tag": model.tag]) : L("feedMuteHashtag", ["tag": model.tag]), systemImage: muted ? "speaker.wave.2" : "speaker.slash") {
+                                Task {
+                                    if muted { await mutes.unmuteHashtag(model.tag) } else { await mutes.muteHashtag(model.tag) }
+                                    ToastCenter.shared.show(muted ? L("feedHashtagUnmuted") : L("feedHashtagMuted"), style: .success)
+                                }
+                            }
+                            .accessibilityIdentifier("hashtag-mute")
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
+                        .accessibilityLabel(L("profileMoreActions"))
+                        .accessibilityIdentifier("hashtag-more")
+                    }
                 }
         }
         .navigationBarTitleDisplayMode(.inline)

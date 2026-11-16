@@ -4,14 +4,24 @@ import SwiftUI
 @Observable
 final class MutedSettingsModel {
     enum Tab: String, CaseIterable, Identifiable {
-        case users, words
+        case users, words, hashtags, threads
         var id: String { rawValue }
-        var title: String { self == .users ? L("mutedUsersTitle") : L("mutedWordsTitle") }
+        var title: String {
+            switch self {
+            case .users: L("mutedUsersTitle")
+            case .words: L("mutedWordsTitle")
+            case .hashtags: L("mutedHashtagsTitle")
+            case .threads: L("mutedThreadsTitle")
+            }
+        }
     }
 
     var tab: Tab = .users
     var newWord = ""
     var showAddWord = false
+    var newHashtag = ""
+    var showAddHashtag = false
+    private(set) var threadNotes: [String: Note] = [:]
     private(set) var busy: Set<String> = []
     private(set) var isRefreshing = false
     var feedback = 0
@@ -77,6 +87,34 @@ final class MutedSettingsModel {
     }
 
     func isBusy(_ key: String) -> Bool { busy.contains(key) }
+
+    func addHashtag() async {
+        let tag = MuteService.normalizedHashtag(newHashtag)
+        newHashtag = ""
+        guard !tag.isEmpty else { return }
+        await service.muteHashtag(tag)
+        feedback += 1
+    }
+
+    func removeHashtag(_ tag: String) async {
+        await service.unmuteHashtag(tag)
+        feedback += 1
+    }
+
+    func unmuteThread(_ id: String) async {
+        await service.unmuteThread(id)
+        feedback += 1
+    }
+
+    func loadThreads() async {
+        let missing = service.mutedThreads.filter { threadNotes[$0] == nil }
+        guard !missing.isEmpty else { return }
+        for note in await NoteRepository.notes(missing) { threadNotes[note.id] = note }
+        for id in missing where threadNotes[id] == nil {
+            if let note = await NoteRepository.ensureNote(id) { threadNotes[id] = note }
+        }
+        await ProfileCache.shared.load(Array(Set(threadNotes.values.map(\.pubkey))))
+    }
 }
 
 struct MutedSettingsView: View {
@@ -88,7 +126,7 @@ struct MutedSettingsView: View {
             Section {
                 Picker(L("mutedTitle"), selection: $model.tab) {
                     ForEach(MutedSettingsModel.Tab.allCases) { tab in
-                        Text("\(tab.title) (\(tab == .users ? service.mutedPubkeys.count : service.mutedWords.count))").tag(tab)
+                        Text(tab.title).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -102,6 +140,8 @@ struct MutedSettingsView: View {
             switch model.tab {
             case .users: usersSection
             case .words: wordsSection
+            case .hashtags: hashtagsSection
+            case .threads: threadsSection
             }
         }
         .settingsListStyle()
@@ -117,7 +157,29 @@ struct MutedSettingsView: View {
                     .accessibilityIdentifier("muted-word-add")
                 }
             }
+            if model.tab == .hashtags {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("settingsAddHashtag"), systemImage: "plus") {
+                        model.newHashtag = ""
+                        model.showAddHashtag = true
+                    }
+                    .accessibilityIdentifier("muted-hashtag-add")
+                }
+            }
         }
+        .alert(L("settingsAddHashtag"), isPresented: $model.showAddHashtag) {
+            TextField(L("addHashtagToMuteHint"), text: $model.newHashtag)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("muted-hashtag-field")
+            Button(L("cancel"), role: .cancel) { model.newHashtag = "" }
+            Button(L("settingsAdd")) { Task { await model.addHashtag() } }
+                .disabled(MuteService.normalizedHashtag(model.newHashtag).isEmpty)
+                .accessibilityIdentifier("muted-hashtag-add-confirm")
+        }
+        .task(id: service.mutedThreads) { await model.loadThreads() }
+        .animation(.snappy, value: service.mutedHashtags)
+        .animation(.snappy, value: service.mutedThreads)
         .alert(L("settingsAddWord"), isPresented: $model.showAddWord) {
             TextField(L("addWordToMuteHint"), text: $model.newWord)
                 .textInputAutocapitalization(.never)
@@ -191,6 +253,77 @@ struct MutedSettingsView: View {
                         Button(L("delete"), systemImage: "trash", role: .destructive) { Task { await model.removeWord(word) } }
                     }
                     .accessibilityIdentifier("muted-word-\(word)")
+                }
+            }
+        }
+    }
+}
+
+extension MutedSettingsView {
+    @ViewBuilder
+    fileprivate var hashtagsSection: some View {
+        Section {
+            if service.mutedHashtags.isEmpty {
+                ContentUnavailableView(L("settingsNoMutedHashtags"), systemImage: "number", description: Text(L("settingsNoMutedHashtagsMessage")))
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("muted-hashtags-empty")
+            } else {
+                ForEach(service.mutedHashtags, id: \.self) { tag in
+                    Label("#\(tag)", systemImage: "number")
+                        .contextMenu {
+                            Button(L("delete"), systemImage: "trash", role: .destructive) { Task { await model.removeHashtag(tag) } }
+                        }
+                        .swipeActions {
+                            Button(L("delete"), systemImage: "trash", role: .destructive) { Task { await model.removeHashtag(tag) } }
+                        }
+                        .accessibilityIdentifier("muted-hashtag-\(tag)")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    fileprivate var threadsSection: some View {
+        Section {
+            if service.mutedThreads.isEmpty {
+                ContentUnavailableView(L("settingsNoMutedThreads"), systemImage: "bell.slash", description: Text(L("settingsNoMutedThreadsMessage")))
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("muted-threads-empty")
+            } else {
+                ForEach(service.mutedThreads, id: \.self) { id in
+                    MutedThreadRow(noteId: id, note: model.threadNotes[id])
+                        .contextMenu {
+                            Button(L("feedUnmuteConversation"), systemImage: "bell") { Task { await model.unmuteThread(id) } }
+                        }
+                        .swipeActions {
+                            Button(L("unmute"), systemImage: "bell", role: .destructive) { Task { await model.unmuteThread(id) } }
+                        }
+                        .accessibilityIdentifier("muted-thread-\(id)")
+                }
+            }
+        }
+    }
+}
+
+struct MutedThreadRow: View {
+    let noteId: String
+    let note: Note?
+    @State private var cache = ProfileCache.shared
+
+    var body: some View {
+        NavigationLink(value: Route.thread(noteId)) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let note {
+                    Text(cache.profile(note.pubkey)?.bestName ?? note.authorName ?? Profile.shortNpub(note.pubkey))
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                    Text(note.content.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " "))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                } else {
+                    Text(L("thread")).font(.body.weight(.semibold))
+                    Text(verbatim: "\(noteId.prefix(12))…").font(.subheadline.monospaced()).foregroundStyle(.secondary)
                 }
             }
         }

@@ -11,6 +11,10 @@ nonisolated struct ComposeDraftMedia: Codable, Hashable, Sendable {
     var blurhash: String?
     var altText: String
     var isVideo: Bool
+    var duration: Double?
+    var waveform: [Int]?
+
+    var isAudio: Bool { mimeType.hasPrefix("audio/") }
 }
 
 nonisolated struct ComposeDraftPoll: Codable, Hashable, Sendable {

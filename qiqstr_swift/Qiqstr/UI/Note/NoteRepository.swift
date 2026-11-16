@@ -55,9 +55,9 @@ enum NoteRepository {
     static var mutedPubkeys: [String] { Session.shared.mutedPubkeys }
     static var mutedWords: [String] { Session.shared.mutedWords }
 
-    static func feed(authors: [String]?, limit: Int, sort: FeedSortMode) async -> [Note] {
+    static func feed(authors: [String]?, limit: Int, sort: FeedSortMode, showReplies: Bool = false) async -> [Note] {
         guard let me else { return [] }
-        let raw = try? await dbGetHydratedFeedNotesSorted(userPubkeyHex: me, authorsHex: authors, limit: UInt32(limit), filterReplies: true, currentUserPubkeyHex: me, sortMode: sort.rawValue)
+        let raw = try? await dbGetHydratedFeedNotesSorted(userPubkeyHex: me, authorsHex: authors, limit: UInt32(limit), filterReplies: !showReplies, currentUserPubkeyHex: me, sortMode: sort.rawValue)
         return await Note.parsed(raw)
     }
 

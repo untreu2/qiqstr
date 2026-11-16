@@ -75,6 +75,15 @@ final class NoteActionHandler {
         }
     }
 
+    func toggleThreadMute(_ note: Note) {
+        let root = note.rootId ?? note.id
+        let wasMuted = MuteService.shared.isThreadMuted(root)
+        Task {
+            if wasMuted { await MuteService.shared.unmuteThread(root) } else { await MuteService.shared.muteThread(root) }
+            ToastCenter.shared.show(wasMuted ? L("feedConversationUnmuted") : L("feedConversationMuted"), style: .success)
+        }
+    }
+
     func confirmDelete(_ note: Note) {
         NoteInteractionStore.shared.markDeleted(note.id, parent: note.parentId)
         Task {
@@ -95,6 +104,7 @@ struct NoteMenuItems: View {
     let actions: NoteActionHandler
     @State private var bookmarks = BookmarkService.shared
     @State private var pinned = PinnedNotesService.shared
+    @State private var mutes = MuteService.shared
 
     private var isMine: Bool { note.pubkey == Session.shared.pubkey }
 
@@ -119,6 +129,8 @@ struct NoteMenuItems: View {
             Button(L("verifySignature"), systemImage: "checkmark.shield") { actions.verify(note) }
         }
         Section {
+            let threadMuted = mutes.isThreadMuted(note.rootId ?? note.id)
+            Button(threadMuted ? L("feedUnmuteConversation") : L("feedMuteConversation"), systemImage: threadMuted ? "bell" : "bell.slash") { actions.toggleThreadMute(note) }
             if isMine {
                 Button(L("delete"), systemImage: "trash", role: .destructive) { actions.pendingDelete = note }
             } else {

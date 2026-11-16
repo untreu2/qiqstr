@@ -23,6 +23,7 @@ struct SettingsView: View {
             Section {
                 link(.keys, L("keys"), "key.horizontal.fill", fill: AppColors.settingsTile)
                 link(.relays, L("relays"), "point.3.connected.trianglepath.dotted", fill: AppColors.settingsTile)
+                link(.mediaServer, L("settingsMediaServer"), "photo.stack.fill", fill: AppColors.settingsTile)
                 link(.notifications, L("notifications"), "bell.badge.fill", fill: AppColors.settingsTile, value: notifications.isDelivering ? L("localNotifyOn") : L("localNotifyOff"))
                 link(.muted, L("muted"), "bell.slash.fill", fill: AppColors.settingsTile)
                 link(.safety, L("safetyTitle"), "hand.raised.fill", fill: AppColors.settingsTile)

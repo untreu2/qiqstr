@@ -1,4 +1,5 @@
-"NSCameraUsageDescription" = "qiqstr, anahtarlar, faturalar ve cüzdan bağlantıları için QR kodlarını taramak üzere kamerayı kullanır.";
+"NSCameraUsageDescription" = "qiqstr kamerayı QR kodlarını taramak ve gönderilerin için fotoğraf ve video çekmek amacıyla kullanır.";
 "NSPhotoLibraryUsageDescription" = "qiqstr, notlara ve mesajlara medya eklemek için fotoğraflarına erişmek ister.";
 "NSPhotoLibraryAddUsageDescription" = "qiqstr, saklamayı seçtiğin fotoğraf ve videoları fotoğraf arşivine kaydeder.";
 "NSFaceIDUsageDescription" = "qiqstr, özel anahtarlarına erişimi korumak için Face ID kullanır.";
+"NSMicrophoneUsageDescription" = "qiqstr mikrofonu sesli mesaj kaydetmek ve çektiğin videoların sesini almak için kullanır.";

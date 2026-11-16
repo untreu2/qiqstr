@@ -20,19 +20,23 @@ final class ComposeAttachment: Identifiable {
     let isVideo: Bool
     let dimensions: CGSize?
     let blurhash: String?
+    let audio: ComposeAudio?
     var status: Status = .uploading
     var altText = ""
     @ObservationIgnored var payload: (Data, String)?
 
     let remoteURL: String?
 
-    init(preview: UIImage?, isVideo: Bool, dimensions: CGSize?, blurhash: String? = nil, remoteURL: String? = nil) {
+    init(preview: UIImage?, isVideo: Bool, dimensions: CGSize?, blurhash: String? = nil, remoteURL: String? = nil, audio: ComposeAudio? = nil) {
         self.remoteURL = remoteURL
         self.preview = preview
         self.isVideo = isVideo
         self.dimensions = dimensions
         self.blurhash = blurhash
+        self.audio = audio
     }
+
+    var isAudio: Bool { audio != nil }
 
     var trimmedAlt: String? {
         altText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -42,6 +46,11 @@ final class ComposeAttachment: Identifiable {
         if case .uploaded(let media) = status { return media }
         return nil
     }
+}
+
+struct ComposeAudio: Hashable, Sendable {
+    var duration: Double
+    var waveform: [Int]
 }
 
 struct ComposePollOption: Identifiable, Hashable {
@@ -68,6 +77,7 @@ final class ComposeViewModel {
     var pollMultiple = false
     var pollHasEnd = false
     var pollEndsAt = Date().addingTimeInterval(86400)
+    var scheduledAt: Date?
     private(set) var draftId = UUID().uuidString
     private(set) var attachments: [ComposeAttachment] = []
     private(set) var suggestions: [Profile] = []
@@ -85,7 +95,10 @@ final class ComposeViewModel {
         let store = DraftStore.shared
         let pending = store.pendingDraftId.flatMap(store.draft)
         store.pendingDraftId = nil
-        if let draft = pending?.contextKey == contextKey ? pending : store.latest(contextKey: contextKey) {
+        if let scheduled = ScheduledPostService.shared.takePendingEdit() {
+            apply(scheduled.draft)
+            scheduledAt = scheduled.publishAt
+        } else if let draft = pending?.contextKey == contextKey ? pending : store.latest(contextKey: contextKey) {
             apply(draft)
         }
         if context == .newNote, let share = SharedInbox.shared.pending {
@@ -137,7 +150,7 @@ final class ComposeViewModel {
         }
         let media = attachments.compactMap { attachment -> ComposeDraftMedia? in
             guard let item = attachment.uploaded else { return nil }
-            return ComposeDraftMedia(url: item.url, sha256: item.sha256, mimeType: item.mimeType, size: item.size, width: attachment.dimensions.map { Double($0.width) }, height: attachment.dimensions.map { Double($0.height) }, blurhash: attachment.blurhash, altText: attachment.altText, isVideo: attachment.isVideo)
+            return ComposeDraftMedia(url: item.url, sha256: item.sha256, mimeType: item.mimeType, size: item.size, width: attachment.dimensions.map { Double($0.width) }, height: attachment.dimensions.map { Double($0.height) }, blurhash: attachment.blurhash, altText: attachment.altText, isVideo: attachment.isVideo, duration: attachment.audio?.duration, waveform: attachment.audio?.waveform)
         }
         let poll = pollEnabled ? ComposeDraftPoll(options: pollOptions.map(\.text), multiple: pollMultiple, endsAt: pollHasEnd ? pollEndsAt : nil) : nil
         return ComposeDraft(id: draftId, kind: kind, targetId: target?.id, targetPubkey: target?.pubkey, text: text, mentions: mentionMap, media: media, contentWarningEnabled: contentWarningEnabled, contentWarningReason: contentWarningReason, poll: poll, updatedAt: .distantPast)
@@ -152,7 +165,8 @@ final class ComposeViewModel {
         contentWarningReason = draft.contentWarningReason
         attachments = draft.media.map { item in
             let size = item.width.flatMap { w in item.height.map { CGSize(width: w, height: $0) } }
-            let attachment = ComposeAttachment(preview: nil, isVideo: item.isVideo, dimensions: size, blurhash: item.blurhash, remoteURL: item.url)
+            let audio = item.isAudio ? ComposeAudio(duration: item.duration ?? 0, waveform: item.waveform ?? []) : nil
+            let attachment = ComposeAttachment(preview: nil, isVideo: item.isVideo, dimensions: size, blurhash: item.blurhash, remoteURL: item.url, audio: audio)
             attachment.status = .uploaded(UploadedMedia(url: item.url, sha256: item.sha256, mimeType: item.mimeType, size: item.size))
             attachment.altText = item.altText
             return attachment
@@ -190,7 +204,13 @@ final class ComposeViewModel {
         if hasContent {
             var draft = draftSnapshot
             draft.updatedAt = Date()
-            DraftStore.shared.save(draft)
+            if let scheduledAt, ScheduledPostService.shared.contains(draftId) {
+                ScheduledPostService.shared.schedule(draft, at: scheduledAt)
+                DraftStore.shared.delete(draftId)
+            } else {
+                ScheduledPostService.shared.cancel(draftId)
+                DraftStore.shared.save(draft)
+            }
         } else {
             DraftStore.shared.delete(draftId)
         }
@@ -205,6 +225,22 @@ final class ComposeViewModel {
         saveTask?.cancel()
         finished = true
         DraftStore.shared.delete(draftId)
+        ScheduledPostService.shared.cancel(draftId)
+    }
+
+    var scheduledPosts: [ScheduledPost] {
+        ScheduledPostService.shared.posts.filter { $0.id != draftId }
+    }
+
+    func open(_ post: ScheduledPost) async {
+        saveDraft()
+        if post.draft.contextKey == contextKey {
+            apply(post.draft)
+            scheduledAt = post.publishAt
+            return
+        }
+        ScheduledPostService.shared.edit(post)
+        await open(post.draft)
     }
 
     func deleteDraft(_ id: String) {
@@ -355,33 +391,74 @@ final class ComposeViewModel {
         let isVideo = type?.conforms(to: .movie) == true || type?.conforms(to: .video) == true
         var mime = type?.preferredMIMEType ?? (isVideo ? "video/mp4" : "image/jpeg")
         if isVideo, mime.isEmpty { mime = "video/quicktime" }
-        let data: Data
         if isVideo {
             guard let movie = try? await item.loadTransferable(type: PickedMovie.self) else {
                 ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
                 return
             }
             defer { movie.discard() }
-            guard movie.size <= Self.maxFileSize else {
-                ToastCenter.shared.show(L("fileTooLarge"), style: .error)
-                return
-            }
-            guard let stripped = await MediaSanitizer.strippedVideo(at: movie.url, mime: mime) else {
-                ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
-                return
-            }
-            data = stripped
+            await addVideo(at: movie.url, size: movie.size, mime: mime)
         } else {
             guard let loaded = try? await item.loadTransferable(type: Data.self) else {
                 ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
                 return
             }
-            data = loaded
+            await addImage(loaded, mime: mime)
         }
+    }
+
+    func addCaptured(image: UIImage) async {
+        guard canAttach, let data = image.jpegData(compressionQuality: 0.92) else { return }
+        await addImage(data, mime: "image/jpeg")
+    }
+
+    func addCaptured(videoAt url: URL) async {
+        guard canAttach else { return }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        await addVideo(at: url, size: size, mime: "video/quicktime")
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    func addGif(_ gif: GifItem) {
+        guard canAttach, !attachments.contains(where: { $0.remoteURL == gif.url }) else { return }
+        let attachment = ComposeAttachment(preview: nil, isVideo: false, dimensions: gif.size, blurhash: gif.blurhash, remoteURL: gif.url)
+        attachment.status = .uploaded(UploadedMedia(url: gif.url, sha256: gif.sha256 ?? "", mimeType: "image/gif", size: 0))
+        attachment.altText = gif.title
+        attachments.append(attachment)
+    }
+
+    func addRecording(_ recording: VoiceRecording) async {
+        guard canAttach, let data = try? Data(contentsOf: recording.url) else {
+            ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
+            return
+        }
+        let attachment = ComposeAttachment(preview: nil, isVideo: false, dimensions: nil, audio: ComposeAudio(duration: recording.duration, waveform: recording.waveform))
+        attachment.payload = (data, "audio/mp4")
+        attachments.append(attachment)
+        try? FileManager.default.removeItem(at: recording.url)
+        await upload(attachment)
+    }
+
+    var canAttach: Bool { attachments.count < Self.maxAttachments }
+
+    private func addVideo(at url: URL, size: Int, mime: String) async {
+        guard size <= Self.maxFileSize else {
+            ToastCenter.shared.show(L("fileTooLarge"), style: .error)
+            return
+        }
+        guard let stripped = await MediaSanitizer.strippedVideo(at: url, mime: mime) else {
+            ToastCenter.shared.show(L("errorSelectingMedia"), style: .error)
+            return
+        }
+        await attach(payload: stripped, mime: mime, isVideo: true, preview: nil, dimensions: nil)
+    }
+
+    private func addImage(_ data: Data, mime: String) async {
+        var mime = mime
         var payload = data
         var preview: UIImage?
         var dimensions: CGSize?
-        if !isVideo {
+        do {
             let inputMime = mime
             let prepared = await Task.detached(priority: .userInitiated) { () -> (Data, String, UIImage?, CGSize)? in
                 guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -403,6 +480,10 @@ final class ComposeViewModel {
             }
             (payload, mime, preview, dimensions) = (prepared.0, prepared.1, prepared.2, prepared.3)
         }
+        await attach(payload: payload, mime: mime, isVideo: false, preview: preview, dimensions: dimensions)
+    }
+
+    private func attach(payload: Data, mime: String, isVideo: Bool, preview: UIImage?, dimensions: CGSize?) async {
         guard payload.count <= Self.maxFileSize else {
             ToastCenter.shared.show(L("fileTooLarge"), style: .error)
             return
@@ -430,22 +511,8 @@ final class ComposeViewModel {
         }
     }
 
-    private var contentWarningTags: [[String]] {
-        guard contentWarningEnabled else { return [] }
-        let reason = contentWarningReason.trimmingCharacters(in: .whitespacesAndNewlines)
-        return [reason.isEmpty ? ["content-warning"] : ["content-warning", reason]]
-    }
-
     func remove(_ attachment: ComposeAttachment) {
         attachments.removeAll { $0.id == attachment.id }
-    }
-
-    private func finalContent() -> String {
-        var content = text
-        for key in mentionMap.keys.sorted(by: { $0.count > $1.count }) {
-            if let value = mentionMap[key] { content = content.replacingOccurrences(of: key, with: value) }
-        }
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func post() async -> Bool {
@@ -459,35 +526,21 @@ final class ComposeViewModel {
         }
         isPosting = true
         defer { isPosting = false }
-        let uploaded = attachments.filter { $0.uploaded != nil }
-        let urls = uploaded.compactMap { $0.uploaded?.url }
-        let imeta: [[String]] = uploaded.compactMap { attachment in
-            guard let item = attachment.uploaded else { return nil }
-            var tag = ["imeta", "url \(item.url)", "m \(item.mimeType)"]
-            if !item.sha256.isEmpty { tag.append("x \(item.sha256)") }
-            if let size = attachment.dimensions { tag.append("dim \(Int(size.width))x\(Int(size.height))") }
-            if let blurhash = attachment.blurhash { tag.append("blurhash \(blurhash)") }
-            if let alt = attachment.trimmedAlt { tag.append("alt \(alt)") }
-            return tag
+        var draft = draftSnapshot
+        draft.updatedAt = Date()
+        if let scheduledAt, scheduledAt > Date() {
+            saveTask?.cancel()
+            finished = true
+            DraftStore.shared.delete(draftId)
+            ScheduledPostService.shared.schedule(draft, at: scheduledAt)
+            didPost += 1
+            ToastCenter.shared.show(L("feedScheduledFor", ["date": scheduledAt.formatted(date: .abbreviated, time: .shortened)]), style: .success)
+            return true
         }
-        let extraTags = imeta + contentWarningTags
-        let content = finalContent()
-        let service = InteractionService.shared
         do {
-            switch context {
-            case .newNote where isPollActive:
-                _ = try await service.publishPoll(question: content, options: validPollOptions, multiple: pollMultiple, endsAt: pollHasEnd ? pollEndsAt : nil, mediaUrls: urls, extraTags: extraTags)
-            case .newNote:
-                _ = try await service.publishNote(content: content, mediaUrls: urls, extraTags: extraTags)
-            case .reply(let note):
-                _ = try await service.publishReply(to: note, content: content, mediaUrls: urls, extraTags: extraTags)
-                await NoteInteractionStore.shared.markReplied(note.id)
-            case .quote(let note):
-                _ = try await service.publishQuote(of: note, content: content, mediaUrls: urls, extraTags: extraTags)
-            }
+            try await ComposePublisher.publish(draft)
             didPost += 1
             deleteDraft()
-            DataBus.shared.feedChanged()
             return true
         } catch {
             ToastCenter.shared.show("\(L("errorSharingNote")): \(coreMessage(error))", style: .error)

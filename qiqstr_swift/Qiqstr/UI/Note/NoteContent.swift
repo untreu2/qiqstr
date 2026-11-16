@@ -25,6 +25,8 @@ struct NoteImeta: Hashable, Sendable {
     var blurhash: String?
     var alt: String?
     var poster: String?
+    var duration: Double?
+    var waveform: [Int] = []
 
     var aspectRatio: CGFloat? { size.map { $0.width / $0.height } }
 
@@ -46,6 +48,8 @@ struct NoteImeta: Hashable, Sendable {
         blurhash = fields["blurhash"]?.nilIfEmpty
         alt = fields["alt"]?.nilIfEmpty
         poster = fields["image"]?.nilIfEmpty ?? fields["thumb"]?.nilIfEmpty
+        duration = fields["duration"].flatMap(Double.init)
+        waveform = (fields["waveform"] ?? "").split(separator: " ").compactMap { Int($0) }
     }
 
     static func map(_ tags: [[String]]) -> [String: NoteImeta] {
@@ -63,6 +67,7 @@ final class NoteContent {
     let segments: [NoteContentSegment]
     let truncatedSegments: [NoteContentSegment]?
     let media: [NoteMediaItem]
+    let audio: [NoteAudioItem]
     let linkUrls: [String]
     let quoteIds: [String]
     let articleIds: [String]
@@ -84,6 +89,19 @@ final class NoteContent {
                 if let hex = Nip19.pubkeyHex(from: bech), !mentions.contains(hex) { mentions.append(hex) }
             }
         }
+        var audioItems: [NoteAudioItem] = []
+        for url in parsed.linkUrls where NoteAudioItem.isAudio(url, mimeType: imeta[url]?.mimeType) && !audioItems.contains(where: { $0.url == url }) {
+            audioItems.append(NoteAudioItem(url: url, duration: imeta[url]?.duration, waveform: imeta[url]?.waveform ?? []))
+        }
+        audio = audioItems
+        if !audioItems.isEmpty {
+            let urls = Set(audioItems.map(\.url))
+            segments.removeAll { segment in
+                if case .link(let url) = segment { return urls.contains(url) }
+                return false
+            }
+            while case .text(let text)? = segments.last, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { segments.removeLast() }
+        }
         self.segments = segments
         truncatedSegments = Self.truncate(segments, limit: Self.truncationLimit)
         media = parsed.mediaUrls.map { url in
@@ -92,7 +110,7 @@ final class NoteContent {
             let isVideo = meta?.mimeType?.hasPrefix("video/") ?? (lower.hasSuffix(".mp4") || lower.hasSuffix(".mov") || lower.hasSuffix(".m4v") || lower.hasSuffix(".webm"))
             return NoteMediaItem(url: url, isVideo: isVideo, aspectRatio: meta?.aspectRatio, blurhash: meta?.blurhash, alt: meta?.alt, poster: meta?.poster)
         }
-        linkUrls = parsed.linkUrls
+        linkUrls = parsed.linkUrls.filter { url in !audioItems.contains { $0.url == url } }
         var quotes: [String] = []
         for bech in parsed.quoteIds {
             if let hex = Nip19.decode(bech), !quotes.contains(hex) { quotes.append(hex) }

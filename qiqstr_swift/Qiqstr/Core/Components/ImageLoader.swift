@@ -40,6 +40,10 @@ actor ImagePipeline {
         return image
     }
 
+    func data(for url: URL) async -> Data? {
+        await download(url)
+    }
+
     private func download(_ url: URL) async -> Data? {
         if let cached = session.configuration.urlCache?.cachedResponse(for: URLRequest(url: url))?.data { return cached }
         guard let (file, response) = try? await session.download(from: url) else { return nil }

@@ -2,7 +2,7 @@ import SwiftUI
 
 enum FollowListMode: String, Hashable { case following, followers }
 
-enum SettingsRoute: Hashable { case keys, relays, muted, display, database, eventManager, payments, language, notifications, safety, diagnostics }
+enum SettingsRoute: Hashable { case keys, relays, muted, display, database, eventManager, payments, language, notifications, safety, diagnostics, mediaServer }
 
 enum Route: Hashable {
     case profile(String)

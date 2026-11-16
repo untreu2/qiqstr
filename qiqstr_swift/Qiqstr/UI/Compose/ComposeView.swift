@@ -17,6 +17,11 @@ struct ComposeEditor: View {
     @State private var drafts = DraftStore.shared
     @State private var confirmDiscard = false
     @State private var showsDrafts = false
+    @State private var showsGifs = false
+    @State private var showsRecorder = false
+    @State private var showsCamera = false
+    @State private var showsSchedule = false
+    @State private var scheduled = ScheduledPostService.shared
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -44,6 +49,16 @@ struct ComposeEditor: View {
                     if !model.attachments.isEmpty {
                         ComposeAttachmentStrip(model: model)
                     }
+                    if let date = model.scheduledAt {
+                        Button { showsSchedule = true } label: {
+                            Label(L("feedScheduledFor", ["date": date.formatted(date: .abbreviated, time: .shortened)]), systemImage: "calendar.badge.clock")
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .padding(.leading, 52)
+                        .accessibilityIdentifier("compose-scheduled-chip")
+                    }
                     if case .quote(let note) = context {
                         NoteQuoteCard(noteId: note.id, preloaded: note)
                             .allowsHitTesting(false)
@@ -67,7 +82,7 @@ struct ComposeEditor: View {
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("compose-cancel")
                 }
-                if !model.otherDrafts.isEmpty {
+                if !model.otherDrafts.isEmpty || !model.scheduledPosts.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(L("feedDrafts"), systemImage: "tray.full") { showsDrafts = true }
                             .accessibilityIdentifier("compose-drafts")
@@ -81,7 +96,7 @@ struct ComposeEditor: View {
                         if model.isPosting {
                             ProgressView()
                         } else {
-                            Text(context == .newNote ? L("feedPost") : (model.title))
+                            Text(model.scheduledAt != nil ? L("feedScheduleAction") : context == .newNote ? L("feedPost") : (model.title))
                                 .fontWeight(.semibold)
                         }
                     }
@@ -105,11 +120,36 @@ struct ComposeEditor: View {
                 Button(L("feedKeepEditing"), role: .cancel) {}
             }
             .sheet(isPresented: $showsDrafts) {
-                ComposeDraftsSheet(drafts: model.otherDrafts, onSelect: { draft in
+                ComposeDraftsSheet(drafts: model.otherDrafts, scheduled: model.scheduledPosts, onSelect: { draft in
                     showsDrafts = false
                     Task { await model.open(draft) }
-                }, onDelete: { model.deleteDraft($0.id) })
+                }, onDelete: { model.deleteDraft($0.id) }, onSelectScheduled: { post in
+                    showsDrafts = false
+                    Task { await model.open(post) }
+                }, onDeleteScheduled: { scheduled.cancel($0.id) })
             }
+            .sheet(isPresented: $showsGifs) {
+                GifPickerSheet { model.addGif($0) }
+            }
+            .sheet(isPresented: $showsRecorder) {
+                VoiceRecorderSheet { recording in Task { await model.addRecording(recording) } }
+            }
+            .sheet(isPresented: $showsSchedule) {
+                ComposeScheduleSheet(scheduledAt: $model.scheduledAt)
+            }
+            #if os(iOS)
+            .fullScreenCover(isPresented: $showsCamera) {
+                CameraCaptureView { capture in
+                    Task {
+                        switch capture {
+                        case .image(let image): await model.addCaptured(image: image)
+                        case .video(let url): await model.addCaptured(videoAt: url)
+                        }
+                    }
+                }
+                .ignoresSafeArea()
+            }
+            #endif
         }
         .interactiveDismissDisabled(model.hasContent)
         .presentationDetents([.large])
@@ -166,35 +206,40 @@ struct ComposeEditor: View {
                 .disabled(model.attachments.count >= ComposeViewModel.maxAttachments)
                 .accessibilityLabel(L("addMediaText"))
                 .accessibilityIdentifier("compose-media")
-                Button {
-                    withAnimation(.snappy(duration: 0.25)) { model.contentWarningEnabled.toggle() }
+                #if os(iOS)
+                if CameraCapture.isAvailable {
+                    barButton("camera", label: L("feedCamera"), id: "compose-camera") { showsCamera = true }
+                        .disabled(!model.canAttach)
+                }
+                #endif
+                barButton("gift", label: L("feedGif"), id: "compose-gif", text: "GIF") { showsGifs = true }
+                    .disabled(!model.canAttach)
+                barButton("mic", label: L("voiceTitle"), id: "compose-voice") { showsRecorder = true }
+                    .disabled(!model.canAttach)
+                Menu {
+                    Toggle(isOn: Binding(get: { model.contentWarningEnabled }, set: { value in withAnimation(.snappy(duration: 0.25)) { model.contentWarningEnabled = value } })) {
+                        Label(L("feedContentWarning"), systemImage: "exclamationmark.triangle")
+                    }
+                    .accessibilityIdentifier("compose-content-warning")
+                    if model.supportsPoll {
+                        Toggle(isOn: Binding(get: { model.pollEnabled }, set: { _ in withAnimation(.snappy(duration: 0.25)) { model.togglePoll() } })) {
+                            Label(L("feedPoll"), systemImage: "chart.bar.xaxis")
+                        }
+                        .accessibilityIdentifier("compose-poll")
+                    }
+                    Button { showsSchedule = true } label: {
+                        Label(model.scheduledAt == nil ? L("feedSchedule") : L("feedScheduleChange"), systemImage: "calendar.badge.clock")
+                    }
+                    .accessibilityIdentifier("compose-schedule")
                 } label: {
-                    Image(systemName: model.contentWarningEnabled ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
-                        .foregroundStyle(model.contentWarningEnabled ? AppColors.link : AppColors.textPrimary)
-                        .contentTransition(.symbolEffect(.replace))
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(model.contentWarningEnabled || model.pollEnabled || model.scheduledAt != nil ? AppColors.link : AppColors.textPrimary)
                 }
                 .secondaryGlassStyle()
                 .buttonBorderShape(.circle)
                 .controlSize(.large)
-                .accessibilityLabel(L("feedContentWarning"))
-                .accessibilityValue(model.contentWarningEnabled ? L("feedOn") : L("feedOff"))
-                .accessibilityAddTraits(model.contentWarningEnabled ? .isSelected : [])
-                .accessibilityIdentifier("compose-content-warning")
-                if model.supportsPoll {
-                    Button {
-                        withAnimation(.snappy(duration: 0.25)) { model.togglePoll() }
-                    } label: {
-                        Image(systemName: "chart.bar.xaxis")
-                            .foregroundStyle(model.pollEnabled ? AppColors.link : AppColors.textPrimary)
-                    }
-                    .secondaryGlassStyle()
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
-                    .accessibilityLabel(L("feedPoll"))
-                    .accessibilityValue(model.pollEnabled ? L("feedOn") : L("feedOff"))
-                    .accessibilityAddTraits(model.pollEnabled ? .isSelected : [])
-                    .accessibilityIdentifier("compose-poll")
-                }
+                .accessibilityLabel(L("feedMoreOptions"))
+                .accessibilityIdentifier("compose-more")
                 if model.isUploading {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
@@ -215,6 +260,23 @@ struct ComposeEditor: View {
             .padding(.vertical, 8)
         }
         .animation(.snappy(duration: 0.2), value: model.suggestions.isEmpty)
+    }
+}
+
+extension ComposeEditor {
+    fileprivate func barButton(_ systemImage: String, label: String, id: String, text: String? = nil, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if let text {
+                Text(text).font(.footnote.weight(.bold))
+            } else {
+                Image(systemName: systemImage)
+            }
+        }
+        .secondaryGlassStyle()
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(id)
     }
 }
 
@@ -357,8 +419,20 @@ struct ComposeAttachmentTile: View {
             Group {
                 if let preview = attachment.preview {
                     Image(uiImage: preview).resizable().scaledToFill()
+                } else if let audio = attachment.audio {
+                    ZStack {
+                        Rectangle().fill(AppColors.tile)
+                        VStack(spacing: 8) {
+                            Image(systemName: "waveform").font(.title2).foregroundStyle(.secondary)
+                            Text(VoiceRecorder.format(audio.duration)).font(.footnote.weight(.semibold).monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                    }
                 } else if let url = attachment.remoteURL, !attachment.isVideo {
-                    RemoteImage(url: url, maxPixel: 300) { Rectangle().fill(AppColors.tile) }
+                    if url.lowercased().hasSuffix(".gif") {
+                        AnimatedRemoteImage(url: url, blurhash: attachment.blurhash, maxPixel: 300)
+                    } else {
+                        RemoteImage(url: url, maxPixel: 300) { Rectangle().fill(AppColors.tile) }
+                    }
                 } else {
                     ZStack {
                         Rectangle().fill(AppColors.tile)
@@ -408,7 +482,7 @@ struct ComposeAttachmentTile: View {
             .accessibilityIdentifier("compose-attachment-remove")
         }
         .overlay(alignment: .bottomLeading) {
-            if !attachment.isVideo {
+            if !attachment.isVideo, !attachment.isAudio {
                 Button(action: onEditAlt) {
                     HStack(spacing: 3) {
                         if attachment.trimmedAlt != nil {
@@ -530,28 +604,60 @@ struct ComposePollEditor: View {
 
 struct ComposeDraftsSheet: View {
     @State var drafts: [ComposeDraft]
+    @State var scheduled: [ScheduledPost] = []
     let onSelect: (ComposeDraft) -> Void
     let onDelete: (ComposeDraft) -> Void
+    var onSelectScheduled: (ScheduledPost) -> Void = { _ in }
+    var onDeleteScheduled: (ScheduledPost) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(drafts) { draft in
-                    Button { onSelect(draft) } label: { ComposeDraftRow(draft: draft) }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("compose-draft-row")
-                        .swipeActions {
-                            Button(L("delete"), systemImage: "trash", role: .destructive) {
-                                onDelete(draft)
-                                drafts.removeAll { $0.id == draft.id }
+                if !scheduled.isEmpty {
+                    Section(L("feedScheduledTitle")) {
+                        ForEach(scheduled) { post in
+                            Button { onSelectScheduled(post) } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Label(post.publishAt.formatted(date: .abbreviated, time: .shortened), systemImage: "calendar.badge.clock")
+                                        .font(.footnote.weight(.medium))
+                                        .foregroundStyle(post.lastError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(AppColors.error))
+                                    ComposeDraftRow(draft: post.draft, showsDate: false)
+                                    if let error = post.lastError {
+                                        Text(error).font(.caption).foregroundStyle(AppColors.error).lineLimit(2)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("compose-scheduled-row")
+                            .swipeActions {
+                                Button(L("delete"), systemImage: "trash", role: .destructive) {
+                                    onDeleteScheduled(post)
+                                    scheduled.removeAll { $0.id == post.id }
+                                }
                             }
                         }
+                    }
+                }
+                Section {
+                    ForEach(drafts) { draft in
+                        Button { onSelect(draft) } label: { ComposeDraftRow(draft: draft) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("compose-draft-row")
+                            .swipeActions {
+                                Button(L("delete"), systemImage: "trash", role: .destructive) {
+                                    onDelete(draft)
+                                    drafts.removeAll { $0.id == draft.id }
+                                }
+                            }
+                    }
+                } header: {
+                    if !scheduled.isEmpty, !drafts.isEmpty { Text(L("feedDrafts")) }
                 }
             }
             .listStyle(.insetGrouped)
             .overlay {
-                if drafts.isEmpty {
+                if drafts.isEmpty, scheduled.isEmpty {
                     EmptyStateView(systemImage: "tray", title: L("feedNoDrafts"))
                 }
             }
@@ -571,6 +677,7 @@ struct ComposeDraftsSheet: View {
 
 struct ComposeDraftRow: View {
     let draft: ComposeDraft
+    var showsDate = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -579,9 +686,11 @@ struct ComposeDraftRow: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Text(draft.updatedAt, format: .relative(presentation: .named))
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
+                if showsDate {
+                    Text(draft.updatedAt, format: .relative(presentation: .named))
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                }
             }
             Text(draft.preview.isEmpty ? L("feedDraftEmpty") : draft.preview)
                 .font(.body)

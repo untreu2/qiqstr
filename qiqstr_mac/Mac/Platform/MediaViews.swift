@@ -194,3 +194,25 @@ struct SelectableTextView: NSViewRepresentable {
         }
     }
 }
+
+struct AnimatedImageView: NSViewRepresentable {
+    let id: String
+    let data: Data
+
+    func makeCoordinator() -> GIFAnimator { GIFAnimator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard let layer = view.layer else { return }
+        context.coordinator.play(id: id, data: data, on: layer)
+    }
+
+    static func dismantleNSView(_ view: NSView, coordinator: GIFAnimator) {
+        coordinator.stop()
+    }
+}

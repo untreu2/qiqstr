@@ -22,6 +22,7 @@ struct DisplaySettingsView: View {
     @AppStorage("theme_preference") private var theme = ThemePreference.system.rawValue
     @AppStorage("expanded_note_mode") private var expandedNotes = false
     @AppStorage("app_language") private var language: String?
+    @State private var media = MediaPolicy.shared
 
     var body: some View {
         Form {
@@ -48,6 +49,25 @@ struct DisplaySettingsView: View {
                 .accessibilityIdentifier("display-expanded-notes")
             } footer: {
                 Text(L("settingsExpandedNotesFooter")).wrapsInFooter()
+            }
+            Section {
+                Picker(selection: $media.autoplay) {
+                    ForEach(VideoAutoplay.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                } label: {
+                    SettingsRowLabel(title: L("settingsAutoplay"), systemImage: "play.rectangle")
+                }
+                .accessibilityIdentifier("display-autoplay")
+                Toggle(isOn: $media.dataSaver) {
+                    SettingsRowLabel(title: L("settingsDataSaver"), systemImage: "antenna.radiowaves.left.and.right")
+                }
+                .tint(AppColors.switchActive)
+                .accessibilityIdentifier("display-data-saver")
+            } header: {
+                Text(L("settingsMediaSection"))
+            } footer: {
+                Text(L("settingsDataSaverFooter")).wrapsInFooter()
             }
             Section {
                 NavigationLink(value: Route.settingsPage(.language)) {

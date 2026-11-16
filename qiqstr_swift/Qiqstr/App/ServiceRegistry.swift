@@ -24,6 +24,8 @@ enum ServiceRegistry {
             ExploreService.shared.reset()
             ZapperDirectory.shared.reset()
             ExploreSafety.shared.reset()
+            ScheduledPostService.shared.reset()
+            MediaServerStore.shared.reset()
         }
         SessionHooks.onBootstrap { pubkey in
             NoteInteractionStore.shared.prepareForAccount()
@@ -41,6 +43,8 @@ enum ServiceRegistry {
             Task { await HashtagFollowService.shared.load() }
             Task { await WebOfTrustService.shared.load(for: pubkey) }
             Task { await ZapperDirectory.shared.verify(pubkey) }
+            ScheduledPostService.shared.start()
+            Task { await MediaServerStore.shared.load() }
         }
     }
 }

@@ -13,8 +13,14 @@ enum RelayConfig {
     static let indexerRelays = ["wss://purplepag.es", "wss://nostr.mom", "wss://relay.primal.net"]
     nonisolated static let primalCacheUrl = "wss://cache2.primal.net/v1"
     nonisolated static let vertexRelayUrl = "wss://relay.vertexlab.io"
-    static let blossomServer = "https://blossom.primal.net"
-    static let encryptedMediaServers = [blossomServer, "https://nostr.download"]
+    static let defaultBlossomServer = "https://blossom.primal.net"
+    static var blossomServer: String { MediaServerStore.shared.current }
+    static var encryptedMediaServers: [String] {
+        var servers = [blossomServer, defaultBlossomServer, "https://nostr.download"]
+        var seen: Set<String> = []
+        servers.removeAll { !seen.insert($0).inserted }
+        return servers
+    }
 
     static var mainRelays: [String] {
         get {

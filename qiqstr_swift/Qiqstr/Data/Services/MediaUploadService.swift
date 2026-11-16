@@ -46,6 +46,14 @@ final class MediaUploadService {
         let json = (try? JSONSerialization.jsonObject(with: body)) as? JSONObject ?? [:]
         let sha = json.str("sha256") ?? hash
         guard let remote = json.str("url") ?? (sha.isEmpty ? nil : "\(base)/\(sha)") else { throw CoreError(L("mediaUploadFailed")) }
-        return UploadedMedia(url: remote, sha256: sha, mimeType: json.str("type") ?? mimeType, size: json.int("size") == 0 ? data.count : json.int("size"))
+        return UploadedMedia(url: Self.withExtension(remote, mimeType: mimeType), sha256: sha, mimeType: mimeType, size: json.int("size") == 0 ? data.count : json.int("size"))
+    }
+
+    private static let extensions = ["image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "video/mp4": "mp4", "video/quicktime": "mov", "audio/mp4": "m4a"]
+
+    static func withExtension(_ url: String, mimeType: String) -> String {
+        guard let ext = extensions[mimeType], var components = URLComponents(string: url), (components.path as NSString).pathExtension.isEmpty, !components.path.hasSuffix("/") else { return url }
+        components.path += ".\(ext)"
+        return components.string ?? url
     }
 }

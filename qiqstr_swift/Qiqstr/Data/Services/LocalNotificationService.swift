@@ -56,6 +56,7 @@ private struct ActivityItem {
     var kind: Kind
     var actor: String
     var target: String?
+    var root: String?
     var content: String
     var createdAt: Int
     var sats: Int
@@ -83,6 +84,7 @@ private struct ActivityItem {
             let threadTags = eventTags.filter { $0.count < 4 || $0[3] != "mention" }
             kind = threadTags.isEmpty ? .mention : .reply
             target = (threadTags.first { $0.count > 3 && $0[3] == "root" } ?? threadTags.first)?[1]
+            root = target ?? id
         case 6:
             kind = .repost
             target = eventTags.first?[1]
@@ -266,6 +268,7 @@ final class LocalNotificationService: NSObject {
 
     func shouldBadge(_ event: JSONObject, me: String) -> Bool {
         guard let item = ActivityItem(event: event, me: me), item.actor != me, accepts(item.actor, muted: mutedPubkeys) else { return false }
+        if MuteService.shared.hidesNotification(target: item.target, root: item.root) { return false }
         if NoteInteractionStore.shared.isDeleted(item.id) || item.target.map(NoteInteractionStore.shared.isDeleted) == true { return false }
         guard item.kind == .reply || item.kind == .mention else { return true }
         let text = item.content.lowercased()
@@ -279,6 +282,7 @@ final class LocalNotificationService: NSObject {
             .compactMap { ActivityItem(event: $0, me: me) }
             .filter { item in
                 guard item.createdAt > since, item.type.isEnabled, accepts(item.actor, muted: muted) else { return false }
+                if MuteService.shared.hidesNotification(target: item.target, root: item.root) { return false }
                 if item.kind == .reply || item.kind == .mention {
                     let text = item.content.lowercased()
                     if words.contains(where: text.contains) { return false }

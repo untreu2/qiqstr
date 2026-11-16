@@ -67,7 +67,9 @@ struct NoteMediaGridView: View {
         let item = images[index]
         return NoteMediaImage(item: item, maxPixel: 1100)
             .contentShape(Rectangle())
-            .onTapGesture { viewer = NotePhotoSelection(index: index) }
+            .onTapGesture {
+                if MediaPolicy.shared.loads(item.url) { viewer = NotePhotoSelection(index: index) } else { MediaPolicy.shared.allow(item.url) }
+            }
             .accessibilityElement()
             .accessibilityLabel(item.alt ?? L("photos"))
             .accessibilityAddTraits([.isButton, .isImage])
@@ -84,19 +86,27 @@ struct NoteMediaImage: View {
     let item: NoteMediaItem
     var maxPixel: CGFloat = 1100
     @State private var image: UIImage?
+    @State private var animation: Data?
+    @State private var policy = MediaPolicy.shared
 
     var body: some View {
+        let loads = policy.loads(item.url)
         Color.clear
             .overlay {
-                if let image {
+                if let animation {
+                    AnimatedImageView(id: item.url, data: animation)
+                } else if let image {
                     Image(uiImage: image).resizable().scaledToFill().transition(.opacity)
                 } else {
                     NoteMediaPlaceholder(blurhash: item.blurhash)
+                    if !loads { MediaTapToLoadBadge() }
                 }
             }
             .clipped()
-            .task(id: item.url) {
+            .task(id: "\(item.url)|\(loads)") {
                 image = nil
+                animation = nil
+                guard loads else { return }
                 guard let url = URL(string: item.url), url.scheme?.hasPrefix("http") == true else { return }
                 let start = ContinuousClock.now
                 let loaded = await ImagePipeline.shared.image(for: url, maxPixel: maxPixel)
@@ -105,7 +115,21 @@ struct NoteMediaImage: View {
                 } else {
                     withAnimation(.easeOut(duration: 0.2)) { image = loaded }
                 }
+                guard item.isGIF, !Task.isCancelled else { return }
+                animation = await ImagePipeline.shared.data(for: url)
             }
+    }
+}
+
+struct MediaTapToLoadBadge: View {
+    var body: some View {
+        Label(L("mediaTapToLoad"), systemImage: "arrow.down.circle")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.black.opacity(0.55), in: .capsule)
+            .accessibilityIdentifier("media-tap-to-load")
     }
 }
 
@@ -332,6 +356,8 @@ struct NoteVideoView: View {
     @State private var duration: Double?
     @State private var isPlaying = false
     @State private var isMuted = true
+    @State private var policy = MediaPolicy.shared
+    @State private var autoplayed = false
 
     var body: some View {
         ZStack {
@@ -380,6 +406,16 @@ struct NoteVideoView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: 460, alignment: .leading)
+        .onScrollVisibilityChange(threshold: 0.7) { visible in
+            if visible {
+                guard policy.autoplaysVideo, player == nil, !autoplayed else { return }
+                autoplayed = true
+                play()
+            } else if isPlaying, player?.isExternallyPresented != true {
+                player?.pause()
+                isPlaying = false
+            }
+        }
         .onDisappear {
             guard player?.isExternallyPresented != true else { return }
             player?.pause()
@@ -393,7 +429,8 @@ struct NoteVideoView: View {
             player?.seek(to: .zero)
             isPlaying = false
         }
-        .task(id: url) {
+        .task(id: "\(url)|\(policy.loads(url))") {
+            guard policy.loads(url) else { return }
             guard thumbnail == nil, let u = URL(string: url) else { return }
             if let poster, let p = URL(string: poster), let image = await ImagePipeline.shared.image(for: p, maxPixel: 900) {
                 withAnimation(.easeOut(duration: 0.2)) { thumbnail = image }
@@ -455,6 +492,7 @@ struct NoteVideoView: View {
     }
 
     private func play() {
+        policy.allow(url)
         if let player {
             player.play()
             isPlaying = true

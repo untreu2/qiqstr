@@ -9,6 +9,7 @@ struct FeedView: View {
     @State private var isManagingTopics = false
     @State private var explore = ExploreService.shared
     @State private var follows = FollowService.shared
+    @State private var mutes = MuteService.shared
 
     init(model: FeedViewModel? = nil) {
         _model = State(initialValue: model ?? FeedViewModel())
@@ -48,6 +49,8 @@ struct FeedView: View {
         .task(id: bus.interactionVersion) { if bus.interactionVersion > 0 { store.refreshAll() } }
         .onChange(of: session.mutedPubkeys) { model.refilter() }
         .onChange(of: session.mutedWords) { model.refilter() }
+        .onChange(of: mutes.mutedHashtags) { model.refilter() }
+        .onChange(of: mutes.mutedThreads) { model.refilter() }
         .onChange(of: store.deletedIds) { model.refilter() }
         .onChange(of: model.notes.isEmpty) { _, empty in if empty { Router.shared.expandTabBar() } }
         .onChange(of: hashtags.tags) { model.topicsChanged() }
@@ -108,6 +111,14 @@ struct FeedView: View {
             }
             Button(L("feedManageTopics"), systemImage: "number") { isManagingTopics = true }
                 .accessibilityIdentifier("feed-manage-topics")
+        }
+        if model.hasNoteFilters {
+            Section(L("feedShowSection")) {
+                Toggle(L("feedShowReplies"), systemImage: "bubble.left.and.bubble.right", isOn: $model.showReplies)
+                    .accessibilityIdentifier("feed-show-replies")
+                Toggle(L("feedShowReposts"), systemImage: "arrow.2.squarepath", isOn: $model.showReposts)
+                    .accessibilityIdentifier("feed-show-reposts")
+            }
         }
         if !model.source.isTopicFeed && !model.source.isCurated {
             Section(L("sortBy")) {

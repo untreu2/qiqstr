@@ -7,7 +7,9 @@
 	<key>ATSApplicationFontsPath</key>
 	<string>.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>qiqstr uses the camera to scan QR codes for keys, invoices and wallet connections.</string>
+	<string>qiqstr uses the camera to scan QR codes and to take photos and videos for your posts.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>qiqstr uses the microphone to record voice messages and the sound of videos you take.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>qiqstr needs access to your photos to attach media to notes and messages.</string>
 	<key>CFBundleURLTypes</key>

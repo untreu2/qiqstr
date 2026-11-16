@@ -16,6 +16,7 @@ struct SettingsPageView: View {
         case .notifications: NotificationSettingsView()
         case .safety: SafetySettingsView()
         case .diagnostics: DiagnosticsView()
+        case .mediaServer: MediaServerSettingsView()
         }
     }
 }

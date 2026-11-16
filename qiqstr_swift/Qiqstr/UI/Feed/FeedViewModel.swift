@@ -69,6 +69,20 @@ final class FeedViewModel {
             resetForContextChange()
         }
     }
+    var showReplies: Bool {
+        didSet {
+            guard showReplies != oldValue else { return }
+            UserDefaults.standard.set(showReplies, forKey: "feed_show_replies")
+            resetForContextChange()
+        }
+    }
+    var showReposts: Bool {
+        didSet {
+            guard showReposts != oldValue else { return }
+            UserDefaults.standard.set(showReposts, forKey: "feed_show_reposts")
+            resetForContextChange()
+        }
+    }
     var includeTopics: Bool {
         didSet {
             guard includeTopics != oldValue else { return }
@@ -93,7 +107,11 @@ final class FeedViewModel {
     init() {
         sort = FeedSortMode(rawValue: UserDefaults.standard.string(forKey: "feed_sort_mode") ?? "") ?? .latest
         includeTopics = UserDefaults.standard.bool(forKey: "feed_include_topics")
+        showReplies = UserDefaults.standard.bool(forKey: "feed_show_replies")
+        showReposts = UserDefaults.standard.object(forKey: "feed_show_reposts") as? Bool ?? true
     }
+
+    var hasNoteFilters: Bool { !source.isCurated && !source.isTopicFeed }
 
     private var authors: [String]? {
         if case .list(let set) = source { return set.pubkeys }
@@ -116,7 +134,7 @@ final class FeedViewModel {
         if case .discover(let feed) = source { return await discoverNotes(feed, force: false) }
         let topics = activeTopics
         if source.isTopicFeed { return await Self.topicNotes(topics, limit: limit, includeReplies: true) }
-        let home = await NoteRepository.feed(authors: authors, limit: limit, sort: sort)
+        let home = await NoteRepository.feed(authors: authors, limit: limit, sort: sort, showReplies: showReplies)
         guard !topics.isEmpty else { return home }
         let extra = await Self.topicNotes(topics, limit: limit, includeReplies: false)
         return Self.interleave(home, extra, limit: limit, sort: sort)
@@ -308,9 +326,13 @@ final class FeedViewModel {
         let mutedPubkeys = Set(Session.shared.mutedPubkeys)
         let words = Session.shared.mutedWords.map { $0.lowercased() }.filter { !$0.isEmpty }
         let deleted = store.deletedIds
+        let mutes = MuteService.shared
+        let hidesReposts = hasNoteFilters && !showReposts
         var seen: Set<String> = []
         return list.filter { note in
             guard !deleted.contains(note.id), seen.insert(note.listId).inserted else { return false }
+            if hidesReposts, note.isRepost { return false }
+            if mutes.hides(note), !isSelectedTopic(note) { return false }
             if mutedPubkeys.contains(note.pubkey) { return false }
             if let r = note.repostedBy, mutedPubkeys.contains(r) { return false }
             if !words.isEmpty {
@@ -319,6 +341,11 @@ final class FeedViewModel {
             }
             return true
         }
+    }
+
+    private func isSelectedTopic(_ note: Note) -> Bool {
+        guard case .topic(let tag) = source else { return false }
+        return !MuteService.shared.isThreadMuted(note.rootId ?? note.id) && note.hashtags.contains { $0.lowercased() == tag.lowercased() }
     }
 
     func refilter() {

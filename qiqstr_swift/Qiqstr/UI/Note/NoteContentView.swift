@@ -34,7 +34,10 @@ struct NoteContentView: View {
             if !content.media.isEmpty {
                 NoteMediaGridView(media: content.media)
             }
-            if let link = content.previewLink {
+            ForEach(content.audio) { item in
+                NoteAudioView(item: item)
+            }
+            if let link = content.previewLink, !MediaPolicy.shared.defersMedia {
                 NoteLinkPreviewView(url: link)
             }
             ForEach(content.quoteIds, id: \.self) { id in

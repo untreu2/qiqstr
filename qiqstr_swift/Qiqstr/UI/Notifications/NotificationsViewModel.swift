@@ -64,6 +64,7 @@ final class NotificationsViewModel {
     var revealsHidden = false
 
     private var olderIds: Set<String> = []
+    private var mutedThreadItems: Set<String> = []
     private var didInitialSync = false
     private static let liveLimit: UInt32 = 200
     private static let pageSize: UInt32 = 100
@@ -75,7 +76,7 @@ final class NotificationsViewModel {
         let merged = live + older.filter { !liveIds.contains($0.id) }
         let hidden = NoteInteractionStore.shared.deletedIds
         return merged
-            .filter { $0.fromPubkey != me && $0.kind != .unknown && !hidden.contains($0.id) && !hidden.contains($0.targetNoteId ?? "") }
+            .filter { $0.fromPubkey != me && $0.kind != .unknown && !hidden.contains($0.id) && !hidden.contains($0.targetNoteId ?? "") && !mutedThreadItems.contains($0.id) }
             .sorted { $0.createdAt > $1.createdAt }
     }
 
@@ -115,6 +116,7 @@ final class NotificationsViewModel {
             if !isLoaded { errorMessage = coreErrorMessage(error) }
         }
         isLoaded = true
+        await applyMutedThreads()
         await ProfileCache.shared.load(Array(Set(all.map(\.fromPubkey))))
         if !didInitialSync {
             didInitialSync = true
@@ -125,6 +127,20 @@ final class NotificationsViewModel {
     func refresh() async {
         await SyncService.shared.syncNotifications(force: true)
         await reload()
+    }
+
+    func applyMutedThreads() async {
+        let mutes = MuteService.shared
+        guard !mutes.mutedThreads.isEmpty else {
+            if !mutedThreadItems.isEmpty { mutedThreadItems = [] }
+            return
+        }
+        let items = live + older
+        let ids = Array(Set(items.flatMap { [$0.id, $0.targetNoteId ?? ""] }.filter { $0.count == 64 }))
+        let roots = Dictionary(await NoteRepository.notes(ids).map { ($0.id, $0.rootId ?? $0.id) }, uniquingKeysWith: { first, _ in first })
+        mutedThreadItems = Set(items.filter { item in
+            [item.id, item.targetNoteId ?? ""].contains { id in mutes.isThreadMuted(id) || roots[id].map(mutes.isThreadMuted) == true }
+        }.map(\.id))
     }
 
     func loadMoreIfNeeded(_ group: NotificationGroup) async {

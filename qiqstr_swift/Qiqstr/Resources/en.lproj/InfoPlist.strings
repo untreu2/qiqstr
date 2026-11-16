@@ -1,4 +1,5 @@
-"NSCameraUsageDescription" = "qiqstr uses the camera to scan QR codes for keys, invoices and wallet connections.";
+"NSCameraUsageDescription" = "qiqstr uses the camera to scan QR codes and to take photos and videos for your posts.";
 "NSPhotoLibraryUsageDescription" = "qiqstr needs access to your photos to attach media to notes and messages.";
 "NSPhotoLibraryAddUsageDescription" = "qiqstr saves photos and videos you choose to keep to your photo library.";
 "NSFaceIDUsageDescription" = "qiqstr uses Face ID to protect access to your private keys.";
+"NSMicrophoneUsageDescription" = "qiqstr uses the microphone to record voice messages and the sound of videos you take.";

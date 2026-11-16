@@ -10,9 +10,11 @@ enum BackgroundRefresh {
     private static var launchTask: Task<Void, Never>?
 
     static func schedule() {
-        guard LocalNotificationService.shared.isEnabled else { return }
+        let nextPost = ScheduledPostService.shared.nextDue
+        guard LocalNotificationService.shared.isEnabled || nextPost != nil else { return }
         let request = BGAppRefreshTaskRequest(identifier: identifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: interval)
+        let delay = nextPost.map { min(interval, max(60, $0.timeIntervalSinceNow)) } ?? interval
+        request.earliestBeginDate = Date(timeIntervalSinceNow: delay)
         try? BGTaskScheduler.shared.submit(request)
     }
 
@@ -38,10 +40,21 @@ enum BackgroundRefresh {
         }
     }
 
+    private static func publishScheduledPosts() async {
+        guard Session.shared.phase == .ready, ScheduledPostService.shared.nextDue.map({ $0 <= Date() }) == true else { return }
+        for _ in 0..<10 {
+            if await SyncService.shared.hasConnectedRelays() { break }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        await ScheduledPostService.shared.publishDue()
+        schedule()
+    }
+
     private static func refresh() async {
+        await launchSession()
+        await publishScheduledPosts()
         let service = LocalNotificationService.shared
         guard service.isEnabled else { return }
-        await launchSession()
         await service.refreshStatus()
         guard !Task.isCancelled, service.isAuthorized, Session.shared.phase == .ready, let me = Session.shared.pubkey else { return }
         await service.checkForNewActivity(me: me)
