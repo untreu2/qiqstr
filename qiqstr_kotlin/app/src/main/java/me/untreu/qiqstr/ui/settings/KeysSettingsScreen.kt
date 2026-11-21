@@ -70,7 +70,7 @@ class KeysSettingsModel : ViewModel() {
         private set
     var mnemonic by mutableStateOf<String?>(null)
         private set
-    var privateKeyHex by mutableStateOf<String?>(null)
+    var canBackUp by mutableStateOf(false)
         private set
     var revealed by mutableStateOf<Set<SettingsSecretKind>>(emptySet())
         private set
@@ -84,11 +84,17 @@ class KeysSettingsModel : ViewModel() {
     private var authenticatedAt: Long? = null
 
     fun load() {
-        val account = Session.account
-        npub = account?.npub ?: ""
-        privateKeyHex = account?.signingKey
-        nsec = account?.signingKey?.let { Nip19.nsec(it) }
-        mnemonic = account?.mnemonic?.ifEmpty { null }
+        npub = Session.npub ?: ""
+        canBackUp = Session.canSign
+        nsec = Session.revealSigningKey()?.let { Nip19.nsec(it) }
+        mnemonic = Session.revealMnemonic()
+    }
+
+    fun forget() {
+        nsec = null
+        mnemonic = null
+        revealed = emptySet()
+        pendingCopy = null
     }
 
     fun isRevealed(kind: SettingsSecretKind) = kind in revealed
@@ -172,7 +178,10 @@ fun KeysSettingsScreen() {
             }
         }
         lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycle.removeObserver(observer)
+            model.forget()
+        }
     }
 
     fun authenticate(reason: String = L("keysAuthenticateReason"), then: () -> Unit) {
@@ -233,10 +242,10 @@ fun KeysSettingsScreen() {
                 Text(L("notAvailable"), color = AppColors.textSecondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
         }
-        if (model.privateKeyHex != null) {
+        if (model.canBackUp) {
             settingsSection("backup", L("keysBackupHeader"), footer = L("keysBackupFooter")) {
                 SettingsRow(L("keysBackupCreate"), Icons.Outlined.EnhancedEncryption, modifier = Modifier.testTag("keys-backup-create")) {
-                    if (model.privateKeyHex != null) authenticate(L("keysBackupAuthenticateReason")) { model.isBackupPresented = true }
+                    if (model.canBackUp) authenticate(L("keysBackupAuthenticateReason")) { model.isBackupPresented = true }
                 }
             }
         }
@@ -272,8 +281,7 @@ fun KeysSettingsScreen() {
         }
     }
 
-    val key = model.privateKeyHex
-    if (model.isBackupPresented && key != null) KeysBackupSheet(key) { model.isBackupPresented = false }
+    if (model.isBackupPresented && model.canBackUp) KeysBackupSheet { model.isBackupPresented = false }
     if (model.pendingCopy != null) {
         AlertDialog(
             onDismissRequest = { model.pendingCopy = null },

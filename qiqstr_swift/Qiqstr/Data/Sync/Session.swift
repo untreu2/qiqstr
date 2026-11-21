@@ -16,18 +16,28 @@ final class Session {
     static let shared = Session()
 
     private(set) var phase: SessionPhase = .launching
-    private(set) var account: StoredAccount?
-    private(set) var accounts: [StoredAccount] = []
+    private(set) var account: Account?
+    private(set) var accounts: [Account] = []
     private(set) var generation = 0
     var mutedPubkeys: [String] = []
     var mutedWords: [String] = []
     var isNewAccount = false
 
     var pubkey: String? { account?.pubkeyHex }
-    var privateKey: String? { account?.signingKey }
     var npub: String? { account?.npub }
     var isReadOnly: Bool { account?.isReadOnly ?? false }
-    var canSign: Bool { privateKey != nil }
+    var canSign: Bool {
+        guard let account, !account.isReadOnly else { return false }
+        return (try? sessionPublicKey()) == account.pubkeyHex
+    }
+
+    func revealSigningKey() -> String? {
+        account.flatMap { store.signingKey(for: $0.npub) }
+    }
+
+    func revealMnemonic() -> String? {
+        account.flatMap { store.mnemonic(for: $0.npub) }
+    }
 
     private let store = AccountStore.shared
 
@@ -66,7 +76,7 @@ final class Session {
     }
 
     func login(_ input: String) async throws {
-        let account: StoredAccount
+        let account: Account
         if Nip05Resolver.looksLikeAddress(input) {
             let identity = try await Nip05Resolver.resolve(input)
             account = try store.storeReadOnly(pubkeyHex: identity.pubkey)
@@ -80,7 +90,7 @@ final class Session {
     func addKey(_ input: String) async throws {
         guard let current = account, current.isReadOnly else { return }
         let upgraded = try store.upgrade(npub: current.npub, input: input)
-        guard let key = upgraded.signingKey else { throw AuthError.invalidKey }
+        guard let key = store.signingKey(for: upgraded.npub) else { throw AuthError.invalidKey }
         try await updateSigner(privateKeyHex: key)
         account = upgraded
         refreshAccounts()
@@ -90,16 +100,14 @@ final class Session {
         DataBus.shared.everythingChanged()
     }
 
-    @discardableResult
-    func requireSigner() throws -> String {
-        guard let key = privateKey else {
-            if account != nil { ReadOnlyGate.shared.present() }
+    func requireSigner() throws {
+        guard canSign else {
+            if account?.isReadOnly == true { ReadOnlyGate.shared.present() }
             throw ReadOnlyError.signerRequired
         }
-        return key
     }
 
-    func createAccount() async throws -> StoredAccount {
+    func createAccount() async throws -> Account {
         let account = try store.createAccount()
         isNewAccount = true
         await start(account)
@@ -166,7 +174,7 @@ final class Session {
         NotificationBadge.shared.reset()
     }
 
-    private func start(_ account: StoredAccount) async {
+    private func start(_ account: Account) async {
         await teardown()
         let generation = self.generation
         self.account = account
@@ -174,7 +182,7 @@ final class Session {
         phase = .starting
         do {
             try FileManager.default.createDirectory(at: RelayConfig.databaseURL, withIntermediateDirectories: true)
-            try await initClient(relayUrls: RelayConfig.mainRelays, privateKeyHex: account.signingKey, dbPath: RelayConfig.databaseURL.path, discoveryRelays: RelayConfig.discoveryRelays)
+            try await initClient(relayUrls: RelayConfig.mainRelays, privateKeyHex: store.signingKey(for: account.npub), dbPath: RelayConfig.databaseURL.path, discoveryRelays: RelayConfig.discoveryRelays)
             await applyRelayFlags()
             Task.detached { try? await connectRelays() }
         } catch {

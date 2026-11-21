@@ -2,13 +2,11 @@ package me.untreu.qiqstr.data.services
 
 import android.net.Uri
 import androidx.compose.runtime.Immutable
-import com.qiqstr.core.createDeletionEvent
-import com.qiqstr.core.createNoteEvent
-import com.qiqstr.core.createQuoteEvent
-import com.qiqstr.core.createReactionEvent
-import com.qiqstr.core.createReplyEvent
-import com.qiqstr.core.createRepostEvent
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signRepostEvent
+import com.qiqstr.core.signReactionEvent
+import com.qiqstr.core.signQuoteEvent
+import com.qiqstr.core.signEvent
+import com.qiqstr.core.signDeletionEvent
 import com.qiqstr.core.dbDeleteEventsByIds
 import com.qiqstr.core.dbGetBatchInteractionData
 import com.qiqstr.core.dbGetDetailedInteractions
@@ -104,44 +102,44 @@ enum class NoteReportReason(val raw: String) {
 }
 
 object InteractionService {
-    private fun signingKey(): String = Session.requireSigner()
+    private fun requireSigner() = Session.requireSigner()
 
     private suspend fun primaryRelay(): String =
         runCatching { getRelayList() }.getOrNull()?.firstOrNull() ?: RelayConfig.mainRelays.firstOrNull() ?: ""
 
     suspend fun react(note: Note, content: String = "+", emoji: CustomEmoji? = null) {
-        val key = signingKey()
+        requireSigner()
         val relay = primaryRelay()
-        val event = if (emoji != null) createSignedEvent(7u.toUShort(), emoji.token, listOf(listOf("e", note.id, relay, note.pubkey), listOf("p", note.pubkey, relay), listOf("k", note.kind.toString()), listOf("emoji", emoji.shortcode, emoji.url)), key) else createReactionEvent(note.id, note.pubkey, content, key, relay, note.kind.toUShort())
+        val event = if (emoji != null) signEvent(7u.toUShort(), emoji.token, listOf(listOf("e", note.id, relay, note.pubkey), listOf("p", note.pubkey, relay), listOf("k", note.kind.toString()), listOf("emoji", emoji.shortcode, emoji.url))) else signReactionEvent(note.id, note.pubkey, content, relay, note.kind.toUShort())
         SyncService.publish(event)
     }
 
     suspend fun unreact(note: Note) {
-        val key = signingKey()
+        requireSigner()
         val me = Session.pubkey ?: return
         val ids = ownEvents(listOf(7), me, note.id) { event ->
             event.tags().lastOrNull { it.size > 1 && it[0] == "e" }?.get(1) == note.id
         }
         if (ids.isEmpty()) throw CoreError(L("eventNotFound"))
-        publishDeletion(ids, key)
+        publishDeletion(ids)
     }
 
     suspend fun repost(note: Note) {
-        val key = signingKey()
+        requireSigner()
         val relay = primaryRelay()
         val original = runCatching { dbGetEvent(note.id) }.getOrNull()
-        val event = createRepostEvent(note.id, note.pubkey, original ?: "", key, relay)
+        val event = signRepostEvent(note.id, note.pubkey, original ?: "", relay)
         SyncService.publish(event)
     }
 
     suspend fun undoRepost(note: Note) {
-        val key = signingKey()
+        requireSigner()
         val me = Session.pubkey ?: return
         val ids = ownEvents(listOf(6, 16), me, note.id) { event ->
             event.tags().any { it.size > 1 && it[0] == "e" && it[1] == note.id }
         }
         if (ids.isEmpty()) throw CoreError(L("eventNotFound"))
-        publishDeletion(ids, key)
+        publishDeletion(ids)
     }
 
     private suspend fun ownEvents(kinds: List<Int>, me: String, target: String, matching: (JSONObject) -> Boolean): List<String> {
@@ -155,12 +153,12 @@ object InteractionService {
     }
 
     suspend fun delete(note: Note) {
-        val key = signingKey()
-        publishDeletion(listOf(note.id), key)
+        requireSigner()
+        publishDeletion(listOf(note.id))
     }
 
-    private suspend fun publishDeletion(ids: List<String>, key: String) {
-        val event = createDeletionEvent(ids, "", key)
+    private suspend fun publishDeletion(ids: List<String>) {
+        val event = signDeletionEvent(ids, "")
         SyncService.publish(event)
         runCatching { dbDeleteEventsByIds(ids) }
         DataBus.feedChanged()
@@ -168,15 +166,15 @@ object InteractionService {
     }
 
     suspend fun publishNote(content: String, mediaUrls: List<String>, extraTags: List<List<String>> = emptyList()): String {
-        val key = signingKey()
+        requireSigner()
         val body = composeContent(content, mediaUrls)
         val tags = merge(contentTags(body, mediaUrls), extraTags)
-        val event = createNoteEvent(body, tags, key)
+        val event = signEvent(1u, body, tags)
         return publishReturningId(event)
     }
 
     suspend fun publishReply(note: Note, content: String, mediaUrls: List<String>, extraTags: List<List<String>> = emptyList()): String {
-        val key = signingKey()
+        requireSigner()
         val me = Session.pubkey ?: ""
         val body = composeContent(content, mediaUrls)
         val rootId = note.rootId ?: note.parentId ?: note.id
@@ -195,12 +193,12 @@ object InteractionService {
         if (seen.isEmpty() && note.pubkey.isNotEmpty()) tags.add(listOf("p", note.pubkey))
         val extra = contentTags(body, mediaUrls).filter { it.firstOrNull() != "p" || (if (it.size > 1) it[1] else "") !in seen }
         tags = merge(tags, extra + extraTags.filter { it.firstOrNull() != "e" }).toMutableList()
-        val event = createReplyEvent(body, tags, key)
+        val event = signEvent(1u, body, tags)
         return publishReturningId(event)
     }
 
     suspend fun publishQuote(note: Note, content: String, mediaUrls: List<String>, extraTags: List<List<String>> = emptyList()): String {
-        val key = signingKey()
+        requireSigner()
         val reference = Nip19.nevent(note.id, note.pubkey) ?: Nip19.note(note.id) ?: note.id
         val text = composeContent(content, mediaUrls)
         val body = if (text.isEmpty()) "nostr:$reference" else "$text\nnostr:$reference"
@@ -210,7 +208,7 @@ object InteractionService {
             if (first == "q") return@filter false
             !(first == "p" && tag.size > 1 && tag[1] == note.pubkey)
         }
-        val event = createQuoteEvent(body, note.id, note.pubkey, relay, key, additional)
+        val event = signQuoteEvent(body, note.id, note.pubkey, relay, additional)
         return publishReturningId(event)
     }
 
@@ -222,7 +220,7 @@ object InteractionService {
         mediaUrls: List<String>,
         extraTags: List<List<String>> = emptyList(),
     ): String {
-        val key = signingKey()
+        requireSigner()
         val body = composeContent(question, mediaUrls)
         var tags: List<List<String>> = options.map { listOf("option", pollOptionId(), it) }
         tags = tags + listOf(listOf("polltype", if (multiple) "multiplechoice" else "singlechoice"))
@@ -230,29 +228,29 @@ object InteractionService {
         val relays = runCatching { getRelayList() }.getOrNull() ?: RelayConfig.mainRelays
         tags = tags + relays.take(3).filter { it.startsWith("wss://") }.map { listOf("relay", it) }
         tags = merge(tags, contentTags(body, mediaUrls) + extraTags)
-        val event = createSignedEvent(NotePoll.KIND.toUShort(), body, tags, key)
+        val event = signEvent(NotePoll.KIND.toUShort(), body, tags)
         return publishReturningId(event)
     }
 
     suspend fun publishGoal(description: String, amountSats: Long, closesAt: Long?, mediaUrls: List<String>, extraTags: List<List<String>> = emptyList()) {
-        val key = signingKey()
+        requireSigner()
         val msats = me.untreu.qiqstr.ui.wallet.SatsAmount.msat(amountSats) ?: throw CoreError(L("enterValidAmount"))
         val relays = runCatching { getRelayList() }.getOrDefault(RelayConfig.mainRelays).filter { it.startsWith("wss://") }.take(5)
         val tags = mutableListOf(listOf("amount", msats.toString()), listOf("relays") + relays)
         if (closesAt != null) tags.add(listOf("closed_at", closesAt.toString()))
         val body = composeContent(description, mediaUrls)
-        val goal = SyncService.publish(createSignedEvent(9041u.toUShort(), body, merge(tags, contentTags(body, mediaUrls) + extraTags), key))
+        val goal = SyncService.publish(signEvent(9041u.toUShort(), body, merge(tags, contentTags(body, mediaUrls) + extraTags)))
         val id = goal.str("id") ?: return
         val me = Session.pubkey ?: return
         val reference = Nip19.nevent(id, me) ?: Nip19.note(id) ?: return
-        val announcement = createQuoteEvent("$body\nnostr:$reference", id, me, primaryRelay(), key, merge(contentTags(body, mediaUrls), extraTags).filter { it.firstOrNull() != "q" })
+        val announcement = signQuoteEvent("$body\nnostr:$reference", id, me, primaryRelay(), merge(contentTags(body, mediaUrls), extraTags).filter { it.firstOrNull() != "q" })
         SyncService.publish(announcement)
     }
 
     suspend fun publishPollResponse(pollId: String, optionIds: List<String>, relays: List<String>) {
-        val key = signingKey()
+        requireSigner()
         val tags = listOf(listOf("e", pollId)) + optionIds.map { listOf("response", it) }
-        val event = createSignedEvent(NotePoll.RESPONSE_KIND.toUShort(), "", tags, key)
+        val event = signEvent(NotePoll.RESPONSE_KIND.toUShort(), "", tags)
         if (relays.isNotEmpty() && runCatching { SyncService.publish(event, relays) }.isSuccess) return
         SyncService.publish(event)
     }
@@ -263,10 +261,10 @@ object InteractionService {
     }
 
     suspend fun report(pubkey: String, noteId: String?, reason: String) {
-        val key = signingKey()
+        requireSigner()
         val tags = mutableListOf(listOf("p", pubkey, reason))
         if (!noteId.isNullOrEmpty()) tags.add(listOf("e", noteId, reason))
-        val event = createSignedEvent(1984u.toUShort(), "", tags, key)
+        val event = signEvent(1984u.toUShort(), "", tags)
         SyncService.publish(event)
     }
 

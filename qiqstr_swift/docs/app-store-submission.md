@@ -56,8 +56,7 @@ Everything else from the November 2026 audit is fixed. What is left needs an ups
   - `libsqlite3-sys` 0.28 (CVE-2026-119375, `-wal` file with a different page size). The attacker would need to write files into the app container. The fixed release also bundles an affected SQLCipher, and `cdk-sqlite` 0.18 still requires `rusqlite` 0.31.
   - `libcrux-*` 0.0.x. Only `libcrux-sha3` is compiled, through `hpke-rs`, and only its one-shot SHAKE is called. The affected incremental squeeze and AVX2 code is never used. The other `libcrux` crates are in `Cargo.lock` but not built.
   - `crypto-bigint` 0.5, through `elliptic-curve` 0.13 used by OpenMLS. This is a timing side channel; the fix needs the `elliptic-curve` 0.14 ecosystem.
-  - `lru` 0.16 and the unmaintained `nostr-relay-pool` 0.44. `nostr-sdk` 0.45 fixes both, but `mdk-core` 0.8 (messages) still requires `nostr` 0.44. The `lru` bug needs a key whose destructor panics, and nostr keys never do.
-  - Upgrade when `mdk-core` moves to `nostr` 0.45.
+  - `lru` 0.16 and the unmaintained `nostr-relay-pool` 0.44 are gone: the core no longer depends on `nostr-sdk`.
 
 ## How the audit fixes behave
 

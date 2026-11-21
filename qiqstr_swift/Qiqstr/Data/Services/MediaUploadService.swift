@@ -25,10 +25,10 @@ final class MediaUploadService {
 
     func uploadMedia(data: Data, mimeType: String, server: String? = nil) async throws -> UploadedMedia {
         let server = server ?? RelayConfig.blossomServer
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let hash = await Task.detached { sha256Hash(data: data) }.value
         let expiration = Int64(TimeFormat.now + 600)
-        let auth = try createBlossomAuthEvent(content: "Upload \(hash)", sha256Hash: hash, expiration: expiration, privateKeyHex: key)
+        let auth = try signBlossomAuthEvent(content: "Upload \(hash)", sha256Hash: hash, expiration: expiration)
         let token = Data(auth.utf8).base64EncodedString()
         let base = server.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
         guard let url = URL(string: "\(base)/upload") else { throw CoreError(L("mediaUploadFailed")) }

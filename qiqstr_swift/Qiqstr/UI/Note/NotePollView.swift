@@ -24,7 +24,7 @@ struct NotePollView: View {
     private var content: some View {
         let tally = service.tally(poll.id) ?? PollTally()
         let ended = poll.isEnded()
-        let canVote = interactive && !ended && session.privateKey != nil && tally.mine.isEmpty
+        let canVote = interactive && !ended && session.canSign && tally.mine.isEmpty
         let showsResults = !canVote || revealed
         return VStack(alignment: .leading, spacing: 8) {
             ForEach(poll.options) { option in

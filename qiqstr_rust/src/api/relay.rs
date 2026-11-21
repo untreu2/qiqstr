@@ -123,6 +123,7 @@ pub async fn init_client(
         old_client.shutdown().await;
     }
     *db_path_state().write().await = db_path;
+    super::session::set_session_keys(client.signer().await.ok());
     *lock = Some(client);
 
     Ok(())
@@ -153,6 +154,7 @@ pub async fn shutdown_client() -> Result<()> {
         *db_path_state().write().await = None;
         super::database::set_active_mute_list(Vec::new(), Vec::new());
         primal_socket().discard();
+        super::session::set_session_keys(None);
         lock.take()
     };
     if let Some(client) = client {
@@ -165,7 +167,9 @@ pub async fn shutdown_client() -> Result<()> {
 pub async fn update_signer(private_key_hex: String) -> Result<()> {
     let private_key_hex = Secret::new(private_key_hex);
     let client = get_client().await?;
-    client.set_signer(Keys::parse(&private_key_hex)?).await;
+    let keys = Keys::parse(&private_key_hex)?;
+    client.set_signer(keys.clone()).await;
+    super::session::set_session_keys(Some(keys));
     Ok(())
 }
 
@@ -2940,7 +2944,7 @@ mod tests {
     use super::*;
     use crate::pool::test_relay::{mock_relay, relay_with, unreachable_relay, Script};
 
-    static GLOBAL_CLIENT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    use crate::api::session::SESSION_TEST_LOCK as GLOBAL_CLIENT;
 
     #[derive(Default)]
     struct Collected {

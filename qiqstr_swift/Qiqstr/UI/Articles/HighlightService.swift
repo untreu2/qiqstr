@@ -41,7 +41,7 @@ enum HighlightService {
     }
 
     static func publish(text: String, context: String, comment: String, article: Article) async throws -> ArticleHighlight {
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { throw CoreError(L("highlightEmpty")) }
         var tags: [[String]] = [
@@ -53,7 +53,7 @@ enum HighlightService {
         if !trimmedContext.isEmpty, trimmedContext != content { tags.append(["context", trimmedContext]) }
         let trimmedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedComment.isEmpty { tags.append(["comment", trimmedComment]) }
-        let json = try createSignedEvent(kind: 9802, content: content, tags: tags, privateKeyHex: key)
+        let json = try signEvent(kind: 9802, content: content, tags: tags)
         let event = try await SyncService.shared.publish(json)
         guard let highlight = ArticleHighlight(json: event) else { throw CoreError(L("highlightFailed")) }
         return highlight

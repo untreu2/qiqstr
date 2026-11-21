@@ -152,7 +152,7 @@ final class FollowSetService {
     }
 
     func delete(_ id: String) async throws {
-        guard let existing = ownSet(id), let sk = Session.shared.privateKey else { return }
+        guard let existing = ownSet(id), Session.shared.canSign else { return }
         let current = generation
         let wasFavorite = isFavorite(existing.id)
         sets.removeAll { $0.id == existing.id }
@@ -162,7 +162,7 @@ final class FollowSetService {
         do {
             var tags: [[String]] = [["a", existing.coordinate], ["k", "30000"]]
             if !existing.eventId.isEmpty { tags.insert(["e", existing.eventId], at: 0) }
-            let json = try createSignedEvent(kind: 5, content: "User deleted list", tags: tags, privateKeyHex: sk)
+            let json = try signEvent(kind: 5, content: "User deleted list", tags: tags)
             try await SyncService.shared.publish(json)
             if !existing.eventId.isEmpty { _ = try? await dbDeleteEventsByIds(eventIds: [existing.eventId]) }
         } catch {
@@ -211,7 +211,7 @@ final class FollowSetService {
     }
 
     private func publish(_ set: FollowSet, previous: FollowSet?) async throws -> FollowSet {
-        let sk = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let base = try await SyncService.shared.latestEditableEvent(kind: 30000, author: set.pubkey, dTag: set.dTag, allowingNew: previous == nil)
         let managed: Set<String> = ["d", "title", "description", "image", "p"]
         let baseTags = base?.tags() ?? []
@@ -232,7 +232,7 @@ final class FollowSetService {
         tags.append(contentsOf: members.map { original[$0] ?? ["p", $0] })
         tags.append(contentsOf: baseTags.filter { !$0.isEmpty && !managed.contains($0[0]) })
         let content = (base?["content"] as? String) ?? ""
-        let json = try createSignedEvent(kind: 30000, content: content, tags: tags, privateKeyHex: sk)
+        let json = try signEvent(kind: 30000, content: content, tags: tags)
         let event = try await SyncService.shared.publish(json)
         setTombstone(set.id, at: nil)
         return FollowSet(event: event) ?? set

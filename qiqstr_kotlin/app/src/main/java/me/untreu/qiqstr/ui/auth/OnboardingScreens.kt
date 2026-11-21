@@ -70,8 +70,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.qiqstr.core.createBlossomAuthEvent
-import com.qiqstr.core.createProfileEvent
+import com.qiqstr.core.signEvent
+import com.qiqstr.core.signBlossomAuthEvent
 import com.qiqstr.core.sha256Hash
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
@@ -124,8 +124,8 @@ private data class PendingCopy(val label: String, val value: String)
 
 @Composable
 fun OnboardingKeysScreen(onContinue: () -> Unit) {
-    val words = Session.account?.mnemonic.orEmpty().split(" ").filter { it.isNotEmpty() }
-    val nsec = Session.privateKey?.let { Nip19.nsec(it) }.orEmpty()
+    val words = remember { Session.revealMnemonic().orEmpty().split(" ").filter { it.isNotEmpty() } }
+    val nsec = remember { Session.revealSigningKey()?.let { Nip19.nsec(it) }.orEmpty() }
     var revealNsec by remember { mutableStateOf(false) }
     var pendingCopy by remember { mutableStateOf<PendingCopy?>(null) }
     val haptics = rememberHaptics()
@@ -323,8 +323,7 @@ class OnboardingProfileViewModel : ViewModel() {
             return
         }
         val me = Session.pubkey
-        val key = Session.privateKey
-        if (me == null || key == null) {
+        if (me == null || !Session.canSign) {
             ToastCenter.show(L("privateKeyNotFound"), ToastStyle.ERROR)
             return
         }
@@ -344,7 +343,7 @@ class OnboardingProfileViewModel : ViewModel() {
         )
         viewModelScope.launch {
             try {
-                val event = createProfileEvent(profile.metadataJSON, key)
+                val event = signEvent(0u, profile.metadataJSON, emptyList())
                 SyncService.publish(event)
                 ProfileCache.set(profile)
                 DataBus.profileChanged()
@@ -387,9 +386,9 @@ private object OnboardingMediaUpload {
     }
 
     suspend fun upload(data: ByteArray, mimeType: String): String = withContext(Dispatchers.IO) {
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val hash = sha256Hash(data)
-        val auth = createBlossomAuthEvent("Upload $hash", hash, TimeFormat.now + 600, key)
+        val auth = signBlossomAuthEvent("Upload $hash", hash, TimeFormat.now + 600)
         val token = android.util.Base64.encodeToString(auth.toByteArray(), android.util.Base64.NO_WRAP)
         val base = RelayConfig.blossomServer.trimEnd('/')
         val request = Request.Builder()

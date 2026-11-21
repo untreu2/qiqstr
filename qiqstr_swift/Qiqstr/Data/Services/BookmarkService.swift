@@ -108,7 +108,7 @@ final class BookmarkService {
     }
 
     private func loadFromDatabase(generation current: Int) async {
-        guard let me = Session.shared.pubkey, let sk = Session.shared.privateKey else { return }
+        guard let me = Session.shared.pubkey, Session.shared.canSign else { return }
         let filter = JSON.string(["kinds": [30001], "authors": [me], "#d": [Self.dTag]])
         let events = JSON.array(try? await dbQueryEvents(filterJson: filter, limit: 5))
         guard current == generation else { return }
@@ -118,7 +118,7 @@ final class BookmarkService {
         }
         var ids = eventIds(event.tags())
         if let content = event["content"] as? String, !content.isEmpty,
-           let decrypted = Self.decrypt(content, key: sk, me: me),
+           let decrypted = Self.decrypt(content, me: me),
            let privateTags = JSON.any(decrypted) as? [[Any]] {
             ids += eventIds(privateTags.map { $0.compactMap { $0 as? String } })
         }
@@ -128,9 +128,9 @@ final class BookmarkService {
         DataBus.shared.listsChanged()
     }
 
-    private static func decrypt(_ content: String, key: String, me: String) -> String? {
-        if content.contains("?iv=") { return try? nip04Decrypt(payload: content, receiverSkHex: key, senderPkHex: me) }
-        return try? nip44Decrypt(payload: content, receiverSkHex: key, senderPkHex: me)
+    private static func decrypt(_ content: String, me: String) -> String? {
+        if content.contains("?iv=") { return try? sessionNip04Decrypt(payload: content, senderPkHex: me) }
+        return try? sessionNip44Decrypt(payload: content, senderPkHex: me)
     }
 
     private func eventIds(_ tags: [[String]]) -> [String] {
@@ -151,13 +151,13 @@ final class BookmarkService {
     }
 
     private func publish(_ noteId: String, adding: Bool) async throws {
-        let sk = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         guard let me = Session.shared.pubkey else { throw CoreError("Not signed in") }
         let base = try await SyncService.shared.latestEditableEvent(kind: 30001, author: me, dTag: Self.dTag)
         var publicTags = (base?.tags() ?? []).filter { !($0.first == "d") }
         var privateTags: [[String]] = []
         if let content = base?["content"] as? String, !content.isEmpty {
-            guard let decrypted = Self.decrypt(content, key: sk, me: me),
+            guard let decrypted = Self.decrypt(content, me: me),
                   let tags = JSON.any(decrypted) as? [[Any]] else { throw CoreError(L("bookmarksUnreadable")) }
             privateTags = tags.map { $0.compactMap { $0 as? String } }
         }
@@ -169,8 +169,8 @@ final class BookmarkService {
             privateTags.removeAll(where: isE)
         }
         if !publicTags.contains(where: { $0.first == "alt" }) { publicTags.append(["alt", "List of bookmarks"]) }
-        let encrypted = try nip44Encrypt(content: JSON.string(privateTags), senderSkHex: sk, receiverPkHex: me)
-        let json = try createSignedEvent(kind: 30001, content: encrypted, tags: [["d", Self.dTag]] + publicTags, privateKeyHex: sk)
+        let encrypted = try sessionNip44Encrypt(content: JSON.string(privateTags), receiverPkHex: me)
+        let json = try signEvent(kind: 30001, content: encrypted, tags: [["d", Self.dTag]] + publicTags)
         try await SyncService.shared.publish(json)
         var seen = Set<String>()
         bookmarkedIds = (eventIds(publicTags) + eventIds(privateTags)).filter { seen.insert($0).inserted }

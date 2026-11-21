@@ -156,8 +156,8 @@ enum ProfileDataSource {
     }
 
     static func publishMetadata(_ metadata: JSONObject) async throws {
-        guard let key = session.privateKey else { throw CoreError("Not signed in") }
-        let eventJson = try createProfileEvent(profileJson: JSON.string(metadata), privateKeyHex: key)
+        guard session.canSign else { throw CoreError("Not signed in") }
+        let eventJson = try signEvent(kind: 0, content: JSON.string(metadata), tags: [])
         try await SyncService.shared.publish(eventJson)
     }
 

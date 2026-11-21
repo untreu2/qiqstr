@@ -3,7 +3,7 @@ package me.untreu.qiqstr.data.services
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbCountEvents
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.dbSaveEvents
@@ -89,20 +89,20 @@ object HashtagFollowService {
 
     private suspend fun setFollowing(raw: String, follow: Boolean) {
         val tag = normalize(raw) ?: throw CoreError(L("feedTopicInvalid"))
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val me = Session.pubkey ?: throw CoreError(L("privateKeyNotFound"))
         val generation = this.generation
         intents = intents + (tag to follow)
         tags = projected()
         try {
-            queue.withLock { commit(tag, follow, key, me, generation) }
+            queue.withLock { commit(tag, follow, me, generation) }
         } catch (error: Throwable) {
             if (generation == this.generation) settle(tag, follow)
             throw error
         }
     }
 
-    private suspend fun commit(tag: String, follow: Boolean, key: String, me: String, generation: Int) {
+    private suspend fun commit(tag: String, follow: Boolean, me: String, generation: Int) {
         if (generation != this.generation) return
         val base = SyncService.latestEditableEvent(KIND, me)
         if (generation != this.generation) return
@@ -122,7 +122,7 @@ object HashtagFollowService {
             if (tag !in list) return settle(tag, follow)
             list.remove(tag)
         }
-        val eventJson = createSignedEvent(KIND.toUShort(), content, list.map { listOf("t", it) } + extraTags, key)
+        val eventJson = signEvent(KIND.toUShort(), content, list.map { listOf("t", it) } + extraTags)
         val event = SyncService.publish(eventJson)
         if (generation != this.generation) return
         latestCreatedAt = maxOf(latestCreatedAt, event.long("created_at"))

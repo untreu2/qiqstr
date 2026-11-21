@@ -5,7 +5,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.fetchEventsFromRelays
 import com.qiqstr.core.getRelayList
 import com.qiqstr.core.sendEventTo
@@ -223,11 +223,11 @@ object LiveService {
     }
 
     suspend fun sendChat(text: String, stream: LiveStream): LiveChatMessage {
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val content = text.trim()
         if (content.isEmpty()) throw CoreError(L("liveChatEmptyMessage"))
         val tags = listOf(listOf("a", stream.coordinate, stream.relays.firstOrNull() ?: "", "root"))
-        val json = createSignedEvent(LiveStream.CHAT_KIND.toUShort(), content, tags, key)
+        val json = signEvent(LiveStream.CHAT_KIND.toUShort(), content, tags)
         val event = SyncService.publish(json)
         val extra = (stream.relays + streamRelays.take(3)).distinct()
         App.scope.launch { runCatching { sendEventTo(json, extra) } }

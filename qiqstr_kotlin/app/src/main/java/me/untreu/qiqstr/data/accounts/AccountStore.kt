@@ -19,7 +19,11 @@ import me.untreu.qiqstr.data.bridge.Nip19
 import me.untreu.qiqstr.data.bridge.isHex
 import org.json.JSONObject
 
-data class StoredAccount(
+data class Account(val npub: String, val pubkeyHex: String, val isReadOnly: Boolean) {
+    val id: String get() = npub
+}
+
+private data class StoredAccount(
     val npub: String,
     val privateKeyHex: String,
     val mnemonic: String? = null,
@@ -29,6 +33,8 @@ data class StoredAccount(
     val isReadOnly: Boolean get() = privateKeyHex.isEmpty()
     val signingKey: String? get() = if (isReadOnly) null else privateKeyHex
     val pubkeyHex: String get() = pubkey ?: signingKey?.let { runCatching { getPublicKey(it) }.getOrNull() } ?: ""
+
+    val summary: Account get() = Account(npub, pubkeyHex, isReadOnly)
 
     fun toJson() = JSONObject().apply {
         put("npub", npub)
@@ -65,54 +71,60 @@ object AccountStore {
     private const val ACCOUNTS_KEY = "stored_accounts"
     private const val ACTIVE_KEY = "active_npub"
 
-    val accounts: List<StoredAccount>
+    private val records: List<StoredAccount>
         get() = Json.array(SecureStore.get(ACCOUNTS_KEY)).map(StoredAccount::from)
 
-    val active: StoredAccount?
+    val accounts: List<Account> get() = records.map { it.summary }
+
+    val active: Account?
         get() {
             val npub = SecureStore.get(ACTIVE_KEY) ?: return null
-            return accounts.firstOrNull { it.npub == npub }
+            return records.firstOrNull { it.npub == npub }?.summary
         }
+
+    fun storedSigningKey(npub: String): String? = records.firstOrNull { it.npub == npub }?.signingKey
+
+    fun storedMnemonic(npub: String): String? = records.firstOrNull { it.npub == npub }?.mnemonic?.ifEmpty { null }
 
     private fun save(list: List<StoredAccount>) {
         val array = org.json.JSONArray().apply { list.forEach { put(it.toJson()) } }
         if (!SecureStore.set(ACCOUNTS_KEY, array.toString())) throw AuthError.StorageFailed
     }
 
-    fun store(privateKeyHex: String, mnemonic: String? = null): StoredAccount {
+    fun store(privateKeyHex: String, mnemonic: String? = null): Account {
         val pub = getPublicKey(privateKeyHex)
         val npub = nip19EncodePubkey(pub)
-        val list = accounts.toMutableList()
+        val list = records.toMutableList()
         val existing = list.firstOrNull { it.npub == npub }
         val account = StoredAccount(npub, privateKeyHex, mnemonic ?: existing?.mnemonic, pub)
         list.removeAll { it.npub == npub }
         list.add(account)
         save(list)
         SecureStore.set(ACTIVE_KEY, npub)
-        return account
+        return account.summary
     }
 
-    fun storeReadOnly(pubkeyHex: String): StoredAccount {
+    fun storeReadOnly(pubkeyHex: String): Account {
         val pub = pubkeyHex.lowercase()
         val npub = nip19EncodePubkey(pub)
-        val list = accounts.toMutableList()
+        val list = records.toMutableList()
         list.firstOrNull { it.npub == npub }?.let {
             SecureStore.set(ACTIVE_KEY, npub)
-            return it
+            return it.summary
         }
         val account = StoredAccount(npub, "", null, pub)
         list.add(account)
         save(list)
         SecureStore.set(ACTIVE_KEY, npub)
-        return account
+        return account.summary
     }
 
-    fun login(input: String, password: String): StoredAccount {
+    fun login(input: String, password: String): Account {
         if (!Ncryptsec.matches(input)) return login(input)
         return store(Ncryptsec.decryptSync(input, password))
     }
 
-    fun login(input: String): StoredAccount {
+    fun login(input: String): Account {
         if (Ncryptsec.matches(input)) throw AuthError.PasswordRequired
         readOnlyPubkey(input)?.let { return storeReadOnly(it) }
         val (hex, mnemonic) = signingKey(input)
@@ -141,19 +153,19 @@ object AccountStore {
         return hex.lowercase() to null
     }
 
-    fun upgrade(npub: String, input: String): StoredAccount {
-        val target = accounts.firstOrNull { it.npub == npub } ?: throw AuthError.AccountNotFound
+    fun upgrade(npub: String, input: String): Account {
+        val target = records.firstOrNull { it.npub == npub } ?: throw AuthError.AccountNotFound
         val (hex, mnemonic) = signingKey(input)
         if (runCatching { getPublicKey(hex) }.getOrNull() != target.pubkeyHex) throw AuthError.DifferentAccount
         return store(hex, mnemonic)
     }
 
-    fun upgrade(npub: String, input: String, password: String): StoredAccount {
+    fun upgrade(npub: String, input: String, password: String): Account {
         if (!Ncryptsec.matches(input)) return upgrade(npub, input)
         return upgrade(npub, Ncryptsec.decryptSync(input, password))
     }
 
-    fun createAccount(): StoredAccount {
+    fun createAccount(): Account {
         val phrase = generateMnemonic()
         val key = mnemonicToPrivateKey(phrase)
         val account = store(key, phrase)
@@ -168,19 +180,19 @@ object AccountStore {
 
     private fun createdHereKey(pubkeyHex: String) = "account_created_here_${pubkeyHex.lowercase()}"
 
-    fun switchTo(npub: String): StoredAccount {
-        val target = accounts.firstOrNull { it.npub == npub } ?: throw AuthError.AccountNotFound
+    fun switchTo(npub: String): Account {
+        val target = records.firstOrNull { it.npub == npub } ?: throw AuthError.AccountNotFound
         if (Nip19.npub(target.pubkeyHex) != target.npub) throw AuthError.KeyMismatch
         SecureStore.set(ACTIVE_KEY, npub)
-        return target
+        return target.summary
     }
 
     fun remove(npub: String) {
-        runCatching { save(accounts.filter { it.npub != npub }) }
-        if (SecureStore.get(ACTIVE_KEY) == npub) SecureStore.set(ACTIVE_KEY, accounts.firstOrNull()?.npub)
+        runCatching { save(records.filter { it.npub != npub }) }
+        if (SecureStore.get(ACTIVE_KEY) == npub) SecureStore.set(ACTIVE_KEY, records.firstOrNull()?.npub)
     }
 
-    fun logoutActive(): StoredAccount? {
+    fun logoutActive(): Account? {
         active?.let { remove(it.npub) }
         return active
     }

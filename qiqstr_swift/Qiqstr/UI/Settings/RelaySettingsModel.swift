@@ -157,7 +157,7 @@ final class RelaySettingsModel {
     }
 
     func publish(confirmed: Bool = false) async {
-        guard let key = Session.shared.privateKey, let me = Session.shared.pubkey else { ToastCenter.shared.show(L("privateKeyNotFound"), style: .error); return }
+        guard Session.shared.canSign, let me = Session.shared.pubkey else { ToastCenter.shared.show(L("privateKeyNotFound"), style: .error); return }
         isPublishing = true
         defer { isPublishing = false }
         let base: JSONObject?
@@ -183,7 +183,7 @@ final class RelaySettingsModel {
             return nil
         }
         do {
-            let event = try createRelayListEventWithMarkers(relayConfigs: configs, privateKeyHex: key)
+            let event = try signRelayListEventWithMarkers(relayConfigs: configs)
             try await SyncService.shared.publish(event)
             UserDefaults.standard.set(event, forKey: "published_relay_list")
             feedback += 1

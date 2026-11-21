@@ -98,27 +98,27 @@ object NutzapService {
         if (isReceiving) redeemPending()
     }
     private fun walletSecret(event: JSONObject, me: String): String? = runCatching {
-        val key = Session.privateKey ?: return null
-        val plain = nip44Decrypt(event.optString("content"), key, me)
+        if (!Session.canSign) return null
+        val plain = sessionNip44Decrypt(event.optString("content"), me)
         val array = org.json.JSONArray(plain)
         (0 until array.length()).mapNotNull { array.optJSONArray(it)?.let { tag -> (0 until tag.length()).map { index -> tag.optString(index) } } }.firstOrNull { it.size > 1 && it[0] == "privkey" && it[1].length == 64 }?.get(1)?.lowercase()
     }.getOrNull()
-    private fun secret(): String = lockSecret ?: sha256Hash("qiqstr-nutzap-p2pk:${Session.requireSigner()}".toByteArray()).also { lockSecret = it }
+    private fun secret(): String = lockSecret ?: run { Session.requireSigner(); sessionNutzapLockSecret() }.also { lockSecret = it }
     private fun lockKey() = getPublicKey(secret())
     suspend fun setReceiving(enabled: Boolean, next: List<String>? = null) {
         if (isSaving) return
         val me = Session.pubkey ?: return
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val list = (next ?: mints.ifEmpty { CashuMint.presets.take(2) }).map(CashuMint::normalized).filter(CashuMint::isValid)
         if (enabled && list.isEmpty()) throw CoreError(L("nutzapNeedsMint"))
         isSaving = true
         try {
-            if (enabled) publishWalletIfMissing(me, key, list)
+            if (enabled) publishWalletIfMissing(me, list)
             val lock = lockKey()
             val base = SyncService.latestEditableEvent(infoKind, me, allowingNew = true)
             val kept = base?.tags().orEmpty().filterNot { it.firstOrNull() in listOf("mint", "relay", "pubkey") }
             val tags = if (enabled) (runCatching { getRelayList() }.getOrDefault(RelayConfig.mainRelays)).filter { it.startsWith("wss://") }.take(4).map { listOf("relay", it) } + list.map { listOf("mint", it, "sat") } + listOf(listOf("pubkey", lock)) else emptyList()
-            SyncService.publish(createSignedEvent(infoKind.toUShort(), "", tags + kept, key))
+            SyncService.publish(signEvent(infoKind.toUShort(), "", tags + kept))
             if (me != Session.pubkey) return
             mints = list
             isReceiving = enabled
@@ -127,11 +127,11 @@ object NutzapService {
             if (enabled) App.scope.launch { redeemPending() }
         } finally { isSaving = false }
     }
-    private suspend fun publishWalletIfMissing(me: String, key: String, mints: List<String>) {
+    private suspend fun publishWalletIfMissing(me: String, mints: List<String>) {
         val existing = SyncService.fetchReplaceable(walletKind, me).maxByOrNull { it.long("created_at") }
         if (existing != null) { walletSecret(existing, me)?.let { lockSecret = it }; return }
         val payload = listOf(listOf("privkey", secret())) + mints.map { listOf("mint", it) }
-        SyncService.publish(createSignedEvent(walletKind.toUShort(), nip44Encrypt(Json.string(payload), key, me), emptyList(), key))
+        SyncService.publish(signEvent(walletKind.toUShort(), sessionNip44Encrypt(Json.string(payload), me), emptyList()))
     }
     suspend fun lookup(mint: String): String {
         WalletService.prepareCashu()
@@ -146,7 +146,7 @@ object NutzapService {
     suspend fun send(pubkey: String, note: Note?, amountSats: Long, comment: String) = sendLock.withLock {
         val me = Session.pubkey ?: throw ZapError.InvalidAmount()
         if (amountSats <= 0) throw ZapError.InvalidAmount()
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val info = info(pubkey) ?: throw CoreError(L("nutzapNotSupported"))
         val mint = info.mints.first()
         WalletService.prepareCashu()
@@ -154,7 +154,7 @@ object NutzapService {
         val proofs = Json.obj(cashuCreateToken(mint, amountSats.toULong(), info.lockKey))?.strings("proofs").orEmpty()
         if (proofs.isEmpty()) throw CoreError(L("nutzapFailed"))
         val tags = proofs.map { listOf("proof", it) } + listOf(listOf("u", mint), listOf("unit", "sat")) + (note?.let { listOf(listOf("e", it.id, "", it.pubkey), listOf("k", it.kind.toString())) } ?: emptyList()) + listOf(listOf("p", pubkey))
-        val event = createSignedEvent(nutzapKind.toUShort(), comment.trim(), tags, key)
+        val event = signEvent(nutzapKind.toUShort(), comment.trim(), tags)
         val relays = (info.relays + RelayConfig.mainRelays).distinct()
         outboxLock.withLock { Prefs.setStringList("nutzap_outbox_$me", outbox(me) + Json.string(mapOf("event" to event, "relays" to relays))) }
         publishOutbox()
@@ -208,7 +208,7 @@ object NutzapService {
     }
     suspend fun redeemPending() {
         val me = Session.pubkey ?: return
-        val key = Session.privateKey ?: return
+        if (!Session.canSign) return
         if (!isReceiving || redeeming) return
         val unlock = runCatching { secret() }.getOrNull() ?: return
         redeeming = true
@@ -236,7 +236,7 @@ object NutzapService {
                     done.add(id)
                     runCatching {
                         val payload = listOf(listOf("direction", "in"), listOf("amount", amount.toString()), listOf("unit", "sat"))
-                        SyncService.publish(createSignedEvent(historyKind.toUShort(), nip44Encrypt(Json.string(payload), key, me), listOf(listOf("e", id, "", "redeemed"), listOf("p", sender)), key))
+                        SyncService.publish(signEvent(historyKind.toUShort(), sessionNip44Encrypt(Json.string(payload), me), listOf(listOf("e", id, "", "redeemed"), listOf("p", sender))))
                     }
                 } catch (error: Exception) {
                     val message = coreErrorMessage(error).lowercase()

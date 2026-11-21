@@ -3,7 +3,7 @@ package me.untreu.qiqstr.data.services
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbGetFollowingList
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.dbSaveFollowingListFromEvent
@@ -88,7 +88,7 @@ object FollowService {
         queue.withLock { apply(targets, creatingList, change) }
 
     private suspend fun apply(targets: Set<String>, creatingList: Boolean, change: (Set<String>) -> Set<String>) {
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val me = Session.pubkey?.lowercase() ?: throw CoreError(L("privateKeyNotFound"))
         val generation = this.generation
         val snapshot = following
@@ -99,7 +99,7 @@ object FollowService {
             if (generation != this.generation) return
             val baseTags = base?.tags() ?: emptyList()
             val list = change(pubkeys(baseTags)) - me
-            val event = createSignedEvent(3u.toUShort(), base?.text("content") ?: "", mergedTags(baseTags, list), key)
+            val event = signEvent(3u.toUShort(), base?.text("content") ?: "", mergedTags(baseTags, list))
             SyncService.publish(event)
             if (generation != this.generation) return
             verifiedAt = System.currentTimeMillis()

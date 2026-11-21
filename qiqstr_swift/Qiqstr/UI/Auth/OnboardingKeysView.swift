@@ -15,13 +15,8 @@ struct OnboardingKeysView: View {
         var id: String { label }
     }
 
-    private var mnemonicWords: [String] {
-        (session.account?.mnemonic ?? "").split(separator: " ").map(String.init)
-    }
-
-    private var nsec: String {
-        session.privateKey.flatMap { Nip19.nsec($0) } ?? ""
-    }
+    @State private var mnemonicWords: [String] = []
+    @State private var nsec = ""
 
     var body: some View {
         ScrollView {
@@ -47,6 +42,14 @@ struct OnboardingKeysView: View {
             ToolbarItem(placement: .principal) { OnboardingStepIndicator(current: 1) }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            mnemonicWords = (session.revealMnemonic() ?? "").split(separator: " ").map(String.init)
+            nsec = session.revealSigningKey().flatMap { Nip19.nsec($0) } ?? ""
+        }
+        .onDisappear {
+            mnemonicWords = []
+            nsec = ""
+        }
         .alert(L("warning"), isPresented: Binding(get: { pendingCopy != nil }, set: { if !$0 { pendingCopy = nil } }), presenting: pendingCopy) { item in
             Button(L("cancel"), role: .cancel) {}
             Button(L("copy")) {

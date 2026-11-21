@@ -161,7 +161,7 @@ final class DMService {
     @ObservationIgnored private let engine = MarmotEngine.shared
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var me: String?
-    @ObservationIgnored private var privateKey: String?
+    @ObservationIgnored private var isSigner = false
     @ObservationIgnored private var groups: [String: MarmotGroup] = [:]
     @ObservationIgnored private var seenEvents: Set<String> = []
     @ObservationIgnored private var hiddenIds: Set<String> = []
@@ -198,7 +198,7 @@ final class DMService {
         chatCreation.values.forEach { $0.cancel() }
         chatCreation.removeAll()
         me = nil
-        privateKey = nil
+        isSigner = false
         groups.removeAll()
         groupChats = [:]
         reactions = [:]
@@ -237,7 +237,7 @@ final class DMService {
 
     func start() async {
         guard Session.shared.pubkey != nil else { return }
-        guard let me = Session.shared.pubkey, let key = Session.shared.privateKey else {
+        guard let me = Session.shared.pubkey, Session.shared.canSign else {
             isLoading = false
             hasLoaded = true
             return
@@ -248,7 +248,7 @@ final class DMService {
         }
         if self.me != nil, self.me != me { reset() }
         self.me = me
-        privateKey = key
+        isSigner = true
         let generation = self.generation
         loadReadState(me)
         hiddenIds = Set(defaults.stringArray(forKey: storeKey("marmot_hidden", me)) ?? [])
@@ -256,14 +256,14 @@ final class DMService {
         accepted = Set(defaults.stringArray(forKey: storeKey("accepted", me)) ?? [])
         joinedAt = (defaults.dictionary(forKey: storeKey("group_joined", me)) as? [String: Int]) ?? [:]
         isLoading = true
-        let task = Task { await self.performStart(me, key: key, generation: generation) }
+        let task = Task { await self.performStart(me, generation: generation) }
         startTask = task
         await task.value
     }
 
-    private func performStart(_ me: String, key: String, generation: Int) async {
+    private func performStart(_ me: String, generation: Int) async {
         async let followingLoaded: Void = reloadFollowing()
-        let opened = (try? await engine.open(privateKey: key)) == me
+        let opened = (try? await engine.openSession()) == me
         await followingLoaded
         guard generation == self.generation else { return }
         guard opened else {
@@ -914,7 +914,7 @@ final class DMService {
 
     func prepareFile(_ data: Data, mimeType: String, for peer: String, extraImeta: [String] = []) async throws -> DMPreparedFile {
         guard data.count <= Self.maxFileSize else { throw CoreError(L("fileTooLarge")) }
-        guard let key = privateKey else { throw CoreError(L("dmNotSignedIn")) }
+        guard isSigner else { throw CoreError(L("dmNotSignedIn")) }
         let groupId = try await ensureChat(with: peer)
         let ext = DMMediaCrypto.fileExtension(for: mimeType)
         let filename = "\(UUID().uuidString.prefix(8).lowercased()).\(ext)"
@@ -933,7 +933,7 @@ final class DMService {
         }
         let url: String
         do {
-            url = try await DMMediaCrypto.upload(body, sha256: encrypted.encryptedHash, privateKey: key, servers: RelayConfig.encryptedMediaServers)
+            url = try await DMMediaCrypto.upload(body, sha256: encrypted.encryptedHash, servers: RelayConfig.encryptedMediaServers)
         } catch {
             throw CoreError(L("failedToUploadEncryptedMedia"))
         }
@@ -1283,11 +1283,11 @@ final class DMService {
 }
 
 nonisolated enum DMMediaCrypto {
-    static func upload(_ data: Data, sha256: String, privateKey: String, servers: [String]) async throws -> String {
+    static func upload(_ data: Data, sha256: String, servers: [String]) async throws -> String {
         var lastError: Error = CoreError(L("failedToUploadEncryptedMedia"))
         for server in servers {
             do {
-                return try await upload(data, sha256: sha256, privateKey: privateKey, server: server)
+                return try await upload(data, sha256: sha256, server: server)
             } catch {
                 lastError = error
             }
@@ -1295,9 +1295,9 @@ nonisolated enum DMMediaCrypto {
         throw lastError
     }
 
-    static func upload(_ data: Data, sha256: String, privateKey: String, server: String) async throws -> String {
+    static func upload(_ data: Data, sha256: String, server: String) async throws -> String {
         let expiration = Int64(Date().timeIntervalSince1970) + 600
-        let auth = try createBlossomAuthEvent(content: "Upload \(sha256)", sha256Hash: sha256, expiration: expiration, privateKeyHex: privateKey)
+        let auth = try signBlossomAuthEvent(content: "Upload \(sha256)", sha256Hash: sha256, expiration: expiration)
         let token = Data(auth.utf8).base64EncodedString()
         var base = server
         while base.hasSuffix("/") { base.removeLast() }

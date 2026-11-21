@@ -73,7 +73,7 @@ fun NotePollView(poll: NotePoll, author: String, modifier: Modifier = Modifier, 
     val haptics = LocalHapticFeedback.current
     val tally = PollService.tally(poll.id) ?: PollTally()
     val ended = poll.isEnded()
-    val canVote = interactive && !ended && Session.privateKey != null && tally.mine.isEmpty()
+    val canVote = interactive && !ended && Session.canSign && tally.mine.isEmpty()
     val showsResults = !canVote || revealed
 
     val submit = {

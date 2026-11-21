@@ -153,9 +153,9 @@ final class MuteService {
     }
 
     private func publishPending() async {
-        guard !pending.isEmpty, let me = Session.shared.pubkey, let key = Session.shared.privateKey else { return }
+        guard !pending.isEmpty, let me = Session.shared.pubkey, Session.shared.canSign else { return }
         let generation = self.generation
-        guard let base = await latestList(me, key: key), generation == self.generation, base.isReadable else { return }
+        guard let base = await latestList(me), generation == self.generation, base.isReadable else { return }
         let changes = pending
         let keep: ([String]) -> Bool = { tag in
             guard tag.count > 1, let entry = MuteEntry(rawValue: tag[0]) else { return true }
@@ -169,8 +169,8 @@ final class MuteService {
             privateTags += (changes.added[entry.rawValue] ?? []).filter { !existing.contains($0) }.map { [entry.rawValue, $0] }
         }
         do {
-            let content = privateTags.isEmpty ? "" : try nip44Encrypt(content: JSON.string(privateTags), senderSkHex: key, receiverPkHex: me)
-            let event = try createSignedEvent(kind: 10000, content: content, tags: publicTags, privateKeyHex: key)
+            let content = privateTags.isEmpty ? "" : try sessionNip44Encrypt(content: JSON.string(privateTags), receiverPkHex: me)
+            let event = try signEvent(kind: 10000, content: content, tags: publicTags)
             try await SyncService.shared.publish(event)
             guard generation == self.generation else { return }
             remote = RemoteMuteList(publicTags: publicTags, privateTags: privateTags)
@@ -180,11 +180,11 @@ final class MuteService {
         } catch {}
     }
 
-    private func latestList(_ me: String, key: String) async -> RemoteMuteList? {
+    private func latestList(_ me: String) async -> RemoteMuteList? {
         let cached = await cachedEvents(me)
         let fetched = await SyncService.shared.fetchReplaceable(kind: 10000, author: me)
         if fetched.isEmpty, !cached.isEmpty { return nil }
-        if let newest = Self.newest(cached + fetched, author: me) { return Self.parse(newest, pubkey: me, privateKey: key) }
+        if let newest = Self.newest(cached + fetched, author: me) { return Self.parse(newest, pubkey: me, canDecrypt: true) }
         guard Session.shared.isNewAccount || AccountStore.wasCreatedHere(me) else { return nil }
         if ((try? await getConnectedRelayCount()) ?? 0) == 0 { return nil }
         return RemoteMuteList()
@@ -194,7 +194,7 @@ final class MuteService {
         let events = await cachedEvents(me)
         guard generation == self.generation else { return }
         if let newest = Self.newest(events, author: me) {
-            remote = Self.parse(newest, pubkey: me, privateKey: Session.shared.privateKey)
+            remote = Self.parse(newest, pubkey: me, canDecrypt: Session.shared.canSign)
         } else {
             remote = RemoteMuteList()
         }
@@ -213,10 +213,10 @@ final class MuteService {
             .max { ($0.int("created_at"), $0.str("id") ?? "") < ($1.int("created_at"), $1.str("id") ?? "") }
     }
 
-    private static func parse(_ event: JSONObject, pubkey: String, privateKey: String?) -> RemoteMuteList {
+    private static func parse(_ event: JSONObject, pubkey: String, canDecrypt: Bool) -> RemoteMuteList {
         var list = RemoteMuteList(publicTags: event.tags())
         guard let content = event["content"] as? String, !content.isEmpty else { return list }
-        guard let privateKey, let plain = decrypt(content, privateKey: privateKey, pubkey: pubkey),
+        guard canDecrypt, let plain = decrypt(content, pubkey: pubkey),
               let tags = JSON.any(plain) as? [[Any]] else {
             list.isReadable = false
             return list
@@ -225,11 +225,11 @@ final class MuteService {
         return list
     }
 
-    private static func decrypt(_ content: String, privateKey: String, pubkey: String) -> String? {
+    private static func decrypt(_ content: String, pubkey: String) -> String? {
         if content.contains("?iv=") {
-            return try? nip04Decrypt(payload: content, receiverSkHex: privateKey, senderPkHex: pubkey)
+            return try? sessionNip04Decrypt(payload: content, senderPkHex: pubkey)
         }
-        return try? nip44Decrypt(payload: content, receiverSkHex: privateKey, senderPkHex: pubkey)
+        return try? sessionNip44Decrypt(payload: content, senderPkHex: pubkey)
     }
 
     private func merged(_ entry: MuteEntry) -> [String] {

@@ -82,10 +82,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.qiqstr.core.signRelayListEventWithMarkers
 import com.qiqstr.core.addRelay
 import com.qiqstr.core.addRelayWithFlags
 import com.qiqstr.core.connectRelays
-import com.qiqstr.core.createRelayListEventWithMarkers
 import com.qiqstr.core.getRelayStatus
 import com.qiqstr.core.removeRelay
 import com.qiqstr.core.streamBroadcastEvents
@@ -282,9 +282,8 @@ class RelaySettingsModel : ViewModel() {
     }
 
     fun publish(confirmed: Boolean = false) {
-        val key = Session.privateKey
         val me = Session.pubkey
-        if (key == null || me == null) {
+        if (!Session.canSign || me == null) {
             ToastCenter.show(L("privateKeyNotFound"), ToastStyle.ERROR)
             return
         }
@@ -315,7 +314,7 @@ class RelaySettingsModel : ViewModel() {
                     }
                 }
                 try {
-                    val event = createRelayListEventWithMarkers(configs, key)
+                    val event = signRelayListEventWithMarkers(configs)
                     SyncService.publish(event)
                     Prefs.set("published_relay_list", event)
                     feedback += 1

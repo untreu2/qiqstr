@@ -9,7 +9,6 @@ import com.qiqstr.core.*
 import me.untreu.qiqstr.data.services.EmojiChoice
 import me.untreu.qiqstr.data.services.CustomEmoji
 import me.untreu.qiqstr.core.objects
-import com.qiqstr.core.createBlossomAuthEvent
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.dbSearchProfiles
 import com.qiqstr.core.fetchEvents
@@ -242,7 +241,7 @@ object DMService {
 
     private var generation = 0
     private var me: String? = null
-    private var privateKey: String? = null
+    private var isSigner = false
     private var groups = HashMap<String, MarmotGroup>()
     private val seenEvents = HashSet<String>()
     private var hiddenIds = LinkedHashSet<String>()
@@ -280,7 +279,7 @@ object DMService {
         chatCreation.values.forEach { it.cancel() }
         chatCreation.clear()
         me = null
-        privateKey = null
+        isSigner = false
         groups = HashMap()
         seenEvents.clear()
         hiddenIds = LinkedHashSet()
@@ -316,8 +315,7 @@ object DMService {
 
     suspend fun start() {
         val me = Session.pubkey ?: return
-        val key = Session.privateKey
-        if (key == null) {
+        if (!Session.canSign) {
             isLoading = false
             hasLoaded = true
             return
@@ -329,7 +327,7 @@ object DMService {
         }
         if (this.me != null && this.me != me) reset()
         this.me = me
-        privateKey = key
+        isSigner = true
         val generation = this.generation
         loadReadState(me)
         hiddenIds = LinkedHashSet(Prefs.stringList(storeKey("marmot_hidden", me)).orEmpty())
@@ -337,15 +335,15 @@ object DMService {
         joinedAt = loadLongMap(storeKey("group_joined", me))
         accepted = Prefs.stringList(storeKey("accepted", me)).orEmpty().toSet()
         isLoading = true
-        val task = App.scope.launch { performStart(me, key, generation) }
+        val task = App.scope.launch { performStart(me, generation) }
         startTask = task
         task.join()
     }
 
-    private suspend fun performStart(me: String, key: String, generation: Int) {
+    private suspend fun performStart(me: String, generation: Int) {
         val opened = coroutineScope {
             val followingLoaded = launch { reloadFollowing() }
-            val opened = runCatching { MarmotEngine.open(key) }.getOrNull() == me
+            val opened = runCatching { MarmotEngine.openSession() }.getOrNull() == me
             followingLoaded.join()
             opened
         }
@@ -1008,7 +1006,7 @@ object DMService {
 
     suspend fun prepareFile(data: ByteArray, mimeType: String, peer: String, extraImeta: List<String> = emptyList()): DMPreparedFile {
         if (data.size > MAX_FILE_SIZE) throw CoreError(L("fileTooLarge"))
-        val key = privateKey ?: throw CoreError(L("dmNotSignedIn"))
+        if (!isSigner) throw CoreError(L("dmNotSignedIn"))
         val groupId = ensureChat(peer)
         val ext = DMMediaCrypto.fileExtension(mimeType)
         val filename = "${UUID.randomUUID().toString().take(8).lowercase()}.$ext"
@@ -1033,7 +1031,7 @@ object DMService {
                 verifiedMedia.add(file.name)
             }
             val url = try {
-                DMMediaCrypto.upload(body, encrypted.encryptedHash, key, RelayConfig.encryptedMediaServers)
+                DMMediaCrypto.upload(body, encrypted.encryptedHash, RelayConfig.encryptedMediaServers)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Throwable) {
@@ -1405,11 +1403,11 @@ object DMMediaCrypto {
         OkHttpClient.Builder().callTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
     }
 
-    suspend fun upload(data: ByteArray, sha256: String, privateKey: String, servers: List<String>): String {
+    suspend fun upload(data: ByteArray, sha256: String, servers: List<String>): String {
         var lastError: Throwable = CoreError(L("failedToUploadEncryptedMedia"))
         for (server in servers) {
             try {
-                return upload(data, sha256, privateKey, server)
+                return upload(data, sha256, server)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -1419,9 +1417,9 @@ object DMMediaCrypto {
         throw lastError
     }
 
-    suspend fun upload(data: ByteArray, sha256: String, privateKey: String, server: String): String = withContext(Dispatchers.IO) {
+    suspend fun upload(data: ByteArray, sha256: String, server: String): String = withContext(Dispatchers.IO) {
         val expiration = System.currentTimeMillis() / 1000 + 600
-        val auth = createBlossomAuthEvent("Upload $sha256", sha256, expiration, privateKey)
+        val auth = signBlossomAuthEvent("Upload $sha256", sha256, expiration)
         val token = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         val base = server.trimEnd('/')
         val request = runCatching {

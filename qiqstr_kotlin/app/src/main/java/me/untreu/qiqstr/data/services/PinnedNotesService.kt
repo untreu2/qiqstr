@@ -4,7 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.dbSaveEvents
 import me.untreu.qiqstr.core.CoreError
@@ -72,7 +72,7 @@ object PinnedNotesService {
     }
 
     suspend fun toggle(noteId: String) {
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val me = Session.pubkey ?: throw CoreError("Not signed in")
         val base = SyncService.latestEditableEvent(KIND, me)
         if (base != null) {
@@ -91,7 +91,7 @@ object PinnedNotesService {
         latestCreatedAt = maxOf(latestCreatedAt, TimeFormat.now)
         try {
             val tags = updated.map { listOf("e", it) } + extraTags
-            val eventJson = createSignedEvent(KIND.toUShort(), "", tags, key)
+            val eventJson = signEvent(KIND.toUShort(), "", tags)
             val event = SyncService.publish(eventJson)
             latestCreatedAt = maxOf(latestCreatedAt, event.long("created_at"))
             DataBus.listsChanged()

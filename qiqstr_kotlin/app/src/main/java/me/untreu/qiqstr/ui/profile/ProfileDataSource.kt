@@ -1,6 +1,6 @@
 package me.untreu.qiqstr.ui.profile
 
-import com.qiqstr.core.createProfileEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbCalculateFollowScore
 import com.qiqstr.core.dbGetFollowingList
 import com.qiqstr.core.dbGetHydratedNotesByIds
@@ -153,8 +153,8 @@ object ProfileDataSource {
     }
 
     suspend fun publishMetadata(metadata: JSONObject) {
-        val key = Session.privateKey ?: throw CoreError("Not signed in")
-        val eventJson = createProfileEvent(metadata.toString(), key)
+        if (!Session.canSign) throw CoreError("Not signed in")
+        val eventJson = signEvent(0u, metadata.toString(), emptyList())
         SyncService.publish(eventJson)
     }
 

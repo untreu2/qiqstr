@@ -156,11 +156,11 @@ final class EmojiPackService {
 
     private func edit(_ coordinate: String, _ change: ([[String]]) -> [[String]]) async throws {
         guard let me = Session.shared.pubkey else { return }
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         guard busy.insert(coordinate).inserted else { return }
         defer { busy.remove(coordinate) }
         let base = try await SyncService.shared.latestEditableEvent(kind: Self.listKind, author: me, allowingNew: true)
-        let event = try createSignedEvent(kind: UInt16(Self.listKind), content: (base?["content"] as? String) ?? "", tags: change(base?.tags() ?? []), privateKeyHex: key)
+        let event = try signEvent(kind: UInt16(Self.listKind), content: (base?["content"] as? String) ?? "", tags: change(base?.tags() ?? []))
         try await SyncService.shared.publish(event)
     }
 

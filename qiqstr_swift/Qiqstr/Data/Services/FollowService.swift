@@ -78,7 +78,7 @@ final class FollowService {
     }
 
     private func apply(_ targets: Set<String>, creatingList: Bool, _ change: (inout Set<String>) -> Void) async throws {
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         guard let me = Session.shared.pubkey?.lowercased() else { throw CoreError(L("privateKeyNotFound")) }
         let generation = self.generation
         let snapshot = following
@@ -95,7 +95,7 @@ final class FollowService {
             var list = Self.pubkeys(in: baseTags)
             change(&list)
             list.remove(me)
-            let event = try createSignedEvent(kind: 3, content: (base?["content"] as? String) ?? "", tags: Self.mergedTags(baseTags, list: list), privateKeyHex: key)
+            let event = try signEvent(kind: 3, content: (base?["content"] as? String) ?? "", tags: Self.mergedTags(baseTags, list: list))
             try await SyncService.shared.publish(event)
             guard generation == self.generation else { return }
             verifiedAt = Date()

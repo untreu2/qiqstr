@@ -13,7 +13,7 @@ open build/dd/Build/Products/Debug/qiqstr.app
 
 `QiqstrMac.xcodeproj` and `build/` are not committed. Run `xcodegen generate` after adding or removing Swift files here or in `../qiqstr_swift/Qiqstr`.
 
-The app is not sandboxed: LMDB's POSIX semaphores are blocked in the App Sandbox unless their names carry a team-signed app group prefix. Its data lives in `~/Library/Application Support/me.untreu.qiqstrmac` (`AppDirectories.support` adds the bundle id on macOS). Sign builds with your team (`DEVELOPMENT_TEAM=<team> CODE_SIGN_IDENTITY="Apple Development"` on the `xcodebuild` line, or the Signing pane in Xcode); an ad-hoc signature changes on every build, so macOS asks for the login keychain password each time the app reads its stored keys. Keys are stored under the same keychain service as iOS, `me.untreu.qiqstrswift`.
+The app is not sandboxed. (It was kept out of the App Sandbox for LMDB's POSIX semaphores; the core now uses SQLite, so that reason no longer applies, but sandboxing has not been tried.) Its data lives in `~/Library/Application Support/me.untreu.qiqstrmac` (`AppDirectories.support` adds the bundle id on macOS). Sign builds with your team (`DEVELOPMENT_TEAM=<team> CODE_SIGN_IDENTITY="Apple Development"` on the `xcodebuild` line, or the Signing pane in Xcode); an ad-hoc signature changes on every build, so macOS asks for the login keychain password each time the app reads its stored keys. Keys are stored under the same keychain service as iOS, `me.untreu.qiqstrswift`.
 
 ## Layout
 

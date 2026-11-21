@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createZapRequestEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbGetProfile
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -199,12 +199,12 @@ object ZapService {
             pendingSats[note.id] = amountSats
         }
         try {
-            val privateKey = Session.requireSigner()
+            Session.requireSigner()
             val targets = ZapSplit.shares(amountSats, note?.let { ZapSplit.parse(it.tags) }.orEmpty()).ifEmpty { listOf(pubkey to amountSats) }
             var paid = 0L
             var lastError: Exception? = null
             for ((recipient, sats) in targets) {
-                try { pay(recipient, sats, comment, note, privateKey); paid += sats }
+                try { pay(recipient, sats, comment, note); paid += sats }
                 catch (error: WalletError.PaymentPending) { throw error }
                 catch (error: Exception) { lastError = error }
             }
@@ -218,7 +218,7 @@ object ZapService {
         } finally { if (note != null) pendingSats.remove(note.id) }
     }
 
-    private suspend fun pay(pubkey: String, sats: Long, comment: String, note: Note?, privateKey: String) {
+    private suspend fun pay(pubkey: String, sats: Long, comment: String, note: Note?) {
         val amountMsat = SatsAmount.msat(sats) ?: throw ZapError.InvalidAmount()
         val recipient = recipient(pubkey)
         val address = recipient.lightningAddress
@@ -231,7 +231,7 @@ object ZapService {
         if (!params.allowsNostr || params.nostrPubkey.isNullOrEmpty()) throw ZapError.ZapsNotSupported()
         val tags = mutableListOf(listOf("relays") + RelayConfig.mainRelays, listOf("amount", amountMsat.toString()), listOf("lnurl", params.lnurl), listOf("p", pubkey))
         if (note != null) { tags.add(listOf("e", note.id)); tags.add(listOf("k", note.kind.toString())) }
-        val zapRequest = createZapRequestEvent(tags, comment.trim(), privateKey)
+        val zapRequest = signEvent(9734u, comment.trim(), tags)
         WalletService.payBolt11(Lnurl.requestInvoice(params, amountMsat, zapRequest = zapRequest))
     }
 

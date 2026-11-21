@@ -190,7 +190,7 @@ final class ZapService {
             pendingSats[note.id] = amountSats
         }
         defer { if let note { pendingSats[note.id] = nil } }
-        let privateKey = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let splits = note?.zapSplits ?? []
         var targets = ZapSplit.shares(amountSats, splits: splits)
         if targets.isEmpty { targets = [(pubkey: pubkey, sats: amountSats)] }
@@ -198,7 +198,7 @@ final class ZapService {
         var lastError: Error?
         for target in targets {
             do {
-                try await pay(target.pubkey, sats: target.sats, comment: comment, note: note, privateKey: privateKey)
+                try await pay(target.pubkey, sats: target.sats, comment: comment, note: note)
                 paid += target.sats
             } catch WalletError.paymentPending {
                 throw WalletError.paymentPending
@@ -217,7 +217,7 @@ final class ZapService {
         }
     }
 
-    private func pay(_ pubkey: String, sats: Int, comment: String, note: Note?, privateKey: String) async throws {
+    private func pay(_ pubkey: String, sats: Int, comment: String, note: Note?) async throws {
         guard let amountMsat = SatsAmount.msat(sats) else { throw ZapError.invalidAmount }
         let recipient = await recipient(pubkey)
         let params: LnurlPayParams
@@ -240,7 +240,7 @@ final class ZapService {
             tags.append(["e", note.id])
             tags.append(["k", String(note.kind)])
         }
-        let zapRequest = try createZapRequestEvent(tags: tags, content: comment.trimmingCharacters(in: .whitespacesAndNewlines), privateKeyHex: privateKey)
+        let zapRequest = try signEvent(kind: 9734, content: comment.trimmingCharacters(in: .whitespacesAndNewlines), tags: tags)
         let invoice = try await Lnurl.requestInvoice(params, amountMsat: amountMsat, zapRequest: zapRequest)
         try await WalletService.shared.payBolt11(invoice)
     }

@@ -234,7 +234,7 @@ Future<String> mergeAndSortNotes({
 );
 
 /// DB-only version of fetch_full_thread — no network calls, returns instantly
-/// from local LMDB. Returns None if the root note is not in the DB yet.
+/// from local store. Returns None if the root note is not in the DB yet.
 Future<String?> fetchFullThreadLocal({
   required String noteId,
   String? currentUserPubkeyHex,

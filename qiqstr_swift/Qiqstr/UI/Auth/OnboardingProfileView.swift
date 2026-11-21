@@ -70,7 +70,7 @@ final class OnboardingProfileViewModel {
             failureCount += 1
             return false
         }
-        guard let me = Session.shared.pubkey, let key = Session.shared.privateKey else {
+        guard let me = Session.shared.pubkey, Session.shared.canSign else {
             ToastCenter.shared.show(L("privateKeyNotFound"), style: .error)
             return false
         }
@@ -87,7 +87,7 @@ final class OnboardingProfileViewModel {
             website: website.authTrimmed
         )
         do {
-            let event = try createProfileEvent(profileJson: profile.metadataJSON, privateKeyHex: key)
+            let event = try signEvent(kind: 0, content: profile.metadataJSON, tags: [])
             try await SyncService.shared.publish(event)
             ProfileCache.shared.set(profile)
             DataBus.shared.profileChanged()

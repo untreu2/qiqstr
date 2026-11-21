@@ -3,12 +3,12 @@ package me.untreu.qiqstr.data.services
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
+import com.qiqstr.core.sessionNip44Encrypt
+import com.qiqstr.core.sessionNip44Decrypt
+import com.qiqstr.core.sessionNip04Decrypt
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.getConnectedRelayCount
-import com.qiqstr.core.nip04Decrypt
-import com.qiqstr.core.nip44Decrypt
-import com.qiqstr.core.nip44Encrypt
 import com.qiqstr.core.setActiveMuteList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -162,9 +162,9 @@ object MuteService {
     private suspend fun publishPending() {
         if (pending.isEmpty) return
         val me = Session.pubkey ?: return
-        val key = Session.privateKey ?: return
+        if (!Session.canSign) return
         val generation = this.generation
-        val base = latestList(me, key) ?: return
+        val base = latestList(me) ?: return
         if (generation != this.generation || !base.isReadable) return
         val changes = pending.copy()
         val keep: (List<String>) -> Boolean = { tag ->
@@ -179,8 +179,8 @@ object MuteService {
             privateTags += changes.added[entry.raw].orEmpty().filter { it !in existing }.map { listOf(entry.raw, it) }
         }
         runCatching {
-            val content = if (privateTags.isEmpty()) "" else nip44Encrypt(Json.string(privateTags), key, me)
-            val event = createSignedEvent(10000u.toUShort(), content, publicTags, key)
+            val content = if (privateTags.isEmpty()) "" else sessionNip44Encrypt(Json.string(privateTags), me)
+            val event = signEvent(10000u.toUShort(), content, publicTags)
             SyncService.publish(event)
             if (generation != this.generation) return
             remote = RemoteMuteList(publicTags, privateTags)
@@ -190,11 +190,11 @@ object MuteService {
         }
     }
 
-    private suspend fun latestList(me: String, key: String): RemoteMuteList? {
+    private suspend fun latestList(me: String): RemoteMuteList? {
         val cached = cachedEvents(me)
         val fetched = SyncService.fetchReplaceable(10000, me)
         if (fetched.isEmpty() && cached.isNotEmpty()) return null
-        newest(cached + fetched, me)?.let { return parse(it, me, key) }
+        newest(cached + fetched, me)?.let { return parse(it, me, canDecrypt = true) }
         if (!Session.isNewAccount && !AccountStore.wasCreatedHere(me)) return null
         if (runCatching { getConnectedRelayCount() }.getOrDefault(0u) == 0u) return null
         return RemoteMuteList()
@@ -203,7 +203,7 @@ object MuteService {
     private suspend fun readCachedList(me: String, generation: Int) {
         val events = cachedEvents(me)
         if (generation != this.generation) return
-        remote = newest(events, me)?.let { parse(it, me, Session.privateKey) } ?: RemoteMuteList()
+        remote = newest(events, me)?.let { parse(it, me, Session.canSign) } ?: RemoteMuteList()
         recompute()
     }
 
@@ -216,11 +216,11 @@ object MuteService {
         events.filter { it.int("kind") == 10000 && it.str("pubkey")?.lowercase() == author.lowercase() }
             .maxWithOrNull(compareBy<JSONObject>({ it.long("created_at") }, { it.str("id") ?: "" }))
 
-    private fun parse(event: JSONObject, pubkey: String, privateKey: String?): RemoteMuteList {
+    private fun parse(event: JSONObject, pubkey: String, canDecrypt: Boolean): RemoteMuteList {
         val publicTags = event.tags()
         val content = event.text("content")
         if (content.isEmpty()) return RemoteMuteList(publicTags)
-        val plain = privateKey?.let { decrypt(content, it, pubkey) }
+        val plain = if (canDecrypt) decrypt(content, pubkey) else null
         val array = plain?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return RemoteMuteList(publicTags, isReadable = false)
         val privateTags = (0 until array.length()).mapNotNull { index ->
             val tag = array.optJSONArray(index) ?: return@mapNotNull null
@@ -229,8 +229,8 @@ object MuteService {
         return RemoteMuteList(publicTags, privateTags)
     }
 
-    private fun decrypt(content: String, privateKey: String, pubkey: String): String? = runCatching {
-        if (content.contains("?iv=")) nip04Decrypt(content, privateKey, pubkey) else nip44Decrypt(content, privateKey, pubkey)
+    private fun decrypt(content: String, pubkey: String): String? = runCatching {
+        if (content.contains("?iv=")) sessionNip04Decrypt(content, pubkey) else sessionNip44Decrypt(content, pubkey)
     }.getOrNull()
 
     private fun merged(entry: MuteEntry): List<String> {

@@ -58,10 +58,10 @@ object CommunityService {
     fun isJoined(channel: PublicChannel) = channels.any { it.id == channel.id }
     private suspend fun editList(kind: Int, change: (List<List<String>>) -> List<List<String>>) = listLock.withLock {
         val me = Session.pubkey ?: throw CoreError(L("readOnlyMessage"))
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val base = SyncService.latestEditableEvent(kind, me, allowingNew = true)
         if (me != Session.pubkey) throw CancellationException()
-        SyncService.publish(createSignedEvent(kind.toUShort(), base?.text("content").orEmpty(), change(base?.tags().orEmpty()), key))
+        SyncService.publish(signEvent(kind.toUShort(), base?.text("content").orEmpty(), change(base?.tags().orEmpty())))
         if (me != Session.pubkey) throw CancellationException()
     }
     private suspend fun resolveGroups(refs: List<RelayGroup>): List<RelayGroup> = coroutineScope {
@@ -192,7 +192,7 @@ object CommunityService {
     }
     fun latestCommunities(events: List<JSONObject>) = events.mapNotNull(Community::from).sortedByDescending { it.createdAt }.distinctBy { it.id }
     fun parseChannels(created: List<JSONObject>, metadata: List<JSONObject>): List<PublicChannel> = created.mapNotNull(PublicChannel::from).distinctBy { it.id }.map { channel -> metadata.fold(channel) { value, event -> value.metadata(event) } }
-    private fun sign(kind: Int, content: String, tags: List<List<String>>) = createSignedEvent(kind.toUShort(), content.trim(), tags, Session.requireSigner())
+    private fun sign(kind: Int, content: String, tags: List<List<String>>) = signEvent(kind.toUShort(), content.trim(), tags)
     private suspend fun sendToRelays(event: String, relays: List<String>) {
         val result = Json.obj(sendEventTo(event, relays))
         if (result?.optJSONArray("success")?.length() == null || result.optJSONArray("success")!!.length() == 0) throw CoreError(L("publishNoRelayAccepted"))

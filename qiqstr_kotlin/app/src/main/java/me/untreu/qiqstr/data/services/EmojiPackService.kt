@@ -1,9 +1,9 @@
 package me.untreu.qiqstr.data.services
 
+import com.qiqstr.core.signEvent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import me.untreu.qiqstr.core.*
@@ -94,11 +94,11 @@ object EmojiPackService {
     }
     private suspend fun edit(coordinate: String, change: (List<List<String>>) -> List<List<String>>) {
         val me = Session.pubkey ?: return
-        val key = Session.requireSigner()
+        Session.requireSigner()
         busy = busy + coordinate
         try {
             val base = SyncService.latestEditableEvent(listKind, me, allowingNew = true)
-            SyncService.publish(createSignedEvent(listKind.toUShort(), base?.str("content") ?: "", change(base?.tags() ?: emptyList()), key))
+            SyncService.publish(signEvent(listKind.toUShort(), base?.str("content") ?: "", change(base?.tags() ?: emptyList())))
         } finally { busy = busy - coordinate }
     }
     private fun persist() { owner?.let { Prefs.set("emoji_packs_$it", Json.string(packs.map(EmojiPack::toJson))) } }

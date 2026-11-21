@@ -1,7 +1,7 @@
 package me.untreu.qiqstr.ui.articles
 
 import androidx.compose.runtime.*
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbDeleteEventsByIds
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -61,7 +61,7 @@ object ArticleDraftStore {
 object ArticlePublisher {
     suspend fun publish(draft: ArticleDraft): ArticleAddress {
         val owner = Session.pubkey ?: throw CoreError(L("noRelayConnection"))
-        val key = Session.requireSigner()
+        Session.requireSigner()
         if (!draft.canPublish) throw CoreError(L("articleNeedsTitleAndText"))
         val identifier = draft.dTag.ifEmpty { ArticleIdentifier.make(draft.title) }
         val content = draft.content.trim()
@@ -70,7 +70,7 @@ object ArticlePublisher {
         if (draft.image.isNotBlank()) tags.add(listOf("image", draft.image.trim()))
         tags.addAll(draft.hashtags.map { listOf("t", it) })
         tags.addAll(MarkdownParser.pubkeys(content).filter { it != owner }.map { listOf("p", it) })
-        SyncService.publish(createSignedEvent(30023u, content, tags, key))
+        SyncService.publish(signEvent(30023u, content, tags))
         if (owner == Session.pubkey) ArticleDraftStore.delete(draft.id)
         DataBus.feedChanged()
         return ArticleAddress(owner, identifier)
@@ -78,7 +78,7 @@ object ArticlePublisher {
     suspend fun delete(article: Article) {
         if (article.pubkey != Session.pubkey) throw CoreError(L("readOnlyMessage"))
         val owner = Session.pubkey
-        val event = createSignedEvent(5u, "", listOf(listOf("e", article.id), listOf("a", "30023:${article.pubkey}:${article.dTag}"), listOf("k", "30023")), Session.requireSigner())
+        val event = signEvent(5u, "", listOf(listOf("e", article.id), listOf("a", "30023:${article.pubkey}:${article.dTag}"), listOf("k", "30023")))
         SyncService.publish(event)
         runCatching { dbDeleteEventsByIds(listOf(article.id)) }
         if (owner == Session.pubkey) ArticleDraftStore.editing(article.dTag)?.let { ArticleDraftStore.delete(it.id) }

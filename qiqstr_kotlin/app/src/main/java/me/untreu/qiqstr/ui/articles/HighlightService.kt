@@ -1,6 +1,6 @@
 package me.untreu.qiqstr.ui.articles
 
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.dbSaveEvents
 import me.untreu.qiqstr.core.CoreError
@@ -52,7 +52,7 @@ object HighlightService {
     }
 
     suspend fun publish(text: String, context: String, comment: String, article: Article): ArticleHighlight {
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val content = text.trim()
         if (content.isEmpty()) throw CoreError(L("highlightEmpty"))
         val tags = mutableListOf(
@@ -64,7 +64,7 @@ object HighlightService {
         if (trimmedContext.isNotEmpty() && trimmedContext != content) tags.add(listOf("context", trimmedContext))
         val trimmedComment = comment.trim()
         if (trimmedComment.isNotEmpty()) tags.add(listOf("comment", trimmedComment))
-        val json = createSignedEvent(9802.toUShort(), content, tags, key)
+        val json = signEvent(9802.toUShort(), content, tags)
         val event = SyncService.publish(json)
         return ArticleHighlight.from(event) ?: throw CoreError(L("highlightFailed"))
     }

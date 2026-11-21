@@ -63,7 +63,7 @@ import me.untreu.qiqstr.core.AppColors
 import me.untreu.qiqstr.core.L
 import me.untreu.qiqstr.core.components.ProfileAvatar
 import me.untreu.qiqstr.core.components.TextAction
-import me.untreu.qiqstr.data.accounts.StoredAccount
+import me.untreu.qiqstr.data.accounts.Account
 import me.untreu.qiqstr.data.services.ReadOnlyGate
 import me.untreu.qiqstr.data.services.ToastCenter
 import me.untreu.qiqstr.data.services.ToastStyle
@@ -100,13 +100,13 @@ fun SwitchAccountSheet(onDismiss: () -> Unit) {
 private fun AccountList(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
     val haptics = rememberHaptics()
     var switchingTo by remember { mutableStateOf<String?>(null) }
-    var removing by remember { mutableStateOf<StoredAccount?>(null) }
+    var removing by remember { mutableStateOf<Account?>(null) }
     var confirmLogout by remember { mutableStateOf(false) }
     var isLoggingOut by remember { mutableStateOf(false) }
     val accounts = Session.accounts
     LaunchedEffect(accounts.map { it.npub }) { ProfileCache.load(accounts.map { it.pubkeyHex }.filter { it.isNotEmpty() }) }
 
-    fun switchTo(account: StoredAccount) {
+    fun switchTo(account: Account) {
         if (account.npub == Session.npub) {
             onDismiss()
             return
@@ -209,7 +209,7 @@ private fun AccountList(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun AccountRow(account: StoredAccount, switching: Boolean, enabled: Boolean, onClick: () -> Unit, onRemove: () -> Unit) {
+private fun AccountRow(account: Account, switching: Boolean, enabled: Boolean, onClick: () -> Unit, onRemove: () -> Unit) {
     val pubkey = account.pubkeyHex
     val isActive = account.npub == Session.npub
     val profile = ProfileCache.profiles[pubkey]

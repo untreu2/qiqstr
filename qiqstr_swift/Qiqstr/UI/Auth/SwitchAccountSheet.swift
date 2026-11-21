@@ -10,7 +10,7 @@ struct SwitchAccountSheet: View {
     @State private var path = NavigationPath()
     @State private var detent: PresentationDetent = .medium
     @State private var switchingTo: String?
-    @State private var removing: StoredAccount?
+    @State private var removing: Account?
     @State private var confirmLogout = false
     @State private var isLoggingOut = false
     @State private var switchCount = 0
@@ -112,7 +112,7 @@ struct SwitchAccountSheet: View {
         .accessibilityIdentifier("switch-account-sheet")
     }
 
-    private func accountRow(_ account: StoredAccount) -> some View {
+    private func accountRow(_ account: Account) -> some View {
         let pubkey = account.pubkeyHex
         let isActive = account.npub == session.npub
         let profile = cache.profile(pubkey)
@@ -190,7 +190,7 @@ struct SwitchAccountSheet: View {
         npub.count > 16 ? "\(npub.prefix(10))…\(npub.suffix(6))" : npub
     }
 
-    private func switchTo(_ account: StoredAccount) {
+    private func switchTo(_ account: Account) {
         guard account.npub != session.npub else {
             dismiss()
             return
@@ -207,7 +207,7 @@ struct SwitchAccountSheet: View {
         }
     }
 
-    private func remove(_ account: StoredAccount) {
+    private func remove(_ account: Account) {
         Task { await session.removeAccount(account.npub) }
     }
 

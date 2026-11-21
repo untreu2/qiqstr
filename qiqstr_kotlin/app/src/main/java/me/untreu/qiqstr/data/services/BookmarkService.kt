@@ -3,14 +3,14 @@ package me.untreu.qiqstr.data.services
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
+import com.qiqstr.core.sessionNip44Encrypt
+import com.qiqstr.core.sessionNip44Decrypt
+import com.qiqstr.core.sessionNip04Decrypt
 import com.qiqstr.core.dbGetHydratedNotesByIds
 import com.qiqstr.core.dbQueryEvents
 import com.qiqstr.core.dbSaveEvents
 import com.qiqstr.core.fetchEventsByIds
-import com.qiqstr.core.nip04Decrypt
-import com.qiqstr.core.nip44Decrypt
-import com.qiqstr.core.nip44Encrypt
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.untreu.qiqstr.core.CoreError
@@ -134,7 +134,7 @@ object BookmarkService {
 
     private suspend fun loadFromDatabase(current: Int) {
         val me = Session.pubkey ?: return
-        val sk = Session.privateKey ?: return
+        if (!Session.canSign) return
         val filter = Json.string(mapOf("kinds" to listOf(30001), "authors" to listOf(me), "#d" to listOf(D_TAG)))
         val events = Json.array(runCatching { dbQueryEvents(filter, 5u) }.getOrNull())
         if (current != generation) return
@@ -146,7 +146,7 @@ object BookmarkService {
         val ids = eventIds(event.tags()).toMutableList()
         val content = event.text("content")
         if (content.isNotEmpty()) {
-            decrypt(content, sk, me)?.let(::parseTags)?.let { ids += eventIds(it) }
+            decrypt(content, me)?.let(::parseTags)?.let { ids += eventIds(it) }
         }
         bookmarkedIds = ids.distinct()
         isLoaded = true
@@ -161,8 +161,8 @@ object BookmarkService {
         }
     }
 
-    private fun decrypt(content: String, key: String, me: String): String? = runCatching {
-        if (content.contains("?iv=")) nip04Decrypt(content, key, me) else nip44Decrypt(content, key, me)
+    private fun decrypt(content: String, me: String): String? = runCatching {
+        if (content.contains("?iv=")) sessionNip04Decrypt(content, me) else sessionNip44Decrypt(content, me)
     }.getOrNull()
 
     private fun eventIds(tags: List<List<String>>): List<String> =
@@ -178,14 +178,14 @@ object BookmarkService {
     }
 
     private suspend fun publish(noteId: String, adding: Boolean) {
-        val sk = Session.requireSigner()
+        Session.requireSigner()
         val me = Session.pubkey ?: throw CoreError("Not signed in")
         val base: JSONObject? = SyncService.latestEditableEvent(30001, me, D_TAG)
         val publicTags = (base?.tags() ?: emptyList()).filter { it.firstOrNull() != "d" }.toMutableList()
         var privateTags = mutableListOf<List<String>>()
         val content = base?.text("content") ?: ""
         if (content.isNotEmpty()) {
-            val decrypted = decrypt(content, sk, me)?.let(::parseTags) ?: throw CoreError(L("bookmarksUnreadable"))
+            val decrypted = decrypt(content, me)?.let(::parseTags) ?: throw CoreError(L("bookmarksUnreadable"))
             privateTags = decrypted.toMutableList()
         }
         val isE: (List<String>) -> Boolean = { it.size > 1 && it[0] == "e" && it[1] == noteId }
@@ -196,8 +196,8 @@ object BookmarkService {
             privateTags.removeAll(isE)
         }
         if (publicTags.none { it.firstOrNull() == "alt" }) publicTags.add(listOf("alt", "List of bookmarks"))
-        val encrypted = nip44Encrypt(Json.string(privateTags), sk, me)
-        val json = createSignedEvent(30001u.toUShort(), encrypted, listOf(listOf("d", D_TAG)) + publicTags, sk)
+        val encrypted = sessionNip44Encrypt(Json.string(privateTags), me)
+        val json = signEvent(30001u.toUShort(), encrypted, listOf(listOf("d", D_TAG)) + publicTags)
         SyncService.publish(json)
         bookmarkedIds = (eventIds(publicTags) + eventIds(privateTags)).distinct()
         DataBus.listsChanged()

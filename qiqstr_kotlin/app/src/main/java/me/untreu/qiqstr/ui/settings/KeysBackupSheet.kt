@@ -54,9 +54,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.untreu.qiqstr.core.AppColors
+import me.untreu.qiqstr.core.CoreError
 import me.untreu.qiqstr.core.L
 import me.untreu.qiqstr.core.components.TextAction
 import me.untreu.qiqstr.core.coreErrorMessage
+import me.untreu.qiqstr.data.sync.Session
 import me.untreu.qiqstr.data.accounts.Ncryptsec
 import me.untreu.qiqstr.data.services.ToastCenter
 import me.untreu.qiqstr.data.services.ToastStyle
@@ -119,12 +121,13 @@ class KeysBackupModel : ViewModel() {
     val showMismatch: Boolean get() = confirmation.isNotEmpty() && password != confirmation
     val canEncrypt: Boolean get() = isLongEnough && matches && !isEncrypting
 
-    fun encrypt(privateKeyHex: String) {
+    fun encrypt() {
         if (!canEncrypt) return
         isEncrypting = true
         errorMessage = null
         viewModelScope.launch {
             try {
+                val privateKeyHex = Session.revealSigningKey() ?: throw CoreError(L("privateKeyNotFound"))
                 ncryptsec = Ncryptsec.encrypt(privateKeyHex, password)
                 password = ""
                 confirmation = ""
@@ -151,7 +154,7 @@ class KeysBackupModel : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KeysBackupSheet(privateKeyHex: String, onDismiss: () -> Unit) {
+fun KeysBackupSheet(onDismiss: () -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { true })
     ScopedViewModels {
         val model: KeysBackupModel = viewModel()
@@ -161,14 +164,14 @@ fun KeysBackupSheet(privateKeyHex: String, onDismiss: () -> Unit) {
             containerColor = AppColors.background,
             modifier = Modifier.testTag("keys-backup-sheet"),
         ) {
-            KeysBackupContent(model, privateKeyHex, onDismiss)
+            KeysBackupContent(model, onDismiss)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun KeysBackupContent(model: KeysBackupModel, privateKeyHex: String, onDismiss: () -> Unit) {
+private fun KeysBackupContent(model: KeysBackupModel, onDismiss: () -> Unit) {
     val haptics = rememberHaptics()
     val focus = LocalFocusManager.current
     val passwordFocus = remember { FocusRequester() }
@@ -179,7 +182,7 @@ private fun KeysBackupContent(model: KeysBackupModel, privateKeyHex: String, onD
     val encrypt = {
         if (model.canEncrypt) {
             focus.clearFocus()
-            model.encrypt(privateKeyHex)
+            model.encrypt()
         }
     }
     val result = model.ncryptsec

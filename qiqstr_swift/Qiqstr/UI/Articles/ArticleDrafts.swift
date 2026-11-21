@@ -158,7 +158,7 @@ enum ArticlePublisher {
     @discardableResult
     static func publish(_ draft: ArticleDraft) async throws -> ArticleAddress {
         guard let me = Session.shared.pubkey else { throw CoreError(L("noRelayConnection")) }
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         guard draft.canPublish else { throw CoreError(L("articleNeedsTitleAndText")) }
         let identifier = draft.dTag.isEmpty ? ArticleDraft.makeIdentifier(title: draft.title) : draft.dTag
         let now = TimeFormat.now
@@ -174,7 +174,7 @@ enum ArticlePublisher {
         if !image.isEmpty { tags.append(["image", image]) }
         tags += draft.hashtags.map { ["t", $0] }
         tags += MarkdownParser.pubkeys(in: content).filter { $0 != me }.map { ["p", $0] }
-        let event = try createSignedEvent(kind: UInt16(kind), content: content, tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: UInt16(kind), content: content, tags: tags)
         try await SyncService.shared.publish(event)
         ArticleDraftStore.shared.delete(draft.id)
         DataBus.shared.feedChanged()
@@ -183,13 +183,13 @@ enum ArticlePublisher {
 
     /// Asks relays to delete the article (NIP-09) and removes it from the local database.
     static func delete(_ article: Article) async throws {
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let tags: [[String]] = [
             ["e", article.id],
             ["a", "\(kind):\(article.pubkey):\(article.dTag)"],
             ["k", String(kind)],
         ]
-        let event = try createSignedEvent(kind: 5, content: "", tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: 5, content: "", tags: tags)
         try await SyncService.shared.publish(event)
         _ = try? await dbDeleteEventsByIds(eventIds: [article.id])
         if let draft = ArticleDraftStore.shared.draft(editing: article.dTag) { ArticleDraftStore.shared.delete(draft.id) }

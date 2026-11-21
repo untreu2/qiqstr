@@ -12,7 +12,7 @@ import com.qiqstr.core.marmotKeyPackageEvent
 import com.qiqstr.core.marmotKeyPackageRelaysEvent
 import com.qiqstr.core.marmotMergePendingCommit
 import com.qiqstr.core.marmotMessagesPage
-import com.qiqstr.core.marmotOpen
+import com.qiqstr.core.marmotOpenSession
 import com.qiqstr.core.marmotPickKeyPackage
 import com.qiqstr.core.marmotProcessEvent
 import com.qiqstr.core.marmotSelfUpdate
@@ -117,11 +117,11 @@ object MarmotEngine {
         withContext(NonCancellable) { runCatching { serial { marmotClose() } } }
     }
 
-    suspend fun open(privateKey: String): String {
+    suspend fun openSession(): String {
         val directory = storageDirectory
         return serial {
             directory.mkdirs()
-            marmotOpen(directory.path, privateKey)
+            marmotOpenSession(directory.path)
         }
     }
 

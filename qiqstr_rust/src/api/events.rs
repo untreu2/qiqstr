@@ -3,33 +3,137 @@ use nostr::prelude::*;
 
 use super::crypto::Secret;
 
+/// An event's kind, content and tags, before it is signed.
+pub(crate) struct Draft {
+    pub kind: u16,
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+}
+
+impl Draft {
+    pub(crate) fn new(kind: u16, content: String, tags: Vec<Vec<String>>) -> Self {
+        Self {
+            kind,
+            content,
+            tags,
+        }
+    }
+
+    pub(crate) fn sign(self, keys: &Keys) -> Result<String> {
+        let tags: Vec<Tag> = self
+            .tags
+            .iter()
+            .filter(|t| !t.is_empty())
+            .map(|t| Tag::custom(TagKind::custom(&t[0]), t[1..].to_vec()))
+            .collect();
+        let event = EventBuilder::new(Kind::from(self.kind), &self.content)
+            .tags(tags)
+            .sign_with_keys(keys)?;
+        Ok(event.as_json())
+    }
+
+    fn sign_with_key(self, private_key_hex: String) -> Result<String> {
+        self.sign_with_secret(&Secret::new(private_key_hex))
+    }
+
+    fn sign_with_secret(self, private_key_hex: &Secret) -> Result<String> {
+        self.sign(&Keys::new(SecretKey::parse(private_key_hex)?))
+    }
+}
+
+pub(crate) fn reaction_draft(
+    target_event_id: String,
+    target_author: String,
+    content: String,
+    relay_url: String,
+    target_kind: u16,
+) -> Draft {
+    let tags = vec![
+        vec!["e".into(), target_event_id, relay_url],
+        vec!["p".into(), target_author],
+        vec!["k".into(), target_kind.to_string()],
+    ];
+    Draft::new(7, content, tags)
+}
+
+pub(crate) fn repost_draft(
+    note_id: String,
+    note_author: String,
+    content: String,
+    relay_url: String,
+) -> Result<Draft> {
+    let note_id = EventId::parse(&note_id)?;
+    let note_author = PublicKey::parse(&note_author)?;
+    let original = Event::from_json(&content).ok().filter(|event| {
+        event.id == note_id
+            && event.pubkey == note_author
+            && event.kind == Kind::TextNote
+            && event.verify().is_ok()
+    });
+    let content = original.map(|event| event.as_json()).unwrap_or_default();
+    let tags = vec![
+        vec!["e".into(), note_id.to_hex(), relay_url],
+        vec!["p".into(), note_author.to_hex()],
+    ];
+    Ok(Draft::new(6, content, tags))
+}
+
+pub(crate) fn deletion_draft(event_ids: Vec<String>, reason: String) -> Draft {
+    let tags = event_ids
+        .into_iter()
+        .map(|id| vec!["e".into(), id])
+        .collect();
+    Draft::new(5, reason, tags)
+}
+
+pub(crate) fn quote_draft(
+    content: String,
+    quoted_event_id: String,
+    quoted_event_pubkey: Option<String>,
+    relay_url: String,
+    additional_tags: Vec<Vec<String>>,
+) -> Draft {
+    let mut tags = Vec::new();
+    if let Some(pk) = quoted_event_pubkey {
+        tags.push(vec!["q".into(), quoted_event_id, relay_url, pk.clone()]);
+        tags.push(vec!["p".into(), pk]);
+    } else {
+        tags.push(vec!["q".into(), quoted_event_id, relay_url]);
+    }
+    tags.extend(additional_tags);
+    Draft::new(1, content, tags)
+}
+
+pub(crate) fn blossom_auth_draft(content: String, sha256_hash: String, expiration: i64) -> Draft {
+    let tags = vec![
+        vec!["t".into(), "upload".into()],
+        vec!["x".into(), sha256_hash],
+        vec!["expiration".into(), expiration.to_string()],
+    ];
+    Draft::new(24242, content, tags)
+}
+
+pub(crate) fn relay_list_draft_with_markers(relay_configs: Vec<String>) -> Draft {
+    let tags = relay_configs
+        .iter()
+        .map(|config| {
+            if let Some((url, marker)) = config.split_once('|') {
+                vec!["r".into(), url.to_string(), marker.to_string()]
+            } else {
+                vec!["r".into(), config.clone()]
+            }
+        })
+        .collect();
+    Draft::new(10002, String::new(), tags)
+}
+
 pub fn create_signed_event(
     kind: u16,
     content: String,
     tags: Vec<Vec<String>>,
     private_key_hex: String,
 ) -> Result<String> {
-    sign_event(kind, content, tags, &Secret::new(private_key_hex))
-}
-
-fn sign_event(
-    kind: u16,
-    content: String,
-    tags: Vec<Vec<String>>,
-    private_key_hex: &Secret,
-) -> Result<String> {
-    let secret_key = SecretKey::parse(private_key_hex)?;
-    let keys = Keys::new(secret_key);
-
-    let nostr_tags: Vec<Tag> = tags
-        .iter()
-        .filter(|t| !t.is_empty())
-        .map(|t| Tag::custom(TagKind::custom(&t[0]), t[1..].to_vec()))
-        .collect();
-
-    let builder = EventBuilder::new(Kind::from(kind), &content).tags(nostr_tags);
-    let event = builder.sign_with_keys(&keys)?;
-    Ok(event.as_json())
+    Draft::new(kind, content, tags).sign_with_key(private_key_hex)
 }
 
 pub fn zap_receipt_summary(event_json: String) -> Result<String> {
@@ -50,8 +154,7 @@ pub fn create_note_event(
     tags: Vec<Vec<String>>,
     private_key_hex: String,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    sign_event(1, content, tags, &private_key_hex)
+    Draft::new(1, content, tags).sign_with_key(private_key_hex)
 }
 
 pub fn create_reaction_event(
@@ -62,13 +165,14 @@ pub fn create_reaction_event(
     relay_url: String,
     target_kind: u16,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let tags = vec![
-        vec!["e".into(), target_event_id, relay_url],
-        vec!["p".into(), target_author],
-        vec!["k".into(), target_kind.to_string()],
-    ];
-    sign_event(7, content, tags, &private_key_hex)
+    reaction_draft(
+        target_event_id,
+        target_author,
+        content,
+        relay_url,
+        target_kind,
+    )
+    .sign_with_key(private_key_hex)
 }
 
 pub fn create_reply_event(
@@ -76,8 +180,7 @@ pub fn create_reply_event(
     tags: Vec<Vec<String>>,
     private_key_hex: String,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    sign_event(1, content, tags, &private_key_hex)
+    Draft::new(1, content, tags).sign_with_key(private_key_hex)
 }
 
 pub fn create_repost_event(
@@ -88,20 +191,7 @@ pub fn create_repost_event(
     relay_url: String,
 ) -> Result<String> {
     let private_key_hex = Secret::new(private_key_hex);
-    let note_id = EventId::parse(&note_id)?;
-    let note_author = PublicKey::parse(&note_author)?;
-    let original = Event::from_json(&content).ok().filter(|event| {
-        event.id == note_id
-            && event.pubkey == note_author
-            && event.kind == Kind::TextNote
-            && event.verify().is_ok()
-    });
-    let content = original.map(|event| event.as_json()).unwrap_or_default();
-    let tags = vec![
-        vec!["e".into(), note_id.to_hex(), relay_url],
-        vec!["p".into(), note_author.to_hex()],
-    ];
-    sign_event(6, content, tags, &private_key_hex)
+    repost_draft(note_id, note_author, content, relay_url)?.sign_with_secret(&private_key_hex)
 }
 
 pub fn create_deletion_event(
@@ -109,38 +199,30 @@ pub fn create_deletion_event(
     reason: String,
     private_key_hex: String,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let tags: Vec<Vec<String>> = event_ids
-        .iter()
-        .map(|id| vec!["e".into(), id.clone()])
-        .collect();
-    sign_event(5, reason, tags, &private_key_hex)
+    deletion_draft(event_ids, reason).sign_with_key(private_key_hex)
 }
 
 pub fn create_profile_event(profile_json: String, private_key_hex: String) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    sign_event(0, profile_json, vec![], &private_key_hex)
+    Draft::new(0, profile_json, vec![]).sign_with_key(private_key_hex)
 }
 
 pub fn create_follow_event(
     following_pubkeys: Vec<String>,
     private_key_hex: String,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let tags: Vec<Vec<String>> = following_pubkeys
-        .iter()
-        .map(|pk| vec!["p".into(), pk.clone(), String::new()])
+    let tags = following_pubkeys
+        .into_iter()
+        .map(|pk| vec!["p".into(), pk, String::new()])
         .collect();
-    sign_event(3, String::new(), tags, &private_key_hex)
+    Draft::new(3, String::new(), tags).sign_with_key(private_key_hex)
 }
 
 pub fn create_mute_event(muted_pubkeys: Vec<String>, private_key_hex: String) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let tags: Vec<Vec<String>> = muted_pubkeys
-        .iter()
-        .map(|pk| vec!["p".into(), pk.clone()])
+    let tags = muted_pubkeys
+        .into_iter()
+        .map(|pk| vec!["p".into(), pk])
         .collect();
-    sign_event(10000, String::new(), tags, &private_key_hex)
+    Draft::new(10000, String::new(), tags).sign_with_key(private_key_hex)
 }
 
 pub fn create_zap_request_event(
@@ -148,8 +230,7 @@ pub fn create_zap_request_event(
     content: String,
     private_key_hex: String,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    sign_event(9734, content, tags, &private_key_hex)
+    Draft::new(9734, content, tags).sign_with_key(private_key_hex)
 }
 
 pub fn create_quote_event(
@@ -160,21 +241,14 @@ pub fn create_quote_event(
     private_key_hex: String,
     additional_tags: Vec<Vec<String>>,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let mut tags = Vec::new();
-    if let Some(ref pk) = quoted_event_pubkey {
-        tags.push(vec![
-            "q".into(),
-            quoted_event_id.clone(),
-            relay_url,
-            pk.clone(),
-        ]);
-        tags.push(vec!["p".into(), pk.clone()]);
-    } else {
-        tags.push(vec!["q".into(), quoted_event_id, relay_url]);
-    }
-    tags.extend(additional_tags);
-    sign_event(1, content, tags, &private_key_hex)
+    quote_draft(
+        content,
+        quoted_event_id,
+        quoted_event_pubkey,
+        relay_url,
+        additional_tags,
+    )
+    .sign_with_key(private_key_hex)
 }
 
 pub fn create_blossom_auth_event(
@@ -183,40 +257,22 @@ pub fn create_blossom_auth_event(
     expiration: i64,
     private_key_hex: String,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let tags = vec![
-        vec!["t".into(), "upload".into()],
-        vec!["x".into(), sha256_hash],
-        vec!["expiration".into(), expiration.to_string()],
-    ];
-    sign_event(24242, content, tags, &private_key_hex)
+    blossom_auth_draft(content, sha256_hash, expiration).sign_with_key(private_key_hex)
 }
 
 pub fn create_relay_list_event(relay_urls: Vec<String>, private_key_hex: String) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let tags: Vec<Vec<String>> = relay_urls
-        .iter()
-        .map(|url| vec!["r".into(), url.clone()])
+    let tags = relay_urls
+        .into_iter()
+        .map(|url| vec!["r".into(), url])
         .collect();
-    sign_event(10002, String::new(), tags, &private_key_hex)
+    Draft::new(10002, String::new(), tags).sign_with_key(private_key_hex)
 }
 
 pub fn create_relay_list_event_with_markers(
     relay_configs: Vec<String>,
     private_key_hex: String,
 ) -> Result<String> {
-    let private_key_hex = Secret::new(private_key_hex);
-    let tags: Vec<Vec<String>> = relay_configs
-        .iter()
-        .map(|config| {
-            if let Some((url, marker)) = config.split_once('|') {
-                vec!["r".into(), url.to_string(), marker.to_string()]
-            } else {
-                vec!["r".into(), config.clone()]
-            }
-        })
-        .collect();
-    sign_event(10002, String::new(), tags, &private_key_hex)
+    relay_list_draft_with_markers(relay_configs).sign_with_key(private_key_hex)
 }
 
 #[cfg(test)]

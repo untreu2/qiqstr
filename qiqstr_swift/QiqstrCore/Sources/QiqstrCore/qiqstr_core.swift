@@ -3208,6 +3208,14 @@ public func marmotOpen(dataDir: String, privateKeyHex: String)throws  -> String 
     )
 })
 }
+public func marmotOpenSession(dataDir: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_marmot_open_session(
+        FfiConverterString.lower(dataDir),uniffiCallStatus
+    )
+})
+}
 public func marmotPickKeyPackage(eventsJson: String, pubkeyHex: String)throws  -> String?  {
     return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
@@ -3569,6 +3577,54 @@ public func sendEventTo(eventJson: String, relayUrls: [String])async throws  -> 
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
+public func sessionCanSign() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_session_can_sign(uniffiCallStatus
+    )
+})
+}
+public func sessionNip04Decrypt(payload: String, senderPkHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_session_nip04_decrypt(
+        FfiConverterString.lower(payload),
+        FfiConverterString.lower(senderPkHex),uniffiCallStatus
+    )
+})
+}
+public func sessionNip44Decrypt(payload: String, senderPkHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_session_nip44_decrypt(
+        FfiConverterString.lower(payload),
+        FfiConverterString.lower(senderPkHex),uniffiCallStatus
+    )
+})
+}
+public func sessionNip44Encrypt(content: String, receiverPkHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_session_nip44_encrypt(
+        FfiConverterString.lower(content),
+        FfiConverterString.lower(receiverPkHex),uniffiCallStatus
+    )
+})
+}
+public func sessionNutzapLockSecret()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_session_nutzap_lock_secret(uniffiCallStatus
+    )
+})
+}
+public func sessionPublicKey()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_session_public_key(uniffiCallStatus
+    )
+})
+}
 public func setActiveMuteList(mutedPubkeys: [String], mutedWords: [String])  {try! rustCall() {
         uniffiCallStatus in
     uniffi_qiqstr_core_fn_func_set_active_mute_list(
@@ -3606,12 +3662,84 @@ public func shutdownClient()async throws   {
             errorHandler: FfiConverterTypeQiqError_lift
         )
 }
+public func signBlossomAuthEvent(content: String, sha256Hash: String, expiration: Int64)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_sign_blossom_auth_event(
+        FfiConverterString.lower(content),
+        FfiConverterString.lower(sha256Hash),
+        FfiConverterInt64.lower(expiration),uniffiCallStatus
+    )
+})
+}
+public func signDeletionEvent(eventIds: [String], reason: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_sign_deletion_event(
+        FfiConverterSequenceString.lower(eventIds),
+        FfiConverterString.lower(reason),uniffiCallStatus
+    )
+})
+}
+public func signEvent(kind: UInt16, content: String, tags: [[String]])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_sign_event(
+        FfiConverterUInt16.lower(kind),
+        FfiConverterString.lower(content),
+        FfiConverterSequenceSequenceString.lower(tags),uniffiCallStatus
+    )
+})
+}
 public func signEventId(eventIdHex: String, privateKeyHex: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
         uniffiCallStatus in
     uniffi_qiqstr_core_fn_func_sign_event_id(
         FfiConverterString.lower(eventIdHex),
         FfiConverterString.lower(privateKeyHex),uniffiCallStatus
+    )
+})
+}
+public func signQuoteEvent(content: String, quotedEventId: String, quotedEventPubkey: String?, relayUrl: String, additionalTags: [[String]])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_sign_quote_event(
+        FfiConverterString.lower(content),
+        FfiConverterString.lower(quotedEventId),
+        FfiConverterOptionString.lower(quotedEventPubkey),
+        FfiConverterString.lower(relayUrl),
+        FfiConverterSequenceSequenceString.lower(additionalTags),uniffiCallStatus
+    )
+})
+}
+public func signReactionEvent(targetEventId: String, targetAuthor: String, content: String, relayUrl: String, targetKind: UInt16)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_sign_reaction_event(
+        FfiConverterString.lower(targetEventId),
+        FfiConverterString.lower(targetAuthor),
+        FfiConverterString.lower(content),
+        FfiConverterString.lower(relayUrl),
+        FfiConverterUInt16.lower(targetKind),uniffiCallStatus
+    )
+})
+}
+public func signRelayListEventWithMarkers(relayConfigs: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_sign_relay_list_event_with_markers(
+        FfiConverterSequenceString.lower(relayConfigs),uniffiCallStatus
+    )
+})
+}
+public func signRepostEvent(noteId: String, noteAuthor: String, content: String, relayUrl: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeQiqError_lift) {
+        uniffiCallStatus in
+    uniffi_qiqstr_core_fn_func_sign_repost_event(
+        FfiConverterString.lower(noteId),
+        FfiConverterString.lower(noteAuthor),
+        FfiConverterString.lower(content),
+        FfiConverterString.lower(relayUrl),uniffiCallStatus
     )
 })
 }
@@ -4273,6 +4401,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_marmot_open() != 61561) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_marmot_open_session() != 52499) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_marmot_pick_key_package() != 47065) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4375,6 +4506,24 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_send_event_to() != 26001) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_session_can_sign() != 8414) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_session_nip04_decrypt() != 28779) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_session_nip44_decrypt() != 46180) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_session_nip44_encrypt() != 31573) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_session_nutzap_lock_secret() != 39365) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_session_public_key() != 30594) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_set_active_mute_list() != 23487) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4387,7 +4536,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_qiqstr_core_checksum_func_shutdown_client() != 16448) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_qiqstr_core_checksum_func_sign_blossom_auth_event() != 64699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_sign_deletion_event() != 14906) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_sign_event() != 51264) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_qiqstr_core_checksum_func_sign_event_id() != 45219) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_sign_quote_event() != 25241) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_sign_reaction_event() != 3138) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_sign_relay_list_event_with_markers() != 30076) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_qiqstr_core_checksum_func_sign_repost_event() != 31971) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_qiqstr_core_checksum_func_stream_broadcast_events() != 18581) {

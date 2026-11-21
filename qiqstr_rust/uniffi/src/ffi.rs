@@ -395,6 +395,9 @@ pub fn create_relay_list_event_with_markers(relay_configs: Vec<String>, private_
 pub fn marmot_open(data_dir: String, private_key_hex: String) -> Result<String, QiqError> { api::marmot::marmot_open(data_dir, private_key_hex).map_err(Into::into) }
 
 #[uniffi::export]
+pub fn marmot_open_session(data_dir: String) -> Result<String, QiqError> { api::marmot::marmot_open_session(data_dir).map_err(Into::into) }
+
+#[uniffi::export]
 pub fn marmot_close() -> () { api::marmot::marmot_close() }
 
 #[uniffi::export]
@@ -651,3 +654,42 @@ pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String, 
 
 #[uniffi::export]
 pub async fn fetch_events_from_relays(filter_json: String, relay_urls: Vec<String>, timeout_secs: u32) -> Result<String, QiqError> { on_rt(async move { api::relay::fetch_events_from_relays(filter_json, relay_urls, timeout_secs).await }).await }
+
+#[uniffi::export]
+pub fn session_can_sign() -> bool { api::session::session_can_sign() }
+
+#[uniffi::export]
+pub fn session_public_key() -> Result<String, QiqError> { api::session::session_public_key().map_err(Into::into) }
+
+#[uniffi::export]
+pub fn sign_event(kind: u16, content: String, tags: Vec<Vec<String>>) -> Result<String, QiqError> { api::session::sign_event(kind, content, tags).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn sign_reaction_event(target_event_id: String, target_author: String, content: String, relay_url: String, target_kind: u16) -> Result<String, QiqError> { api::session::sign_reaction_event(target_event_id, target_author, content, relay_url, target_kind).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn sign_repost_event(note_id: String, note_author: String, content: String, relay_url: String) -> Result<String, QiqError> { api::session::sign_repost_event(note_id, note_author, content, relay_url).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn sign_deletion_event(event_ids: Vec<String>, reason: String) -> Result<String, QiqError> { api::session::sign_deletion_event(event_ids, reason).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn sign_quote_event(content: String, quoted_event_id: String, quoted_event_pubkey: Option<String>, relay_url: String, additional_tags: Vec<Vec<String>>) -> Result<String, QiqError> { api::session::sign_quote_event(content, quoted_event_id, quoted_event_pubkey, relay_url, additional_tags).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn sign_blossom_auth_event(content: String, sha256_hash: String, expiration: i64) -> Result<String, QiqError> { api::session::sign_blossom_auth_event(content, sha256_hash, expiration).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn sign_relay_list_event_with_markers(relay_configs: Vec<String>) -> Result<String, QiqError> { api::session::sign_relay_list_event_with_markers(relay_configs).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn session_nutzap_lock_secret() -> Result<String, QiqError> { api::session::session_nutzap_lock_secret().map_err(Into::into) }
+
+#[uniffi::export]
+pub fn session_nip44_encrypt(content: String, receiver_pk_hex: String) -> Result<String, QiqError> { api::session::session_nip44_encrypt(content, receiver_pk_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn session_nip44_decrypt(payload: String, sender_pk_hex: String) -> Result<String, QiqError> { api::session::session_nip44_decrypt(payload, sender_pk_hex).map_err(Into::into) }
+
+#[uniffi::export]
+pub fn session_nip04_decrypt(payload: String, sender_pk_hex: String) -> Result<String, QiqError> { api::session::session_nip04_decrypt(payload, sender_pk_hex).map_err(Into::into) }

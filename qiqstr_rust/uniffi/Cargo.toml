@@ -21,11 +21,17 @@ qiqstr = { path = "..", features = ["marmot"] }
 [target.'cfg(target_os = "android")'.dependencies]
 rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"] }
 
+# opt-level 3 is deliberate: "z" makes the library about 10% smaller but the core up to 2x slower.
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+# Stripping the macros that run during the build corrupts them on macOS when
+# MACOSX_DEPLOYMENT_TARGET is set, and a clean build then fails ("can't find crate for zeroize_derive").
+[profile.release.build-override]
+strip = false
 
 [patch.crates-io]
 mdk-sqlite-storage = { path = "../vendor/mdk-sqlite-storage" }

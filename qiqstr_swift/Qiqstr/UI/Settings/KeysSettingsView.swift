@@ -15,7 +15,7 @@ final class KeysSettingsModel {
     private(set) var mnemonic: String?
     private(set) var revealed: Set<SettingsSecretKind> = []
     private(set) var copied: String?
-    private(set) var privateKeyHex: String?
+    private(set) var canBackUp = false
     var pendingCopy: SettingsSecretKind?
     var isBackupPresented = false
     var showAdvanced = false
@@ -23,11 +23,18 @@ final class KeysSettingsModel {
     @ObservationIgnored private var authenticatedAt: Date?
 
     func load() {
-        let account = Session.shared.account
-        npub = account?.npub ?? ""
-        privateKeyHex = account?.signingKey
-        nsec = account?.signingKey.flatMap { Nip19.nsec($0) }
-        mnemonic = account?.mnemonic?.nilIfEmpty
+        let session = Session.shared
+        npub = session.npub ?? ""
+        canBackUp = session.canSign
+        nsec = session.revealSigningKey().flatMap { Nip19.nsec($0) }
+        mnemonic = session.revealMnemonic()
+    }
+
+    func forget() {
+        nsec = nil
+        mnemonic = nil
+        revealed = []
+        pendingCopy = nil
     }
 
     func isRevealed(_ kind: SettingsSecretKind) -> Bool { revealed.contains(kind) }
@@ -60,7 +67,7 @@ final class KeysSettingsModel {
     }
 
     func requestBackup() async {
-        guard privateKeyHex != nil, await authenticate(reason: L("keysBackupAuthenticateReason")) else { return }
+        guard canBackUp, await authenticate(reason: L("keysBackupAuthenticateReason")) else { return }
         isBackupPresented = true
     }
 
@@ -132,7 +139,7 @@ struct KeysSettingsView: View {
                 Text(L("useThisToRecoverAccount")).wrapsInFooter()
             }
 
-            if model.privateKeyHex != nil {
+            if model.canBackUp {
                 Section {
                     Button {
                         Task { await model.requestBackup() }
@@ -182,13 +189,14 @@ struct KeysSettingsView: View {
         .navigationTitle(L("keysTitle"))
         .navigationBarTitleDisplayMode(.large)
         .onAppear { model.load() }
+        .onDisappear { model.forget() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.hideAll() }
             if phase == .background { model.isBackupPresented = false }
         }
         .sheet(isPresented: $model.isBackupPresented) {
-            if let key = model.privateKeyHex {
-                KeysBackupSheet(privateKeyHex: key)
+            if model.canBackUp {
+                KeysBackupSheet()
             }
         }
         .alert(L("warning"), isPresented: Binding(get: { model.pendingCopy != nil }, set: { if !$0 { model.pendingCopy = nil } })) {

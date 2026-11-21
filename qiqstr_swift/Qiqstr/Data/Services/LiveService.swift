@@ -188,11 +188,11 @@ final class LiveService {
     }
 
     func sendChat(_ text: String, to stream: LiveStream) async throws -> LiveChatMessage {
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { throw CoreError(L("liveChatEmptyMessage")) }
         let tags: [[String]] = [["a", stream.coordinate, stream.relays.first ?? "", "root"]]
-        let json = try createSignedEvent(kind: LiveStream.chatKind, content: content, tags: tags, privateKeyHex: key)
+        let json = try signEvent(kind: LiveStream.chatKind, content: content, tags: tags)
         let event = try await SyncService.shared.publish(json)
         let extra = Array(Set(stream.relays + Self.streamRelays.prefix(3)))
         Task.detached { _ = try? await sendEventTo(eventJson: json, relayUrls: extra) }

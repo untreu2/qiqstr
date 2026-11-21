@@ -263,10 +263,10 @@ final class CommunityService {
 
     private func editList(kind: Int, _ mutate: ([[String]]) -> [[String]]) async throws {
         guard let me = Session.shared.pubkey else { return }
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let base = try await SyncService.shared.latestEditableEvent(kind: kind, author: me, allowingNew: true)
         let tags = mutate(base?.tags() ?? [])
-        let event = try createSignedEvent(kind: UInt16(kind), content: (base?["content"] as? String) ?? "", tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: UInt16(kind), content: (base?["content"] as? String) ?? "", tags: tags)
         try await SyncService.shared.publish(event)
     }
 
@@ -570,9 +570,9 @@ final class CommunityService {
     }
 
     private static func sign(kind: Int, content: String, tags: [[String]]) throws -> String {
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        return try createSignedEvent(kind: UInt16(kind), content: text, tags: tags, privateKeyHex: key)
+        return try signEvent(kind: UInt16(kind), content: text, tags: tags)
     }
 
     private static func sendToRelays(_ event: String, relays: [String]) async throws {

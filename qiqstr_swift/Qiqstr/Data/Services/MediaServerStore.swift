@@ -58,12 +58,12 @@ final class MediaServerStore {
 
     private func publish(_ next: [String]) async throws {
         guard let me = Session.shared.pubkey else { return }
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         isSaving = true
         defer { isSaving = false }
         let base = try await SyncService.shared.latestEditableEvent(kind: Self.kind, author: me, allowingNew: true)
         let kept = (base?.tags() ?? []).filter { $0.first != "server" }
-        let event = try createSignedEvent(kind: UInt16(Self.kind), content: (base?["content"] as? String) ?? "", tags: next.map { ["server", $0] } + kept, privateKeyHex: key)
+        let event = try signEvent(kind: UInt16(Self.kind), content: (base?["content"] as? String) ?? "", tags: next.map { ["server", $0] } + kept)
         try await SyncService.shared.publish(event)
         guard me == Session.shared.pubkey else { return }
         servers = next

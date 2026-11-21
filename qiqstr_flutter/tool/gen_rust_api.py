@@ -8,7 +8,7 @@ app = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 shared_api = os.path.join(app, "..", "qiqstr_rust", "src", "api")
 out_dir = os.path.join(app, "rust", "src", "api")
 
-skip_modules = {"mod", "marmot", "nip44"}
+skip_modules = {"mod", "marmot", "nip44", "session"}
 dart_async = {
     "set_active_mute_list",
     "extract_pubkeys_from_events",

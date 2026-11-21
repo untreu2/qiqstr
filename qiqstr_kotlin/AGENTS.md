@@ -17,6 +17,7 @@ export JAVA_HOME=<JDK 17>
 ## Rust ↔ Kotlin
 
 - `import com.qiqstr.core.*` exposes every core function in camelCase (`dbGetHydratedFeedNotes`, `createSignedEvent`, `sendEvent`, ...). Most are `suspend`. Integer arguments are unsigned Kotlin types (`10u`, `x.toUInt()`, `kind.toUShort()`).
+- Sign and encrypt with the session functions (`signEvent`, `signReactionEvent`, `sessionNip44Encrypt`, `sessionNip44Decrypt`, `marmotOpenSession`, ...), which use the key the core already holds. Gate on `Session.requireSigner()` or `Session.canSign`. Only the keys and backup screens read the key, through `Session.revealSigningKey()`.
 - Errors are `QiqException.Failed(reason)`. Show them with `coreErrorMessage(error)` or `ToastCenter.error(error)`.
 - Streams take an `EventSink`. Use `EventStream.make { sink -> someStreamingFn(..., sink) }` to get a `Flow<String>`.
 - JSON comes back as strings. Use `Json.obj/array/string` and the `JSONObject.str/int/long/bool/strings/tags/objects` helpers in `core/Json.kt`. Build filters as Kotlin maps: `Json.string(mapOf("kinds" to listOf(1), "authors" to listOf(pk)))`.

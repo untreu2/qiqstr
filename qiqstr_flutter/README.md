@@ -32,7 +32,7 @@ through [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge).
 - **Built-in Bitcoin wallet** — send and receive Lightning payments and zaps over Nostr Wallet Connect (NIP-47), with built-in wallet onboarding through the Breez Spark SDK and Cashu token support.
 - **You own your identity** — private identity keys are generated on-device and stored in OS-backed secure storage. Relays receive signed events and public keys.
 - **Local identity and wallet keys** — identity keys and Spark recovery keys are stored on-device. Connected NWC wallets and Cashu mints have their own custody and service models.
-- **Fast local data** — events are stored and synced locally in an embedded LMDB database, with efficient Negentropy syncing (NIP-77).
+- **Fast local data** — events are stored locally in an embedded SQLite database and fetched from several relays at once.
 - **Localized** — available in English, Turkish, and German.
 
 <details>
@@ -62,7 +62,6 @@ through [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge).
 | [NIP-59](https://github.com/nostr-protocol/nips/blob/master/59.md) | Gift Wrap |
 | [NIP-62](https://github.com/nostr-protocol/nips/blob/master/62.md) | Request to Vanish |
 | [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay List Metadata |
-| [NIP-77](https://github.com/nostr-protocol/nips/blob/master/77.md) | Negentropy Syncing |
 | [NIP-98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP Auth |
 
 </details>
@@ -105,8 +104,8 @@ through [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge).
 | UI | Flutter |
 | State management | flutter_bloc |
 | Native layer | Rust via flutter_rust_bridge |
-| Nostr protocol | nostr-sdk 0.44 (Rust) |
-| Local database | LMDB via nostr-lmdb |
+| Nostr protocol | `nostr` 0.44 (Rust) with the core's own relay pool |
+| Local database | SQLite (`rusqlite`) |
 | Wallet | Breez Spark SDK + Nostr Wallet Connect + Cashu (cdk) |
 | Secure storage | flutter_secure_storage |
 | Routing | go_router |
@@ -255,7 +254,7 @@ flutter devices
 ./tool/verify.sh <device-id>
 ```
 
-The native suite uses generated test identities and temporary LMDB databases. Its NWC
+The native suite uses generated test identities and temporary databases. Its NWC
 relay runs on loopback. Onboarding tests mock secure storage; a separate device test uses
 the real secure-storage plugin with isolated temporary keys. The real-startup test
 redirects filesystem paths to a temporary directory. Startup checks connect to the default

@@ -80,7 +80,7 @@ final class HashtagFollowService {
 
     private func setFollowing(_ raw: String, _ follow: Bool) async throws {
         guard let tag = Self.normalize(raw) else { throw CoreError(L("feedTopicInvalid")) }
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         guard let me = Session.shared.pubkey else { throw CoreError(L("privateKeyNotFound")) }
         let generation = self.generation
         intents[tag] = follow
@@ -88,7 +88,7 @@ final class HashtagFollowService {
         let previous = queue
         let task = Task { () throws -> Void in
             await previous?.value
-            try await self.commit(tag, follow, key: key, me: me, generation: generation)
+            try await self.commit(tag, follow, me: me, generation: generation)
         }
         queue = Task { _ = try? await task.value }
         do {
@@ -99,7 +99,7 @@ final class HashtagFollowService {
         }
     }
 
-    private func commit(_ tag: String, _ follow: Bool, key: String, me: String, generation: Int) async throws {
+    private func commit(_ tag: String, _ follow: Bool, me: String, generation: Int) async throws {
         guard generation == self.generation else { return }
         let base = try await SyncService.shared.latestEditableEvent(kind: Self.kind, author: me)
         guard generation == self.generation else { return }
@@ -119,7 +119,7 @@ final class HashtagFollowService {
             guard list.contains(tag) else { return settle(tag, follow) }
             list.removeAll { $0 == tag }
         }
-        let eventJson = try createSignedEvent(kind: UInt16(Self.kind), content: content, tags: list.map { ["t", $0] } + extraTags, privateKeyHex: key)
+        let eventJson = try signEvent(kind: UInt16(Self.kind), content: content, tags: list.map { ["t", $0] } + extraTags)
         let event = try await SyncService.shared.publish(eventJson)
         guard generation == self.generation else { return }
         latestCreatedAt = max(latestCreatedAt, event.int("created_at"))

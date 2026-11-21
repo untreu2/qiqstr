@@ -1,5 +1,6 @@
 package me.untreu.qiqstr.ui.dm
 
+import com.qiqstr.core.signEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,7 +50,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.qiqstr.core.createSignedEvent
 import kotlinx.coroutines.launch
 import me.untreu.qiqstr.App
 import me.untreu.qiqstr.core.AppColors
@@ -87,9 +87,9 @@ private object DMModeration {
 
     suspend fun report(pubkey: String, reason: DMReportReason, muteAuthor: Boolean): Boolean {
         if (muteAuthor) mute(pubkey)
-        val key = Session.privateKey ?: return false
+        if (!Session.canSign) return false
         return runCatching {
-            val event = createSignedEvent(1984u.toUShort(), "", listOf(listOf("p", pubkey, reason.raw)), key)
+            val event = signEvent(1984u.toUShort(), "", listOf(listOf("p", pubkey, reason.raw)))
             SyncService.publish(event)
         }.isSuccess
     }

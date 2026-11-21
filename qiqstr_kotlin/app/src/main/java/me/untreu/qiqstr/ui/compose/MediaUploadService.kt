@@ -1,7 +1,7 @@
 package me.untreu.qiqstr.ui.compose
 
 import android.util.Base64
-import com.qiqstr.core.createBlossomAuthEvent
+import com.qiqstr.core.signBlossomAuthEvent
 import com.qiqstr.core.sha256Hash
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -35,9 +35,9 @@ object MediaUploadService {
 
     suspend fun uploadMedia(bytes: ByteArray, mimeType: String, server: String? = null): UploadedMedia {
         val target = server ?: RelayConfig.blossomServer
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val hash = withContext(Dispatchers.Default) { sha256Hash(bytes) }
-        val auth = createBlossomAuthEvent("Upload $hash", hash, TimeFormat.now + 600, key)
+        val auth = signBlossomAuthEvent("Upload $hash", hash, TimeFormat.now + 600)
         val token = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         val base = target.replace(Regex("/+$"), "")
         return withContext(Dispatchers.IO) {

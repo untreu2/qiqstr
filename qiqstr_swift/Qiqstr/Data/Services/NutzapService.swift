@@ -119,16 +119,16 @@ final class NutzapService {
     }
 
     private func walletSecret(_ event: JSONObject, me: String) -> String? {
-        guard let key = Session.shared.privateKey, let content = event["content"] as? String, !content.isEmpty,
-              let plain = try? nip44Decrypt(payload: content, receiverSkHex: key, senderPkHex: me),
+        guard Session.shared.canSign, let content = event["content"] as? String, !content.isEmpty,
+              let plain = try? sessionNip44Decrypt(payload: content, senderPkHex: me),
               let tags = JSON.any(plain) as? [[Any]] else { return nil }
         return tags.map { $0.compactMap { $0 as? String } }.first { $0.count > 1 && $0[0] == "privkey" && $0[1].count == 64 }?[1].lowercased()
     }
 
     private func secret() throws -> String {
         if let lockSecret { return lockSecret }
-        let key = try Session.shared.requireSigner()
-        let derived = sha256Hash(data: Data("qiqstr-nutzap-p2pk:\(key)".utf8))
+        try Session.shared.requireSigner()
+        let derived = try sessionNutzapLockSecret()
         lockSecret = derived
         return derived
     }
@@ -143,13 +143,13 @@ final class NutzapService {
 
     func setReceiving(_ enabled: Bool, mints next: [String]? = nil) async throws {
         guard let me = Session.shared.pubkey else { return }
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         let list = (next ?? (mints.isEmpty ? Array(CashuMint.presets.prefix(2)) : mints)).map(CashuMint.normalized).filter(CashuMint.isValid)
         guard !enabled || !list.isEmpty else { throw CoreError(L("nutzapNeedsMint")) }
         isSaving = true
         defer { isSaving = false }
         let lock = try lockKey()
-        if enabled { try await publishWalletIfMissing(me: me, key: key, mints: list) }
+        if enabled { try await publishWalletIfMissing(me: me, mints: list) }
         let base = try await SyncService.shared.latestEditableEvent(kind: Self.infoKind, author: me, allowingNew: true)
         let kept = (base?.tags() ?? []).filter { !["mint", "relay", "pubkey"].contains($0.first ?? "") }
         var tags: [[String]] = []
@@ -157,7 +157,7 @@ final class NutzapService {
             let relays = ((try? await getRelayList()) ?? RelayConfig.mainRelays).filter { $0.hasPrefix("wss://") }.prefix(4)
             tags = relays.map { ["relay", $0] } + list.map { ["mint", $0, "sat"] } + [["pubkey", lock]]
         }
-        let event = try createSignedEvent(kind: UInt16(Self.infoKind), content: "", tags: tags + kept, privateKeyHex: key)
+        let event = try signEvent(kind: UInt16(Self.infoKind), content: "", tags: tags + kept)
         try await SyncService.shared.publish(event)
         guard me == Session.shared.pubkey else { return }
         mints = list
@@ -167,15 +167,15 @@ final class NutzapService {
         if enabled { Task { await redeemPending() } }
     }
 
-    private func publishWalletIfMissing(me: String, key: String, mints: [String]) async throws {
+    private func publishWalletIfMissing(me: String, mints: [String]) async throws {
         let existing = await SyncService.shared.fetchReplaceable(kind: Self.walletKind, author: me)
         if let newest = existing.max(by: { $0.int("created_at") < $1.int("created_at") }) {
             if let found = walletSecret(newest, me: me) { lockSecret = found }
             return
         }
         let payload: [[String]] = [["privkey", try secret()]] + mints.map { ["mint", $0] }
-        let content = try nip44Encrypt(content: JSON.string(payload), senderSkHex: key, receiverPkHex: me)
-        let event = try createSignedEvent(kind: UInt16(Self.walletKind), content: content, tags: [], privateKeyHex: key)
+        let content = try sessionNip44Encrypt(content: JSON.string(payload), receiverPkHex: me)
+        let event = try signEvent(kind: UInt16(Self.walletKind), content: content, tags: [])
         try await SyncService.shared.publish(event)
     }
 
@@ -196,7 +196,7 @@ final class NutzapService {
     func send(to pubkey: String, note: Note?, amountSats: Int, comment: String) async throws {
         guard AppStorePolicy.allowsCashu else { throw ZapError.zapsNotSupported }
         guard let me = Session.shared.pubkey, amountSats > 0 else { throw ZapError.invalidAmount }
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         guard let info = await info(for: pubkey), let mint = info.mints.first else { throw CoreError(L("nutzapNotSupported")) }
         try WalletService.shared.prepareCashu()
         try await fund(mint: mint, amountSats: amountSats)
@@ -211,7 +211,7 @@ final class NutzapService {
             tags.append(["k", String(note.kind)])
         }
         tags.append(["p", pubkey])
-        let event = try createSignedEvent(kind: UInt16(Self.nutzapKind), content: comment.trimmingCharacters(in: .whitespacesAndNewlines), tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: UInt16(Self.nutzapKind), content: comment.trimmingCharacters(in: .whitespacesAndNewlines), tags: tags)
         var relays = info.relays
         for relay in RelayConfig.mainRelays where !relays.contains(relay) { relays.append(relay) }
         var outbox = Self.outbox(me)
@@ -275,7 +275,7 @@ final class NutzapService {
     }
 
     func redeemPending() async {
-        guard AppStorePolicy.allowsCashu, isReceiving, !redeeming, let me = Session.shared.pubkey, let key = Session.shared.privateKey, let unlock = try? secret() else { return }
+        guard AppStorePolicy.allowsCashu, isReceiving, !redeeming, let me = Session.shared.pubkey, Session.shared.canSign, let unlock = try? secret() else { return }
         redeeming = true
         defer { redeeming = false }
         let generation = self.generation
@@ -300,7 +300,7 @@ final class NutzapService {
                 let amount = result.int("received_sats")
                 received += amount
                 done.insert(id)
-                await publishHistory(nutzapId: id, sender: sender, amount: amount, me: me, key: key)
+                await publishHistory(nutzapId: id, sender: sender, amount: amount, me: me)
             } catch {
                 let message = coreErrorMessage(error).lowercased()
                 if message.contains("spent") || message.contains("invalid") || message.contains("unlock") { done.insert(id) }
@@ -316,10 +316,10 @@ final class NutzapService {
         }
     }
 
-    private func publishHistory(nutzapId: String, sender: String, amount: Int, me: String, key: String) async {
+    private func publishHistory(nutzapId: String, sender: String, amount: Int, me: String) async {
         let payload: [[String]] = [["direction", "in"], ["amount", String(amount)], ["unit", "sat"]]
-        guard let content = try? nip44Encrypt(content: JSON.string(payload), senderSkHex: key, receiverPkHex: me),
-              let event = try? createSignedEvent(kind: UInt16(Self.historyKind), content: content, tags: [["e", nutzapId, "", "redeemed"], ["p", sender]], privateKeyHex: key) else { return }
+        guard let content = try? sessionNip44Encrypt(content: JSON.string(payload), receiverPkHex: me),
+              let event = try? signEvent(kind: UInt16(Self.historyKind), content: content, tags: [["e", nutzapId, "", "redeemed"], ["p", sender]]) else { return }
         _ = try? await SyncService.shared.publish(event)
     }
 

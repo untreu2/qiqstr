@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.qiqstr.core.sessionPublicKey
 import com.qiqstr.core.addRelayWithFlags
 import com.qiqstr.core.connectRelays
 import com.qiqstr.core.dbGetProfile
@@ -28,7 +29,7 @@ import me.untreu.qiqstr.data.accounts.AccountData
 import me.untreu.qiqstr.data.accounts.AccountStore
 import me.untreu.qiqstr.data.accounts.AuthError
 import me.untreu.qiqstr.data.accounts.Nip05Resolver
-import me.untreu.qiqstr.data.accounts.StoredAccount
+import me.untreu.qiqstr.data.accounts.Account
 import me.untreu.qiqstr.data.services.ReadOnlyError
 import me.untreu.qiqstr.data.services.ReadOnlyGate
 import me.untreu.qiqstr.data.services.RelayConfig
@@ -46,9 +47,9 @@ sealed interface SessionPhase {
 object Session {
     var phase by mutableStateOf<SessionPhase>(SessionPhase.Launching)
         private set
-    var account by mutableStateOf<StoredAccount?>(null)
+    var account by mutableStateOf<Account?>(null)
         private set
-    var accounts by mutableStateOf<List<StoredAccount>>(emptyList())
+    var accounts by mutableStateOf<List<Account>>(emptyList())
         private set
     var generation by mutableIntStateOf(0)
         private set
@@ -57,10 +58,18 @@ object Session {
     var isNewAccount = false
 
     val pubkey: String? get() = account?.pubkeyHex
-    val privateKey: String? get() = account?.signingKey
     val npub: String? get() = account?.npub
     val isReadOnly: Boolean get() = account?.isReadOnly ?: false
-    val canSign: Boolean get() = privateKey != null
+    val canSign: Boolean
+        get() {
+            val current = account ?: return false
+            if (current.isReadOnly) return false
+            return runCatching { sessionPublicKey() }.getOrNull() == current.pubkeyHex
+        }
+
+    fun revealSigningKey(): String? = account?.let { AccountStore.storedSigningKey(it.npub) }
+
+    fun revealMnemonic(): String? = account?.let { AccountStore.storedMnemonic(it.npub) }
 
     var debugLogin: String? = null
 
@@ -105,7 +114,7 @@ object Session {
         val current = account ?: return
         if (!current.isReadOnly) return
         val upgraded = if (password != null) AccountStore.upgrade(current.npub, input, password) else AccountStore.upgrade(current.npub, input)
-        val key = upgraded.signingKey ?: throw AuthError.InvalidKey
+        val key = AccountStore.storedSigningKey(upgraded.npub) ?: throw AuthError.InvalidKey
         com.qiqstr.core.updateSigner(key)
         account = upgraded
         refreshAccounts()
@@ -115,16 +124,14 @@ object Session {
         DataBus.everythingChanged()
     }
 
-    fun requireSigner(): String {
-        val key = privateKey
-        if (key == null) {
-            if (account != null) ReadOnlyGate.present()
+    fun requireSigner() {
+        if (!canSign) {
+            if (account?.isReadOnly == true) ReadOnlyGate.present()
             throw ReadOnlyError()
         }
-        return key
     }
 
-    suspend fun createAccount(): StoredAccount {
+    suspend fun createAccount(): Account {
         val created = AccountStore.createAccount()
         isNewAccount = true
         start(created)
@@ -191,7 +198,7 @@ object Session {
         NotificationBadge.reset()
     }
 
-    private suspend fun start(target: StoredAccount) {
+    private suspend fun start(target: Account) {
         teardown()
         val generation = this.generation
         account = target
@@ -199,7 +206,7 @@ object Session {
         phase = SessionPhase.Starting
         try {
             RelayConfig.databaseDir.mkdirs()
-            initClient(RelayConfig.mainRelays, target.signingKey, RelayConfig.databaseDir.absolutePath, RelayConfig.discoveryRelays)
+            initClient(RelayConfig.mainRelays, AccountStore.storedSigningKey(target.npub), RelayConfig.databaseDir.absolutePath, RelayConfig.discoveryRelays)
             applyRelayFlags()
             App.scope.launch { runCatching { connectRelays() } }
             runCatching { waitForReady(3u) }

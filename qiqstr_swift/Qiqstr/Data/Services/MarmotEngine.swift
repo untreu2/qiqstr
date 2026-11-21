@@ -130,12 +130,12 @@ actor MarmotEngine {
         _ = try? await serial { marmotClose() }
     }
 
-    func open(privateKey: String) async throws -> String {
+    func openSession() async throws -> String {
         let directory = Self.storageDirectory
         return try await serial {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             Self.excludeFromBackup(directory)
-            return try marmotOpen(dataDir: directory.path, privateKeyHex: privateKey)
+            return try marmotOpenSession(dataDir: directory.path)
         }
     }
 

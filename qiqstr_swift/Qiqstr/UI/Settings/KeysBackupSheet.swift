@@ -1,3 +1,4 @@
+import QiqstrCore
 import SwiftUI
 
 enum KeysPasswordStrength: Int, Comparable {
@@ -57,11 +58,6 @@ final class KeysBackupModel {
     private(set) var errorMessage: String?
     private(set) var copied = false
     private(set) var copyCount = 0
-    private let privateKeyHex: String
-
-    init(privateKeyHex: String) {
-        self.privateKeyHex = privateKeyHex
-    }
 
     var strength: KeysPasswordStrength { KeysPasswordStrength(password) }
     var isLongEnough: Bool { password.count >= Ncryptsec.minimumPasswordLength }
@@ -75,6 +71,7 @@ final class KeysBackupModel {
         errorMessage = nil
         defer { isEncrypting = false }
         do {
+            guard let privateKeyHex = Session.shared.revealSigningKey() else { throw CoreError(L("privateKeyNotFound")) }
             ncryptsec = try await Ncryptsec.encrypt(privateKeyHex: privateKeyHex, password: password)
             password = ""
             confirmation = ""
@@ -103,8 +100,8 @@ struct KeysBackupSheet: View {
 
     private enum Field { case password, confirmation }
 
-    init(privateKeyHex: String) {
-        _model = State(initialValue: KeysBackupModel(privateKeyHex: privateKeyHex))
+    init() {
+        _model = State(initialValue: KeysBackupModel())
     }
 
     var body: some View {

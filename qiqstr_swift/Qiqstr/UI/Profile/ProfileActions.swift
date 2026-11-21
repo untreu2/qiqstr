@@ -110,7 +110,7 @@ struct ProfileMenu: View {
                 Label(L("profileShowQRCode"), systemImage: "qrcode")
             }
             .accessibilityIdentifier("menu-qr")
-            if !model.isMe, Session.shared.privateKey != nil {
+            if !model.isMe, Session.shared.canSign {
                 Divider()
                 Button { showAddToList = true } label: {
                     Label(L("addToList"), systemImage: "text.badge.plus")

@@ -179,7 +179,7 @@ class RustRelayService {
       return jsonDecode(result) as Map<String, dynamic>;
     } catch (e) {
       if (kDebugMode) {
-        print('[RustRelayService] syncEvents (negentropy) error: $e');
+        print('[RustRelayService] syncEvents error: $e');
       }
       return {'received': 0, 'sent': 0, 'local': 0, 'remote': 0};
     }

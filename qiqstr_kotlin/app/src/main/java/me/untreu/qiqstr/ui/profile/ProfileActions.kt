@@ -113,7 +113,7 @@ fun ProfileMenu(model: ProfileViewModel) {
                 expanded = false
                 Router.present(AppSheet.ShareProfile(model.pubkey))
             }
-            if (!model.isMe && Session.privateKey != null) {
+            if (!model.isMe && Session.canSign) {
                 HorizontalDivider()
                 MenuItem(L("addToList"), Icons.AutoMirrored.Outlined.PlaylistAdd, "menu-add-to-list") {
                     expanded = false

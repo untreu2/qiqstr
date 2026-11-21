@@ -119,5 +119,19 @@ schemes:
         QiqstrUITests: [test]
     test:
       targets:
-        - QiqstrTests
-        - QiqstrUITests
+        - name: QiqstrTests
+          skippedTests: [QiqstrPerfTests]
+        - name: QiqstrUITests
+          skippedTests: [QiqstrUITests/testLaunchPerformance(), QiqstrUITests/testStartupAndFeedBenchmark()]
+  QiqstrBenchmarks:
+    build:
+      targets:
+        Qiqstr: all
+        QiqstrTests: [test]
+        QiqstrUITests: [test]
+    test:
+      targets:
+        - name: QiqstrTests
+          selectedTests: [QiqstrPerfTests]
+        - name: QiqstrUITests
+          selectedTests: [QiqstrUITests/testLaunchPerformance(), QiqstrUITests/testStartupAndFeedBenchmark()]

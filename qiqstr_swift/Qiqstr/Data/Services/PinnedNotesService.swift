@@ -51,7 +51,7 @@ final class PinnedNotesService {
     }
 
     func toggle(_ noteId: String) async throws {
-        let key = try Session.shared.requireSigner()
+        try Session.shared.requireSigner()
         guard let me = Session.shared.pubkey else { throw CoreError("Not signed in") }
         if let base = try await SyncService.shared.latestEditableEvent(kind: Self.kind, author: me) {
             adopt(base, owner: me)
@@ -69,7 +69,7 @@ final class PinnedNotesService {
         latestCreatedAt = max(latestCreatedAt, TimeFormat.now)
         do {
             let tags = updated.map { ["e", $0] } + extraTags
-            let eventJson = try createSignedEvent(kind: UInt16(Self.kind), content: "", tags: tags, privateKeyHex: key)
+            let eventJson = try signEvent(kind: UInt16(Self.kind), content: "", tags: tags)
             let event = try await SyncService.shared.publish(eventJson)
             latestCreatedAt = max(latestCreatedAt, event.int("created_at"))
             DataBus.shared.listsChanged()

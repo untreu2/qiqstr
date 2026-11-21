@@ -198,7 +198,15 @@ fn key_package_relays(event: &Event) -> Vec<String> {
 
 pub fn marmot_open(data_dir: String, private_key_hex: String) -> Result<String> {
     let private_key_hex = Secret::new(private_key_hex);
-    let keys = Keys::new(SecretKey::parse(&private_key_hex)?);
+    open_with_keys(data_dir, Keys::new(SecretKey::parse(&private_key_hex)?))
+}
+
+/// Opens messaging for the signed-in account, using the key the core already holds.
+pub fn marmot_open_session(data_dir: String) -> Result<String> {
+    open_with_keys(data_dir, super::session::session_keys()?)
+}
+
+fn open_with_keys(data_dir: String, keys: Keys) -> Result<String> {
     let pubkey = keys.public_key().to_hex();
     let mut guard = STATE
         .lock()

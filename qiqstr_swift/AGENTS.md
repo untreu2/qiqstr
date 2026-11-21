@@ -1,6 +1,6 @@
 # qiqstr for iOS (Swift)
 
-Native SwiftUI port of [qiqstr](https://github.com/untreu2/qiqstr). The shared Rust core in `../qiqstr_rust` (nostr-sdk, LMDB, NWC, Cashu), which the Flutter app also uses, is exposed to Swift with **UniFFI**. Direct messages use the Marmot protocol through MDK (`../qiqstr_rust/src/api/marmot.rs`, `Data/Services/MarmotEngine.swift`); NIP-17 is not used.
+Native SwiftUI port of [qiqstr](https://github.com/untreu2/qiqstr). The shared Rust core in `../qiqstr_rust` (relay pool, SQLite event store, NWC, Cashu), which the Flutter app also uses, is exposed to Swift with **UniFFI**. Direct messages use the Marmot protocol through MDK (`../qiqstr_rust/src/api/marmot.rs`, `Data/Services/MarmotEngine.swift`); NIP-17 is not used.
 
 ## Build
 
@@ -20,6 +20,7 @@ xcodebuild -project Qiqstr.xcodeproj -scheme Qiqstr -destination 'generic/platfo
 - Streams use the `EventSink` callback interface (`../qiqstr_rust/uniffi/src/sink.rs`, adapted to the core's sink by `ForeignSink`). On the Swift side, wrap them with `EventStream.make { sink in try await someStreamingFn(..., sink: sink) }` to get an `AsyncThrowingStream<String, Error>`.
 - Generated Swift bindings live in `QiqstrCore` (a local Swift package). `import QiqstrCore` exposes the functions in camelCase, for example `dbGetHydratedFeedNotes(...)`, `createNoteEvent(...)`, `sendEvent(...)`. The full list is in `QiqstrCore/Sources/QiqstrCore/qiqstr_core.swift`.
 - Use `coreErrorMessage(error)` to show Rust errors.
+- Sign and encrypt with the session functions (`signEvent`, `signReactionEvent`, `sessionNip44Encrypt`, `sessionNip44Decrypt`, `marmotOpenSession`, ...), which use the key the core already holds. Gate on `Session.shared.requireSigner()` or `canSign`. Only the keys and backup screens read the key, through `Session.shared.revealSigningKey()`; never keep it in a property that outlives the screen.
 - `../qiqstr_rust/vendor/mdk-sqlite-storage` is `mdk-sqlite-storage` 0.8.0 patched to `rusqlite` 0.31 so it shares one SQLCipher build with `cdk-sqlite`. Only one `libsqlite3-sys` can be linked, so keep both crates on the same `rusqlite`.
 
 ## App layering
@@ -57,7 +58,7 @@ It should feel like a native iOS 26 app with **Liquid Glass**: system `TabView` 
 
 ## Testing
 
-Always test in light mode (simulator appearance light, in-app theme System). Debug builds accept `-QIQ_LOGIN <nsec|hex|mnemonic>` as a launch argument to sign in automatically when no account is stored. Use generated test keys only. Never message, react to, or zap real users from test accounts.
+The `Qiqstr` scheme runs the unit and UI tests and skips the benchmarks, which use live relays; run them with the `QiqstrBenchmarks` scheme (`QiqstrPerfTests`, `testLaunchPerformance`, `testStartupAndFeedBenchmark`). Always test in light mode (simulator appearance light, in-app theme System). Debug builds accept `-QIQ_LOGIN <nsec|hex|mnemonic>` as a launch argument to sign in automatically when no account is stored. Use generated test keys only. Never message, react to, or zap real users from test accounts.
 
 ## Adding strings
 

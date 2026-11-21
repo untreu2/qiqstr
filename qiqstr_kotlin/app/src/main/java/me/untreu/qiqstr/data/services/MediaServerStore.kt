@@ -1,10 +1,10 @@
 package me.untreu.qiqstr.data.services
 
+import com.qiqstr.core.signEvent
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
 import me.untreu.qiqstr.core.CoreError
 import me.untreu.qiqstr.core.L
 import me.untreu.qiqstr.core.Prefs
@@ -69,12 +69,12 @@ object MediaServerStore {
 
     private suspend fun publish(next: List<String>) {
         val me = Session.pubkey ?: return
-        val key = Session.requireSigner()
+        Session.requireSigner()
         isSaving = true
         try {
             val base = SyncService.latestEditableEvent(KIND, me, allowingNew = true)
             val kept = base?.tags().orEmpty().filter { it.firstOrNull() != "server" }
-            val event = createSignedEvent(KIND.toUShort(), base?.text("content") ?: "", next.map { listOf("server", it) } + kept, key)
+            val event = signEvent(KIND.toUShort(), base?.text("content") ?: "", next.map { listOf("server", it) } + kept)
             SyncService.publish(event)
             if (me != Session.pubkey) return
             servers = next

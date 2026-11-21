@@ -74,9 +74,8 @@ final class InteractionService {
 
     private var sync: SyncService { SyncService.shared }
 
-    private func signingKey() throws -> String {
-        let key = try Session.shared.requireSigner()
-        return key
+    private func requireSigner() throws {
+        try Session.shared.requireSigner()
     }
 
     private func primaryRelay() async -> String {
@@ -84,44 +83,44 @@ final class InteractionService {
     }
 
     func react(to note: Note, content: String = "+", emoji: CustomEmoji? = nil) async throws {
-        let key = try signingKey()
+        try requireSigner()
         let relay = await primaryRelay()
         let event: String
         if let emoji {
             let tags = [["e", note.id, relay, note.pubkey], ["p", note.pubkey, relay], ["k", String(note.kind)], ["emoji", emoji.shortcode, emoji.url]]
-            event = try createSignedEvent(kind: 7, content: emoji.token, tags: tags, privateKeyHex: key)
+            event = try signEvent(kind: 7, content: emoji.token, tags: tags)
         } else {
-            event = try createReactionEvent(targetEventId: note.id, targetAuthor: note.pubkey, content: content, privateKeyHex: key, relayUrl: relay, targetKind: UInt16(clamping: note.kind))
+            event = try signReactionEvent(targetEventId: note.id, targetAuthor: note.pubkey, content: content, relayUrl: relay, targetKind: UInt16(clamping: note.kind))
         }
         try await sync.publish(event)
     }
 
     func unreact(_ note: Note) async throws {
-        let key = try signingKey()
+        try requireSigner()
         guard let me = Session.shared.pubkey else { return }
         let ids = await ownEvents(kinds: [7], me: me, target: note.id) { event in
             event.tags().last { $0.count > 1 && $0[0] == "e" }?[1] == note.id
         }
         guard !ids.isEmpty else { throw CoreError(L("eventNotFound")) }
-        try await publishDeletion(ids, key: key)
+        try await publishDeletion(ids)
     }
 
     func repost(_ note: Note) async throws {
-        let key = try signingKey()
+        try requireSigner()
         let relay = await primaryRelay()
         let original = (try? await dbGetEvent(eventId: note.id)) ?? nil
-        let event = try createRepostEvent(noteId: note.id, noteAuthor: note.pubkey, content: original ?? "", privateKeyHex: key, relayUrl: relay)
+        let event = try signRepostEvent(noteId: note.id, noteAuthor: note.pubkey, content: original ?? "", relayUrl: relay)
         try await sync.publish(event)
     }
 
     func undoRepost(_ note: Note) async throws {
-        let key = try signingKey()
+        try requireSigner()
         guard let me = Session.shared.pubkey else { return }
         let ids = await ownEvents(kinds: [6, 16], me: me, target: note.id) { event in
             event.tags().contains { $0.count > 1 && $0[0] == "e" && $0[1] == note.id }
         }
         guard !ids.isEmpty else { throw CoreError(L("eventNotFound")) }
-        try await publishDeletion(ids, key: key)
+        try await publishDeletion(ids)
     }
 
     private func ownEvents(kinds: [Int], me: String, target: String, matching: (JSONObject) -> Bool) async -> [String] {
@@ -136,12 +135,12 @@ final class InteractionService {
     }
 
     func delete(_ note: Note) async throws {
-        let key = try signingKey()
-        try await publishDeletion([note.id], key: key)
+        try requireSigner()
+        try await publishDeletion([note.id])
     }
 
-    private func publishDeletion(_ ids: [String], key: String) async throws {
-        let event = try createDeletionEvent(eventIds: ids, reason: "", privateKeyHex: key)
+    private func publishDeletion(_ ids: [String]) async throws {
+        let event = try signDeletionEvent(eventIds: ids, reason: "")
         try await sync.publish(event)
         _ = try? await dbDeleteEventsByIds(eventIds: ids)
         DataBus.shared.feedChanged()
@@ -149,15 +148,15 @@ final class InteractionService {
     }
 
     func publishNote(content: String, mediaUrls: [String], extraTags: [[String]] = []) async throws -> String {
-        let key = try signingKey()
+        try requireSigner()
         let body = Self.composeContent(content, mediaUrls: mediaUrls)
         let tags = Self.merge(Self.contentTags(body, mediaUrls: mediaUrls), extraTags)
-        let event = try createNoteEvent(content: body, tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: 1, content: body, tags: tags)
         return try await publishReturningId(event)
     }
 
     func publishReply(to note: Note, content: String, mediaUrls: [String], extraTags: [[String]] = []) async throws -> String {
-        let key = try signingKey()
+        try requireSigner()
         let me = Session.shared.pubkey ?? ""
         let body = Self.composeContent(content, mediaUrls: mediaUrls)
         let rootId = note.rootId ?? note.parentId ?? note.id
@@ -176,12 +175,12 @@ final class InteractionService {
         if seen.isEmpty, !note.pubkey.isEmpty { tags.append(["p", note.pubkey]) }
         let extra = Self.contentTags(body, mediaUrls: mediaUrls).filter { $0.first != "p" || !seen.contains($0.count > 1 ? $0[1] : "") }
         tags = Self.merge(tags, extra + extraTags.filter { $0.first != "e" })
-        let event = try createReplyEvent(content: body, tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: 1, content: body, tags: tags)
         return try await publishReturningId(event)
     }
 
     func publishQuote(of note: Note, content: String, mediaUrls: [String], extraTags: [[String]] = []) async throws -> String {
-        let key = try signingKey()
+        try requireSigner()
         let reference = Nip19.nevent(note.id, author: note.pubkey) ?? Nip19.note(note.id) ?? note.id
         let text = Self.composeContent(content, mediaUrls: mediaUrls)
         let body = text.isEmpty ? "nostr:\(reference)" : "\(text)\nnostr:\(reference)"
@@ -192,12 +191,12 @@ final class InteractionService {
             if first == "p", tag.count > 1, tag[1] == note.pubkey { return false }
             return true
         }
-        let event = try createQuoteEvent(content: body, quotedEventId: note.id, quotedEventPubkey: note.pubkey, relayUrl: relay, privateKeyHex: key, additionalTags: additional)
+        let event = try signQuoteEvent(content: body, quotedEventId: note.id, quotedEventPubkey: note.pubkey, relayUrl: relay, additionalTags: additional)
         return try await publishReturningId(event)
     }
 
     func publishPoll(question: String, options: [String], multiple: Bool, endsAt: Date?, mediaUrls: [String], extraTags: [[String]] = []) async throws -> String {
-        let key = try signingKey()
+        try requireSigner()
         let body = Self.composeContent(question, mediaUrls: mediaUrls)
         var tags: [[String]] = options.map { ["option", Self.pollOptionId(), $0] }
         tags.append(["polltype", multiple ? "multiplechoice" : "singlechoice"])
@@ -206,29 +205,29 @@ final class InteractionService {
             tags.append(["relay", relay])
         }
         tags = Self.merge(tags, Self.contentTags(body, mediaUrls: mediaUrls) + extraTags)
-        let event = try createSignedEvent(kind: NotePoll.kind, content: body, tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: NotePoll.kind, content: body, tags: tags)
         return try await publishReturningId(event)
     }
 
     func publishGoal(description: String, amountSats: Int, closesAt: Date?, mediaUrls: [String], extraTags: [[String]] = []) async throws {
-        let key = try signingKey()
+        try requireSigner()
         guard let msats = SatsAmount.msat(amountSats) else { throw CoreError(L("enterValidAmount")) }
         let relays = Array(((try? await getRelayList()) ?? RelayConfig.mainRelays).filter { $0.hasPrefix("wss://") }.prefix(5))
         var tags: [[String]] = [["amount", String(msats)], ["relays"] + relays]
         if let closesAt { tags.append(["closed_at", String(Int(closesAt.timeIntervalSince1970))]) }
         let body = Self.composeContent(description, mediaUrls: mediaUrls)
         tags = Self.merge(tags, Self.contentTags(body, mediaUrls: mediaUrls) + extraTags)
-        let goal = try await sync.publish(try createSignedEvent(kind: UInt16(ZapGoal.kind), content: body, tags: tags, privateKeyHex: key))
+        let goal = try await sync.publish(try signEvent(kind: UInt16(ZapGoal.kind), content: body, tags: tags))
         guard let id = goal.str("id"), let me = Session.shared.pubkey, let reference = Nip19.nevent(id, author: me) ?? Nip19.note(id) else { return }
         let relay = await primaryRelay()
-        let announcement = try createQuoteEvent(content: "\(body)\nnostr:\(reference)", quotedEventId: id, quotedEventPubkey: me, relayUrl: relay, privateKeyHex: key, additionalTags: Self.merge(Self.contentTags(body, mediaUrls: mediaUrls), extraTags).filter { $0.first != "q" })
+        let announcement = try signQuoteEvent(content: "\(body)\nnostr:\(reference)", quotedEventId: id, quotedEventPubkey: me, relayUrl: relay, additionalTags: Self.merge(Self.contentTags(body, mediaUrls: mediaUrls), extraTags).filter { $0.first != "q" })
         try await sync.publish(announcement)
     }
 
     func publishPollResponse(pollId: String, optionIds: [String], relays: [String]) async throws {
-        let key = try signingKey()
+        try requireSigner()
         let tags = [["e", pollId]] + optionIds.map { ["response", $0] }
-        let event = try createSignedEvent(kind: NotePoll.responseKind, content: "", tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: NotePoll.responseKind, content: "", tags: tags)
         if !relays.isEmpty, (try? await sync.publish(event, to: relays)) != nil { return }
         try await sync.publish(event)
     }
@@ -239,10 +238,10 @@ final class InteractionService {
     }
 
     func report(pubkey: String, noteId: String?, reason: String) async throws {
-        let key = try signingKey()
+        try requireSigner()
         var tags: [[String]] = [["p", pubkey, reason]]
         if let noteId, !noteId.isEmpty { tags.append(["e", noteId, reason]) }
-        let event = try createSignedEvent(kind: 1984, content: "", tags: tags, privateKeyHex: key)
+        let event = try signEvent(kind: 1984, content: "", tags: tags)
         try await sync.publish(event)
     }
 

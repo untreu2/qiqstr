@@ -211,7 +211,7 @@ pub async fn merge_and_sort_notes(existing_json: String, incoming_json: String) 
 }
 
 /// DB-only version of fetch_full_thread — no network calls, returns instantly
-/// from local LMDB. Returns None if the root note is not in the DB yet.
+/// from local store. Returns None if the root note is not in the DB yet.
 pub async fn fetch_full_thread_local(
     note_id: String,
     current_user_pubkey_hex: Option<String>,

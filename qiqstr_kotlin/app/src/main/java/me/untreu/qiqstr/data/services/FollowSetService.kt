@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.qiqstr.core.createSignedEvent
+import com.qiqstr.core.signEvent
 import com.qiqstr.core.dbDeleteEventsByIds
 import com.qiqstr.core.dbGetFollowSets
 import com.qiqstr.core.dbSaveEvents
@@ -170,7 +170,7 @@ object FollowSetService {
 
     suspend fun delete(id: String) {
         val existing = ownSet(id) ?: return
-        val key = Session.privateKey ?: return
+        if (!Session.canSign) return
         val current = generation
         val wasFavorite = isFavorite(existing.id)
         sets = sets.filter { it.id != existing.id }
@@ -180,7 +180,7 @@ object FollowSetService {
         try {
             val tags = mutableListOf(listOf("a", existing.coordinate), listOf("k", "30000"))
             if (existing.eventId.isNotEmpty()) tags.add(0, listOf("e", existing.eventId))
-            val json = createSignedEvent(5u.toUShort(), "User deleted list", tags, key)
+            val json = signEvent(5u.toUShort(), "User deleted list", tags)
             SyncService.publish(json)
             if (existing.eventId.isNotEmpty()) runCatching { dbDeleteEventsByIds(listOf(existing.eventId)) }
         } catch (error: Throwable) {
@@ -224,7 +224,7 @@ object FollowSetService {
     }
 
     private suspend fun publish(set: FollowSet, previous: FollowSet?): FollowSet {
-        val key = Session.requireSigner()
+        Session.requireSigner()
         val base = SyncService.latestEditableEvent(30000, set.pubkey, set.dTag, allowingNew = previous == null)
         val managed = setOf("d", "title", "description", "image", "p")
         val baseTags = base?.tags() ?: emptyList()
@@ -246,7 +246,7 @@ object FollowSetService {
         tags.addAll(members.map { original[it] ?: listOf("p", it) })
         tags.addAll(baseTags.filter { it.isNotEmpty() && it[0] !in managed })
         val content = base?.text("content") ?: ""
-        val json = createSignedEvent(30000u.toUShort(), content, tags, key)
+        val json = signEvent(30000u.toUShort(), content, tags)
         val event = SyncService.publish(json)
         setTombstone(set.id, null)
         return FollowSet.fromEvent(event) ?: set
