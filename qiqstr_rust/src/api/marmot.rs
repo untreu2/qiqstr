@@ -10,6 +10,8 @@ use mdk_storage_traits::groups::Pagination;
 use mdk_storage_traits::messages::MessageStorage;
 use nostr::nips::nip59;
 use nostr::prelude::*;
+
+use super::crypto::Secret;
 use openmls::prelude::OpenMlsProvider;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -195,6 +197,7 @@ fn key_package_relays(event: &Event) -> Vec<String> {
 }
 
 pub fn marmot_open(data_dir: String, private_key_hex: String) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let keys = Keys::new(SecretKey::parse(&private_key_hex)?);
     let pubkey = keys.public_key().to_hex();
     let mut guard = STATE

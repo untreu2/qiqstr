@@ -1,13 +1,24 @@
 use anyhow::Result;
 use nostr::prelude::*;
 
+use super::crypto::Secret;
+
 pub fn create_signed_event(
     kind: u16,
     content: String,
     tags: Vec<Vec<String>>,
     private_key_hex: String,
 ) -> Result<String> {
-    let secret_key = SecretKey::parse(&private_key_hex)?;
+    sign_event(kind, content, tags, &Secret::new(private_key_hex))
+}
+
+fn sign_event(
+    kind: u16,
+    content: String,
+    tags: Vec<Vec<String>>,
+    private_key_hex: &Secret,
+) -> Result<String> {
+    let secret_key = SecretKey::parse(private_key_hex)?;
     let keys = Keys::new(secret_key);
 
     let nostr_tags: Vec<Tag> = tags
@@ -39,7 +50,8 @@ pub fn create_note_event(
     tags: Vec<Vec<String>>,
     private_key_hex: String,
 ) -> Result<String> {
-    create_signed_event(1, content, tags, private_key_hex)
+    let private_key_hex = Secret::new(private_key_hex);
+    sign_event(1, content, tags, &private_key_hex)
 }
 
 pub fn create_reaction_event(
@@ -50,12 +62,13 @@ pub fn create_reaction_event(
     relay_url: String,
     target_kind: u16,
 ) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let tags = vec![
         vec!["e".into(), target_event_id, relay_url],
         vec!["p".into(), target_author],
         vec!["k".into(), target_kind.to_string()],
     ];
-    create_signed_event(7, content, tags, private_key_hex)
+    sign_event(7, content, tags, &private_key_hex)
 }
 
 pub fn create_reply_event(
@@ -63,7 +76,8 @@ pub fn create_reply_event(
     tags: Vec<Vec<String>>,
     private_key_hex: String,
 ) -> Result<String> {
-    create_signed_event(1, content, tags, private_key_hex)
+    let private_key_hex = Secret::new(private_key_hex);
+    sign_event(1, content, tags, &private_key_hex)
 }
 
 pub fn create_repost_event(
@@ -73,6 +87,7 @@ pub fn create_repost_event(
     private_key_hex: String,
     relay_url: String,
 ) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let note_id = EventId::parse(&note_id)?;
     let note_author = PublicKey::parse(&note_author)?;
     let original = Event::from_json(&content).ok().filter(|event| {
@@ -86,7 +101,7 @@ pub fn create_repost_event(
         vec!["e".into(), note_id.to_hex(), relay_url],
         vec!["p".into(), note_author.to_hex()],
     ];
-    create_signed_event(6, content, tags, private_key_hex)
+    sign_event(6, content, tags, &private_key_hex)
 }
 
 pub fn create_deletion_event(
@@ -94,34 +109,38 @@ pub fn create_deletion_event(
     reason: String,
     private_key_hex: String,
 ) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let tags: Vec<Vec<String>> = event_ids
         .iter()
         .map(|id| vec!["e".into(), id.clone()])
         .collect();
-    create_signed_event(5, reason, tags, private_key_hex)
+    sign_event(5, reason, tags, &private_key_hex)
 }
 
 pub fn create_profile_event(profile_json: String, private_key_hex: String) -> Result<String> {
-    create_signed_event(0, profile_json, vec![], private_key_hex)
+    let private_key_hex = Secret::new(private_key_hex);
+    sign_event(0, profile_json, vec![], &private_key_hex)
 }
 
 pub fn create_follow_event(
     following_pubkeys: Vec<String>,
     private_key_hex: String,
 ) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let tags: Vec<Vec<String>> = following_pubkeys
         .iter()
         .map(|pk| vec!["p".into(), pk.clone(), String::new()])
         .collect();
-    create_signed_event(3, String::new(), tags, private_key_hex)
+    sign_event(3, String::new(), tags, &private_key_hex)
 }
 
 pub fn create_mute_event(muted_pubkeys: Vec<String>, private_key_hex: String) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let tags: Vec<Vec<String>> = muted_pubkeys
         .iter()
         .map(|pk| vec!["p".into(), pk.clone()])
         .collect();
-    create_signed_event(10000, String::new(), tags, private_key_hex)
+    sign_event(10000, String::new(), tags, &private_key_hex)
 }
 
 pub fn create_zap_request_event(
@@ -129,7 +148,8 @@ pub fn create_zap_request_event(
     content: String,
     private_key_hex: String,
 ) -> Result<String> {
-    create_signed_event(9734, content, tags, private_key_hex)
+    let private_key_hex = Secret::new(private_key_hex);
+    sign_event(9734, content, tags, &private_key_hex)
 }
 
 pub fn create_quote_event(
@@ -140,6 +160,7 @@ pub fn create_quote_event(
     private_key_hex: String,
     additional_tags: Vec<Vec<String>>,
 ) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let mut tags = Vec::new();
     if let Some(ref pk) = quoted_event_pubkey {
         tags.push(vec![
@@ -153,7 +174,7 @@ pub fn create_quote_event(
         tags.push(vec!["q".into(), quoted_event_id, relay_url]);
     }
     tags.extend(additional_tags);
-    create_signed_event(1, content, tags, private_key_hex)
+    sign_event(1, content, tags, &private_key_hex)
 }
 
 pub fn create_blossom_auth_event(
@@ -162,26 +183,29 @@ pub fn create_blossom_auth_event(
     expiration: i64,
     private_key_hex: String,
 ) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let tags = vec![
         vec!["t".into(), "upload".into()],
         vec!["x".into(), sha256_hash],
         vec!["expiration".into(), expiration.to_string()],
     ];
-    create_signed_event(24242, content, tags, private_key_hex)
+    sign_event(24242, content, tags, &private_key_hex)
 }
 
 pub fn create_relay_list_event(relay_urls: Vec<String>, private_key_hex: String) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let tags: Vec<Vec<String>> = relay_urls
         .iter()
         .map(|url| vec!["r".into(), url.clone()])
         .collect();
-    create_signed_event(10002, String::new(), tags, private_key_hex)
+    sign_event(10002, String::new(), tags, &private_key_hex)
 }
 
 pub fn create_relay_list_event_with_markers(
     relay_configs: Vec<String>,
     private_key_hex: String,
 ) -> Result<String> {
+    let private_key_hex = Secret::new(private_key_hex);
     let tags: Vec<Vec<String>> = relay_configs
         .iter()
         .map(|config| {
@@ -192,7 +216,7 @@ pub fn create_relay_list_event_with_markers(
             }
         })
         .collect();
-    create_signed_event(10002, String::new(), tags, private_key_hex)
+    sign_event(10002, String::new(), tags, &private_key_hex)
 }
 
 #[cfg(test)]

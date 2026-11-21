@@ -7,8 +7,10 @@ use anyhow::{anyhow, Result};
 use nostr::prelude::*;
 use tokio::sync::RwLock;
 
+use super::crypto::Secret;
 use crate::pool::{
-    NostrClient, PublishOutput, RelayStatus, SubNotification, FLAG_READ, FLAG_WRITE,
+    is_public_secure_relay, NostrClient, PublishOutput, RelayStatus, SubNotification, FLAG_AUTH,
+    FLAG_READ, FLAG_WRITE,
 };
 use crate::sink::StreamSink;
 use crate::store::EventStore;
@@ -49,7 +51,25 @@ pub(crate) async fn quick_fetch(
     filter: Filter,
     timeout: Duration,
 ) -> Result<Vec<Event>> {
-    client.quick_fetch(filter, timeout, true).await
+    client.fetch(filter, timeout, true).await
+}
+
+/// Fetches profiles the app has never seen, for display. Any version will do, so this does not
+/// wait for every relay the way a lookup of one author's newest profile does.
+async fn fetch_unseen_profiles(
+    client: &NostrClient,
+    authors: Vec<PublicKey>,
+    limit: usize,
+    timeout: Duration,
+) -> Vec<Event> {
+    let filter = Filter::new()
+        .authors(authors)
+        .kind(Kind::Metadata)
+        .limit(limit);
+    client
+        .quick_fetch(filter, timeout, true)
+        .await
+        .unwrap_or_default()
 }
 
 pub async fn init_client(
@@ -58,17 +78,14 @@ pub async fn init_client(
     db_path: Option<String>,
     discovery_relays: Vec<String>,
 ) -> Result<()> {
+    let private_key_hex = private_key_hex.map(Secret::new);
     let mut lock = state().write().await;
     for url in relay_urls.iter().chain(&discovery_relays) {
         RelayUrl::parse(url)?;
     }
 
     let signer = match private_key_hex {
-        Some(sk_hex) => {
-            let parsed = Keys::parse(&sk_hex);
-            super::crypto::wipe_string(sk_hex);
-            Some(parsed?)
-        }
+        Some(sk_hex) => Some(Keys::parse(&sk_hex)?),
         None => None,
     };
 
@@ -85,9 +102,12 @@ pub async fn init_client(
     };
 
     let client = NostrClient::new(store, signer);
+    client.automatic_authentication(true);
 
     for url in &relay_urls {
-        let _ = client.add_relay(url.as_str()).await;
+        let _ = client
+            .add_relay_with_flags(url.as_str(), FLAG_READ | FLAG_WRITE | FLAG_AUTH)
+            .await;
     }
     for url in &discovery_relays {
         let _ = client.add_discovery_relay(url.as_str()).await;
@@ -127,29 +147,25 @@ pub async fn disconnect_relays() -> Result<()> {
 }
 
 pub async fn shutdown_client() -> Result<()> {
-    let mut lock = state().write().await;
-    if let Some(client) = lock.take() {
+    let client = {
+        let mut lock = state().write().await;
+        user_relays_state().write().await.clear();
+        *db_path_state().write().await = None;
+        super::database::set_active_mute_list(Vec::new(), Vec::new());
+        primal_socket().discard();
+        lock.take()
+    };
+    if let Some(client) = client {
         client.unset_signer().await;
         client.shutdown().await;
     }
-    *primal_ws_lock().lock().await = None;
-    user_relays_state().write().await.clear();
-    *db_path_state().write().await = None;
-    super::database::set_active_mute_list(Vec::new(), Vec::new());
     Ok(())
 }
 
 pub async fn update_signer(private_key_hex: String) -> Result<()> {
-    let client = match get_client().await {
-        Ok(c) => c,
-        Err(e) => {
-            super::crypto::wipe_string(private_key_hex);
-            return Err(e);
-        }
-    };
-    let parsed = Keys::parse(&private_key_hex);
-    super::crypto::wipe_string(private_key_hex);
-    client.set_signer(parsed?).await;
+    let private_key_hex = Secret::new(private_key_hex);
+    let client = get_client().await?;
+    client.set_signer(Keys::parse(&private_key_hex)?).await;
     Ok(())
 }
 
@@ -160,7 +176,10 @@ pub async fn is_client_initialized() -> bool {
 
 pub async fn add_relay(url: String) -> Result<bool> {
     let client = get_client().await?;
-    let added = client.add_relay(&url).await.is_ok();
+    let added = client
+        .add_relay_with_flags(&url, FLAG_READ | FLAG_WRITE | FLAG_AUTH)
+        .await
+        .is_ok();
     if added {
         let mut ur = user_relays_state().write().await;
         if !ur.contains(&url) {
@@ -174,7 +193,7 @@ pub async fn add_relay(url: String) -> Result<bool> {
 pub async fn add_relay_with_flags(url: String, read: bool, write: bool) -> Result<bool> {
     let client = get_client().await?;
     let relay_url = RelayUrl::parse(&url)?;
-    let mut flags = 0u8;
+    let mut flags = FLAG_AUTH;
     if read {
         flags |= FLAG_READ;
     }
@@ -324,26 +343,6 @@ pub async fn stream_relay_status(sink: StreamSink<String>) -> Result<()> {
         let _ = sink.add_error(error);
     }
     Ok(())
-}
-
-fn is_public_secure_relay(url: &RelayUrl) -> bool {
-    let text = url.as_str().to_ascii_lowercase();
-    let Some(rest) = text.strip_prefix("wss://") else {
-        return false;
-    };
-    let host = rest.split(['/', ':', '?']).next().unwrap_or("");
-    if host.is_empty()
-        || host == "localhost"
-        || host.ends_with(".local")
-        || host.ends_with(".onion")
-        || host.starts_with('[')
-    {
-        return false;
-    }
-    if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
-        return !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified());
-    }
-    true
 }
 
 pub async fn discover_and_connect_outbox_relays(
@@ -507,7 +506,7 @@ pub async fn sync_events(filter_json: String) -> Result<String> {
     let local_count = local_ids.len();
 
     let fetched = client
-        .quick_fetch(filter, Duration::from_secs(8), true)
+        .fetch(filter, Duration::from_secs(8), true)
         .await
         .unwrap_or_default();
     let remote_count = fetched.len();
@@ -759,7 +758,7 @@ pub async fn stream_interaction_counts(
             user_reposted.insert(nid.clone(), false);
         }
 
-        let mut eose_count: usize = 0;
+        let mut finished_relays: usize = 0;
         let mut last_emit = std::time::Instant::now();
         let mut has_data = false;
 
@@ -839,13 +838,12 @@ pub async fn stream_interaction_counts(
                             last_emit = std::time::Instant::now();
                         }
                     }
-                    SubNotification::Eose => {
-                        eose_count += 1;
-                        if eose_count >= relay_count {
+                    SubNotification::Eose | SubNotification::Closed { .. } => {
+                        finished_relays += 1;
+                        if finished_relays >= relay_count {
                             break;
                         }
                     }
-                    SubNotification::Closed => {}
                 },
                 Ok(None) | Err(_) => break,
             }
@@ -999,8 +997,10 @@ pub async fn send_event(event_json: String) -> Result<String> {
     published_event_json(output)
 }
 
-/// A short-lived client for relays outside the main pool. It signs with the account's key so
-/// relays that require NIP-42 auth (such as NIP-29 group relays) accept reads and writes.
+/// A short-lived client for relays outside the main pool. It holds the account's key so relays
+/// that require NIP-42 auth accept what the account is entitled to, under the pool's rules: a
+/// relay the account configured is answered whenever it asks, and any other public relay only
+/// when it refuses a publish, a relay-hosted group request, or a read of the account's inbox.
 async fn temporary_client() -> NostrClient {
     let signer = match get_client().await {
         Ok(main) => main.signer().await.ok(),
@@ -1009,6 +1009,72 @@ async fn temporary_client() -> NostrClient {
     let client = NostrClient::in_memory(signer);
     client.automatic_authentication(true);
     client
+}
+
+async fn add_temporary_relays(client: &NostrClient, urls: &[RelayUrl]) {
+    let configured: HashSet<RelayUrl> = user_relays_state()
+        .read()
+        .await
+        .iter()
+        .filter_map(|url| RelayUrl::parse(url).ok())
+        .collect();
+    for url in urls {
+        let trust = if configured.contains(url) {
+            FLAG_AUTH
+        } else {
+            0
+        };
+        let _ = client
+            .add_relay_with_flags(url.as_str(), FLAG_READ | FLAG_WRITE | trust)
+            .await;
+    }
+}
+
+/// Forwards a live subscription until the consumer leaves or every relay it reached has
+/// refused it.
+async fn forward_subscription(
+    client: &NostrClient,
+    sub_id: &str,
+    mut notifications: tokio::sync::mpsc::Receiver<SubNotification>,
+    sink: &StreamSink<String>,
+    save: bool,
+) -> Result<()> {
+    let mut refused_by: HashSet<RelayUrl> = HashSet::new();
+    let mut liveness = tokio::time::interval(Duration::from_secs(2));
+    loop {
+        let received = tokio::select! {
+            received = notifications.recv() => received,
+            _ = liveness.tick() => {
+                if sink.is_closed() {
+                    return Ok(());
+                }
+                continue;
+            }
+        };
+        match received {
+            Some(SubNotification::Event { event }) => {
+                if save {
+                    let _ = client.database().save_event(&event);
+                }
+                if sink.add(event.as_json()).is_err() {
+                    return Ok(());
+                }
+            }
+            Some(SubNotification::Closed { relay, message }) => {
+                refused_by.insert(relay);
+                if refused_by.len() >= client.subscription_relay_count(sub_id).max(1) {
+                    let reason = if message.is_empty() {
+                        "no reason given".to_string()
+                    } else {
+                        message
+                    };
+                    return Err(anyhow!("Subscription closed by relay: {reason}"));
+                }
+            }
+            Some(SubNotification::Eose) => {}
+            None => return Ok(()),
+        }
+    }
 }
 
 struct TargetPool {
@@ -1035,9 +1101,7 @@ impl TargetPool {
             None
         } else {
             let temp = temporary_client().await;
-            for url in &fresh {
-                let _ = temp.add_relay(url.as_str()).await;
-            }
+            add_temporary_relays(&temp, &fresh).await;
             temp.connect().await;
             temp.wait_for_ready(Duration::from_secs(3), fresh.len().min(2))
                 .await;
@@ -1607,44 +1671,24 @@ pub async fn subscribe_to_events_on_relays(
 ) -> Result<()> {
     let result: Result<()> = async {
         let filter = Filter::from_json(&filter_json)?;
+        let urls: Vec<RelayUrl> = relay_urls
+            .iter()
+            .map(|url| RelayUrl::parse(url))
+            .collect::<std::result::Result<_, _>>()?;
         let client = temporary_client().await;
-        for url in &relay_urls {
-            RelayUrl::parse(url)?;
-        }
-        for url in &relay_urls {
-            let _ = client.add_relay(url.as_str()).await;
-        }
+        add_temporary_relays(&client, &urls).await;
         client.connect().await;
         client
-            .wait_for_ready(Duration::from_secs(3), relay_urls.len().min(2))
+            .wait_for_ready(Duration::from_secs(3), urls.len().min(2))
             .await;
-        let (_sub_id, mut notifications, _) = client
-            .subscribe_on(filter, None)
-            .await
-            .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
-        let mut liveness = tokio::time::interval(Duration::from_secs(2));
-        loop {
-            let received = tokio::select! {
-                received = notifications.recv() => received,
-                _ = liveness.tick() => {
-                    if sink.is_closed() {
-                        break;
-                    }
-                    continue;
-                }
-            };
-            match received {
-                Some(SubNotification::Event { event }) => {
-                    if sink.add(event.as_json()).is_err() {
-                        break;
-                    }
-                }
-                None => break,
-                _ => continue,
+        let outcome = match client.subscribe_on(filter, None).await {
+            Ok((sub_id, notifications, _)) => {
+                forward_subscription(&client, &sub_id, notifications, &sink, false).await
             }
-        }
+            Err(error) => Err(anyhow!("Subscribe failed: {}", error)),
+        };
         client.shutdown().await;
-        Ok(())
+        outcome
     }
     .await;
     if let Err(error) = result {
@@ -1658,37 +1702,14 @@ pub async fn subscribe_to_events(filter_json: String, sink: StreamSink<String>) 
         let client = get_client().await?;
         let filter = Filter::from_json(&filter_json)?;
 
-        let (sub_id, mut notifications, _) = client
+        let (sub_id, notifications, _) = client
             .subscribe_on(filter, None)
             .await
             .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
 
-        let mut liveness = tokio::time::interval(Duration::from_secs(2));
-        loop {
-            let received = tokio::select! {
-                received = notifications.recv() => received,
-                _ = liveness.tick() => {
-                    if sink.is_closed() {
-                        break;
-                    }
-                    continue;
-                }
-            };
-            match received {
-                Some(SubNotification::Event { event }) => {
-                    let _ = client.database().save_event(&event);
-                    if sink.add(event.as_json()).is_err() {
-                        break;
-                    }
-                }
-                None => break,
-                _ => continue,
-            }
-        }
-
+        let outcome = forward_subscription(&client, &sub_id, notifications, &sink, true).await;
         client.unsubscribe(&sub_id).await;
-
-        Ok(())
+        outcome
     }
     .await;
     if let Err(error) = result {
@@ -1817,11 +1838,7 @@ pub async fn sync_replies_recursive(note_id: String, max_depth: u32) -> Result<u
             .collect();
 
         if !missing.is_empty() {
-            let profile_filter = Filter::new()
-                .authors(missing)
-                .kind(Kind::Metadata)
-                .limit(200);
-            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5)).await;
+            fetch_unseen_profiles(&client, missing, 200, Duration::from_secs(5)).await;
         }
     }
 
@@ -1996,11 +2013,7 @@ pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
                 .filter(|pk| !existing.contains_key(pk))
                 .collect();
             if !missing_pks.is_empty() {
-                let pf = Filter::new()
-                    .authors(missing_pks)
-                    .kind(Kind::Metadata)
-                    .limit(50);
-                let _ = quick_fetch(&client, pf, Duration::from_secs(4)).await;
+                fetch_unseen_profiles(&client, missing_pks, 50, Duration::from_secs(4)).await;
             }
         }
 
@@ -2098,11 +2111,7 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
             .collect();
 
         if !missing_pks.is_empty() {
-            let profile_filter = Filter::new()
-                .authors(missing_pks)
-                .kind(Kind::Metadata)
-                .limit(50);
-            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5)).await;
+            fetch_unseen_profiles(&client, missing_pks, 50, Duration::from_secs(5)).await;
         }
     }
 
@@ -2559,11 +2568,7 @@ pub async fn fetch_full_thread(
                 .collect();
 
             if !missing.is_empty() {
-                let profile_filter = Filter::new()
-                    .authors(missing)
-                    .kind(Kind::Metadata)
-                    .limit(200);
-                let _ = quick_fetch(&client, profile_filter, Duration::from_secs(3)).await;
+                fetch_unseen_profiles(&client, missing, 200, Duration::from_secs(3)).await;
             }
         }
     }
@@ -2621,16 +2626,9 @@ pub async fn get_database_size_mb() -> Result<u64> {
         return Ok(client.database().database_size_bytes() / (1024 * 1024));
     }
     let db_path_lock = db_path_state().read().await;
-    if let Some(path) = db_path_lock.as_ref() {
-        let mut size_bytes = 0u64;
-        for name in ["events.sqlite", "events.sqlite-wal", "data.mdb"] {
-            if let Ok(metadata) = std::fs::metadata(Path::new(path).join(name)) {
-                size_bytes += metadata.len();
-            }
-        }
-        Ok(size_bytes / (1024 * 1024))
-    } else {
-        Ok(0)
+    match db_path_lock.as_ref() {
+        Some(path) => Ok(EventStore::database_size_in(Path::new(path)) / (1024 * 1024)),
+        None => Ok(0),
     }
 }
 
@@ -2682,13 +2680,7 @@ pub async fn fetch_missing_profiles_for_events(events_json: String) -> Result<u3
     }
 
     let requested = missing.len();
-    let profile_filter = Filter::new()
-        .authors(missing)
-        .kind(Kind::Metadata)
-        .limit(requested);
-    let fetched = quick_fetch(&client, profile_filter, Duration::from_secs(5))
-        .await
-        .unwrap_or_default();
+    let fetched = fetch_unseen_profiles(&client, missing, requested, Duration::from_secs(5)).await;
 
     Ok(fetched.len() as u32)
 }
@@ -2747,11 +2739,7 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
             .filter(|pk| !existing_profiles.contains_key(pk))
             .collect();
         if !missing_pks.is_empty() {
-            let profile_filter = Filter::new()
-                .authors(missing_pks)
-                .kind(Kind::Metadata)
-                .limit(50);
-            let _ = quick_fetch(&client, profile_filter, Duration::from_secs(5)).await;
+            fetch_unseen_profiles(&client, missing_pks, 50, Duration::from_secs(5)).await;
         }
     }
 
@@ -2761,10 +2749,47 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
 type PrimalWsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-static PRIMAL_WS: OnceLock<tokio::sync::Mutex<Option<PrimalWsStream>>> = OnceLock::new();
+/// The idle connection to the Primal cache. A request takes it and hands it back when done, so
+/// nothing waits on a lock while a request is on the network, and signing out never has to wait
+/// for one.
+struct PrimalSocket {
+    idle: std::sync::Mutex<Option<PrimalWsStream>>,
+    session: std::sync::atomic::AtomicU64,
+}
 
-fn primal_ws_lock() -> &'static tokio::sync::Mutex<Option<PrimalWsStream>> {
-    PRIMAL_WS.get_or_init(|| tokio::sync::Mutex::new(None))
+impl PrimalSocket {
+    fn slot(&self) -> std::sync::MutexGuard<'_, Option<PrimalWsStream>> {
+        self.idle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn take(&self) -> (Option<PrimalWsStream>, u64) {
+        let session = self.session.load(std::sync::atomic::Ordering::Acquire);
+        (self.slot().take(), session)
+    }
+
+    fn give_back(&self, socket: PrimalWsStream, session: u64) {
+        let mut slot = self.slot();
+        if slot.is_none() && self.session.load(std::sync::atomic::Ordering::Acquire) == session {
+            *slot = Some(socket);
+        }
+    }
+
+    fn discard(&self) {
+        self.session
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.slot().take();
+    }
+}
+
+static PRIMAL_SOCKET: PrimalSocket = PrimalSocket {
+    idle: std::sync::Mutex::new(None),
+    session: std::sync::atomic::AtomicU64::new(0),
+};
+
+fn primal_socket() -> &'static PrimalSocket {
+    &PRIMAL_SOCKET
 }
 
 async fn query_primal_follower_counts(
@@ -2864,28 +2889,26 @@ pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> 
     ])
     .to_string();
 
-    let mut guard = primal_ws_lock().lock().await;
-    for attempt in 0..2 {
-        if guard.is_none() {
-            let ws_cfg = crate::pool::hardened_ws_config();
-            match tokio::time::timeout(
-                Duration::from_secs(5),
-                connect_async_with_config(primal_url, Some(ws_cfg), true),
-            )
-            .await
-            {
-                Ok(Ok((stream, _))) => *guard = Some(stream),
-                _ => return Ok("{}".to_string()),
+    let (mut idle, session) = primal_socket().take();
+    for _attempt in 0..2 {
+        let mut socket = match idle.take() {
+            Some(socket) => socket,
+            None => {
+                let ws_cfg = crate::pool::hardened_ws_config();
+                match tokio::time::timeout(
+                    Duration::from_secs(5),
+                    connect_async_with_config(primal_url, Some(ws_cfg), true),
+                )
+                .await
+                {
+                    Ok(Ok((stream, _))) => stream,
+                    _ => return Ok("{}".to_string()),
+                }
             }
-        }
-        if let Some(ws) = guard.as_mut() {
-            if let Some(counts) = query_primal_follower_counts(ws, &sub_id, &request).await {
-                return Ok(serde_json::to_string(&counts)?);
-            }
-        }
-        *guard = None;
-        if attempt == 1 {
-            break;
+        };
+        if let Some(counts) = query_primal_follower_counts(&mut socket, &sub_id, &request).await {
+            primal_socket().give_back(socket, session);
+            return Ok(serde_json::to_string(&counts)?);
         }
     }
 
@@ -2898,16 +2921,15 @@ pub async fn fetch_events_from_relays(
     timeout_secs: u32,
 ) -> Result<String> {
     let filter = Filter::from_json(&filter_json)?;
-    for url in &relay_urls {
-        RelayUrl::parse(url)?;
-    }
+    let urls: Vec<RelayUrl> = relay_urls
+        .iter()
+        .map(|url| RelayUrl::parse(url))
+        .collect::<std::result::Result<_, _>>()?;
     let client = temporary_client().await;
-    for url in &relay_urls {
-        let _ = client.add_relay(url.as_str()).await;
-    }
+    add_temporary_relays(&client, &urls).await;
     client.connect().await;
     let events = client
-        .quick_fetch(filter, Duration::from_secs(timeout_secs as u64), false)
+        .thorough_fetch(filter, Duration::from_secs(timeout_secs as u64), false)
         .await;
     client.shutdown().await;
     events_to_json(events?)
@@ -2916,6 +2938,288 @@ pub async fn fetch_events_from_relays(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pool::test_relay::{mock_relay, relay_with, unreachable_relay, Script};
+
+    static GLOBAL_CLIENT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    #[derive(Default)]
+    struct Collected {
+        items: std::sync::Mutex<Vec<String>>,
+        errors: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl crate::sink::EventSink for Collected {
+        fn on_item(&self, item: String) -> bool {
+            self.items.lock().unwrap().push(item);
+            true
+        }
+
+        fn on_error(&self, message: String) {
+            self.errors.lock().unwrap().push(message);
+        }
+
+        fn on_done(&self) {}
+
+        fn is_closed(&self) -> bool {
+            false
+        }
+    }
+
+    fn collecting_sink() -> (Arc<Collected>, StreamSink<String>) {
+        let collected = Arc::new(Collected::default());
+        (collected.clone(), StreamSink::new(collected))
+    }
+
+    #[tokio::test]
+    async fn a_relay_scoped_fetch_hears_from_every_relay_it_was_pointed_at() {
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("only the slower relay has this")
+            .sign_with_keys(&keys)
+            .unwrap();
+        let empty = relay_with(&[], Duration::ZERO).await;
+        let slower = relay_with(&[&event], Duration::from_millis(1_150)).await;
+        let dead = unreachable_relay().await;
+        let filter = Filter::new().author(keys.public_key()).kind(Kind::TextNote);
+
+        let started = std::time::Instant::now();
+        let raw = fetch_events_from_relays(
+            filter.as_json(),
+            vec![dead, empty.url.clone(), slower.url.clone()],
+            6,
+        )
+        .await
+        .unwrap();
+        let events: Vec<Event> = serde_json::from_str(&raw).unwrap();
+        assert_eq!(events, vec![event]);
+        assert!(started.elapsed() < Duration::from_secs(4));
+        assert!(
+            fetch_events_from_relays(filter.as_json(), vec!["not a relay".into()], 1)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_stream_reports_an_error_once_every_relay_has_refused_it() {
+        let relay = mock_relay(Script {
+            refuse_requests: Some("restricted: members only"),
+            ..Script::default()
+        })
+        .await;
+        let (collected, sink) = collecting_sink();
+        tokio::time::timeout(
+            Duration::from_secs(4),
+            subscribe_to_events_on_relays(
+                Filter::new().kind(Kind::TextNote).as_json(),
+                vec![relay.url.clone()],
+                sink,
+            ),
+        )
+        .await
+        .expect("the stream kept waiting on a subscription its only relay had closed")
+        .unwrap();
+        let errors = collected.errors.lock().unwrap();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].contains("restricted: members only"), "{errors:?}");
+        assert!(collected.items.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_stream_delivers_events_from_the_relays_that_accept_it() {
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("live")
+            .sign_with_keys(&keys)
+            .unwrap();
+        let refusing = mock_relay(Script {
+            refuse_requests: Some("restricted: members only"),
+            ..Script::default()
+        })
+        .await;
+        let serving = mock_relay(Script {
+            live: vec![crate::pool::test_relay::json(&event)],
+            ..Script::default()
+        })
+        .await;
+        let (collected, sink) = collecting_sink();
+        let stream = tokio::spawn(subscribe_to_events_on_relays(
+            Filter::new().kind(Kind::TextNote).as_json(),
+            vec![refusing.url.clone(), serving.url.clone()],
+            sink,
+        ));
+        let deadline = std::time::Instant::now() + Duration::from_secs(4);
+        while collected.items.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(*collected.items.lock().unwrap(), vec![event.as_json()]);
+        assert!(collected.errors.lock().unwrap().is_empty());
+        assert!(!stream.is_finished());
+        stream.abort();
+    }
+
+    #[tokio::test]
+    async fn late_relays_that_refuse_do_not_end_a_stream_other_relays_serve() {
+        let _guard = GLOBAL_CLIENT.lock().await;
+        let keys = Keys::generate();
+        let serving = relay_with(&[], Duration::ZERO).await;
+        init_client(vec![serving.url.clone()], None, None, vec![])
+            .await
+            .unwrap();
+        connect_relays().await.unwrap();
+        assert_eq!(wait_for_ready(3).await.unwrap(), 1);
+
+        let (collected, sink) = collecting_sink();
+        let stream = tokio::spawn(subscribe_to_events(
+            Filter::new().kind(Kind::TextNote).as_json(),
+            sink,
+        ));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        let client = get_client().await.unwrap();
+        let mut refusing = Vec::new();
+        for _ in 0..3 {
+            let relay = mock_relay(Script {
+                refuse_requests: Some("auth-required: members only"),
+                ..Script::default()
+            })
+            .await;
+            client.add_relay(&relay.url).await.unwrap();
+            refusing.push(relay);
+        }
+        let event = EventBuilder::text_note("from a relay that joined later")
+            .sign_with_keys(&keys)
+            .unwrap();
+        let joining = mock_relay(Script {
+            live: vec![crate::pool::test_relay::json(&event)],
+            ..Script::default()
+        })
+        .await;
+        client.add_relay(&joining.url).await.unwrap();
+        client.connect().await;
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(4);
+        while collected.items.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(*collected.items.lock().unwrap(), vec![event.as_json()]);
+        assert!(collected.errors.lock().unwrap().is_empty());
+        assert!(!stream.is_finished());
+        assert!(client.database().event_by_id(&event.id).unwrap().is_some());
+
+        stream.abort();
+        shutdown_client().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn signing_out_never_waits_for_a_follower_count_request() {
+        use tokio_tungstenite::connect_async_with_config;
+        let _guard = GLOBAL_CLIENT.lock().await;
+        let relay = relay_with(&[], Duration::ZERO).await;
+        let connect = || async {
+            connect_async_with_config(
+                relay.url.as_str(),
+                Some(crate::pool::hardened_ws_config()),
+                true,
+            )
+            .await
+            .unwrap()
+            .0
+        };
+        let pool = primal_socket();
+        pool.discard();
+
+        let (idle, session) = pool.take();
+        assert!(idle.is_none());
+        pool.give_back(connect().await, session);
+        let (idle, session) = pool.take();
+        let in_use = idle.expect("an idle connection is reused by the next request");
+
+        init_client(vec![], None, None, vec![]).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(1), shutdown_client())
+            .await
+            .expect("sign-out waited for a follower-count request")
+            .unwrap();
+        assert!(!is_client_initialized().await);
+
+        pool.give_back(in_use, session);
+        assert!(
+            pool.take().0.is_none(),
+            "a connection from before sign-out was kept"
+        );
+
+        let (_, session) = pool.take();
+        pool.give_back(connect().await, session);
+        pool.give_back(connect().await, session);
+        assert!(pool.take().0.is_some());
+        assert!(pool.take().0.is_none());
+    }
+
+    #[tokio::test]
+    async fn interaction_counts_stop_waiting_for_a_relay_that_refuses_the_request() {
+        let _guard = GLOBAL_CLIENT.lock().await;
+        let relay = mock_relay(Script {
+            refuse_requests: Some("rate-limited: slow down"),
+            ..Script::default()
+        })
+        .await;
+        init_client(vec![relay.url.clone()], None, None, vec![])
+            .await
+            .unwrap();
+        connect_relays().await.unwrap();
+        assert_eq!(wait_for_ready(3).await.unwrap(), 1);
+
+        let (collected, sink) = collecting_sink();
+        let started = std::time::Instant::now();
+        stream_interaction_counts(vec!["11".repeat(32)], None, sink)
+            .await
+            .unwrap();
+        assert!(
+            started.elapsed() < Duration::from_millis(1_500),
+            "waited {:?} for a relay that had already refused",
+            started.elapsed()
+        );
+        assert!(collected.errors.lock().unwrap().is_empty());
+        shutdown_client().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn relays_the_account_configured_are_trusted_and_discovered_ones_are_not() {
+        let _guard = GLOBAL_CLIENT.lock().await;
+        init_client(
+            vec!["wss://mine.example".into()],
+            None,
+            None,
+            vec!["wss://index.example".into()],
+        )
+        .await
+        .unwrap();
+        add_relay("wss://added.example".into()).await.unwrap();
+        add_relay_with_flags("wss://readonly.example".into(), true, false)
+            .await
+            .unwrap();
+        let client = get_client().await.unwrap();
+        client.add_relay("wss://outbox.example").await.unwrap();
+        let relays = client.relays().await;
+        let trusted = |url: &str| relays[&RelayUrl::parse(url).unwrap()].has_flag(FLAG_AUTH);
+        assert!(trusted("wss://mine.example"));
+        assert!(trusted("wss://added.example"));
+        assert!(trusted("wss://readonly.example"));
+        assert!(!trusted("wss://index.example"));
+        assert!(!trusted("wss://outbox.example"));
+
+        let temporary = temporary_client().await;
+        let urls: Vec<RelayUrl> = ["wss://mine.example", "wss://hint.example"]
+            .iter()
+            .map(|url| RelayUrl::parse(url).unwrap())
+            .collect();
+        add_temporary_relays(&temporary, &urls).await;
+        let relays = temporary.relays().await;
+        assert!(relays[&urls[0]].has_flag(FLAG_AUTH));
+        assert!(!relays[&urls[1]].has_flag(FLAG_AUTH));
+        temporary.shutdown().await;
+        shutdown_client().await.unwrap();
+    }
 
     async fn fake_relay(answer: Option<Event>) -> String {
         use futures::{SinkExt, StreamExt};
@@ -3165,6 +3469,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_reinitialization_preserves_valid_configuration_on_error() {
+        let _guard = GLOBAL_CLIENT.lock().await;
         init_client(vec![], None, None, vec![]).await.unwrap();
         init_client(vec!["wss://new.example".into()], None, None, vec![])
             .await

@@ -85,6 +85,7 @@ final class SyncService {
         let key = "profile_\(pubkey)"
         guard force || shouldSync(key) else { return }
         _ = await fetchEvents(["kinds": [0], "authors": [pubkey], "limit": 1])
+        await ProfileCache.shared.reload([pubkey])
         bus.profileChanged()
         mark(key)
     }
@@ -92,6 +93,7 @@ final class SyncService {
     func syncProfiles(_ pubkeys: [String]) async {
         guard !pubkeys.isEmpty else { return }
         _ = await fetchEvents(["kinds": [0], "authors": pubkeys, "limit": pubkeys.count])
+        await ProfileCache.shared.reload(pubkeys)
         bus.profileChanged()
     }
 
@@ -168,7 +170,7 @@ final class SyncService {
         guard force || shouldSync(key) else { return }
         var events = await fetchEvents(["kinds": [3], "authors": [pubkey], "limit": 1])
         if events.isEmpty { events = await fetchIndexedContactLists(of: pubkey) }
-        if let event = events.max(by: { $0.int("created_at") < $1.int("created_at") }) {
+        if let event = Self.newestVerified(events) {
             try? await dbSaveFollowingListFromEvent(eventJson: JSON.string(event), selfPubkeyHex: pubkey)
         }
         if pubkey == session.pubkey { bus.feedChanged() }
@@ -199,10 +201,15 @@ final class SyncService {
             guard await ListConfirmation.startNewList(kind: kind) else { throw ListError.cancelled }
             return nil
         }
-        let newest = (cached + remote).filter(matches)
-            .max { ($0.int("created_at"), $0.str("id") ?? "") < ($1.int("created_at"), $1.str("id") ?? "") }
+        let newest = Self.newestVerified((cached + remote).filter(matches))
         if let newest { _ = try? await dbSaveEvents(eventsJson: JSON.string([newest])) }
         return newest
+    }
+
+    nonisolated static func newestVerified(_ candidates: [JSONObject]) -> JSONObject? {
+        candidates
+            .sorted { ($0.int("created_at"), $0.str("id") ?? "") > ($1.int("created_at"), $1.str("id") ?? "") }
+            .first { verifyEvent(eventJson: JSON.string($0)) }
     }
 
     func fetchReplaceable(kind: Int, author pubkey: String, dTag: String? = nil) async -> [JSONObject] {

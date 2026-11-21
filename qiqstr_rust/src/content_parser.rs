@@ -11,8 +11,9 @@ fn normalize_content_url(url: &str) -> &str {
 
 #[inline]
 fn is_media_url(url: &str) -> bool {
-    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let path = url.split(['?', '#']).next().unwrap_or(url).as_bytes();
     MEDIA_EXTENSIONS.iter().any(|ext| {
+        let ext = ext.as_bytes();
         path.len() >= ext.len() && path[path.len() - ext.len()..].eq_ignore_ascii_case(ext)
     })
 }
@@ -25,7 +26,7 @@ fn starts_with_ignore_ascii_case(haystack: &[u8], pos: usize, needle: &[u8]) -> 
 
 #[inline]
 fn is_url_stop_byte(b: u8) -> bool {
-    b.is_ascii_whitespace() || matches!(b, b'<' | b'>' | b'"' | b'\'')
+    b.is_ascii_whitespace() || matches!(b, 0x0B | b'<' | b'>' | b'"' | b'\'')
 }
 
 #[inline]
@@ -167,7 +168,28 @@ fn inside_any_span(spans: &[(usize, usize)], start: usize, end: usize) -> bool {
     spans.iter().any(|(s, e)| start >= *s && end <= *e)
 }
 
-pub fn parse_note_content(content: String) -> String {
+pub fn plain_text_content(content: &str) -> String {
+    let text = content.trim();
+    let text_parts: Vec<serde_json::Value> = if text.is_empty() {
+        Vec::new()
+    } else {
+        vec![serde_json::json!({ "type": "text", "text": text })]
+    };
+    serde_json::json!({
+        "textParts": text_parts,
+        "mediaUrls": [],
+        "linkUrls": [],
+        "quoteIds": [],
+        "articleIds": [],
+    })
+    .to_string()
+}
+
+pub fn parse_note_content_guarded(content: &str, parser: fn(&str) -> String) -> String {
+    std::panic::catch_unwind(|| parser(content)).unwrap_or_else(|_| plain_text_content(content))
+}
+
+pub fn parse_note_content(content: &str) -> String {
     let mut seen_urls: HashSet<&str> = HashSet::new();
     let mut url_spans: Vec<(usize, usize)> = Vec::new();
     let mut media_urls: Vec<String> = Vec::new();
@@ -175,7 +197,7 @@ pub fn parse_note_content(content: String) -> String {
     let mut remove_spans: Vec<(usize, usize)> = Vec::new();
 
     if content.contains("://") {
-        url_spans = find_url_spans(&content);
+        url_spans = find_url_spans(content);
         for &(start, end) in &url_spans {
             let raw = &content[start..end];
             let normalized = normalize_content_url(raw);
@@ -194,7 +216,7 @@ pub fn parse_note_content(content: String) -> String {
     let mut article_ids: Vec<String> = Vec::new();
 
     if content.contains('1') {
-        for m in scan_bech32(&content, false) {
+        for m in scan_bech32(content, false) {
             if inside_any_span(&url_spans, m.full_start, m.end) {
                 continue;
             }
@@ -352,7 +374,7 @@ mod tests {
         let input = format!(
             "Hello NOSTR:{npub}! Look https://cdn.example/photo.JPG?w=800, and https://example.com/path/{note_id}. Quoting nostr:{note_id}"
         );
-        let parsed: serde_json::Value = serde_json::from_str(&parse_note_content(input)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&parse_note_content(&input)).unwrap();
         assert_eq!(
             parsed["mediaUrls"],
             serde_json::json!(["https://cdn.example/photo.JPG?w=800"])
@@ -366,5 +388,150 @@ mod tests {
         assert!(parts
             .iter()
             .any(|p| p["type"] == "mention" && p["id"] == npub));
+    }
+
+    fn parsed(input: &str) -> serde_json::Value {
+        serde_json::from_str(&parse_note_content(input)).unwrap()
+    }
+
+    #[test]
+    fn urls_ending_in_multibyte_characters_do_not_panic() {
+        for (input, link) in [
+            (
+                "見て https://ja.wikipedia.org/wiki/日本",
+                "https://ja.wikipedia.org/wiki/日本",
+            ),
+            (
+                "https://example.com/abcを見て",
+                "https://example.com/abcを見て",
+            ),
+            (
+                "https://ru.wikipedia.org/wiki/Биткойн",
+                "https://ru.wikipedia.org/wiki/Биткойн",
+            ),
+            (
+                "https://example.com/caf\u{e9}s",
+                "https://example.com/cafés",
+            ),
+            ("https://example.com/😀", "https://example.com/😀"),
+            ("https://example.com/é", "https://example.com/é"),
+        ] {
+            let value = parsed(input);
+            assert_eq!(value["linkUrls"], serde_json::json!([link]), "{input}");
+            assert_eq!(value["mediaUrls"], serde_json::json!([]), "{input}");
+        }
+        let value = parsed("https://例え.jp/画像.PNG?x=1 と https://example.com/日本.mp4");
+        assert_eq!(
+            value["mediaUrls"],
+            serde_json::json!([
+                "https://例え.jp/画像.PNG?x=1",
+                "https://example.com/日本.mp4"
+            ])
+        );
+    }
+
+    #[test]
+    fn every_unicode_whitespace_ends_a_url() {
+        for separator in [
+            " ", "\t", "\n", "\u{0B}", "\u{0C}", "\r", "\u{85}", "\u{A0}", "\u{3000}",
+        ] {
+            let value = parsed(&format!("https://example.com/a{separator}tail"));
+            assert_eq!(
+                value["linkUrls"],
+                serde_json::json!(["https://example.com/a"]),
+                "{separator:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn random_fragment_mixes_never_panic() {
+        use rand::{Rng, SeedableRng};
+        let fragments = [
+            "https://",
+            "http://",
+            "HTTPS://",
+            "Http://",
+            "example.com/a",
+            "cdn.x/y",
+            ".jpg",
+            ".PNG",
+            ".mp4",
+            ".jpeg",
+            ".mov",
+            "?x=1",
+            "#frag",
+            " ",
+            "\n",
+            "\u{0B}",
+            ".",
+            ",",
+            ")",
+            "(",
+            "!",
+            ":",
+            ";",
+            "nostr:",
+            "NOSTR:",
+            "note1",
+            "nevent1",
+            "naddr1",
+            "npub1",
+            "nprofile1",
+            "qqqsyq9",
+            "abc",
+            "N",
+            "n",
+            "h",
+            "é",
+            "日本",
+            "😀",
+            "Б",
+            "<",
+            ">",
+            "\"",
+            "'",
+            "\u{A0}",
+            "\u{3000}",
+            "x",
+            "1",
+            "/",
+            "://",
+            "http",
+            "s",
+        ];
+        let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+        for _ in 0..20_000 {
+            let mut input = String::new();
+            for _ in 0..rng.gen_range(1..12) {
+                input.push_str(fragments[rng.gen_range(0..fragments.len())]);
+            }
+            let output = parse_note_content(&input);
+            assert!(serde_json::from_str::<serde_json::Value>(&output).is_ok());
+            let _ = extract_embedded_ids_batch_typed(vec![input]);
+        }
+    }
+
+    #[test]
+    fn a_parser_panic_falls_back_to_plain_text() {
+        fn exploding(_: &str) -> String {
+            panic!("parser bug")
+        }
+        let value: serde_json::Value = serde_json::from_str(&parse_note_content_guarded(
+            "  héllo 日本 https://example.com/日本  ",
+            exploding,
+        ))
+        .unwrap();
+        assert_eq!(
+            value["textParts"],
+            serde_json::json!([{ "type": "text", "text": "héllo 日本 https://example.com/日本" }])
+        );
+        assert_eq!(value["mediaUrls"], serde_json::json!([]));
+        assert_eq!(
+            parse_note_content_guarded("plain", parse_note_content),
+            parse_note_content("plain")
+        );
+        let empty: serde_json::Value = serde_json::from_str(&plain_text_content("  ")).unwrap();
+        assert_eq!(empty["textParts"], serde_json::json!([]));
     }
 }

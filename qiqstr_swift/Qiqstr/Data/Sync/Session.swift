@@ -320,15 +320,21 @@ final class ProfileCache {
         if wanted.count == 1 {
             queued.insert(wanted[0])
             if fetchMissing { queuedFetchMissing = true }
-            scheduleBatch()
+            await scheduleBatch().value
             return
         }
-        await fetchBatch(Array(Set(wanted)), fetchMissing: fetchMissing)
+        await fetchBatch(Array(Set(wanted)), fetchMissing: fetchMissing, refreshing: false)
     }
 
-    private func scheduleBatch() {
-        guard batchTask == nil else { return }
-        batchTask = Task { [weak self] in
+    func reload(_ pubkeys: [String]) async {
+        let wanted = Array(Set(pubkeys.filter { !$0.isEmpty }))
+        guard !wanted.isEmpty else { return }
+        await fetchBatch(wanted, fetchMissing: false, refreshing: true)
+    }
+
+    private func scheduleBatch() -> Task<Void, Never> {
+        if let batchTask { return batchTask }
+        let task = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(16))
             guard let self else { return }
             self.batchTask = nil
@@ -337,12 +343,14 @@ final class ProfileCache {
             self.queued.removeAll()
             self.queuedFetchMissing = false
             guard !batch.isEmpty else { return }
-            await self.fetchBatch(batch, fetchMissing: fetchMissing)
+            await self.fetchBatch(batch, fetchMissing: fetchMissing, refreshing: false)
         }
+        batchTask = task
+        return task
     }
 
-    private func fetchBatch(_ batch: [String], fetchMissing: Bool) async {
-        let wanted = batch.filter { !$0.isEmpty && slots[$0]?.profile == nil && !inflight.contains($0) }
+    private func fetchBatch(_ batch: [String], fetchMissing: Bool, refreshing: Bool) async {
+        let wanted = batch.filter { !$0.isEmpty && (refreshing || slots[$0]?.profile == nil) && !inflight.contains($0) }
         guard !wanted.isEmpty else { return }
         inflight.formUnion(wanted)
         defer { inflight.subtract(wanted) }

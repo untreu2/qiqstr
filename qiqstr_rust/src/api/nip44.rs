@@ -1,11 +1,14 @@
 use anyhow::Result;
 use nostr::prelude::*;
 
+use super::crypto::Secret;
+
 pub fn nip44_encrypt(
     content: String,
     sender_sk_hex: String,
     receiver_pk_hex: String,
 ) -> Result<String> {
+    let sender_sk_hex = Secret::new(sender_sk_hex);
     let sender_sk = SecretKey::parse(&sender_sk_hex)?;
     let receiver_pk = PublicKey::parse(&receiver_pk_hex)?;
     let encrypted = nostr::nips::nip44::encrypt(
@@ -22,6 +25,7 @@ pub fn nip44_decrypt(
     receiver_sk_hex: String,
     sender_pk_hex: String,
 ) -> Result<String> {
+    let receiver_sk_hex = Secret::new(receiver_sk_hex);
     let receiver_sk = SecretKey::parse(&receiver_sk_hex)?;
     let sender_pk = PublicKey::parse(&sender_pk_hex)?;
     let decrypted = nostr::nips::nip44::decrypt(&receiver_sk, &sender_pk, &payload)?;
@@ -33,6 +37,7 @@ pub fn nip04_decrypt(
     receiver_sk_hex: String,
     sender_pk_hex: String,
 ) -> Result<String> {
+    let receiver_sk_hex = Secret::new(receiver_sk_hex);
     let receiver_sk = SecretKey::parse(&receiver_sk_hex)?;
     let sender_pk = PublicKey::parse(&sender_pk_hex)?;
     let decrypted = nostr::nips::nip04::decrypt(&receiver_sk, &sender_pk, payload)?;

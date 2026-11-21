@@ -121,9 +121,7 @@ final class FollowService {
             }
             candidates += remote
         }
-        let newest = candidates
-            .filter { $0.int("kind") == 3 && $0.str("pubkey")?.lowercased() == me }
-            .max { ($0.int("created_at"), $0.str("id") ?? "") < ($1.int("created_at"), $1.str("id") ?? "") }
+        let newest = SyncService.newestVerified(candidates.filter { $0.int("kind") == 3 && $0.str("pubkey")?.lowercased() == me })
         if let newest {
             try? await dbSaveFollowingListFromEvent(eventJson: JSON.string(newest), selfPubkeyHex: me)
             return newest

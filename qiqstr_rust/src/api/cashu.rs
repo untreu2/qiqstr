@@ -15,6 +15,7 @@ use cdk_sqlite::wallet::WalletSqliteDatabase;
 use rand::RngCore;
 use tokio::sync::Mutex;
 
+use crate::api::crypto::Secret;
 use crate::api::relay::db_path_state;
 
 static WALLET_STORE: Mutex<Option<(PathBuf, Arc<Mutex<WalletStore>>)>> = Mutex::const_new(None);
@@ -549,6 +550,7 @@ pub async fn cashu_redeem_proofs(
     p2pk_private_key_hex: String,
     lightning_target: String,
 ) -> Result<String> {
+    let p2pk_private_key_hex = Secret::new(p2pk_private_key_hex);
     if proofs_json.is_empty() {
         return Err(anyhow!("No proofs to redeem"));
     }

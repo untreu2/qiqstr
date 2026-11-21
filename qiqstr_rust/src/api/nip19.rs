@@ -1,7 +1,10 @@
 use anyhow::Result;
 use nostr::prelude::*;
 
+use super::crypto::Secret;
+
 pub fn nip19_decode(bech32_str: String) -> Result<String> {
+    let bech32_str = Secret::new(bech32_str);
     if bech32_str.starts_with("npub1") {
         let pk = PublicKey::from_bech32(&bech32_str)?;
         Ok(pk.to_hex())
@@ -26,7 +29,7 @@ pub fn nip19_decode(bech32_str: String) -> Result<String> {
         })
         .to_string())
     } else {
-        anyhow::bail!("Unknown bech32 prefix: {}", bech32_str)
+        anyhow::bail!("Unknown bech32 prefix: {}", &*bech32_str)
     }
 }
 
@@ -71,6 +74,7 @@ pub fn nip19_encode_pubkey(pubkey_hex: String) -> Result<String> {
 }
 
 pub fn nip19_encode_privkey(privkey_hex: String) -> Result<String> {
+    let privkey_hex = Secret::new(privkey_hex);
     let sk = SecretKey::parse(&privkey_hex)?;
     Ok(sk.to_bech32()?)
 }

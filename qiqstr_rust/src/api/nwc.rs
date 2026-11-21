@@ -7,14 +7,17 @@ use nostr::nips::nip47::{
 };
 use nostr::prelude::*;
 
+use super::crypto::Secret;
 use crate::pool::{NostrClient, SubNotification};
 
 pub fn validate_nwc_uri(uri: String) -> bool {
-    NostrWalletConnectURI::parse(&uri).is_ok_and(|parsed| parsed.public_key.xonly().is_ok())
+    let uri = Secret::new(uri);
+    NostrWalletConnectURI::parse(&*uri).is_ok_and(|parsed| parsed.public_key.xonly().is_ok())
 }
 
 pub fn parse_nwc_uri(uri: String) -> Result<String> {
-    let parsed = NostrWalletConnectURI::parse(&uri).map_err(|_| anyhow!("Invalid NWC URI"))?;
+    let uri = Secret::new(uri);
+    let parsed = NostrWalletConnectURI::parse(&*uri).map_err(|_| anyhow!("Invalid NWC URI"))?;
 
     let relays: Vec<String> = parsed
         .relays
@@ -50,11 +53,13 @@ async fn request_wallet(nwc_uri: &str, request: Request, timeout: Duration) -> R
         client
             .wait_for_ready(Duration::from_secs(10), uri.relays.len().min(1))
             .await;
-        let (_sub_id, mut notifications, _) = client.subscribe_on(filter.clone(), None).await?;
+        let (_sub_id, mut notifications, relay_count) =
+            client.subscribe_on(filter.clone(), None).await?;
         let published = client.publish_event(&event, None).await?;
         if published.success.is_empty() {
             return Err(anyhow!("No relay accepted the wallet request"));
         }
+        let mut refused_by = std::collections::HashSet::new();
         loop {
             match notifications.recv().await {
                 Some(SubNotification::Event { event: received })
@@ -68,6 +73,19 @@ async fn request_wallet(nwc_uri: &str, request: Request, timeout: Duration) -> R
                     }
                     return Ok(response);
                 }
+                Some(SubNotification::Closed { relay, message }) => {
+                    refused_by.insert(relay);
+                    if refused_by.len() >= relay_count.max(1) {
+                        return Err(anyhow!(
+                            "The wallet relay refused to deliver the response: {}",
+                            if message.is_empty() {
+                                "no reason given"
+                            } else {
+                                &message
+                            }
+                        ));
+                    }
+                }
                 None => return Err(anyhow!("NWC relay connection closed")),
                 _ => {}
             }
@@ -80,6 +98,7 @@ async fn request_wallet(nwc_uri: &str, request: Request, timeout: Duration) -> R
 }
 
 pub async fn nwc_pay_invoice(nwc_uri: String, invoice: String) -> Result<String> {
+    let nwc_uri = Secret::new(nwc_uri);
     let response = request_wallet(
         &nwc_uri,
         Request::pay_invoice(PayInvoiceRequest::new(invoice)),
@@ -94,6 +113,7 @@ pub async fn nwc_pay_invoice(nwc_uri: String, invoice: String) -> Result<String>
 }
 
 pub async fn nwc_lookup_invoice(nwc_uri: String, invoice: String) -> Result<String> {
+    let nwc_uri = Secret::new(nwc_uri);
     let request = LookupInvoiceRequest {
         payment_hash: None,
         invoice: Some(invoice),
@@ -127,6 +147,7 @@ pub async fn nwc_lookup_invoice(nwc_uri: String, invoice: String) -> Result<Stri
 }
 
 pub async fn nwc_get_balance(nwc_uri: String) -> Result<String> {
+    let nwc_uri = Secret::new(nwc_uri);
     let response =
         request_wallet(&nwc_uri, Request::get_balance(), Duration::from_secs(30)).await?;
     Ok(serde_json::json!({ "balance": response.to_get_balance()?.balance }).to_string())
@@ -137,6 +158,7 @@ pub async fn nwc_make_invoice(
     amount_msats: u64,
     description: Option<String>,
 ) -> Result<String> {
+    let nwc_uri = Secret::new(nwc_uri);
     if amount_msats == 0 {
         return Err(anyhow!("Invoice amount must be greater than zero"));
     }
@@ -164,6 +186,7 @@ pub async fn nwc_list_transactions(
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<String> {
+    let nwc_uri = Secret::new(nwc_uri);
     let request = ListTransactionsRequest {
         from: None,
         until: None,
@@ -221,6 +244,35 @@ mod tests {
         );
         assert!(validate_nwc_uri(valid));
         assert!(!validate_nwc_uri(invalid));
+    }
+
+    #[tokio::test]
+    async fn a_relay_that_refuses_the_response_subscription_fails_the_request_at_once() {
+        let relay = crate::pool::test_relay::mock_relay(crate::pool::test_relay::Script {
+            refuse_requests: Some("auth-required: wallet users only"),
+            ..Default::default()
+        })
+        .await;
+        let uri = format!(
+            "nostr+walletconnect://{}?relay={}&secret={}",
+            Keys::generate().public_key().to_hex(),
+            relay.url,
+            Keys::generate().secret_key().to_secret_hex()
+        );
+        let started = std::time::Instant::now();
+        let error = request_wallet(&uri, Request::get_balance(), Duration::from_secs(8))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("refused") && error.contains("wallet users only"),
+            "{error}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "took {:?}",
+            started.elapsed()
+        );
     }
 
     #[tokio::test]

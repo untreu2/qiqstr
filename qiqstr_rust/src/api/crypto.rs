@@ -12,13 +12,38 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use typenum::U16;
 
-pub(crate) fn wipe_string(s: String) {
-    let mut bytes = s.into_bytes();
-    for b in &mut bytes {
-        // SAFETY: `b` is a valid, aligned, uniquely-owned pointer into `bytes`.
+fn wipe_in_place(value: &mut str) {
+    // SAFETY: every byte is overwritten with zero, which keeps the string valid UTF-8, and each
+    // pointer is valid, aligned and uniquely borrowed.
+    for b in unsafe { value.as_bytes_mut() } {
         unsafe { std::ptr::write_volatile(b, 0) };
     }
     std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+}
+
+/// A secret handed over by the app. Its bytes are overwritten when it goes out of scope, on
+/// every return path. This is best effort: copies held by the app and the bridge are out of
+/// reach from here.
+pub(crate) struct Secret(String);
+
+impl Secret {
+    pub(crate) fn new(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for Secret {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Drop for Secret {
+    fn drop(&mut self) {
+        wipe_in_place(&mut self.0);
+    }
 }
 
 pub fn generate_keypair() -> (String, String) {
@@ -30,16 +55,14 @@ pub fn generate_keypair() -> (String, String) {
 }
 
 pub fn get_public_key(private_key_hex: String) -> Result<String> {
-    let parsed = SecretKey::parse(&private_key_hex);
-    wipe_string(private_key_hex);
-    let keys = Keys::new(parsed?);
+    let private_key_hex = Secret::new(private_key_hex);
+    let keys = Keys::new(SecretKey::parse(&private_key_hex)?);
     Ok(keys.public_key().to_hex())
 }
 
 pub fn sign_event_id(event_id_hex: String, private_key_hex: String) -> Result<String> {
-    let parsed = SecretKey::parse(&private_key_hex);
-    wipe_string(private_key_hex);
-    let keys = Keys::new(parsed?);
+    let private_key_hex = Secret::new(private_key_hex);
+    let keys = Keys::new(SecretKey::parse(&private_key_hex)?);
     let event_id = EventId::parse(&event_id_hex)?;
     let message = Message::from_digest(*event_id.as_bytes());
     let sig = keys.sign_schnorr(&message);
@@ -82,13 +105,13 @@ pub fn generate_mnemonic() -> Result<String> {
 }
 
 pub fn validate_mnemonic(mnemonic: String) -> bool {
+    let mnemonic = Secret::new(mnemonic);
     bip39::Mnemonic::parse_normalized(&mnemonic).is_ok()
 }
 
 pub fn mnemonic_to_private_key(mnemonic: String) -> Result<String> {
-    let parsed = Keys::from_mnemonic(mnemonic.as_str(), None);
-    wipe_string(mnemonic);
-    let keys = parsed?;
+    let mnemonic = Secret::new(mnemonic);
+    let keys = Keys::from_mnemonic(&*mnemonic, None)?;
     Ok(keys.secret_key().to_secret_hex())
 }
 
@@ -181,37 +204,50 @@ pub fn sha256_hash(data: Vec<u8>) -> String {
 }
 
 pub fn ncryptsec_encrypt(private_key_hex: String, password: String) -> Result<String> {
-    let sk_res = SecretKey::parse(&private_key_hex);
-    wipe_string(private_key_hex);
-    let sk = match sk_res {
-        Ok(sk) => sk,
-        Err(e) => {
-            wipe_string(password);
-            return Err(e.into());
-        }
-    };
-    let enc_res = EncryptedSecretKey::new(&sk, &password, 16, KeySecurity::Medium);
-    wipe_string(password);
-    Ok(enc_res?.to_bech32()?)
+    let private_key_hex = Secret::new(private_key_hex);
+    let password = Secret::new(password);
+    let sk = SecretKey::parse(&private_key_hex)?;
+    let encrypted = EncryptedSecretKey::new(&sk, &password, 16, KeySecurity::Medium)?;
+    Ok(encrypted.to_bech32()?)
 }
 
 pub fn ncryptsec_decrypt(ncryptsec: String, password: String) -> Result<String> {
-    let enc_res = EncryptedSecretKey::from_bech32(ncryptsec.trim());
-    let encrypted = match enc_res {
-        Ok(enc) => enc,
-        Err(e) => {
-            wipe_string(password);
-            return Err(e.into());
-        }
-    };
-    let sk_res = encrypted.decrypt(&password);
-    wipe_string(password);
-    Ok(sk_res?.to_secret_hex())
+    let password = Secret::new(password);
+    let encrypted = EncryptedSecretKey::from_bech32(ncryptsec.trim())?;
+    Ok(encrypted.decrypt(&password)?.to_secret_hex())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secrets_are_overwritten_in_place_and_stay_usable_until_dropped() {
+        let mut value = "nsec1 correct horse battery staple é".to_string();
+        let length = value.len();
+        wipe_in_place(&mut value);
+        assert_eq!(value.len(), length);
+        assert!(value.bytes().all(|byte| byte == 0));
+
+        let keys = Keys::generate();
+        let secret = Secret::new(keys.secret_key().to_secret_hex());
+        assert_eq!(secret.len(), 64);
+        assert_eq!(
+            get_public_key(secret.to_string()).unwrap(),
+            keys.public_key().to_hex()
+        );
+        assert!(get_public_key("not a key".into()).is_err());
+        assert!(sign_event_id("zz".into(), keys.secret_key().to_secret_hex()).is_err());
+        assert!(mnemonic_to_private_key("not a mnemonic".into()).is_err());
+        assert!(ncryptsec_encrypt("not a key".into(), "password".into()).is_err());
+        assert!(ncryptsec_decrypt("not ncryptsec".into(), "password".into()).is_err());
+        let encrypted =
+            ncryptsec_encrypt(keys.secret_key().to_secret_hex(), "password".into()).unwrap();
+        assert_eq!(
+            ncryptsec_decrypt(encrypted, "password".into()).unwrap(),
+            keys.secret_key().to_secret_hex()
+        );
+    }
 
     #[test]
     fn encrypted_files_round_trip_and_reject_tampering() {

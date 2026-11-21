@@ -127,8 +127,7 @@ object FollowService {
             }
             candidates += remote
         }
-        val newest = candidates.filter { it.int("kind") == 3 && it.str("pubkey")?.lowercase() == me }
-            .maxWithOrNull(compareBy<JSONObject>({ it.long("created_at") }, { it.str("id") ?: "" }))
+        val newest = SyncService.newestVerified(candidates.filter { it.int("kind") == 3 && it.str("pubkey")?.lowercase() == me })
         if (newest != null) {
             runCatching { dbSaveFollowingListFromEvent(newest.toString(), me) }
             return newest

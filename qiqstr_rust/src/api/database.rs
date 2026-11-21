@@ -655,19 +655,18 @@ pub async fn db_search_profiles(query: String, limit: u32) -> Result<String> {
     let mut results: Vec<serde_json::Value> = Vec::new();
 
     for event in events.into_iter() {
-        if let Ok(m) = Metadata::from_json(&event.content) {
-            let name = m.name.as_deref().unwrap_or("").to_lowercase();
-            let display = m.display_name.as_deref().unwrap_or("").to_lowercase();
-            let nip05 = m.nip05.as_deref().unwrap_or("").to_lowercase();
+        let m = crate::store::parse_metadata_lenient(&event.content);
+        let name = m.name.as_deref().unwrap_or("").to_lowercase();
+        let display = m.display_name.as_deref().unwrap_or("").to_lowercase();
+        let nip05 = m.nip05.as_deref().unwrap_or("").to_lowercase();
 
-            if name.contains(&query_lower)
-                || display.contains(&query_lower)
-                || nip05.contains(&query_lower)
-            {
-                results.push(metadata_to_flat_json(&event, &m));
-                if results.len() >= limit as usize {
-                    break;
-                }
+        if name.contains(&query_lower)
+            || display.contains(&query_lower)
+            || nip05.contains(&query_lower)
+        {
+            results.push(metadata_to_flat_json(&event, &m));
+            if results.len() >= limit as usize {
+                break;
             }
         }
     }
@@ -950,58 +949,7 @@ pub async fn db_delete_events_by_ids(event_ids: Vec<String>) -> Result<u32> {
 
 pub async fn db_process_deletion_events() -> Result<u32> {
     let client = get_client_pub().await?;
-
-    let filter = Filter::new().kind(Kind::EventDeletion);
-    let deletion_events = client.database().query(&filter)?;
-
-    let mut candidate_ids: Vec<EventId> = Vec::new();
-    let mut del_author_map: HashMap<EventId, PublicKey> = HashMap::new();
-
-    for del_event in deletion_events {
-        for tag in del_event.tags.iter() {
-            let tag_kind = tag.kind();
-            if matches!(
-                tag_kind,
-                TagKind::SingleLetter(SingleLetterTag {
-                    character: Alphabet::E,
-                    ..
-                })
-            ) {
-                if let Some(ref_id_str) = tag.content() {
-                    if let Ok(ref_id) = EventId::from_hex(ref_id_str) {
-                        candidate_ids.push(ref_id);
-                        del_author_map.insert(ref_id, del_event.pubkey);
-                    }
-                }
-            }
-        }
-    }
-
-    if candidate_ids.is_empty() {
-        return Ok(0);
-    }
-
-    let batch_filter = Filter::new().ids(candidate_ids);
-    let referenced_events = client.database().query(&batch_filter)?;
-
-    let mut ids_to_delete: Vec<EventId> = Vec::new();
-    for event in referenced_events {
-        if let Some(expected_author) = del_author_map.get(&event.id) {
-            if event.pubkey == *expected_author {
-                ids_to_delete.push(event.id);
-            }
-        }
-    }
-
-    if ids_to_delete.is_empty() {
-        return Ok(0);
-    }
-
-    let deleted_count = ids_to_delete.len() as u32;
-    let del_filter = Filter::new().ids(ids_to_delete);
-    let _ = client.database().delete(&del_filter);
-
-    Ok(deleted_count)
+    Ok(client.database().take_removed_by_request() as u32)
 }
 
 pub async fn db_query_events(filter_json: String, limit: u32) -> Result<String> {
@@ -1430,12 +1378,11 @@ pub async fn db_get_random_profiles(limit: u32) -> Result<String> {
 
     let mut results: Vec<serde_json::Value> = Vec::new();
     for event in events.into_iter() {
-        if let Ok(m) = Metadata::from_json(&event.content) {
-            if m.picture.is_some() {
-                results.push(metadata_to_flat_json(&event, &m));
-                if results.len() >= limit as usize {
-                    break;
-                }
+        let m = crate::store::parse_metadata_lenient(&event.content);
+        if m.picture.is_some() {
+            results.push(metadata_to_flat_json(&event, &m));
+            if results.len() >= limit as usize {
+                break;
             }
         }
     }
@@ -2966,11 +2913,17 @@ pub(crate) async fn hydrate_notes_values_pub(
 }
 
 pub fn parse_note_content(content: String) -> String {
-    crate::content_parser::parse_note_content(content)
+    crate::content_parser::parse_note_content_guarded(
+        &content,
+        crate::content_parser::parse_note_content,
+    )
 }
 
 pub fn extract_embedded_ids_batch(contents: Vec<String>) -> String {
-    crate::content_parser::extract_embedded_ids_batch(contents)
+    std::panic::catch_unwind(|| crate::content_parser::extract_embedded_ids_batch(contents))
+        .unwrap_or_else(|_| {
+            serde_json::json!({ "quoteEventIds": [], "articleAuthorPubkeys": [] }).to_string()
+        })
 }
 
 pub async fn db_get_hydrated_reaction_notes(
@@ -3681,7 +3634,8 @@ pub async fn queue_missing_repost_originals(since_timestamp: i64) -> Result<Vec<
 // ---------------------------------------------------------------------------
 
 pub fn extract_embedded_ids_batch_typed(contents: Vec<String>) -> (Vec<String>, Vec<String>) {
-    crate::content_parser::extract_embedded_ids_batch_typed(contents)
+    std::panic::catch_unwind(|| crate::content_parser::extract_embedded_ids_batch_typed(contents))
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------

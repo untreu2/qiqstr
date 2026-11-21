@@ -21,6 +21,7 @@ import com.qiqstr.core.sendEvent
 import com.qiqstr.core.sendEventTo
 import com.qiqstr.core.subscribeToEvents
 import com.qiqstr.core.syncEvents
+import com.qiqstr.core.verifyEvent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -215,7 +216,7 @@ object SyncService {
         if (!force && !shouldSync(key)) return
         var events = fetchEvents(mapOf("kinds" to listOf(3), "authors" to listOf(pubkey), "limit" to 1))
         if (events.isEmpty()) events = fetchIndexedContactLists(pubkey)
-        events.maxByOrNull { it.long("created_at") }?.let { event ->
+        newestVerified(events)?.let { event ->
             runCatching { dbSaveFollowingListFromEvent(event.toString(), pubkey) }
         }
         if (pubkey == Session.pubkey) DataBus.feedChanged()
@@ -242,11 +243,15 @@ object SyncService {
             if (!ListConfirmation.startNewList(kind)) throw ListError()
             return null
         }
-        val newest = (cached + remote).filter(matches)
-            .maxWithOrNull(compareBy<JSONObject>({ it.long("created_at") }, { it.str("id") ?: "" }))
+        val newest = newestVerified((cached + remote).filter(matches))
         if (newest != null) runCatching { dbSaveEvents(JSONArray(listOf(newest)).toString()) }
         return newest
     }
+
+    fun newestVerified(candidates: List<JSONObject>): JSONObject? =
+        candidates
+            .sortedWith(compareBy<JSONObject>({ it.long("created_at") }, { it.str("id") ?: "" }).reversed())
+            .firstOrNull { runCatching { verifyEvent(it.toString()) }.getOrDefault(false) }
 
     suspend fun fetchReplaceable(kind: Int, author: String, dTag: String? = null): List<JSONObject> = coroutineScope {
         val query = mutableMapOf<String, Any?>("kinds" to listOf(kind), "authors" to listOf(author), "limit" to 1)

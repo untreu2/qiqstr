@@ -5,6 +5,68 @@ import UIKit
 import AppKit
 #endif
 
+nonisolated final class CappedDataLoader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private struct Transfer {
+        var data = Data()
+        var response: URLResponse?
+        var rejected = false
+        var continuation: CheckedContinuation<(Data, URLResponse)?, Never>
+    }
+
+    let limit: Int
+    private(set) var session: URLSession!
+    private let lock = NSLock()
+    private var transfers: [Int: Transfer] = [:]
+
+    init(configuration: URLSessionConfiguration, limit: Int) {
+        self.limit = limit
+        super.init()
+        session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+    }
+
+    func data(for request: URLRequest) async -> (Data, URLResponse)? {
+        await withCheckedContinuation { continuation in
+            let task = session.dataTask(with: request)
+            lock.withLock { transfers[task.taskIdentifier] = Transfer(continuation: continuation) }
+            task.resume()
+        }
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        let failed = (response as? HTTPURLResponse).map { !(200..<300).contains($0.statusCode) } ?? false
+        guard !failed, response.expectedContentLength <= Int64(limit) else {
+            completionHandler(.cancel)
+            return
+        }
+        lock.withLock { transfers[dataTask.taskIdentifier]?.response = response }
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let id = dataTask.taskIdentifier
+        let exceeded = lock.withLock { () -> Bool in
+            guard let received = transfers[id]?.data.count else { return false }
+            guard received + data.count <= limit else {
+                transfers[id]?.rejected = true
+                transfers[id]?.data = Data()
+                return true
+            }
+            transfers[id]?.data.append(data)
+            return false
+        }
+        if exceeded { dataTask.cancel() }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let transfer = lock.withLock({ transfers.removeValue(forKey: task.taskIdentifier) }) else { return }
+        guard error == nil, !transfer.rejected, !transfer.data.isEmpty, let response = transfer.response else {
+            transfer.continuation.resume(returning: nil)
+            return
+        }
+        transfer.continuation.resume(returning: (transfer.data, response))
+    }
+}
+
 actor ImagePipeline {
     static let shared = ImagePipeline()
     nonisolated private let cache: NSCache<NSString, UIImage> = {
@@ -14,17 +76,18 @@ actor ImagePipeline {
         return c
     }()
     private var tasks: [String: Task<UIImage?, Never>] = [:]
-    private let session: URLSession = {
+    static let maxDownloadBytes = 30 * 1024 * 1024
+
+    private let loader: CappedDataLoader = {
         let config = URLSessionConfiguration.default
         config.urlCache = URLCache(memoryCapacity: 50_000_000, diskCapacity: 400_000_000)
         config.requestCachePolicy = .returnCacheDataElseLoad
         config.timeoutIntervalForRequest = 20
+        config.timeoutIntervalForResource = 120
         config.httpMaximumConnectionsPerHost = 8
         config.waitsForConnectivity = false
-        return URLSession(configuration: config)
+        return CappedDataLoader(configuration: config, limit: ImagePipeline.maxDownloadBytes)
     }()
-
-    private static let maxDownloadBytes = 30 * 1024 * 1024
 
     nonisolated func cachedImage(for url: URL, maxPixel: CGFloat) -> UIImage? {
         cache.object(forKey: "\(url.absoluteString)#\(maxPixel)" as NSString)
@@ -74,11 +137,10 @@ actor ImagePipeline {
 
     private func download(_ url: URL) async -> Data? {
         let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
-        if let cached = session.configuration.urlCache?.cachedResponse(for: request)?.data { return cached }
-        guard let (data, response) = try? await session.data(for: request) else { return nil }
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
-        guard !data.isEmpty, data.count <= Self.maxDownloadBytes else { return nil }
-        session.configuration.urlCache?.storeCachedResponse(CachedURLResponse(response: response, data: data), for: request)
+        let cache = loader.session.configuration.urlCache
+        if let cached = cache?.cachedResponse(for: request)?.data { return cached }
+        guard let (data, response) = await loader.data(for: request) else { return nil }
+        cache?.storeCachedResponse(CachedURLResponse(response: response, data: data), for: request)
         return data
     }
 

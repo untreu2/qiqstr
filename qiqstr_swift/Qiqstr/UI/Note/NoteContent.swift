@@ -78,9 +78,15 @@ nonisolated final class NoteContent: @unchecked Sendable {
     let contentWarning: String?
     let hasCustomEmoji: Bool
 
+    private struct AttributedKey: Hashable {
+        var truncated: Bool
+        var font: Font
+        var mentionNames: String
+    }
+
     private let mentionHexMap: [String: String]
     private let mentionFallbackMap: [String: String]
-    private let attributedCache = OSAllocatedUnfairLock(initialState: [String: AttributedString]())
+    private let attributedCache = OSAllocatedUnfairLock(uncheckedState: [AttributedKey: AttributedString]())
 
     init(content: String, tags: [[String]]) {
         let parsed = NoteRepository.parse(content)
@@ -285,15 +291,15 @@ nonisolated final class NoteContent: @unchecked Sendable {
     func attributed(_ segments: [NoteContentSegment], font: Font = .body, cache: ProfileCache) -> AttributedString {
         let isFull = segments.count == self.segments.count && segments == self.segments
         let isTrunc = !isFull && truncatedSegments.map { $0 == segments } == true
-        let cacheKey: String?
+        let cacheKey: AttributedKey?
         if isFull || isTrunc {
-            var key = isTrunc ? "T|" : "F|"
-            key += "\(font)|"
+            var names = ""
             for pk in mentionPubkeys {
-                key += cache.profile(pk)?.bestName ?? ""
-                key += "\u{1F}"
+                names += cache.profile(pk)?.bestName ?? ""
+                names += "\u{1F}"
             }
-            if let hit = attributedCache.withLock({ $0[key] }) {
+            let key = AttributedKey(truncated: isTrunc, font: font, mentionNames: names)
+            if let hit = attributedCache.withLockUnchecked({ $0[key] }) {
                 return hit
             }
             cacheKey = key
@@ -329,7 +335,7 @@ nonisolated final class NoteContent: @unchecked Sendable {
             }
         }
         if let cacheKey {
-            attributedCache.withLock { map in
+            attributedCache.withLockUnchecked { map in
                 if map.count >= 8 { map.removeAll(keepingCapacity: true) }
                 map[cacheKey] = result
             }

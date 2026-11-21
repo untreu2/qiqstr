@@ -2,11 +2,14 @@ use anyhow::Result;
 use nostr::nips::nip59;
 use nostr::prelude::*;
 
+use super::crypto::Secret;
+
 pub fn create_gift_wrap_dm(
     sender_private_key_hex: String,
     receiver_pubkey_hex: String,
     message: String,
 ) -> Result<String> {
+    let sender_private_key_hex = Secret::new(sender_private_key_hex);
     let sender_sk = SecretKey::parse(&sender_private_key_hex)?;
     let sender_keys = Keys::new(sender_sk);
     let receiver_pk = PublicKey::parse(&receiver_pubkey_hex)?;
@@ -27,6 +30,7 @@ pub fn create_gift_wrap_dm_for_sender(
     receiver_pubkey_hex: String,
     message: String,
 ) -> Result<String> {
+    let sender_private_key_hex = Secret::new(sender_private_key_hex);
     let sender_sk = SecretKey::parse(&sender_private_key_hex)?;
     let sender_keys = Keys::new(sender_sk);
     let receiver_pk = PublicKey::parse(&receiver_pubkey_hex)?;
@@ -56,6 +60,7 @@ pub fn create_gift_wrap_file_message(
     original_hash: String,
     file_size: Option<u64>,
 ) -> Result<String> {
+    let sender_private_key_hex = Secret::new(sender_private_key_hex);
     let sender_sk = SecretKey::parse(&sender_private_key_hex)?;
     let sender_keys = Keys::new(sender_sk);
     let receiver_pk = PublicKey::parse(&receiver_pubkey_hex)?;
@@ -116,6 +121,7 @@ pub fn create_gift_wrap_file_message_for_sender(
     original_hash: String,
     file_size: Option<u64>,
 ) -> Result<String> {
+    let sender_private_key_hex = Secret::new(sender_private_key_hex);
     let sender_sk = SecretKey::parse(&sender_private_key_hex)?;
     let sender_keys = Keys::new(sender_sk);
     let receiver_pk = PublicKey::parse(&receiver_pubkey_hex)?;
@@ -187,6 +193,7 @@ pub fn create_gift_wrap_dm_pair(
     receiver_pubkey_hex: String,
     message: String,
 ) -> Result<String> {
+    let sender_private_key_hex = Secret::new(sender_private_key_hex);
     let sender = Keys::parse(&sender_private_key_hex)?;
     let receiver = PublicKey::parse(&receiver_pubkey_hex)?;
     let rumor = EventBuilder::private_msg_rumor(receiver, message).build(sender.public_key());
@@ -205,6 +212,7 @@ pub fn create_gift_wrap_file_message_pair(
     original_hash: String,
     file_size: Option<u64>,
 ) -> Result<String> {
+    let sender_private_key_hex = Secret::new(sender_private_key_hex);
     let sender = Keys::parse(&sender_private_key_hex)?;
     let receiver = PublicKey::parse(&receiver_pubkey_hex)?;
     let mut tags = vec![
@@ -229,6 +237,7 @@ pub fn unwrap_gift_wrap(
     receiver_private_key_hex: String,
     gift_wrap_json: String,
 ) -> Result<String> {
+    let receiver_private_key_hex = Secret::new(receiver_private_key_hex);
     let receiver_sk = SecretKey::parse(&receiver_private_key_hex)?;
     let receiver_keys = Keys::new(receiver_sk);
     let gift_wrap = Event::from_json(&gift_wrap_json)?;
@@ -269,6 +278,7 @@ pub fn unwrap_gift_wrap_dm(
     gift_wrap_json: String,
     current_user_pubkey_hex: String,
 ) -> Result<String> {
+    let receiver_private_key_hex = Secret::new(receiver_private_key_hex);
     let receiver_sk = SecretKey::parse(&receiver_private_key_hex)?;
     let receiver_keys = Keys::new(receiver_sk);
     let gift_wrap = Event::from_json(&gift_wrap_json)?;
@@ -381,6 +391,7 @@ pub fn nip44_encrypt(
     sender_sk_hex: String,
     receiver_pk_hex: String,
 ) -> Result<String> {
+    let sender_sk_hex = Secret::new(sender_sk_hex);
     let sender_sk = SecretKey::parse(&sender_sk_hex)?;
     let receiver_pk = PublicKey::parse(&receiver_pk_hex)?;
     let encrypted = nostr::nips::nip44::encrypt(
@@ -397,6 +408,7 @@ pub fn nip44_decrypt(
     receiver_sk_hex: String,
     sender_pk_hex: String,
 ) -> Result<String> {
+    let receiver_sk_hex = Secret::new(receiver_sk_hex);
     let receiver_sk = SecretKey::parse(&receiver_sk_hex)?;
     let sender_pk = PublicKey::parse(&sender_pk_hex)?;
     let decrypted = nostr::nips::nip44::decrypt(&receiver_sk, &sender_pk, &payload)?;
