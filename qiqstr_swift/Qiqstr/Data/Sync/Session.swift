@@ -177,7 +177,6 @@ final class Session {
             try await initClient(relayUrls: RelayConfig.mainRelays, privateKeyHex: account.signingKey, dbPath: RelayConfig.databaseURL.path, discoveryRelays: RelayConfig.discoveryRelays)
             await applyRelayFlags()
             Task.detached { try? await connectRelays() }
-            _ = try? await waitForReady(timeoutSecs: 3)
         } catch {
             phase = .failed(coreErrorMessage(error))
             return
@@ -189,22 +188,29 @@ final class Session {
     }
 
     private func bootstrap(_ me: String, generation: Int) async {
+        _ = try? await waitForReady(timeoutSecs: 2)
+        guard generation == self.generation else { return }
         let sync = SyncService.shared
+        let cachedFollows = await sync.followingList(me)
+        if !cachedFollows.isEmpty {
+            sync.startRealtime()
+        }
         async let following: Void = sync.syncFollowingList(me, force: true)
         async let profile: Void = sync.syncProfile(me, force: true)
-        _ = await (following, profile)
-        guard generation == self.generation else { return }
-        await SessionHooks.runBootstrap(me)
+        async let hooks: Void = SessionHooks.runBootstrap(me)
+        _ = await (following, profile, hooks)
         guard generation == self.generation else { return }
         let follows = await sync.followingList(me)
         let mode = RelayConfig.gossipMode
         Task.detached {
             _ = try? await discoverAndConnectOutboxRelays(pubkeysHex: follows + [me], maxOutboxRelays: UInt32(mode.maxOutboxRelays), minRelayFrequency: UInt32(mode.minRelayFrequency))
         }
-        await sync.syncFeed(force: true)
-        guard generation == self.generation else { return }
-        sync.startRealtime()
-        await sync.syncNotifications(force: true)
+        async let feed: Void = sync.syncFeed(force: true)
+        async let notifications: Void = sync.syncNotifications(force: true)
+        if cachedFollows.isEmpty || follows != cachedFollows {
+            sync.startRealtime()
+        }
+        _ = await (feed, notifications)
     }
 
     private func applyRelayFlags() async {
@@ -268,39 +274,104 @@ final class NotificationBadge {
 
 @MainActor
 @Observable
+final class ProfileSlot {
+    var profile: Profile?
+}
+
+@MainActor
 final class ProfileCache {
     static let shared = ProfileCache()
-    private(set) var profiles: [String: Profile] = [:]
+    private var slots: [String: ProfileSlot] = [:]
     private var inflight: Set<String> = []
+    private var queued: Set<String> = []
+    private var queuedFetchMissing = false
+    private var batchTask: Task<Void, Never>?
 
-    func clear() { profiles.removeAll() }
+    private func slot(for pubkey: String) -> ProfileSlot {
+        if let existing = slots[pubkey] { return existing }
+        let created = ProfileSlot()
+        slots[pubkey] = created
+        return created
+    }
 
-    func profile(_ pubkey: String) -> Profile? { profiles[pubkey] }
+    func clear() {
+        batchTask?.cancel()
+        batchTask = nil
+        queued.removeAll()
+        inflight.removeAll()
+        for slot in slots.values { slot.profile = nil }
+        slots.removeAll()
+    }
 
-    func set(_ profile: Profile) { profiles[profile.pubkey] = profile }
+    func profile(_ pubkey: String) -> Profile? {
+        guard !pubkey.isEmpty else { return nil }
+        return slot(for: pubkey).profile
+    }
+
+    func set(_ profile: Profile) {
+        guard !profile.pubkey.isEmpty else { return }
+        let target = slot(for: profile.pubkey)
+        if target.profile != profile { target.profile = profile }
+    }
 
     func load(_ pubkeys: [String], fetchMissing: Bool = true) async {
-        let wanted = Array(Set(pubkeys.filter { !$0.isEmpty && !inflight.contains($0) }))
+        let wanted = pubkeys.filter { !$0.isEmpty && slots[$0]?.profile == nil && !inflight.contains($0) }
+        guard !wanted.isEmpty else { return }
+        if wanted.count == 1 {
+            queued.insert(wanted[0])
+            if fetchMissing { queuedFetchMissing = true }
+            scheduleBatch()
+            return
+        }
+        await fetchBatch(Array(Set(wanted)), fetchMissing: fetchMissing)
+    }
+
+    private func scheduleBatch() {
+        guard batchTask == nil else { return }
+        batchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard let self else { return }
+            self.batchTask = nil
+            let batch = Array(self.queued)
+            let fetchMissing = self.queuedFetchMissing
+            self.queued.removeAll()
+            self.queuedFetchMissing = false
+            guard !batch.isEmpty else { return }
+            await self.fetchBatch(batch, fetchMissing: fetchMissing)
+        }
+    }
+
+    private func fetchBatch(_ batch: [String], fetchMissing: Bool) async {
+        let wanted = batch.filter { !$0.isEmpty && slots[$0]?.profile == nil && !inflight.contains($0) }
         guard !wanted.isEmpty else { return }
         inflight.formUnion(wanted)
         defer { inflight.subtract(wanted) }
-        let map = (JSON.any(try? await dbGetProfiles(pubkeysHex: wanted)) as? [String: Any]) ?? [:]
-        var missing: [String] = []
-        for pk in wanted {
-            if let obj = map[pk] as? JSONObject {
-                profiles[pk] = Profile(json: obj, fallbackPubkey: pk)
-            } else if let s = map[pk] as? String, let obj = JSON.object(s) {
-                profiles[pk] = Profile(json: obj, fallbackPubkey: pk)
-            } else {
-                missing.append(pk)
+        let raw = try? await dbGetProfiles(pubkeysHex: wanted)
+        let parsed: ([String: Profile], [String]) = await Task.detached(priority: .userInitiated) {
+            let map = (JSON.any(raw) as? [String: Any]) ?? [:]
+            var loaded: [String: Profile] = [:]
+            var missing: [String] = []
+            for pk in wanted {
+                if let obj = map[pk] as? JSONObject {
+                    loaded[pk] = Profile(json: obj, fallbackPubkey: pk)
+                } else if let s = map[pk] as? String, let obj = JSON.object(s) {
+                    loaded[pk] = Profile(json: obj, fallbackPubkey: pk)
+                } else {
+                    missing.append(pk)
+                }
             }
+            return (loaded, missing)
+        }.value
+        for (pk, profile) in parsed.0 {
+            let target = slot(for: pk)
+            if target.profile != profile { target.profile = profile }
         }
-        if fetchMissing, !missing.isEmpty { SyncService.shared.fetchMissingProfiles(missing) }
+        if fetchMissing, !parsed.1.isEmpty { SyncService.shared.fetchMissingProfiles(parsed.1) }
     }
 
     func refresh(_ pubkey: String) async {
         if let raw = try? await dbGetProfile(pubkeyHex: pubkey), let obj = JSON.object(raw) {
-            profiles[pubkey] = Profile(json: obj, fallbackPubkey: pubkey)
+            set(Profile(json: obj, fallbackPubkey: pubkey))
         }
     }
 }

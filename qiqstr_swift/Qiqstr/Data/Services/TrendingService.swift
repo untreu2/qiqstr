@@ -116,7 +116,7 @@ final class TrendingService {
     }
 
     nonisolated private static func primalPool(_ name: String) async -> [String] {
-        await storeTrending(primalCache(name, args: ["limit": 100], timeout: 10)) ?? []
+        await storeTrending(primalCache(name, args: ["limit": 50], timeout: 10)) ?? []
     }
 
     nonisolated private static func storeTrending(_ events: [JSONObject]) async -> [String]? {

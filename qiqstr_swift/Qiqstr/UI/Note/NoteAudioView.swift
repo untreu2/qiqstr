@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct NoteAudioItem: Hashable, Sendable, Identifiable {
+nonisolated struct NoteAudioItem: Hashable, Sendable, Identifiable {
     var id: String { url }
     var url: String
     var duration: Double?

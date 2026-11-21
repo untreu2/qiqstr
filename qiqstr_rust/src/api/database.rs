@@ -1,4 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{OnceLock, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,6 +16,75 @@ use super::relay::get_client_pub;
 struct MuteState {
     pubkeys: Vec<String>,
     words: Vec<String>,
+    parsed: MutedFilter,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct MutedFilter {
+    pubkeys: HashSet<PublicKey>,
+    pubkeys_hex: HashSet<String>,
+    words_lower: Vec<String>,
+}
+
+impl MutedFilter {
+    pub(crate) fn new(muted_pubkeys: &[String], muted_words: &[String]) -> Self {
+        let mut pubkeys = HashSet::with_capacity(muted_pubkeys.len());
+        let mut pubkeys_hex = HashSet::with_capacity(muted_pubkeys.len());
+        for p in muted_pubkeys {
+            if let Ok(pk) = PublicKey::from_hex(p) {
+                pubkeys.insert(pk);
+            }
+            pubkeys_hex.insert(p.to_ascii_lowercase());
+        }
+        let words_lower = muted_words
+            .iter()
+            .filter(|w| !w.is_empty())
+            .map(|w| w.to_lowercase())
+            .collect();
+        Self {
+            pubkeys,
+            pubkeys_hex,
+            words_lower,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.pubkeys.is_empty() && self.pubkeys_hex.is_empty() && self.words_lower.is_empty()
+    }
+
+    pub(crate) fn is_muted(&self, event: &Event) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+        if self.pubkeys.contains(&event.pubkey) {
+            return true;
+        }
+        if !self.words_lower.is_empty() {
+            let content_lower = event.content.to_lowercase();
+            for word in &self.words_lower {
+                if content_lower.contains(word.as_str()) {
+                    return true;
+                }
+            }
+        }
+        if event.kind == Kind::Repost && !self.pubkeys_hex.is_empty() {
+            for tag in event.tags.iter() {
+                let slice = tag.as_slice();
+                if slice.len() >= 2 && slice[0] == "p" && self.pubkeys_hex.contains(&slice[1]) {
+                    return true;
+                }
+            }
+        }
+        if event.kind == Kind::ZapReceipt && !self.pubkeys_hex.is_empty() {
+            if let Some(sender) = extract_zap_sender(event) {
+                if self.pubkeys_hex.contains(&sender) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 static ACTIVE_MUTE: OnceLock<RwLock<MuteState>> = OnceLock::new();
@@ -24,18 +94,46 @@ fn mute_state() -> &'static RwLock<MuteState> {
         RwLock::new(MuteState {
             pubkeys: Vec::new(),
             words: Vec::new(),
+            parsed: MutedFilter::default(),
         })
     })
 }
 
 pub fn set_active_mute_list(muted_pubkeys: Vec<String>, muted_words: Vec<String>) {
+    let parsed = MutedFilter::new(&muted_pubkeys, &muted_words);
     if let Ok(mut state) = mute_state().write() {
         state.pubkeys = muted_pubkeys;
         state.words = muted_words;
+        state.parsed = parsed;
     }
 }
 
 static KNOWN_ZAPPERS: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
+static ZAPPER_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone)]
+pub(crate) struct ZapInfo {
+    pub sats: u64,
+    pub sender: String,
+    pub comment: String,
+}
+
+struct ZapCache {
+    epoch: u64,
+    entries: HashMap<EventId, Option<ZapInfo>>,
+}
+
+static VERIFIED_ZAPS: OnceLock<RwLock<ZapCache>> = OnceLock::new();
+const ZAP_CACHE_MAX: usize = 4096;
+
+fn zap_cache() -> &'static RwLock<ZapCache> {
+    VERIFIED_ZAPS.get_or_init(|| {
+        RwLock::new(ZapCache {
+            epoch: 0,
+            entries: HashMap::new(),
+        })
+    })
+}
 
 fn known_zappers() -> &'static RwLock<HashMap<String, String>> {
     KNOWN_ZAPPERS.get_or_init(|| RwLock::new(HashMap::new()))
@@ -50,67 +148,96 @@ pub fn set_known_zappers(zappers_json: String) {
     if let Ok(mut map) = known_zappers().write() {
         *map = normalized;
     }
+    let next_epoch = ZAPPER_EPOCH.fetch_add(1, Ordering::AcqRel) + 1;
+    if let Ok(mut cache) = zap_cache().write() {
+        cache.epoch = next_epoch;
+        cache.entries.clear();
+    }
 }
 
 fn zapper_allowed(recipient: &str, signer: &str) -> bool {
     let Ok(map) = known_zappers().read() else {
         return true;
     };
+    if map.is_empty() {
+        return true;
+    }
     match map.get(&recipient.to_lowercase()) {
         Some(zapper) => !zapper.is_empty() && zapper == &signer.to_lowercase(),
         None => true,
     }
 }
 
-fn active_muted_pubkeys() -> Vec<String> {
+fn active_muted_filter() -> MutedFilter {
     mute_state()
         .read()
-        .map(|s| s.pubkeys.clone())
-        .unwrap_or_default()
-}
-
-fn active_muted_words() -> Vec<String> {
-    mute_state()
-        .read()
-        .map(|s| s.words.clone())
+        .map(|s| s.parsed.clone())
         .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
-// Realtime deduplication cache
+// Realtime deduplication cache (O(1) lookup & eviction)
 // ---------------------------------------------------------------------------
 
-static SEEN_EVENT_IDS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
-static SEEN_EVENT_IDS_MAX: usize = 2000;
+struct SeenIdRing {
+    set: HashSet<String>,
+    order: VecDeque<String>,
+}
 
-fn seen_ids() -> &'static RwLock<Vec<String>> {
-    SEEN_EVENT_IDS.get_or_init(|| RwLock::new(Vec::new()))
+static SEEN_EVENT_IDS: OnceLock<RwLock<SeenIdRing>> = OnceLock::new();
+const SEEN_EVENT_IDS_MAX: usize = 2000;
+
+fn seen_ids() -> &'static RwLock<SeenIdRing> {
+    SEEN_EVENT_IDS.get_or_init(|| {
+        RwLock::new(SeenIdRing {
+            set: HashSet::with_capacity(SEEN_EVENT_IDS_MAX),
+            order: VecDeque::with_capacity(SEEN_EVENT_IDS_MAX),
+        })
+    })
 }
 
 pub fn is_event_new_and_track(event_id: String) -> bool {
     if event_id.is_empty() {
         return false;
     }
+    if let Ok(ring) = seen_ids().read() {
+        if ring.set.contains(&event_id) {
+            return false;
+        }
+    }
     let Ok(mut ring) = seen_ids().write() else {
         return true;
     };
-    if ring.contains(&event_id) {
+    if !ring.set.insert(event_id.clone()) {
         return false;
     }
-    if ring.len() >= SEEN_EVENT_IDS_MAX {
+    if ring.order.len() >= SEEN_EVENT_IDS_MAX {
         let drain_count = SEEN_EVENT_IDS_MAX / 2;
-        ring.drain(..drain_count);
+        for _ in 0..drain_count {
+            if let Some(old) = ring.order.pop_front() {
+                ring.set.remove(&old);
+            }
+        }
     }
-    ring.push(event_id);
+    ring.order.push_back(event_id);
     true
 }
 
-fn is_future_dated(event: &Event) -> bool {
-    let now = SystemTime::now()
+#[inline]
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+#[inline]
+fn is_future_dated_at(event: &Event, now: u64) -> bool {
     event.created_at.as_secs() > now
+}
+
+fn events_to_json_string(events: &[Event]) -> Result<String> {
+    Ok(serde_json::to_string(events)?)
 }
 
 pub(crate) fn is_event_muted(
@@ -121,50 +248,7 @@ pub(crate) fn is_event_muted(
     if muted_pubkeys.is_empty() && muted_words.is_empty() {
         return false;
     }
-
-    let pubkey_hex = event.pubkey.to_hex();
-    if muted_pubkeys.iter().any(|p| p == &pubkey_hex) {
-        return true;
-    }
-
-    if !muted_words.is_empty() {
-        let content_lower = event.content.to_lowercase();
-        for word in muted_words {
-            if content_lower.contains(&word.to_lowercase()) {
-                return true;
-            }
-        }
-    }
-
-    if event.kind == Kind::Repost {
-        for tag in event.tags.iter() {
-            let tag_kind = tag.kind();
-            if matches!(
-                tag_kind,
-                TagKind::SingleLetter(SingleLetterTag {
-                    character: Alphabet::P,
-                    ..
-                })
-            ) {
-                if let Some(original_author) = tag.content() {
-                    let author_str = original_author.to_string();
-                    if muted_pubkeys.iter().any(|p| p == &author_str) {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-
-    if event.kind == Kind::ZapReceipt {
-        if let Some(sender) = extract_zap_sender(event) {
-            if muted_pubkeys.iter().any(|p| p == &sender) {
-                return true;
-            }
-        }
-    }
-
-    false
+    MutedFilter::new(muted_pubkeys, muted_words).is_muted(event)
 }
 
 fn extract_bolt11_amount_sats(bolt11: &str) -> Option<u64> {
@@ -247,10 +331,8 @@ fn verified_zap_request(receipt: &Event) -> Option<Event> {
     Some(request)
 }
 
-pub(crate) fn extract_zap_amount_sats(event: &Event) -> u64 {
-    let Some(request) = verified_zap_request(event) else {
-        return 0;
-    };
+fn compute_zap_info(event: &Event) -> Option<ZapInfo> {
+    let request = verified_zap_request(event)?;
     let bolt11_sats = event
         .tags
         .iter()
@@ -264,20 +346,50 @@ pub(crate) fn extract_zap_amount_sats(event: &Event) -> u64 {
         .and_then(|value| value.parse::<u64>().ok())
         .map(|msats| msats / 1000);
     let sats = match (bolt11_sats, requested_sats) {
-        (Some(paid), Some(requested)) if paid != requested => return 0,
-        (Some(paid), _) => paid,
-        (None, _) => return 0,
+        (Some(paid), Some(requested)) if paid != requested => 0,
+        (Some(paid), _) => paid.min(MAX_ZAP_SATS),
+        (None, _) => 0,
     };
-    sats.min(MAX_ZAP_SATS)
+    Some(ZapInfo {
+        sats,
+        sender: request.pubkey.to_hex(),
+        comment: request.content,
+    })
+}
+
+pub(crate) fn extract_zap_info(event: &Event) -> Option<ZapInfo> {
+    let epoch = ZAPPER_EPOCH.load(Ordering::Acquire);
+    if let Ok(cache) = zap_cache().read() {
+        if cache.epoch == epoch {
+            if let Some(cached) = cache.entries.get(&event.id) {
+                return cached.clone();
+            }
+        }
+    }
+    let info = compute_zap_info(event);
+    if let Ok(mut cache) = zap_cache().write() {
+        if cache.epoch != epoch {
+            cache.epoch = epoch;
+            cache.entries.clear();
+        } else if cache.entries.len() >= ZAP_CACHE_MAX {
+            cache.entries.clear();
+        }
+        cache.entries.insert(event.id, info.clone());
+    }
+    info
+}
+
+pub(crate) fn extract_zap_amount_sats(event: &Event) -> u64 {
+    extract_zap_info(event).map(|info| info.sats).unwrap_or(0)
 }
 
 pub(crate) fn extract_zap_sender(event: &Event) -> Option<String> {
-    verified_zap_request(event).map(|request| request.pubkey.to_hex())
+    extract_zap_info(event).map(|info| info.sender)
 }
 
 pub(crate) fn extract_zap_comment(event: &Event) -> String {
-    verified_zap_request(event)
-        .map(|request| request.content)
+    extract_zap_info(event)
+        .map(|info| info.comment)
         .unwrap_or_default()
 }
 
@@ -346,23 +458,81 @@ pub(crate) fn extract_note_references(tags: &[Vec<String>]) -> NoteReferences {
     }
 }
 
-pub(crate) fn tags_from_event(event: &Event) -> Vec<Vec<String>> {
-    event.tags.iter().map(|tag| tag.clone().to_vec()).collect()
+pub(crate) fn extract_note_references_from_event(event: &Event) -> NoteReferences {
+    let mut root_id: Option<String> = None;
+    let mut parent_id: Option<String> = None;
+    let mut is_quote = false;
+    let mut quoted_note_id: Option<String> = None;
+    let mut first_e: Option<&str> = None;
+    let mut last_e: Option<&str> = None;
+
+    for tag in event.tags.iter() {
+        let slice = tag.as_slice();
+        if slice.len() < 2 {
+            continue;
+        }
+        match slice[0].as_str() {
+            "q" => {
+                is_quote = true;
+                if quoted_note_id.is_none() {
+                    quoted_note_id = Some(slice[1].clone());
+                }
+            }
+            "e" => {
+                if slice.len() >= 4 {
+                    match slice[3].as_str() {
+                        "root" => root_id = Some(slice[1].clone()),
+                        "reply" => parent_id = Some(slice[1].clone()),
+                        "mention" => {}
+                        _ => {
+                            if first_e.is_none() {
+                                first_e = Some(slice[1].as_str());
+                            }
+                            last_e = Some(slice[1].as_str());
+                        }
+                    }
+                } else {
+                    if first_e.is_none() {
+                        first_e = Some(slice[1].as_str());
+                    }
+                    last_e = Some(slice[1].as_str());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if root_id.is_none() && parent_id.is_none() && !is_quote {
+        if let Some(first) = first_e {
+            root_id = Some(first.to_string());
+            parent_id = Some(last_e.unwrap_or(first).to_string());
+        }
+    } else if root_id.is_some() && parent_id.is_none() && !is_quote {
+        parent_id = root_id.clone();
+    }
+
+    let is_reply = (root_id.is_some() || parent_id.is_some()) && !is_quote;
+
+    NoteReferences {
+        root_id,
+        parent_id,
+        is_reply,
+        is_quote,
+        quoted_note_id,
+    }
 }
 
-fn json_tags_to_vecs(tags: &[serde_json::Value]) -> Vec<Vec<String>> {
-    tags.iter()
-        .filter_map(|tag| {
-            tag.as_array().map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-        })
+pub(crate) fn tags_from_event(event: &Event) -> Vec<Vec<String>> {
+    event
+        .tags
+        .iter()
+        .map(|tag| tag.as_slice().to_vec())
         .collect()
 }
 
-fn extract_content_references(content: &str) -> (Vec<String>, Vec<(String, String)>) {
+type ContentRefs = (Vec<String>, Vec<(String, String)>);
+
+fn extract_content_references(content: &str) -> ContentRefs {
     let mut event_ids: Vec<String> = Vec::new();
     let mut naddr_refs: Vec<(String, String)> = Vec::new();
 
@@ -446,13 +616,13 @@ pub async fn db_get_profiles(pubkeys_hex: Vec<String>) -> Result<String> {
         return Ok("{}".to_string());
     }
 
-    let filter = Filter::new().authors(authors.clone()).kind(Kind::Metadata);
+    let filter = Filter::new().authors(authors).kind(Kind::Metadata);
     let events = client.database().query(filter).await?;
 
-    let mut result = serde_json::Map::new();
+    let mut result: HashMap<String, Metadata> = HashMap::with_capacity(events.len());
     for event in events.into_iter() {
         if let Ok(m) = Metadata::from_json(&event.content) {
-            result.insert(event.pubkey.to_hex(), serde_json::from_str(&m.as_json())?);
+            result.insert(event.pubkey.to_hex(), m);
         }
     }
     Ok(serde_json::to_string(&result)?)
@@ -605,13 +775,14 @@ pub async fn db_get_feed_notes(
         .kinds([Kind::TextNote, Kind::Repost])
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let json: Vec<serde_json::Value> = events
+    let kept: Vec<Event> = events
         .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .filter(|e| !is_future_dated_at(e, now) && !muted.is_muted(e))
         .collect();
-    Ok(serde_json::to_string(&json)?)
+    events_to_json_string(&kept)
 }
 
 pub async fn db_get_profile_notes(
@@ -628,13 +799,14 @@ pub async fn db_get_profile_notes(
         .kinds([Kind::TextNote, Kind::Repost])
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let json: Vec<serde_json::Value> = events
+    let kept: Vec<Event> = events
         .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .filter(|e| !is_future_dated_at(e, now) && !muted.is_muted(e))
         .collect();
-    Ok(serde_json::to_string(&json)?)
+    events_to_json_string(&kept)
 }
 
 pub async fn db_get_hashtag_notes(
@@ -650,13 +822,14 @@ pub async fn db_get_hashtag_notes(
         .hashtag(hashtag)
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let json: Vec<serde_json::Value> = events
+    let kept: Vec<Event> = events
         .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .filter(|e| !is_future_dated_at(e, now) && !muted.is_muted(e))
         .collect();
-    Ok(serde_json::to_string(&json)?)
+    events_to_json_string(&kept)
 }
 
 pub async fn db_get_event(event_id: String) -> Result<Option<String>> {
@@ -702,29 +875,88 @@ pub async fn db_save_event(event_json: String) -> Result<bool> {
 
 pub async fn db_save_events(events_json: String) -> Result<u32> {
     let client = get_client_pub().await?;
-    let events: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
-    let mut saved: u32 = 0;
-
-    for val in &events {
-        if let Some(id_str) = val.get("id").and_then(|v| v.as_str()) {
-            if let Ok(id) = EventId::from_hex(id_str) {
-                if let Ok(DatabaseEventStatus::Saved) = client.database().check_id(&id).await {
-                    continue;
-                }
-            }
+    let mut parsed: Vec<Event> = match serde_json::from_str::<Vec<Event>>(&events_json) {
+        Ok(events) => events,
+        Err(_) => {
+            let values: Vec<serde_json::Value> = serde_json::from_str(&events_json)?;
+            values
+                .into_iter()
+                .filter_map(|v| serde_json::from_value::<Event>(v).ok())
+                .collect()
         }
-
-        if let Ok(event) = Event::from_json(val.to_string()) {
-            if event.verify().is_err() {
-                continue;
-            }
-            if let Ok(status) = client.database().save_event(&event).await {
-                if matches!(status, SaveEventStatus::Success) {
-                    saved += 1;
-                }
-            }
-        }
+    };
+    if parsed.is_empty() {
+        return Ok(0);
     }
+
+    let mut seen_ids: HashSet<EventId> = HashSet::with_capacity(parsed.len());
+    parsed.retain(|e| seen_ids.insert(e.id));
+
+    // Batch-check which event IDs are already persisted in a single LMDB read transaction.
+    let candidate_ids: Vec<EventId> = parsed.iter().map(|e| e.id).collect();
+    let existing_events = client
+        .database()
+        .query(Filter::new().ids(candidate_ids))
+        .await
+        .unwrap_or_default();
+    let existing_ids: HashSet<EventId> = existing_events.iter().map(|e| e.id).collect();
+
+    let mut fresh: Vec<Event> = parsed
+        .into_iter()
+        .filter(|e| !existing_ids.contains(&e.id))
+        .collect();
+    if fresh.is_empty() {
+        return Ok(0);
+    }
+
+    // Verify Schnorr signatures; parallelize across cores for larger batches.
+    let verified: Vec<Event> = if fresh.len() >= 16 {
+        tokio::task::spawn_blocking(move || {
+            let threads = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(2)
+                .min(4);
+            let chunk_size = fresh.len().div_ceil(threads).max(1);
+            let mut results: Vec<Vec<Event>> = Vec::with_capacity(threads);
+            std::thread::scope(|s| {
+                let mut handles = Vec::new();
+                while !fresh.is_empty() {
+                    let take = chunk_size.min(fresh.len());
+                    let chunk: Vec<Event> = fresh.drain(..take).collect();
+                    handles.push(s.spawn(move || {
+                        chunk
+                            .into_iter()
+                            .filter(|e| e.verify().is_ok())
+                            .collect::<Vec<_>>()
+                    }));
+                }
+                for h in handles {
+                    if let Ok(part) = h.join() {
+                        results.push(part);
+                    }
+                }
+            });
+            results.into_iter().flatten().collect()
+        })
+        .await
+        .unwrap_or_default()
+    } else {
+        fresh.into_iter().filter(|e| e.verify().is_ok()).collect()
+    };
+
+    if verified.is_empty() {
+        return Ok(0);
+    }
+
+    // Submit all saves concurrently so nostr-lmdb's batch ingester commits them in one write txn.
+    let db = client.database();
+    let save_results =
+        futures::future::join_all(verified.iter().map(|event| db.save_event(event))).await;
+
+    let saved = save_results
+        .into_iter()
+        .filter(|r| matches!(r, Ok(SaveEventStatus::Success)))
+        .count() as u32;
     Ok(saved)
 }
 
@@ -808,12 +1040,8 @@ pub async fn db_query_events(filter_json: String, limit: u32) -> Result<String> 
         filter = filter.limit(limit as usize);
     }
     let events = client.database().query(filter).await?;
-
-    let json: Vec<serde_json::Value> = events
-        .into_iter()
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
-        .collect();
-    Ok(serde_json::to_string(&json)?)
+    let kept: Vec<Event> = events.into_iter().collect();
+    events_to_json_string(&kept)
 }
 
 pub async fn db_get_replies(
@@ -830,13 +1058,10 @@ pub async fn db_get_replies(
         .event(id)
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let json: Vec<serde_json::Value> = events
-        .into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
-        .collect();
-    Ok(serde_json::to_string(&json)?)
+    let kept: Vec<Event> = events.into_iter().filter(|e| !muted.is_muted(e)).collect();
+    events_to_json_string(&kept)
 }
 
 pub async fn db_get_notifications(
@@ -858,14 +1083,13 @@ pub async fn db_get_notifications(
         ])
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let json: Vec<serde_json::Value> = events
+    let kept: Vec<Event> = events
         .into_iter()
-        .filter(|e| e.pubkey.to_hex() != user_pubkey_hex)
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
+        .filter(|e| e.pubkey != pk && !muted.is_muted(e))
         .collect();
-    Ok(serde_json::to_string(&json)?)
+    events_to_json_string(&kept)
 }
 
 pub async fn db_get_interaction_counts(note_id: String) -> Result<String> {
@@ -878,35 +1102,32 @@ pub async fn db_get_interaction_counts(note_id: String) -> Result<String> {
 }
 
 pub(crate) fn extract_reply_parent_id(event: &Event) -> Option<String> {
-    let mut reply_marker: Option<String> = None;
-    let mut root_marker: Option<String> = None;
-    let mut positional: Vec<String> = Vec::new();
+    let mut reply_marker: Option<&str> = None;
+    let mut root_marker: Option<&str> = None;
+    let mut last_positional: Option<&str> = None;
 
     for tag in event.tags.iter() {
-        let vec = tag.clone().to_vec();
-        if vec.len() < 2 || vec[0] != "e" {
+        let slice = tag.as_slice();
+        if slice.len() < 2 || slice[0] != "e" {
             continue;
         }
-        let ref_id = vec[1].clone();
+        let ref_id = slice[1].as_str();
         if ref_id.is_empty() {
             continue;
         }
-        let marker = vec.get(3).map(|s| s.as_str()).unwrap_or("");
+        let marker = slice.get(3).map(|s| s.as_str()).unwrap_or("");
         match marker {
             "reply" => reply_marker = Some(ref_id),
             "root" => root_marker = Some(ref_id),
             "mention" => {}
-            _ => positional.push(ref_id),
+            _ => last_positional = Some(ref_id),
         }
     }
 
-    if let Some(id) = reply_marker {
-        return Some(id);
-    }
-    if let Some(id) = root_marker {
-        return Some(id);
-    }
-    positional.into_iter().last()
+    reply_marker
+        .or(root_marker)
+        .or(last_positional)
+        .map(String::from)
 }
 
 pub(crate) fn extract_first_e_tag(event: &Event) -> Option<String> {
@@ -1028,6 +1249,7 @@ pub async fn db_get_batch_interaction_data(
     }
 
     let user_pk = PublicKey::from_hex(&user_pubkey_hex).ok();
+    let user_pk_hex = user_pk.as_ref().map(|pk| pk.to_hex());
 
     let filter = Filter::new()
         .kinds([
@@ -1039,46 +1261,26 @@ pub async fn db_get_batch_interaction_data(
         .events(ids);
     let events = client.database().query(filter).await?;
 
-    let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
-    let mut user_reacted: HashMap<String, bool> = HashMap::new();
-    let mut user_reposted: HashMap<String, bool> = HashMap::new();
-    let mut user_zapped: HashMap<String, bool> = HashMap::new();
-    let mut counted_events: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut counts: HashMap<String, [usize; 4]> = HashMap::with_capacity(note_ids.len());
+    let mut user_reacted: HashSet<String> = HashSet::new();
+    let mut user_reposted: HashSet<String> = HashSet::new();
+    let mut user_zapped: HashSet<String> = HashSet::new();
+    let mut counted_events: HashSet<EventId> = HashSet::with_capacity(events.len());
 
     for nid in &note_ids {
         counts.insert(nid.clone(), [0; 4]);
-        user_reacted.insert(nid.clone(), false);
-        user_reposted.insert(nid.clone(), false);
-        user_zapped.insert(nid.clone(), false);
-        counted_events.insert(nid.clone(), HashSet::new());
     }
 
     for event in events.iter() {
+        if !counted_events.insert(event.id) {
+            continue;
+        }
         let kind = event.kind;
-        let event_id_hex = event.id.to_hex();
-        let is_user = user_pk.as_ref().is_some_and(|pk| event.pubkey == *pk);
-
-        let zap_sats = if kind == Kind::ZapReceipt {
-            extract_zap_amount_sats(event) as usize
-        } else {
-            0
-        };
-
-        let is_zap_sender = if kind == Kind::ZapReceipt {
-            user_pk.as_ref().is_some_and(|pk| {
-                extract_zap_sender(event).is_some_and(|sender| sender == pk.to_hex())
-            })
-        } else {
-            false
-        };
 
         if kind == Kind::TextNote {
             if let Some(parent_id) = extract_reply_parent_id(event) {
                 if let Some(c) = counts.get_mut(&parent_id) {
-                    let seen = counted_events.get_mut(&parent_id).unwrap();
-                    if seen.insert(event_id_hex.clone()) {
-                        c[3] += 1;
-                    }
+                    c[3] += 1;
                 }
             }
             continue;
@@ -1087,35 +1289,35 @@ pub async fn db_get_batch_interaction_data(
         let target = extract_first_e_tag(event);
         if let Some(target_id) = target {
             if let Some(c) = counts.get_mut(&target_id) {
-                let seen = counted_events.get_mut(&target_id).unwrap();
-                if seen.insert(event_id_hex) {
-                    match kind {
-                        Kind::Reaction => {
-                            c[0] += 1;
-                            if is_user {
-                                user_reacted.insert(target_id, true);
-                            }
+                let is_user = user_pk.as_ref().is_some_and(|pk| event.pubkey == *pk);
+                match kind {
+                    Kind::Reaction => {
+                        c[0] += 1;
+                        if is_user {
+                            user_reacted.insert(target_id);
                         }
-                        Kind::Repost => {
-                            c[1] += 1;
-                            if is_user {
-                                user_reposted.insert(target_id, true);
-                            }
-                        }
-                        Kind::ZapReceipt => {
-                            c[2] += zap_sats;
-                            if is_zap_sender {
-                                user_zapped.insert(target_id, true);
-                            }
-                        }
-                        _ => {}
                     }
+                    Kind::Repost => {
+                        c[1] += 1;
+                        if is_user {
+                            user_reposted.insert(target_id);
+                        }
+                    }
+                    Kind::ZapReceipt => {
+                        if let Some(info) = extract_zap_info(event) {
+                            c[2] += info.sats as usize;
+                            if user_pk_hex.as_deref() == Some(info.sender.as_str()) {
+                                user_zapped.insert(target_id);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
     }
 
-    let mut result = serde_json::Map::new();
+    let mut result = serde_json::Map::with_capacity(counts.len());
     for (nid, c) in &counts {
         result.insert(
             nid.clone(),
@@ -1124,9 +1326,9 @@ pub async fn db_get_batch_interaction_data(
                 "reposts": c[1],
                 "zaps": c[2],
                 "replies": c[3],
-                "hasReacted": user_reacted.get(nid).copied().unwrap_or(false),
-                "hasReposted": user_reposted.get(nid).copied().unwrap_or(false),
-                "hasZapped": user_zapped.get(nid).copied().unwrap_or(false),
+                "hasReacted": user_reacted.contains(nid),
+                "hasReposted": user_reposted.contains(nid),
+                "hasZapped": user_zapped.contains(nid),
             }),
         );
     }
@@ -1206,9 +1408,10 @@ pub async fn db_get_detailed_interactions(note_id: String) -> Result<String> {
                 }));
             }
             Kind::ZapReceipt => {
-                let amount = extract_zap_amount_sats(event);
-                let sender = extract_zap_sender(event).unwrap_or_default();
-                let comment = extract_zap_comment(event);
+                let (amount, sender, comment) = match extract_zap_info(event) {
+                    Some(info) => (info.sats, info.sender, info.comment),
+                    None => (0, String::new(), String::new()),
+                };
                 results.push(serde_json::json!({
                     "type": "zap",
                     "pubkey": sender,
@@ -1234,18 +1437,11 @@ pub async fn db_get_articles(
         .kind(Kind::LongFormTextNote)
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let mut events_vec: Vec<Event> = events
-        .into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .collect();
+    let mut events_vec: Vec<Event> = events.into_iter().filter(|e| !muted.is_muted(e)).collect();
     events_vec.sort_by_key(|event| std::cmp::Reverse(event.created_at));
-
-    let json: Vec<serde_json::Value> = events_vec
-        .into_iter()
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
-        .collect();
-    Ok(serde_json::to_string(&json)?)
+    events_to_json_string(&events_vec)
 }
 
 pub async fn db_get_articles_by_authors(
@@ -1270,18 +1466,11 @@ pub async fn db_get_articles_by_authors(
         .authors(authors)
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let mut events_vec: Vec<Event> = events
-        .into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .collect();
+    let mut events_vec: Vec<Event> = events.into_iter().filter(|e| !muted.is_muted(e)).collect();
     events_vec.sort_by_key(|event| std::cmp::Reverse(event.created_at));
-
-    let json: Vec<serde_json::Value> = events_vec
-        .into_iter()
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
-        .collect();
-    Ok(serde_json::to_string(&json)?)
+    events_to_json_string(&events_vec)
 }
 
 pub async fn db_find_user_repost_event_id(
@@ -1378,19 +1567,17 @@ pub async fn db_search_notes(query: String, limit: u32) -> Result<String> {
     let events = client.database().query(filter).await?;
 
     let query_lower = query.to_lowercase();
-    let mut results: Vec<serde_json::Value> = Vec::new();
+    let mut results: Vec<Event> = Vec::new();
 
     for event in events.into_iter() {
         if event.content.to_lowercase().contains(&query_lower) {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&event.as_json()) {
-                results.push(val);
-                if results.len() >= limit as usize {
-                    break;
-                }
+            results.push(event);
+            if results.len() >= limit as usize {
+                break;
             }
         }
     }
-    Ok(serde_json::to_string(&results)?)
+    events_to_json_string(&results)
 }
 
 pub async fn db_get_oldest_events(limit: u32) -> Result<String> {
@@ -1400,12 +1587,7 @@ pub async fn db_get_oldest_events(limit: u32) -> Result<String> {
 
     let mut events_vec: Vec<Event> = events.into_iter().collect();
     events_vec.sort_by_key(|a| a.created_at);
-
-    let json: Vec<serde_json::Value> = events_vec
-        .into_iter()
-        .filter_map(|e| serde_json::from_str(&e.as_json()).ok())
-        .collect();
-    Ok(serde_json::to_string(&json)?)
+    events_to_json_string(&events_vec)
 }
 
 pub async fn db_cleanup_old_events(days_to_keep: u32) -> Result<u32> {
@@ -1580,14 +1762,15 @@ pub async fn db_get_database_stats() -> Result<String> {
     Ok(stats.to_string())
 }
 
-async fn hydrate_notes(
+async fn hydrate_notes_values(
     client: &Client,
     events: &[Event],
     filter_replies: bool,
     current_user_pubkey_hex: Option<String>,
-) -> Result<String> {
+    pre_truncate_latest: Option<usize>,
+) -> Result<Vec<serde_json::Value>> {
     if events.is_empty() {
-        return Ok("[]".to_string());
+        return Ok(Vec::new());
     }
 
     let mut repost_lookup_ids: Vec<EventId> = Vec::new();
@@ -1595,16 +1778,18 @@ async fn hydrate_notes(
         if event.kind != Kind::Repost {
             continue;
         }
-        let has_embedded = serde_json::from_str::<serde_json::Value>(&event.content)
-            .map(|p| p.get("content").is_some() && p.get("pubkey").is_some())
-            .unwrap_or(false);
+        let has_embedded = !event.content.is_empty()
+            && event.content.as_bytes().first() == Some(&b'{')
+            && serde_json::from_str::<serde_json::Value>(&event.content)
+                .map(|p| p.get("content").is_some() && p.get("pubkey").is_some())
+                .unwrap_or(false);
         if has_embedded {
             continue;
         }
         for tag in event.tags.iter() {
-            let tag_vec: Vec<String> = tag.clone().to_vec();
-            if tag_vec.len() >= 2 && tag_vec[0] == "e" {
-                if let Ok(eid) = EventId::from_hex(&tag_vec[1]) {
+            let slice = tag.as_slice();
+            if slice.len() >= 2 && slice[0] == "e" {
+                if let Ok(eid) = EventId::from_hex(&slice[1]) {
                     repost_lookup_ids.push(eid);
                 }
                 break;
@@ -1612,42 +1797,17 @@ async fn hydrate_notes(
         }
     }
 
-    let mut repost_cache: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut repost_cache: HashMap<String, Event> = HashMap::new();
     if !repost_lookup_ids.is_empty() {
-        let db_filter = Filter::new()
-            .ids(repost_lookup_ids.clone())
-            .kind(Kind::TextNote);
+        let db_filter = Filter::new().ids(repost_lookup_ids).kind(Kind::TextNote);
         if let Ok(db_results) = client.database().query(db_filter).await {
             for ev in db_results {
-                let ev_tags: Vec<serde_json::Value> = ev
-                    .tags
-                    .iter()
-                    .map(|t| {
-                        serde_json::Value::Array(
-                            t.clone()
-                                .to_vec()
-                                .iter()
-                                .map(|s| serde_json::json!(s))
-                                .collect(),
-                        )
-                    })
-                    .collect();
-                repost_cache.insert(
-                    ev.id.to_hex(),
-                    serde_json::json!({
-                        "content": ev.content,
-                        "pubkey": ev.pubkey.to_hex(),
-                        "created_at": ev.created_at.as_secs(),
-                        "tags": ev_tags,
-                    }),
-                );
+                repost_cache.insert(ev.id.to_hex(), ev);
             }
         }
     }
 
-    let mut notes: Vec<serde_json::Value> = Vec::new();
-    let mut pubkeys_needed: HashSet<String> = HashSet::new();
-    let mut note_ids: Vec<String> = Vec::new();
+    let mut notes: Vec<serde_json::Value> = Vec::with_capacity(events.len());
 
     for event in events {
         let is_repost = event.kind == Kind::Repost;
@@ -1661,44 +1821,24 @@ async fn hydrate_notes(
         let mut repost_created_at: Option<u64> = None;
         let mut repost_event_id: Option<String> = None;
 
-        let mut tags: Vec<Vec<String>> =
-            event.tags.iter().map(|tag| tag.clone().to_vec()).collect();
-
-        let refs = extract_note_references(&tags);
-        let mut root_id = refs.root_id;
-        let mut parent_id = refs.parent_id;
-        let mut is_quote = refs.is_quote;
-        let mut quoted_note_id = refs.quoted_note_id;
-        let mut is_reply = refs.is_reply;
+        let tags: Vec<Vec<String>>;
+        let root_id: Option<String>;
+        let parent_id: Option<String>;
+        let is_quote: bool;
+        let quoted_note_id: Option<String>;
+        let is_reply: bool;
 
         if is_repost {
             repost_event_id = Some(id.clone());
             reposted_by = Some(pubkey.clone());
             repost_created_at = Some(created_at);
 
-            root_id = None;
-            parent_id = None;
-            is_reply = false;
-            is_quote = false;
-            quoted_note_id = None;
-
             let mut repost_original_id: Option<String> = None;
-            let mut repost_extra_e_tags: Vec<(String, Option<String>)> = Vec::new();
-            for tag in tags.iter() {
-                if tag.is_empty() || tag[0] != "e" || tag.len() < 2 {
-                    continue;
-                }
-                if repost_original_id.is_none() {
-                    repost_original_id = Some(tag[1].clone());
-                } else {
-                    let marker = tag.get(3).map(|s| s.as_str()).and_then(|m| {
-                        if m == "root" || m == "reply" {
-                            Some(m.to_string())
-                        } else {
-                            None
-                        }
-                    });
-                    repost_extra_e_tags.push((tag[1].clone(), marker));
+            for tag in event.tags.iter() {
+                let slice = tag.as_slice();
+                if slice.len() >= 2 && slice[0] == "e" {
+                    repost_original_id = Some(slice[1].clone());
+                    break;
                 }
             }
 
@@ -1706,76 +1846,43 @@ async fn hydrate_notes(
                 id = orig_id;
             }
 
-            for (ref_id, marker) in &repost_extra_e_tags {
-                match marker.as_deref() {
-                    Some("root") => {
-                        root_id = Some(ref_id.clone());
-                    }
-                    Some("reply") => {
-                        parent_id = Some(ref_id.clone());
-                    }
-                    _ => {}
-                }
-            }
-
-            let embedded_json: Option<serde_json::Value> =
-                repost_cache.get(&id).cloned().or_else(|| {
-                    let original = Event::from_json(&content).ok()?;
-                    if original.verify().is_err() || original.id.to_hex() != id {
-                        return None;
-                    }
-                    serde_json::from_str::<serde_json::Value>(&original.as_json()).ok()
-                });
-            if embedded_json.is_none() {
+            let resolved: Option<Event> = if let Some(cached) = repost_cache.get(&id) {
+                Some(cached.clone())
+            } else {
+                Event::from_json(&content)
+                    .ok()
+                    .filter(|original| original.verify().is_ok() && original.id.to_hex() == id)
+            };
+            let Some(orig) = resolved else {
                 continue;
-            }
+            };
 
-            if let Some(parsed) = embedded_json {
-                if let Some(c) = parsed["content"].as_str() {
-                    content = c.to_string();
-                }
-                if let Some(p) = parsed["pubkey"].as_str() {
-                    pubkey = p.to_string();
-                }
-                if let Some(ca) = parsed["created_at"].as_u64() {
-                    created_at = ca;
-                }
-                kind = parsed["kind"].as_u64().unwrap_or(1) as u16;
-
-                if let Some(parsed_tags) = parsed["tags"].as_array() {
-                    let embedded_tags = json_tags_to_vecs(parsed_tags);
-                    let embedded_refs = extract_note_references(&embedded_tags);
-                    tags = embedded_tags;
-                    root_id = embedded_refs.root_id;
-                    parent_id = embedded_refs.parent_id;
-                    is_quote = embedded_refs.is_quote;
-                    quoted_note_id = embedded_refs.quoted_note_id;
-                    is_reply = embedded_refs.is_reply;
-                }
-            }
-
+            content = orig.content;
             if content.trim().is_empty() {
                 continue;
             }
+            pubkey = orig.pubkey.to_hex();
+            created_at = orig.created_at.as_secs();
+            kind = orig.kind.as_u16();
+            tags = orig.tags.iter().map(|t| t.as_slice().to_vec()).collect();
+            let embedded_refs = extract_note_references(&tags);
+            root_id = embedded_refs.root_id;
+            parent_id = embedded_refs.parent_id;
+            is_quote = embedded_refs.is_quote;
+            quoted_note_id = embedded_refs.quoted_note_id;
+            is_reply = embedded_refs.is_reply;
+        } else {
+            let refs = extract_note_references_from_event(event);
+            if filter_replies && refs.is_reply {
+                continue;
+            }
+            root_id = refs.root_id;
+            parent_id = refs.parent_id;
+            is_quote = refs.is_quote;
+            quoted_note_id = refs.quoted_note_id;
+            is_reply = refs.is_reply;
+            tags = event.tags.iter().map(|t| t.as_slice().to_vec()).collect();
         }
-
-        if filter_replies && is_reply && !is_repost {
-            continue;
-        }
-
-        if !pubkey.is_empty() {
-            pubkeys_needed.insert(pubkey.clone());
-        }
-        if !id.is_empty() {
-            note_ids.push(id.clone());
-        }
-
-        let json_tags: Vec<serde_json::Value> = tags
-            .iter()
-            .map(|t: &Vec<String>| {
-                serde_json::Value::Array(t.iter().map(|s| serde_json::json!(s)).collect())
-            })
-            .collect();
 
         notes.push(serde_json::json!({
             "id": id,
@@ -1784,7 +1891,7 @@ async fn hydrate_notes(
             "author": pubkey,
             "content": content,
             "created_at": created_at,
-            "tags": json_tags,
+            "tags": tags,
             "isRepost": is_repost,
             "repostEventId": repost_event_id,
             "repostedBy": reposted_by,
@@ -1808,9 +1915,37 @@ async fn hydrate_notes(
     }
 
     if notes.is_empty() {
-        return Ok("[]".to_string());
+        return Ok(Vec::new());
     }
 
+    // For chronological feeds, sort, deduplicate, and truncate BEFORE querying profiles,
+    // interactions, and embedded references (avoids hydrating 4x over-fetched notes).
+    if let Some(limit) = pre_truncate_latest {
+        notes.sort_by_key(|note| std::cmp::Reverse(hydrated_note_timestamp(note)));
+        let mut seen_ids: HashSet<String> = HashSet::with_capacity(notes.len());
+        notes.retain(|note| {
+            let id = note["id"].as_str().unwrap_or("");
+            !id.is_empty() && seen_ids.insert(id.to_string())
+        });
+        notes.truncate(limit);
+    }
+
+    let mut pubkeys_needed: HashSet<String> = HashSet::with_capacity(notes.len());
+    let mut note_ids: Vec<String> = Vec::with_capacity(notes.len());
+    for note in &notes {
+        if let Some(pk) = note["pubkey"].as_str() {
+            if !pk.is_empty() {
+                pubkeys_needed.insert(pk.to_string());
+            }
+        }
+        if let Some(id) = note["id"].as_str() {
+            if !id.is_empty() {
+                note_ids.push(id.to_string());
+            }
+        }
+    }
+
+    let mut profiles: HashMap<String, (String, String, String)> = HashMap::new();
     let authors: Vec<PublicKey> = pubkeys_needed
         .iter()
         .filter_map(|h| PublicKey::from_hex(h).ok())
@@ -1819,17 +1954,13 @@ async fn hydrate_notes(
     if !authors.is_empty() {
         let filter = Filter::new().authors(authors).kind(Kind::Metadata);
         let profile_events = client.database().query(filter).await?;
-        let mut profiles: HashMap<String, (String, String, String)> = HashMap::new();
+        profiles.reserve(profile_events.len());
 
         for pe in profile_events {
             if let Ok(m) = Metadata::from_json(&pe.content) {
-                let name = m
-                    .name
-                    .clone()
-                    .or_else(|| m.display_name.clone())
-                    .unwrap_or_default();
-                let picture = m.picture.clone().unwrap_or_default();
-                let nip05 = m.nip05.clone().unwrap_or_default();
+                let name = m.name.or(m.display_name).unwrap_or_default();
+                let picture = m.picture.unwrap_or_default();
+                let nip05 = m.nip05.unwrap_or_default();
                 profiles.insert(pe.pubkey.to_hex(), (name, picture, nip05));
             }
         }
@@ -1858,6 +1989,7 @@ async fn hydrate_notes(
                 PublicKey::from_hex(h).ok()
             }
         });
+        let user_pk_hex = user_pk.as_ref().map(|pk| pk.to_hex());
 
         let local_filter = Filter::new()
             .kinds([
@@ -1869,124 +2001,77 @@ async fn hydrate_notes(
             .events(ids);
         let local_events = client.database().query(local_filter).await?;
 
-        let mut reply_counts: HashMap<String, usize> = HashMap::new();
-        let mut reaction_counts: HashMap<String, usize> = HashMap::new();
-        let mut repost_counts: HashMap<String, usize> = HashMap::new();
-        let mut zap_counts: HashMap<String, usize> = HashMap::new();
+        let mut counts: HashMap<&str, [usize; 4]> = HashMap::with_capacity(note_ids.len());
+        for nid in &note_ids {
+            counts.insert(nid.as_str(), [0; 4]);
+        }
         let mut has_reacted: HashSet<String> = HashSet::new();
         let mut has_reposted: HashSet<String> = HashSet::new();
         let mut has_zapped: HashSet<String> = HashSet::new();
-
-        for nid in &note_ids {
-            reply_counts.insert(nid.clone(), 0);
-            reaction_counts.insert(nid.clone(), 0);
-            repost_counts.insert(nid.clone(), 0);
-            zap_counts.insert(nid.clone(), 0);
-        }
-
-        let mut counted_reply_events: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut counted_reaction_events: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut counted_repost_events: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut counted_zap_events: HashMap<String, HashSet<String>> = HashMap::new();
-        for nid in &note_ids {
-            counted_reply_events.insert(nid.clone(), HashSet::new());
-            counted_reaction_events.insert(nid.clone(), HashSet::new());
-            counted_repost_events.insert(nid.clone(), HashSet::new());
-            counted_zap_events.insert(nid.clone(), HashSet::new());
-        }
+        let mut seen_interactions: HashSet<EventId> = HashSet::with_capacity(local_events.len());
 
         for ev in local_events.iter() {
-            let is_user = user_pk.as_ref().is_some_and(|pk| ev.pubkey == *pk);
-            let is_zap_sender = if ev.kind == Kind::ZapReceipt {
-                user_pk.as_ref().is_some_and(|pk| {
-                    extract_zap_sender(ev).is_some_and(|sender| sender == pk.to_hex())
-                })
-            } else {
-                false
-            };
-            let zap_sats = if ev.kind == Kind::ZapReceipt {
-                extract_zap_amount_sats(ev) as usize
-            } else {
-                0
-            };
-            let ev_hex = ev.id.to_hex();
-
+            if !seen_interactions.insert(ev.id) {
+                continue;
+            }
             if ev.kind == Kind::TextNote {
                 if let Some(parent_id) = extract_reply_parent_id(ev) {
-                    if reply_counts.contains_key(&parent_id) {
-                        let seen = counted_reply_events.get_mut(&parent_id).unwrap();
-                        if seen.insert(ev_hex.clone()) {
-                            if let Some(c) = reply_counts.get_mut(&parent_id) {
-                                *c += 1;
-                            }
-                        }
+                    if let Some(c) = counts.get_mut(parent_id.as_str()) {
+                        c[3] += 1;
                     }
                 }
                 continue;
             }
 
-            let target = extract_first_e_tag(ev);
-            if let Some(ref_hex) = target {
-                if !reaction_counts.contains_key(&ref_hex) {
-                    continue;
-                }
-                match ev.kind {
-                    Kind::Reaction => {
-                        let seen = counted_reaction_events.get_mut(&ref_hex).unwrap();
-                        if seen.insert(ev_hex.clone()) {
-                            if let Some(c) = reaction_counts.get_mut(&ref_hex) {
-                                *c += 1;
-                            }
+            if let Some(ref_hex) = extract_first_e_tag(ev) {
+                if let Some(c) = counts.get_mut(ref_hex.as_str()) {
+                    let is_user = user_pk.as_ref().is_some_and(|pk| ev.pubkey == *pk);
+                    match ev.kind {
+                        Kind::Reaction => {
+                            c[0] += 1;
                             if is_user {
                                 has_reacted.insert(ref_hex);
                             }
                         }
-                    }
-                    Kind::Repost => {
-                        let seen = counted_repost_events.get_mut(&ref_hex).unwrap();
-                        if seen.insert(ev_hex.clone()) {
-                            if let Some(c) = repost_counts.get_mut(&ref_hex) {
-                                *c += 1;
-                            }
+                        Kind::Repost => {
+                            c[1] += 1;
                             if is_user {
                                 has_reposted.insert(ref_hex);
                             }
                         }
-                    }
-                    Kind::ZapReceipt => {
-                        let seen = counted_zap_events.get_mut(&ref_hex).unwrap();
-                        if seen.insert(ev_hex.clone()) {
-                            if let Some(c) = zap_counts.get_mut(&ref_hex) {
-                                *c += zap_sats;
-                            }
-                            if is_zap_sender {
-                                has_zapped.insert(ref_hex);
+                        Kind::ZapReceipt => {
+                            if let Some(info) = extract_zap_info(ev) {
+                                c[2] += info.sats as usize;
+                                if user_pk_hex.as_deref() == Some(info.sender.as_str()) {
+                                    has_zapped.insert(ref_hex);
+                                }
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         }
 
         for note in notes.iter_mut() {
-            let nid = note["id"].as_str().map(|s| s.to_string());
-            if let Some(ref nid) = nid {
-                note["reactionCount"] =
-                    serde_json::json!(reaction_counts.get(nid).copied().unwrap_or(0));
-                note["repostCount"] =
-                    serde_json::json!(repost_counts.get(nid).copied().unwrap_or(0));
-                note["zapCount"] = serde_json::json!(zap_counts.get(nid).copied().unwrap_or(0));
-                note["replyCount"] = serde_json::json!(reply_counts.get(nid).copied().unwrap_or(0));
-                note["hasReacted"] = serde_json::json!(has_reacted.contains(nid));
-                note["hasReposted"] = serde_json::json!(has_reposted.contains(nid));
-                note["hasZapped"] = serde_json::json!(has_zapped.contains(nid));
+            if let Some(nid) = note["id"].as_str().map(str::to_string) {
+                if let Some(c) = counts.get(nid.as_str()) {
+                    note["reactionCount"] = serde_json::json!(c[0]);
+                    note["repostCount"] = serde_json::json!(c[1]);
+                    note["zapCount"] = serde_json::json!(c[2]);
+                    note["replyCount"] = serde_json::json!(c[3]);
+                }
+                note["hasReacted"] = serde_json::json!(has_reacted.contains(&nid));
+                note["hasReposted"] = serde_json::json!(has_reposted.contains(&nid));
+                note["hasZapped"] = serde_json::json!(has_zapped.contains(&nid));
             }
         }
     }
 
+    // Extract content references ONCE per note instead of 3 times.
     let mut all_ref_event_ids: HashSet<String> = HashSet::new();
     let mut all_naddr_refs: Vec<(String, String)> = Vec::new();
+    let mut per_note_refs: Vec<ContentRefs> = Vec::with_capacity(notes.len());
 
     for note in &notes {
         if let Some(qid) = note["quotedNoteId"].as_str() {
@@ -1994,17 +2079,19 @@ async fn hydrate_notes(
                 all_ref_event_ids.insert(qid.to_string());
             }
         }
-        if let Some(content) = note["content"].as_str() {
-            let (event_refs, naddr_refs) = extract_content_references(content);
-            for eid in event_refs {
-                all_ref_event_ids.insert(eid);
-            }
-            all_naddr_refs.extend(naddr_refs);
+        let refs = note["content"]
+            .as_str()
+            .map(extract_content_references)
+            .unwrap_or_default();
+        for eid in &refs.0 {
+            all_ref_event_ids.insert(eid.clone());
         }
+        all_naddr_refs.extend(refs.1.iter().cloned());
+        per_note_refs.push(refs);
     }
 
-    let own_ids: HashSet<String> = note_ids.iter().cloned().collect();
-    all_ref_event_ids.retain(|id| !own_ids.contains(id));
+    let own_ids: HashSet<&str> = note_ids.iter().map(String::as_str).collect();
+    all_ref_event_ids.retain(|id| !own_ids.contains(id.as_str()));
 
     if !all_ref_event_ids.is_empty() {
         let ref_eids: Vec<EventId> = all_ref_event_ids
@@ -2020,17 +2107,18 @@ async fn hydrate_notes(
                 .await
                 .unwrap_or_default();
 
-            let mut ref_notes_map: HashMap<String, serde_json::Value> = HashMap::new();
-            let mut ref_pubkeys: HashSet<String> = HashSet::new();
+            let mut ref_notes_map: HashMap<String, serde_json::Value> =
+                HashMap::with_capacity(ref_events.len());
+            let mut missing_ref_pubkeys: HashSet<String> = HashSet::new();
 
             for ev in ref_events {
                 let ev_id = ev.id.to_hex();
                 let ev_pubkey = ev.pubkey.to_hex();
-                ref_pubkeys.insert(ev_pubkey.clone());
+                if !profiles.contains_key(&ev_pubkey) {
+                    missing_ref_pubkeys.insert(ev_pubkey.clone());
+                }
 
-                let ev_tags = tags_from_event(&ev);
-                let ev_refs = extract_note_references(&ev_tags);
-
+                let ev_refs = extract_note_references_from_event(&ev);
                 ref_notes_map.insert(
                     ev_id.clone(),
                     serde_json::json!({
@@ -2049,55 +2137,49 @@ async fn hydrate_notes(
                 );
             }
 
-            if !ref_pubkeys.is_empty() {
-                let ref_authors: Vec<PublicKey> = ref_pubkeys
+            if !missing_ref_pubkeys.is_empty() {
+                let ref_authors: Vec<PublicKey> = missing_ref_pubkeys
                     .iter()
                     .filter_map(|h| PublicKey::from_hex(h).ok())
                     .collect();
                 let ref_profile_filter = Filter::new().authors(ref_authors).kind(Kind::Metadata);
                 if let Ok(ref_profiles) = client.database().query(ref_profile_filter).await {
-                    let mut profiles: HashMap<String, (String, String)> = HashMap::new();
                     for pe in ref_profiles {
                         if let Ok(m) = Metadata::from_json(&pe.content) {
-                            let name = m
-                                .name
-                                .clone()
-                                .or_else(|| m.display_name.clone())
-                                .unwrap_or_default();
-                            let picture = m.picture.clone().unwrap_or_default();
-                            profiles.insert(pe.pubkey.to_hex(), (name, picture));
-                        }
-                    }
-                    for ref_note in ref_notes_map.values_mut() {
-                        if let Some(pk) = ref_note["pubkey"].as_str() {
-                            if let Some((name, picture)) = profiles.get(pk) {
-                                ref_note["authorName"] = serde_json::json!(name);
-                                ref_note["authorImage"] = serde_json::json!(picture);
-                            }
+                            let name = m.name.or(m.display_name).unwrap_or_default();
+                            let picture = m.picture.unwrap_or_default();
+                            let nip05 = m.nip05.unwrap_or_default();
+                            profiles.insert(pe.pubkey.to_hex(), (name, picture, nip05));
                         }
                     }
                 }
             }
 
-            for note in notes.iter_mut() {
-                if let Some(qid) = note["quotedNoteId"].as_str().map(|s| s.to_string()) {
+            for ref_note in ref_notes_map.values_mut() {
+                if let Some(pk) = ref_note["pubkey"].as_str() {
+                    if let Some((name, picture, _)) = profiles.get(pk) {
+                        ref_note["authorName"] = serde_json::json!(name);
+                        ref_note["authorImage"] = serde_json::json!(picture);
+                    }
+                }
+            }
+
+            for (note, (content_event_ids, _)) in notes.iter_mut().zip(&per_note_refs) {
+                if let Some(qid) = note["quotedNoteId"].as_str().map(str::to_string) {
                     if let Some(quoted) = ref_notes_map.get(&qid) {
                         note["quotedNote"] = quoted.clone();
                     }
                 }
 
-                if let Some(content) = note["content"].as_str().map(|s| s.to_string()) {
-                    let (content_event_ids, _) = extract_content_references(&content);
-                    if !content_event_ids.is_empty() {
-                        let mut embedded = serde_json::Map::new();
-                        for eid in &content_event_ids {
-                            if let Some(ref_note) = ref_notes_map.get(eid) {
-                                embedded.insert(eid.clone(), ref_note.clone());
-                            }
+                if !content_event_ids.is_empty() {
+                    let mut embedded = serde_json::Map::new();
+                    for eid in content_event_ids {
+                        if let Some(ref_note) = ref_notes_map.get(eid) {
+                            embedded.insert(eid.clone(), ref_note.clone());
                         }
-                        if !embedded.is_empty() {
-                            note["embeddedNotes"] = serde_json::Value::Object(embedded);
-                        }
+                    }
+                    if !embedded.is_empty() {
+                        note["embeddedNotes"] = serde_json::Value::Object(embedded);
                     }
                 }
             }
@@ -2114,109 +2196,122 @@ async fn hydrate_notes(
         };
 
         let mut articles_map: HashMap<String, serde_json::Value> = HashMap::new();
-        let mut article_pubkeys: HashSet<String> = HashSet::new();
+        let mut missing_article_pubkeys: HashSet<String> = HashSet::new();
 
         for (pubkey_hex, d_tag) in &unique_naddrs {
-            let filter_json = serde_json::json!({
-                "kinds": [30023],
-                "authors": [pubkey_hex],
-                "#d": [d_tag],
-                "limit": 1,
-            });
-            if let Ok(filter) = Filter::from_json(filter_json.to_string()) {
-                if let Ok(events) = client.database().query(filter).await {
-                    if let Some(ev) = events.into_iter().next() {
-                        let ev_tags = tags_from_event(&ev);
-                        let mut title = String::new();
-                        let mut image: Option<String> = None;
-                        let mut summary: Option<String> = None;
-                        let mut actual_d_tag = String::new();
+            let Ok(pk) = PublicKey::from_hex(pubkey_hex) else {
+                continue;
+            };
+            let filter = Filter::new()
+                .kind(Kind::LongFormTextNote)
+                .author(pk)
+                .identifier(d_tag.clone())
+                .limit(1);
+            if let Ok(events) = client.database().query(filter).await {
+                if let Some(ev) = events.into_iter().next() {
+                    let mut title = String::new();
+                    let mut image: Option<String> = None;
+                    let mut summary: Option<String> = None;
+                    let mut actual_d_tag = String::new();
 
-                        for tag in &ev_tags {
-                            if tag.len() < 2 {
-                                continue;
-                            }
-                            match tag[0].as_str() {
-                                "d" => actual_d_tag = tag[1].clone(),
-                                "title" => title = tag[1].clone(),
-                                "image" if !tag[1].is_empty() => image = Some(tag[1].clone()),
-                                "summary" if !tag[1].is_empty() => summary = Some(tag[1].clone()),
-                                _ => {}
-                            }
+                    for tag in ev.tags.iter() {
+                        let slice = tag.as_slice();
+                        if slice.len() < 2 {
+                            continue;
                         }
-
-                        article_pubkeys.insert(pubkey_hex.clone());
-                        let key = format!("{}:{}", pubkey_hex, d_tag);
-                        articles_map.insert(
-                            key,
-                            serde_json::json!({
-                                "id": ev.id.to_hex(),
-                                "pubkey": pubkey_hex,
-                                "title": title,
-                                "image": image,
-                                "summary": summary,
-                                "dTag": actual_d_tag,
-                                "created_at": ev.created_at.as_secs(),
-                                "authorName": serde_json::Value::Null,
-                                "authorImage": serde_json::Value::Null,
-                            }),
-                        );
+                        match slice[0].as_str() {
+                            "d" => actual_d_tag = slice[1].clone(),
+                            "title" => title = slice[1].clone(),
+                            "image" if !slice[1].is_empty() => image = Some(slice[1].clone()),
+                            "summary" if !slice[1].is_empty() => summary = Some(slice[1].clone()),
+                            _ => {}
+                        }
                     }
+
+                    if !profiles.contains_key(pubkey_hex) {
+                        missing_article_pubkeys.insert(pubkey_hex.clone());
+                    }
+                    let key = format!("{}:{}", pubkey_hex, d_tag);
+                    articles_map.insert(
+                        key,
+                        serde_json::json!({
+                            "id": ev.id.to_hex(),
+                            "pubkey": pubkey_hex,
+                            "title": title,
+                            "image": image,
+                            "summary": summary,
+                            "dTag": actual_d_tag,
+                            "created_at": ev.created_at.as_secs(),
+                            "authorName": serde_json::Value::Null,
+                            "authorImage": serde_json::Value::Null,
+                        }),
+                    );
                 }
             }
         }
 
-        if !article_pubkeys.is_empty() {
-            let art_authors: Vec<PublicKey> = article_pubkeys
+        if !missing_article_pubkeys.is_empty() {
+            let art_authors: Vec<PublicKey> = missing_article_pubkeys
                 .iter()
                 .filter_map(|h| PublicKey::from_hex(h).ok())
                 .collect();
             let art_profile_filter = Filter::new().authors(art_authors).kind(Kind::Metadata);
             if let Ok(art_profiles) = client.database().query(art_profile_filter).await {
-                let mut profiles: HashMap<String, (String, String)> = HashMap::new();
                 for pe in art_profiles {
                     if let Ok(m) = Metadata::from_json(&pe.content) {
-                        let name = m
-                            .name
-                            .clone()
-                            .or_else(|| m.display_name.clone())
-                            .unwrap_or_default();
-                        let picture = m.picture.clone().unwrap_or_default();
-                        profiles.insert(pe.pubkey.to_hex(), (name, picture));
-                    }
-                }
-                for article in articles_map.values_mut() {
-                    if let Some(pk) = article["pubkey"].as_str() {
-                        if let Some((name, picture)) = profiles.get(pk) {
-                            article["authorName"] = serde_json::json!(name);
-                            article["authorImage"] = serde_json::json!(picture);
-                        }
+                        let name = m.name.or(m.display_name).unwrap_or_default();
+                        let picture = m.picture.unwrap_or_default();
+                        let nip05 = m.nip05.unwrap_or_default();
+                        profiles.insert(pe.pubkey.to_hex(), (name, picture, nip05));
                     }
                 }
             }
         }
 
         if !articles_map.is_empty() {
-            for note in notes.iter_mut() {
-                if let Some(content) = note["content"].as_str().map(|s| s.to_string()) {
-                    let (_, naddr_refs) = extract_content_references(&content);
-                    if !naddr_refs.is_empty() {
-                        let mut embedded = serde_json::Map::new();
-                        for (pk, dt) in &naddr_refs {
-                            let key = format!("{}:{}", pk, dt);
-                            if let Some(article) = articles_map.get(&key) {
-                                embedded.insert(key, article.clone());
-                            }
+            for article in articles_map.values_mut() {
+                if let Some(pk) = article["pubkey"].as_str() {
+                    if let Some((name, picture, _)) = profiles.get(pk) {
+                        article["authorName"] = serde_json::json!(name);
+                        article["authorImage"] = serde_json::json!(picture);
+                    }
+                }
+            }
+
+            for (note, (_, naddr_refs)) in notes.iter_mut().zip(&per_note_refs) {
+                if !naddr_refs.is_empty() {
+                    let mut embedded = serde_json::Map::new();
+                    for (pk, dt) in naddr_refs {
+                        let key = format!("{}:{}", pk, dt);
+                        if let Some(article) = articles_map.get(&key) {
+                            embedded.insert(key, article.clone());
                         }
-                        if !embedded.is_empty() {
-                            note["embeddedArticles"] = serde_json::Value::Object(embedded);
-                        }
+                    }
+                    if !embedded.is_empty() {
+                        note["embeddedArticles"] = serde_json::Value::Object(embedded);
                     }
                 }
             }
         }
     }
 
+    Ok(notes)
+}
+
+async fn hydrate_notes(
+    client: &Client,
+    events: &[Event],
+    filter_replies: bool,
+    current_user_pubkey_hex: Option<String>,
+) -> Result<String> {
+    let notes = hydrate_notes_values(
+        client,
+        events,
+        filter_replies,
+        current_user_pubkey_hex,
+        None,
+    )
+    .await?;
     Ok(serde_json::to_string(&notes)?)
 }
 
@@ -2224,22 +2319,6 @@ fn hydrated_note_timestamp(note: &serde_json::Value) -> i64 {
     note["repostCreatedAt"]
         .as_i64()
         .unwrap_or_else(|| note["created_at"].as_i64().unwrap_or(0))
-}
-
-fn truncate_hydrated_notes(hydrated_json: String, limit: u32, deduplicate: bool) -> Result<String> {
-    let mut notes: Vec<serde_json::Value> = serde_json::from_str(&hydrated_json)?;
-    notes.sort_by_key(|note| std::cmp::Reverse(hydrated_note_timestamp(note)));
-
-    if deduplicate {
-        let mut seen_ids: HashSet<String> = HashSet::new();
-        notes.retain(|note| {
-            let id = note["id"].as_str().unwrap_or("");
-            !id.is_empty() && seen_ids.insert(id.to_string())
-        });
-    }
-
-    notes.truncate(limit as usize);
-    Ok(serde_json::to_string(&notes)?)
 }
 
 pub async fn db_get_hydrated_feed_notes(
@@ -2253,23 +2332,17 @@ pub async fn db_get_hydrated_feed_notes(
 ) -> Result<String> {
     let client = get_client_pub().await?;
 
-    let resolved_authors: Vec<String> = match authors_hex {
-        Some(list) => list,
+    let authors: Vec<PublicKey> = match authors_hex {
+        Some(list) => list
+            .iter()
+            .filter_map(|h| PublicKey::from_hex(h).ok())
+            .collect(),
         None => {
             let pk = PublicKey::from_hex(&user_pubkey_hex)?;
             let contacts = client.database().contacts_public_keys(pk).await?;
-            contacts
-                .into_iter()
-                .chain(std::iter::once(pk))
-                .map(|key| key.to_hex())
-                .collect()
+            contacts.into_iter().chain(std::iter::once(pk)).collect()
         }
     };
-
-    let authors: Vec<PublicKey> = resolved_authors
-        .iter()
-        .filter_map(|h| PublicKey::from_hex(h).ok())
-        .collect();
 
     if authors.is_empty() {
         return Ok("[]".to_string());
@@ -2290,15 +2363,23 @@ pub async fn db_get_hydrated_feed_notes(
         ])
         .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
     let filtered: Vec<Event> = events
         .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated_at(e, now) && !muted.is_muted(e))
         .collect();
 
-    let hydrated =
-        hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
-    truncate_hydrated_notes(hydrated, limit, true)
+    let notes = hydrate_notes_values(
+        &client,
+        &filtered,
+        filter_replies,
+        current_user_pubkey_hex,
+        Some(limit as usize),
+    )
+    .await?;
+    Ok(serde_json::to_string(&notes)?)
 }
 
 pub async fn db_get_hydrated_profile_notes(
@@ -2321,6 +2402,8 @@ pub async fn db_get_hydrated_profile_notes(
         .map(|until| until as u64);
     let mut filtered: Vec<Event> = Vec::new();
     let mut seen: HashSet<EventId> = HashSet::new();
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
     for _ in 0..8 {
         let mut filter = Filter::new()
             .author(pk)
@@ -2344,17 +2427,23 @@ pub async fn db_get_hydrated_profile_notes(
         filtered.extend(batch.into_iter().filter(|e| {
             let hidden_reply = filter_replies
                 && e.kind == Kind::TextNote
-                && extract_note_references(&tags_from_event(e)).is_reply;
-            !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words) && !hidden_reply
+                && extract_note_references_from_event(e).is_reply;
+            !is_future_dated_at(e, now) && !muted.is_muted(e) && !hidden_reply
         }));
         if filtered.len() >= limit as usize || !full {
             break;
         }
     }
 
-    let hydrated =
-        hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
-    truncate_hydrated_notes(hydrated, limit, true)
+    let notes = hydrate_notes_values(
+        &client,
+        &filtered,
+        filter_replies,
+        current_user_pubkey_hex,
+        Some(limit as usize),
+    )
+    .await?;
+    Ok(serde_json::to_string(&notes)?)
 }
 
 pub async fn db_get_hydrated_hashtag_notes(
@@ -2371,14 +2460,23 @@ pub async fn db_get_hydrated_hashtag_notes(
         .hashtag(hashtag)
         .limit(limit.saturating_mul(4) as usize);
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
     let filtered: Vec<Event> = events
         .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated_at(e, now) && !muted.is_muted(e))
         .collect();
 
-    let hydrated = hydrate_notes(&client, &filtered, true, current_user_pubkey_hex).await?;
-    truncate_hydrated_notes(hydrated, limit, true)
+    let notes = hydrate_notes_values(
+        &client,
+        &filtered,
+        true,
+        current_user_pubkey_hex,
+        Some(limit as usize),
+    )
+    .await?;
+    Ok(serde_json::to_string(&notes)?)
 }
 
 pub async fn db_get_hydrated_notes_by_ids(
@@ -2403,23 +2501,19 @@ pub async fn db_get_hydrated_notes_by_ids(
 
     let filter = Filter::new().ids(eids).limit(event_ids.len());
     let events = client.database().query(filter).await?;
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
-    let filtered: Vec<Event> = events
-        .into_iter()
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
-        .collect();
+    let filtered: Vec<Event> = events.into_iter().filter(|e| !muted.is_muted(e)).collect();
 
-    let hydrated_json = hydrate_notes(&client, &filtered, false, current_user_pubkey_hex).await?;
+    let mut ordered =
+        hydrate_notes_values(&client, &filtered, false, current_user_pubkey_hex, None).await?;
 
-    let hydrated: Vec<serde_json::Value> = serde_json::from_str(&hydrated_json)?;
-
-    let id_order: HashMap<String, usize> = event_ids
+    let id_order: HashMap<&str, usize> = event_ids
         .iter()
         .enumerate()
-        .map(|(i, id)| (id.clone(), i))
+        .map(|(i, id)| (id.as_str(), i))
         .collect();
 
-    let mut ordered = hydrated;
     ordered.sort_by_key(|n| {
         let id = n["id"].as_str().unwrap_or("");
         id_order.get(id).copied().unwrap_or(usize::MAX)
@@ -2449,15 +2543,15 @@ pub async fn db_get_hydrated_profile_replies(
         }
     }
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
     let mut reply_events: Vec<Event> = Vec::new();
     for e in events {
-        if is_future_dated(&e) || is_event_muted(&e, &muted_pubkeys, &muted_words) {
+        if is_future_dated_at(&e, now) || muted.is_muted(&e) {
             continue;
         }
-        let tags: Vec<Vec<String>> = e.tags.iter().map(|tag| tag.clone().to_vec()).collect();
-        let refs = extract_note_references(&tags);
-        if refs.is_reply {
+        if extract_note_references_from_event(&e).is_reply {
             reply_events.push(e);
             if reply_events.len() >= limit as usize {
                 break;
@@ -2483,10 +2577,12 @@ pub async fn db_get_hydrated_replies(
         .event(id)
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
     let filtered: Vec<Event> = events
         .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated_at(e, now) && !muted.is_muted(e))
         .collect();
 
     hydrate_notes(&client, &filtered, false, current_user_pubkey_hex).await
@@ -2502,13 +2598,9 @@ pub async fn db_get_hydrated_note(
 
     match event {
         Some(e) => {
-            let result = hydrate_notes(&client, &[e], false, current_user_pubkey_hex).await?;
-            let arr: Vec<serde_json::Value> = serde_json::from_str(&result)?;
-            if arr.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(arr[0].to_string()))
-            }
+            let arr =
+                hydrate_notes_values(&client, &[e], false, current_user_pubkey_hex, None).await?;
+            Ok(arr.into_iter().next().map(|v| v.to_string()))
         }
         None => Ok(None),
     }
@@ -2628,12 +2720,11 @@ async fn hydrate_notification_events(
             }
             9735 => {
                 notification_type = "zap".to_string();
-                let sats = extract_zap_amount_sats(event);
-                if sats > 0 {
-                    zap_amount = Some(sats);
-                }
-                if let Some(sender) = extract_zap_sender(event) {
-                    from_pubkey = sender;
+                if let Some(info) = extract_zap_info(event) {
+                    if info.sats > 0 {
+                        zap_amount = Some(info.sats);
+                    }
+                    from_pubkey = info.sender;
                 }
                 for tag in &tags {
                     if tag.len() >= 2 && tag[0] == "e" {
@@ -2757,11 +2848,11 @@ pub async fn db_get_hydrated_notifications(
         ])
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
     let filtered: Vec<Event> = events
         .into_iter()
-        .filter(|e| e.pubkey.to_hex() != user_pubkey_hex)
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| e.pubkey != pk && !muted.is_muted(e))
         .collect();
 
     hydrate_notification_events(&client, &filtered, &user_pubkey_hex).await
@@ -2788,11 +2879,11 @@ pub async fn db_get_hydrated_notifications_before(
         .until(Timestamp::from(before_timestamp.saturating_sub(1)))
         .limit(limit as usize);
     let events = client.database().query(filter).await?;
+    let muted = MutedFilter::new(&muted_pubkeys, &muted_words);
 
     let filtered: Vec<Event> = events
         .into_iter()
-        .filter(|e| e.pubkey.to_hex() != user_pubkey_hex)
-        .filter(|e| !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| e.pubkey != pk && !muted.is_muted(e))
         .collect();
 
     hydrate_notification_events(&client, &filtered, &user_pubkey_hex).await
@@ -3008,13 +3099,20 @@ pub async fn db_get_hydrated_article_by_naddr(
     }
 }
 
-pub(crate) async fn hydrate_notes_pub(
+pub(crate) async fn hydrate_notes_values_pub(
     client: &Client,
     events: &[Event],
     filter_replies: bool,
     current_user_pubkey_hex: Option<String>,
-) -> Result<String> {
-    hydrate_notes(client, events, filter_replies, current_user_pubkey_hex).await
+) -> Result<Vec<serde_json::Value>> {
+    hydrate_notes_values(
+        client,
+        events,
+        filter_replies,
+        current_user_pubkey_hex,
+        None,
+    )
+    .await
 }
 
 fn content_link_re() -> &'static Regex {
@@ -3026,15 +3124,13 @@ fn normalize_content_url(url: &str) -> &str {
     url.trim_end_matches(['.', ',', ';', ':', '!', '?', ')', ']', '}'])
 }
 
+const MEDIA_EXTENSIONS: [&str; 7] = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".mov"];
+
 fn is_media_url(url: &str) -> bool {
-    let path = url
-        .split(['?', '#'])
-        .next()
-        .unwrap_or(url)
-        .to_ascii_lowercase();
-    ["jpg", "jpeg", "png", "webp", "gif", "mp4", "mov"]
-        .iter()
-        .any(|extension| path.ends_with(&format!(".{extension}")))
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    MEDIA_EXTENSIONS.iter().any(|ext| {
+        path.len() >= ext.len() && path[path.len() - ext.len()..].eq_ignore_ascii_case(ext)
+    })
 }
 
 fn content_quote_re() -> &'static Regex {
@@ -3053,33 +3149,26 @@ fn content_mention_re() -> &'static Regex {
 }
 
 pub fn parse_note_content(content: String) -> String {
-    let link_re = content_link_re();
-    let quote_re = content_quote_re();
-    let article_re = content_article_re();
-    let mention_re = content_mention_re();
+    let has_http = content.contains("://");
+    let mut seen_urls: HashSet<&str> = HashSet::new();
+    let mut url_spans: Vec<(usize, usize)> = Vec::new();
+    let mut media_urls: Vec<String> = Vec::new();
+    let mut link_urls: Vec<String> = Vec::new();
 
-    let mut seen_urls = HashSet::new();
-    let urls: Vec<String> = link_re
-        .find_iter(&content)
-        .map(|m| normalize_content_url(m.as_str()))
-        .filter(|url| !url.is_empty() && seen_urls.insert((*url).to_string()))
-        .map(str::to_string)
-        .collect();
-    let media_urls: Vec<String> = urls
-        .iter()
-        .filter(|url| is_media_url(url))
-        .cloned()
-        .collect();
-    let link_urls: Vec<String> = urls
-        .iter()
-        .filter(|url| !is_media_url(url))
-        .cloned()
-        .collect();
+    if has_http {
+        for m in content_link_re().find_iter(&content) {
+            url_spans.push((m.start(), m.end()));
+            let normalized = normalize_content_url(m.as_str());
+            if !normalized.is_empty() && seen_urls.insert(normalized) {
+                if is_media_url(normalized) {
+                    media_urls.push(normalized.to_string());
+                } else {
+                    link_urls.push(normalized.to_string());
+                }
+            }
+        }
+    }
 
-    let url_spans: Vec<(usize, usize)> = content_link_re()
-        .find_iter(&content)
-        .map(|m| (m.start(), m.end()))
-        .collect();
     let outside_urls = |m: &regex::Match| {
         !url_spans
             .iter()
@@ -3090,61 +3179,78 @@ pub fn parse_note_content(content: String) -> String {
     let mut article_ids: Vec<String> = Vec::new();
     let mut to_remove: Vec<String> = Vec::new();
     to_remove.extend(media_urls.iter().cloned());
-    for c in quote_re.captures_iter(&content) {
-        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else {
-            continue;
-        };
-        if !outside_urls(&full) {
-            continue;
+
+    let has_bech = content.contains('1');
+    if has_bech {
+        for c in content_quote_re().captures_iter(&content) {
+            let (Some(full), Some(id)) = (c.get(0), c.get(1)) else {
+                continue;
+            };
+            if !outside_urls(&full) {
+                continue;
+            }
+            quote_ids.push(id.as_str().to_string());
+            to_remove.push(full.as_str().to_string());
         }
-        quote_ids.push(id.as_str().to_string());
-        to_remove.push(full.as_str().to_string());
-    }
-    for c in article_re.captures_iter(&content) {
-        let (Some(full), Some(id)) = (c.get(0), c.get(1)) else {
-            continue;
-        };
-        if !outside_urls(&full) {
-            continue;
+        for c in content_article_re().captures_iter(&content) {
+            let (Some(full), Some(id)) = (c.get(0), c.get(1)) else {
+                continue;
+            };
+            if !outside_urls(&full) {
+                continue;
+            }
+            article_ids.push(id.as_str().to_string());
+            to_remove.push(full.as_str().to_string());
         }
-        article_ids.push(id.as_str().to_string());
-        to_remove.push(full.as_str().to_string());
     }
 
-    let mut cleaned = content.clone();
-    for s in &to_remove {
-        if let Some(pos) = cleaned.find(s.as_str()) {
-            cleaned.replace_range(pos..pos + s.len(), "");
-        }
-    }
-    let cleaned = cleaned.trim();
+    let cleaned_owned;
+    let cleaned: &str = if to_remove.is_empty() {
+        content.trim()
+    } else {
+        cleaned_owned = {
+            let mut c = content;
+            for s in &to_remove {
+                if let Some(pos) = c.find(s.as_str()) {
+                    c.replace_range(pos..pos + s.len(), "");
+                }
+            }
+            c
+        };
+        cleaned_owned.trim()
+    };
 
     let mut text_parts: Vec<serde_json::Value> = Vec::new();
-    let mut last_end = 0;
+    if cleaned.contains("nostr:") || cleaned.contains("NOSTR:") || cleaned.contains("Nostr:") {
+        let mut last_end = 0;
+        for caps in content_mention_re().captures_iter(cleaned) {
+            let full_match = caps.get(0).unwrap();
+            let id = caps.get(1).unwrap().as_str();
 
-    for caps in mention_re.captures_iter(cleaned) {
-        let full_match = caps.get(0).unwrap();
-        let id = caps.get(1).unwrap().as_str();
+            if full_match.start() > last_end {
+                text_parts.push(serde_json::json!({
+                    "type": "text",
+                    "text": &cleaned[last_end..full_match.start()],
+                }));
+            }
 
-        if full_match.start() > last_end {
+            text_parts.push(serde_json::json!({
+                "type": "mention",
+                "id": id,
+            }));
+
+            last_end = full_match.end();
+        }
+        if last_end < cleaned.len() {
             text_parts.push(serde_json::json!({
                 "type": "text",
-                "text": &cleaned[last_end..full_match.start()],
+                "text": &cleaned[last_end..],
             }));
         }
-
-        text_parts.push(serde_json::json!({
-            "type": "mention",
-            "id": id,
-        }));
-
-        last_end = full_match.end();
-    }
-
-    if last_end < cleaned.len() {
+    } else if !cleaned.is_empty() {
         text_parts.push(serde_json::json!({
             "type": "text",
-            "text": &cleaned[last_end..],
+            "text": cleaned,
         }));
     }
 
@@ -3300,15 +3406,24 @@ pub async fn db_calculate_follow_score(
         return Ok(serde_json::json!({"count": 0, "avatarUrls": []}).to_string());
     }
 
+    // Batch fetch all contact lists of followed accounts in ONE LMDB query instead of N queries.
+    let contact_events = client
+        .database()
+        .query(Filter::new().authors(my_follows).kind(Kind::ContactList))
+        .await?;
+
+    let mut seen_authors: HashSet<PublicKey> = HashSet::new();
     let mut matching_pubkeys: Vec<PublicKey> = Vec::new();
-    for follow_pk in &my_follows {
-        let their_follows = client
-            .database()
-            .contacts_public_keys(*follow_pk)
-            .await
-            .unwrap_or_default();
-        if their_follows.iter().any(|pk| pk.to_hex() == target_hex_str) {
-            matching_pubkeys.push(*follow_pk);
+    for event in contact_events {
+        if !seen_authors.insert(event.pubkey) {
+            continue;
+        }
+        let follows_target = event.tags.iter().any(|tag| {
+            let slice = tag.as_slice();
+            slice.len() >= 2 && slice[0] == "p" && slice[1] == target_hex_str
+        });
+        if follows_target {
+            matching_pubkeys.push(event.pubkey);
         }
     }
 
@@ -3324,9 +3439,9 @@ pub async fn db_calculate_follow_score(
     let mut avatar_urls: Vec<String> = Vec::new();
     for pe in profile_events {
         if let Ok(m) = Metadata::from_json(&pe.content) {
-            if let Some(ref picture) = m.picture {
+            if let Some(picture) = m.picture {
                 if !picture.is_empty() {
-                    avatar_urls.push(picture.clone());
+                    avatar_urls.push(picture);
                 }
             }
         }
@@ -3421,28 +3536,20 @@ pub async fn db_get_hydrated_feed_notes_sorted(
     current_user_pubkey_hex: Option<String>,
     sort_mode: String,
 ) -> Result<String> {
-    let muted_pubkeys = active_muted_pubkeys();
-    let muted_words = active_muted_words();
-
+    let muted = active_muted_filter();
     let client = get_client_pub().await?;
 
-    let resolved_authors: Vec<String> = match authors_hex {
-        Some(list) => list,
+    let authors: Vec<PublicKey> = match authors_hex {
+        Some(list) => list
+            .iter()
+            .filter_map(|h| PublicKey::from_hex(h).ok())
+            .collect(),
         None => {
             let pk = PublicKey::from_hex(&user_pubkey_hex)?;
             let contacts = client.database().contacts_public_keys(pk).await?;
-            contacts
-                .into_iter()
-                .chain(std::iter::once(pk))
-                .map(|key| key.to_hex())
-                .collect()
+            contacts.into_iter().chain(std::iter::once(pk)).collect()
         }
     };
-
-    let authors: Vec<PublicKey> = resolved_authors
-        .iter()
-        .filter_map(|h| PublicKey::from_hex(h).ok())
-        .collect();
 
     if authors.is_empty() {
         return Ok("[]".to_string());
@@ -3463,24 +3570,34 @@ pub async fn db_get_hydrated_feed_notes_sorted(
         ])
         .limit(query_limit as usize);
     let events = client.database().query(filter).await?;
+    let now = now_unix_secs();
 
     let filtered: Vec<Event> = events
         .into_iter()
-        .filter(|e| !is_future_dated(e) && !is_event_muted(e, &muted_pubkeys, &muted_words))
+        .filter(|e| !is_future_dated_at(e, now) && !muted.is_muted(e))
         .collect();
 
-    let json_str =
-        hydrate_notes(&client, &filtered, filter_replies, current_user_pubkey_hex).await?;
+    let by_interacted = sort_mode == "most_interacted";
+    let mut notes = hydrate_notes_values(
+        &client,
+        &filtered,
+        filter_replies,
+        current_user_pubkey_hex,
+        if by_interacted {
+            None
+        } else {
+            Some(limit as usize)
+        },
+    )
+    .await?;
 
-    let mut notes: Vec<serde_json::Value> = serde_json::from_str(&json_str)?;
-    notes.sort_by_key(|note| std::cmp::Reverse(hydrated_note_timestamp(note)));
-    let mut seen_ids: HashSet<String> = HashSet::new();
-    notes.retain(|note| {
-        let id = note["id"].as_str().unwrap_or("");
-        !id.is_empty() && seen_ids.insert(id.to_string())
-    });
-
-    if sort_mode == "most_interacted" {
+    if by_interacted {
+        notes.sort_by_key(|note| std::cmp::Reverse(hydrated_note_timestamp(note)));
+        let mut seen_ids: HashSet<String> = HashSet::with_capacity(notes.len());
+        notes.retain(|note| {
+            let id = note["id"].as_str().unwrap_or("");
+            !id.is_empty() && seen_ids.insert(id.to_string())
+        });
         notes.sort_by(|a, b| {
             let score_a = a["reactionCount"].as_i64().unwrap_or(0)
                 + a["repostCount"].as_i64().unwrap_or(0)
@@ -3494,8 +3611,9 @@ pub async fn db_get_hydrated_feed_notes_sorted(
             let time_b = hydrated_note_timestamp(b);
             score_b.cmp(&score_a).then_with(|| time_b.cmp(&time_a))
         });
+        notes.truncate(limit as usize);
     }
-    notes.truncate(limit as usize);
+
     Ok(serde_json::to_string(&notes)?)
 }
 
@@ -3508,8 +3626,7 @@ pub async fn db_get_hydrated_thread_structure(
     current_user_pubkey_hex: Option<String>,
     limit: u32,
 ) -> Result<String> {
-    let muted_pubkeys = active_muted_pubkeys();
-    let muted_words = active_muted_words();
+    let muted = active_muted_filter();
 
     let client = get_client_pub().await?;
     let root_id = EventId::from_hex(&root_note_id)?;
@@ -3545,7 +3662,7 @@ pub async fn db_get_hydrated_thread_structure(
             if collected.contains_key(&id_hex) {
                 continue;
             }
-            if is_event_muted(&ev, &muted_pubkeys, &muted_words) {
+            if muted.is_muted(&ev) {
                 continue;
             }
             collected.insert(id_hex.clone(), ev.clone());
@@ -3574,7 +3691,7 @@ pub async fn db_get_hydrated_thread_structure(
     let mut quote_event_ids: HashSet<String> = HashSet::new();
     for ev in quote_events.into_iter() {
         let id_hex = ev.id.to_hex();
-        if is_event_muted(&ev, &muted_pubkeys, &muted_words) {
+        if muted.is_muted(&ev) {
             continue;
         }
         quote_event_ids.insert(id_hex.clone());
@@ -3583,8 +3700,8 @@ pub async fn db_get_hydrated_thread_structure(
 
     let all_events: Vec<Event> = collected.into_values().collect();
 
-    let hydrated_str = hydrate_notes(&client, &all_events, false, current_user_pubkey_hex).await?;
-    let hydrated: Vec<serde_json::Value> = serde_json::from_str(&hydrated_str)?;
+    let hydrated =
+        hydrate_notes_values(&client, &all_events, false, current_user_pubkey_hex, None).await?;
 
     if hydrated.is_empty() {
         return Ok(serde_json::json!({"error": "empty"}).to_string());

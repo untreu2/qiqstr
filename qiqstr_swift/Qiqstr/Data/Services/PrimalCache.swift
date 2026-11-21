@@ -1,31 +1,154 @@
 import Foundation
 
+private actor PrimalCacheClient {
+    static let shared = PrimalCacheClient()
+
+    private struct Pending {
+        var events: [JSONObject] = []
+        var continuation: CheckedContinuation<[JSONObject], Never>
+        var watchdog: Task<Void, Never>?
+    }
+
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.waitsForConnectivity = false
+        config.httpMaximumConnectionsPerHost = 6
+        config.timeoutIntervalForRequest = 15
+        return URLSession(configuration: config)
+    }()
+
+    private var socket: URLSessionWebSocketTask?
+    private var readerTask: Task<Void, Never>?
+    private var idleTask: Task<Void, Never>?
+    private var pending: [String: Pending] = [:]
+    private var nextId: UInt64 = 0
+
+    func request(_ name: String, args: JSONObject, timeout: Int) async -> [JSONObject] {
+        guard let url = URL(string: RelayConfig.primalCacheUrl) else { return [] }
+        idleTask?.cancel()
+        idleTask = nil
+
+        nextId &+= 1
+        let subId = "qx_\(nextId)"
+        let payload = JSON.string(["REQ", subId, ["cache": [name, args]]] as [Any])
+
+        return await withCheckedContinuation { continuation in
+            let watchdog = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(timeout))
+                await self?.timeoutSubscription(subId)
+            }
+            pending[subId] = Pending(continuation: continuation, watchdog: watchdog)
+            Task { [weak self] in
+                await self?.sendRequest(url: url, subId: subId, payload: payload)
+            }
+        }
+    }
+
+    private func sendRequest(url: URL, subId: String, payload: String) async {
+        guard pending[subId] != nil else { return }
+        let ws = ensureSocket(url: url)
+        do {
+            try await ws.send(.string(payload))
+        } catch {
+            resetSocket()
+            guard pending[subId] != nil else { return }
+            let retryWs = ensureSocket(url: url)
+            do {
+                try await retryWs.send(.string(payload))
+            } catch {
+                finishSubscription(subId)
+            }
+        }
+    }
+
+    private func ensureSocket(url: URL) -> URLSessionWebSocketTask {
+        if let existing = socket, existing.state == .running {
+            return existing
+        }
+        resetSocket()
+        let ws = session.webSocketTask(with: url)
+        ws.maximumMessageSize = 8 * 1024 * 1024
+        ws.resume()
+        socket = ws
+        readerTask = Task { [weak self] in
+            await self?.readLoop(ws)
+        }
+        return ws
+    }
+
+    private func readLoop(_ ws: URLSessionWebSocketTask) async {
+        while !Task.isCancelled {
+            guard let message = try? await ws.receive() else {
+                handleDisconnect(ws)
+                return
+            }
+            guard case .string(let raw) = message,
+                  let frame = JSON.any(raw) as? [Any],
+                  let type = frame.first as? String,
+                  frame.count >= 2,
+                  let subId = frame[1] as? String else { continue }
+            if type == "EVENT", frame.count >= 3, let event = frame[2] as? JSONObject {
+                pending[subId]?.events.append(event)
+            } else if type == "EOSE" || type == "CLOSED" || type == "NOTICE" {
+                let closeFrame = JSON.string(["CLOSE", subId])
+                Task { try? await ws.send(.string(closeFrame)) }
+                finishSubscription(subId)
+            }
+        }
+    }
+
+    private func handleDisconnect(_ ws: URLSessionWebSocketTask) {
+        guard socket === ws else { return }
+        socket = nil
+        readerTask?.cancel()
+        readerTask = nil
+        let ids = Array(pending.keys)
+        for id in ids {
+            finishSubscription(id)
+        }
+    }
+
+    private func resetSocket() {
+        readerTask?.cancel()
+        readerTask = nil
+        socket?.cancel(with: .normalClosure, reason: nil)
+        socket = nil
+    }
+
+    private func timeoutSubscription(_ subId: String) {
+        if let ws = socket {
+            let closeFrame = JSON.string(["CLOSE", subId])
+            Task { try? await ws.send(.string(closeFrame)) }
+        }
+        finishSubscription(subId)
+    }
+
+    private func finishSubscription(_ subId: String) {
+        guard let item = pending.removeValue(forKey: subId) else { return }
+        item.watchdog?.cancel()
+        item.continuation.resume(returning: item.events)
+        scheduleIdleDisconnectIfNeeded()
+    }
+
+    private func scheduleIdleDisconnectIfNeeded() {
+        guard pending.isEmpty else { return }
+        idleTask?.cancel()
+        idleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(60))
+            guard !Task.isCancelled else { return }
+            await self?.closeIfIdle()
+        }
+    }
+
+    private func closeIfIdle() {
+        guard pending.isEmpty else { return }
+        resetSocket()
+    }
+}
+
 nonisolated enum PrimalCache {
     static func request(_ name: String, args: JSONObject, timeout: Int) async -> [JSONObject] {
-        guard let url = URL(string: RelayConfig.primalCacheUrl) else { return [] }
-        let socket = URLSession.shared.webSocketTask(with: url)
-        socket.maximumMessageSize = 8 * 1024 * 1024
-        socket.resume()
-        let watchdog = Task {
-            try? await Task.sleep(for: .seconds(timeout))
-            socket.cancel(with: .goingAway, reason: nil)
-        }
-        defer {
-            watchdog.cancel()
-            socket.cancel(with: .normalClosure, reason: nil)
-        }
-        let subscription = "qx_\(UUID().uuidString.prefix(8))"
-        let request: [Any] = ["REQ", subscription, ["cache": [name, args]]]
-        do { try await socket.send(.string(JSON.string(request))) } catch { return [] }
-        var events: [JSONObject] = []
-        while !Task.isCancelled {
-            guard let message = try? await socket.receive() else { break }
-            guard case .string(let raw) = message, let frame = JSON.any(raw) as? [Any], let type = frame.first as? String else { continue }
-            if type == "EOSE" || type == "CLOSED" || type == "NOTICE" { break }
-            if type == "EVENT", frame.count >= 3, let event = frame[2] as? JSONObject { events.append(event) }
-        }
-        try? await socket.send(.string(JSON.string(["CLOSE", subscription])))
-        return events
+        await PrimalCacheClient.shared.request(name, args: args, timeout: timeout)
     }
 
     static func order(_ events: [JSONObject]) -> [String] {

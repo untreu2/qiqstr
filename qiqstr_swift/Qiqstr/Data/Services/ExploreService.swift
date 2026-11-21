@@ -312,12 +312,17 @@ final class ExploreService {
         !WebOfTrustService.showsSensitiveContent && adultTags.contains(tag.lowercased())
     }
 
+    nonisolated private static let sensitiveRegex = try? NSRegularExpression(pattern: #"#(nsfw|nude|nudes|porn|xxx|lewd|onlyfans)(?![\p{L}\p{N}_])"#, options: [.caseInsensitive])
+
     static func isSensitive(_ note: Note) -> Bool {
         if note.contentWarning != nil { return true }
         if note.hashtags.contains(where: { adultTags.contains($0.lowercased()) }) { return true }
-        let text = note.content.lowercased()
-        if text.contains("🔞") { return true }
-        return text.range(of: #"#(nsfw|nude|nudes|porn|xxx|lewd|onlyfans)(?![\p{L}\p{N}_])"#, options: .regularExpression) != nil
+        if note.content.contains("🔞") { return true }
+        if note.content.contains("#"), let sensitiveRegex {
+            let ns = note.content as NSString
+            return sensitiveRegex.firstMatch(in: note.content, range: NSRange(location: 0, length: ns.length)) != nil
+        }
+        return false
     }
 
     private var pinnedStorageKey: String { "\(Self.pinnedKey)_\(Session.shared.pubkey ?? "anon")" }

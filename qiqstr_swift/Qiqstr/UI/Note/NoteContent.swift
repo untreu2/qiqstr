@@ -1,7 +1,8 @@
 import Foundation
+import os
 import SwiftUI
 
-enum NoteContentSegment: Hashable, Sendable {
+nonisolated enum NoteContentSegment: Hashable, Sendable {
     case text(String)
     case link(String)
     case hashtag(String)
@@ -9,7 +10,7 @@ enum NoteContentSegment: Hashable, Sendable {
     case emoji(String, String)
 }
 
-struct NoteMediaItem: Hashable, Sendable, Identifiable {
+nonisolated struct NoteMediaItem: Hashable, Sendable, Identifiable {
     var id: String { url }
     var url: String
     var isVideo: Bool
@@ -19,7 +20,7 @@ struct NoteMediaItem: Hashable, Sendable, Identifiable {
     var poster: String?
 }
 
-struct NoteImeta: Hashable, Sendable {
+nonisolated struct NoteImeta: Hashable, Sendable {
     var url: String
     var mimeType: String?
     var size: CGSize?
@@ -62,7 +63,7 @@ struct NoteImeta: Hashable, Sendable {
     }
 }
 
-final class NoteContent {
+nonisolated final class NoteContent: @unchecked Sendable {
     static let truncationLimit = 280
 
     let segments: [NoteContentSegment]
@@ -75,6 +76,11 @@ final class NoteContent {
     let mentionPubkeys: [String]
     let isEmptyText: Bool
     let contentWarning: String?
+    let hasCustomEmoji: Bool
+
+    private let mentionHexMap: [String: String]
+    private let mentionFallbackMap: [String: String]
+    private let attributedCache = OSAllocatedUnfairLock(initialState: [String: AttributedString]())
 
     init(content: String, tags: [[String]]) {
         let parsed = NoteRepository.parse(content)
@@ -82,13 +88,20 @@ final class NoteContent {
         contentWarning = Note.contentWarning(content: content, tags: tags)
         var segments: [NoteContentSegment] = []
         var mentions: [String] = []
+        var mentionSet: Set<String> = []
+        var hexMap: [String: String] = [:]
+        var fallbackMap: [String: String] = [:]
         let emojis = CustomEmoji.map(tags)
         for part in parsed.parts {
             switch part {
             case .text(let text): segments.append(contentsOf: Self.split(text, emojis: emojis))
             case .mention(let bech):
                 segments.append(.mention(bech))
-                if let hex = Nip19.pubkeyHex(from: bech), !mentions.contains(hex) { mentions.append(hex) }
+                if let hex = hexMap[bech] ?? Nip19.pubkeyHex(from: bech) {
+                    hexMap[bech] = hex
+                    if fallbackMap[hex] == nil { fallbackMap[hex] = Profile.shortNpub(hex) }
+                    if mentionSet.insert(hex).inserted { mentions.append(hex) }
+                }
             }
         }
         var audioItems: [NoteAudioItem] = []
@@ -122,6 +135,9 @@ final class NoteContent {
         for naddr in parsed.articleIds where !articles.contains(naddr) { articles.append(naddr) }
         articleIds = articles
         mentionPubkeys = mentions
+        mentionHexMap = hexMap
+        mentionFallbackMap = fallbackMap
+        hasCustomEmoji = segments.contains { if case .emoji = $0 { return true } else { return false } }
         isEmptyText = segments.allSatisfy { segment in
             if case .text(let t) = segment { return t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             return false
@@ -146,32 +162,38 @@ final class NoteContent {
 
     private static let linkRegex = try? NSRegularExpression(pattern: "https?://[^\\s<>\"']+", options: [.caseInsensitive])
     private static let hashtagRegex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_/#&])#[\\p{L}\\p{N}_]+")
-
     private static let emojiRegex = try? NSRegularExpression(pattern: ":([A-Za-z0-9_-]{1,64}):")
 
-    var hasCustomEmoji: Bool {
-        segments.contains { if case .emoji = $0 { return true } else { return false } }
-    }
-
     private static func split(_ text: String, emojis: [String: String] = [:]) -> [NoteContentSegment] {
+        let hasLink = text.contains("://")
+        let hasHash = text.contains("#")
+        let hasEmoji = !emojis.isEmpty && text.contains(":")
+        if !hasLink && !hasHash && !hasEmoji {
+            return text.isEmpty ? [] : [.text(text)]
+        }
         guard let linkRegex, let hashtagRegex else { return [.text(text)] }
         let ns = text as NSString
         let full = NSRange(location: 0, length: ns.length)
         var tokens: [(NSRange, NoteContentSegment)] = []
-        for match in linkRegex.matches(in: text, range: full) {
-            var url = ns.substring(with: match.range)
-            while let last = url.last, ".,;:!?)]}".contains(last) { url.removeLast() }
-            tokens.append((NSRange(location: match.range.location, length: (url as NSString).length), .link(url)))
+        if hasLink {
+            for match in linkRegex.matches(in: text, range: full) {
+                var url = ns.substring(with: match.range)
+                while let last = url.last, ".,;:!?)]}".contains(last) { url.removeLast() }
+                tokens.append((NSRange(location: match.range.location, length: (url as NSString).length), .link(url)))
+            }
         }
-        for match in hashtagRegex.matches(in: text, range: full) where !tokens.contains(where: { NSIntersectionRange($0.0, match.range).length > 0 }) {
-            tokens.append((match.range, .hashtag(String(ns.substring(with: match.range).dropFirst()))))
+        if hasHash {
+            for match in hashtagRegex.matches(in: text, range: full) where !tokens.contains(where: { NSIntersectionRange($0.0, match.range).length > 0 }) {
+                tokens.append((match.range, .hashtag(String(ns.substring(with: match.range).dropFirst()))))
+            }
         }
-        if !emojis.isEmpty, let emojiRegex {
+        if hasEmoji, let emojiRegex {
             for match in emojiRegex.matches(in: text, range: full) where !tokens.contains(where: { NSIntersectionRange($0.0, match.range).length > 0 }) {
                 let code = ns.substring(with: match.range(at: 1))
                 if let url = emojis[code] { tokens.append((match.range, .emoji(code, url))) }
             }
         }
+        if tokens.isEmpty { return [.text(text)] }
         tokens.sort { $0.0.location < $1.0.location }
         var result: [NoteContentSegment] = []
         var cursor = 0
@@ -242,12 +264,43 @@ final class NoteContent {
     }
 
     static func displayURL(_ url: String) -> String {
-        var s = url.replacingOccurrences(of: "^https?://(www\\.)?", with: "", options: .regularExpression)
-        if s.hasSuffix("/") { s.removeLast() }
-        return s.count > 36 ? "\(s.prefix(34))…" : s
+        var slice: Substring = url[...]
+        if slice.hasPrefix("https://") {
+            slice = slice.dropFirst(8)
+        } else if slice.hasPrefix("http://") {
+            slice = slice.dropFirst(7)
+        } else if slice.lowercased().hasPrefix("https://") {
+            slice = slice.dropFirst(8)
+        } else if slice.lowercased().hasPrefix("http://") {
+            slice = slice.dropFirst(7)
+        }
+        if slice.hasPrefix("www.") || slice.lowercased().hasPrefix("www.") {
+            slice = slice.dropFirst(4)
+        }
+        if slice.last == "/" { slice = slice.dropLast() }
+        return slice.count > 36 ? "\(slice.prefix(34))…" : String(slice)
     }
 
+    @MainActor
     func attributed(_ segments: [NoteContentSegment], font: Font = .body, cache: ProfileCache) -> AttributedString {
+        let isFull = segments.count == self.segments.count && segments == self.segments
+        let isTrunc = !isFull && truncatedSegments.map { $0 == segments } == true
+        let cacheKey: String?
+        if isFull || isTrunc {
+            var key = isTrunc ? "T|" : "F|"
+            key += "\(font)|"
+            for pk in mentionPubkeys {
+                key += cache.profile(pk)?.bestName ?? ""
+                key += "\u{1F}"
+            }
+            if let hit = attributedCache.withLock({ $0[key] }) {
+                return hit
+            }
+            cacheKey = key
+        } else {
+            cacheKey = nil
+        }
+
         var result = AttributedString()
         for segment in segments {
             switch segment {
@@ -264,8 +317,8 @@ final class NoteContent {
                 part.foregroundColor = AppColors.link
                 result += part
             case .mention(let bech):
-                let hex = Nip19.pubkeyHex(from: bech)
-                let name = hex.flatMap { cache.profile($0)?.bestName } ?? hex.map(Profile.shortNpub) ?? bech
+                let hex = mentionHexMap[bech]
+                let name = hex.flatMap { cache.profile($0)?.bestName ?? mentionFallbackMap[$0] } ?? bech
                 var part = AttributedString("@\(name)")
                 part.link = hex.map(NoteLink.profile)
                 part.foregroundColor = AppColors.link
@@ -275,9 +328,16 @@ final class NoteContent {
                 result += AttributedString(":\(code):")
             }
         }
+        if let cacheKey {
+            attributedCache.withLock { map in
+                if map.count >= 8 { map.removeAll(keepingCapacity: true) }
+                map[cacheKey] = result
+            }
+        }
         return result
     }
 
+    @MainActor
     func text(_ segments: [NoteContentSegment], font: Font = .body, cache: ProfileCache, emojis: InlineEmojiStore) -> Text {
         guard hasCustomEmoji else { return Text(attributed(segments, font: font, cache: cache)) }
         var result = Text(verbatim: "")
@@ -298,7 +358,7 @@ final class NoteContent {
     }
 }
 
-enum NoteLink {
+nonisolated enum NoteLink {
     static let scheme = "qiqstr-note"
     static func profile(_ pubkey: String) -> URL { URL(string: "\(scheme)://profile/\(pubkey)")! }
     static func hashtag(_ tag: String) -> URL {
@@ -349,11 +409,13 @@ enum NoteContentCache {
     static func cached(_ id: String) -> NoteContent? { store[id] }
 
     static func warm(_ notes: [Note]) async {
-        var built = 0
-        for note in notes where store[note.id] == nil {
-            insert(NoteContent(content: note.content, tags: note.tags), for: note.id)
-            built += 1
-            if built % 12 == 0 { await Task.yield() }
+        let pending = notes.filter { store[$0.id] == nil }
+        guard !pending.isEmpty else { return }
+        let built: [(String, NoteContent)] = await Task.detached(priority: .utility) {
+            pending.map { ($0.id, NoteContent(content: $0.content, tags: $0.tags)) }
+        }.value
+        for (id, content) in built where store[id] == nil {
+            insert(content, for: id)
         }
     }
 

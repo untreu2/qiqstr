@@ -28,7 +28,7 @@ struct NoteContentView: View {
                     }
                 }
             }
-            if let poll = NotePoll(id: note.id, tags: note.tags) {
+            if note.kind == Int(NotePoll.kind), let poll = NotePoll(id: note.id, tags: note.tags) {
                 NotePollView(poll: poll, author: note.pubkey)
             }
             if let goal = ZapGoal(note: note) {

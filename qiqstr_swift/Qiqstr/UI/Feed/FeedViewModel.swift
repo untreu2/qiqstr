@@ -262,7 +262,9 @@ final class FeedViewModel {
 
     func reload() async {
         let generation = self.generation
-        try? await Task.sleep(for: .milliseconds(120))
+        if hasLoaded {
+            try? await Task.sleep(for: .milliseconds(120))
+        }
         guard !Task.isCancelled, generation == self.generation else { return }
         let result = await Perf.measure("Feed query") { await query(limit: limit) }
         guard generation == self.generation else { return }
@@ -316,9 +318,11 @@ final class FeedViewModel {
         NoteRepository.prefetchEmbedded(fresh)
         var pubkeys = Set(fresh.map(\.pubkey))
         for note in fresh { if let r = note.repostedBy { pubkeys.insert(r) } }
+        let avatars = fresh.prefix(12).compactMap { $0.authorImage?.nilIfEmpty }
         Task {
             await NoteContentCache.warm(fresh)
             await ProfileCache.shared.load(Array(pubkeys).filter { ProfileCache.shared.profile($0) == nil })
+            if !avatars.isEmpty { await ImagePipeline.shared.prefetch(urls: avatars, maxPixel: 132) }
         }
     }
 
@@ -381,7 +385,7 @@ final class FeedViewModel {
 
     func loadMoreIfNeeded(_ note: Note) {
         ExploreSeenStore.shared.mark(note.id)
-        guard canLoadMore, !isLoadingMore, let index = notes.firstIndex(where: { $0.listId == note.listId }), index >= notes.count - 6 else { return }
+        guard canLoadMore, !isLoadingMore, notes.suffix(6).contains(where: { $0.listId == note.listId }) else { return }
         Task { await loadMore() }
     }
 

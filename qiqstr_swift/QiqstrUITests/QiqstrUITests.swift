@@ -179,6 +179,63 @@ final class QiqstrUITests: XCTestCase {
         }
     }
 
+    func testStartupAndFeedBenchmark() {
+        var homeTimes: [Double] = []
+        var feedTimes: [Double] = []
+        var scrollTimes: [Double] = []
+        let key = Self.randomKeyHex()
+
+        for run in 0..<3 {
+            let app = XCUIApplication()
+            app.launchArguments += [
+                "-QIQ_LOGIN", key,
+                "-AppleLanguages", "(en)",
+                "-AppleLocale", "en_US",
+                "-theme_preference", "system"
+            ]
+            let t0 = ContinuousClock.now
+            app.launch()
+            XCTAssertTrue(app.buttons["Home"].waitForExistence(timeout: 30))
+            let homeDur = t0.duration(to: .now)
+            let homeMs = Double(homeDur.components.seconds) * 1000.0 + Double(homeDur.components.attoseconds) / 1e15
+            homeTimes.append(homeMs)
+
+            let notNow = app.buttons["Not now"]
+            if notNow.waitForExistence(timeout: 1) { notNow.tap() }
+
+            let firstRow = app.descendants(matching: .any)["note-row"].firstMatch
+            if firstRow.waitForExistence(timeout: 25) {
+                let feedDur = t0.duration(to: .now)
+                let feedMs = Double(feedDur.components.seconds) * 1000.0 + Double(feedDur.components.attoseconds) / 1e15
+                feedTimes.append(feedMs)
+
+                if run == 2 {
+                    let s0 = ContinuousClock.now
+                    for _ in 0..<5 {
+                        app.swipeUp(velocity: .fast)
+                    }
+                    let sDur = s0.duration(to: .now)
+                    scrollTimes.append(Double(sDur.components.seconds) * 1000.0 + Double(sDur.components.attoseconds) / 1e15)
+                }
+            }
+            app.terminate()
+        }
+
+        let sortedHome = homeTimes.sorted()
+        let sortedFeed = feedTimes.sorted()
+        let result: [String: Any] = [
+            "ui_launch_to_home_median_ms": sortedHome.isEmpty ? -1 : sortedHome[sortedHome.count / 2],
+            "ui_launch_to_home_runs_ms": homeTimes,
+            "ui_launch_to_first_note_median_ms": sortedFeed.isEmpty ? -1 : sortedFeed[sortedFeed.count / 2],
+            "ui_launch_to_first_note_runs_ms": feedTimes,
+            "ui_feed_5_fast_swipes_ms": scrollTimes.first ?? -1,
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: result),
+           let str = String(data: data, encoding: .utf8) {
+            print("UI_BENCH_JSON:\(str)")
+        }
+    }
+
     private func dismissNotificationPrompt(_ app: XCUIApplication) {
         let notNow = app.buttons["Not now"]
         if notNow.waitForExistence(timeout: 8) { notNow.tap() }

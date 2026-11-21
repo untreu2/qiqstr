@@ -43,16 +43,7 @@ final class SyncService {
     }
 
     private func fetchAndStore(_ filter: JSONObject) async -> [JSONObject] {
-        let now = TimeFormat.now
-        let sinceSecs = (filter["since"] as? Int) ?? (now - 86400 * 2)
-        if now - sinceSecs <= 86400 {
-            var syncFilter = filter
-            syncFilter.removeValue(forKey: "limit")
-            if let result = JSON.object(try? await syncEvents(filterJson: JSON.string(syncFilter))), result.int("received") > 0 {
-                return []
-            }
-        }
-        return await fetchEvents(filter)
+        await fetchEvents(filter)
     }
 
     func followingList(_ pubkey: String) async -> [String] {
@@ -320,7 +311,6 @@ final class SyncService {
         if success.isEmpty {
             throw CoreError(L("publishNoRelayAccepted"))
         }
-        _ = try? await dbSaveEvents(eventsJson: "[\(eventJson)]")
         bus.feedChanged(ids: [event.str("id") ?? ""])
         bus.interactionsChanged()
         return event
@@ -356,7 +346,6 @@ final class SyncService {
                     if created > (feedLastEventTs ?? 0) { feedLastEventTs = created }
                     let id = event.str("id") ?? ""
                     if !id.isEmpty, !isEventNewAndTrack(eventId: id) { continue }
-                    _ = try? await dbSaveEvents(eventsJson: "[\(raw)]")
                     if event.int("kind") == 5 { _ = try? await dbProcessDeletionEvents() }
                     bus.feedChanged(ids: [id])
                     backgroundFollowUps([event])
@@ -379,7 +368,6 @@ final class SyncService {
                     attempts = 0
                     let created = event.int("created_at")
                     if created > (notificationLastEventTs ?? 0) { notificationLastEventTs = created }
-                    _ = try? await dbSaveEvents(eventsJson: "[\(raw)]")
                     if let from = event.str("pubkey"), from != me, LocalNotificationService.shared.shouldBadge(event, me: me) {
                         NotificationBadge.shared.markUnread(from: ProfileCache.shared.profile(from)?.bestName)
                     }

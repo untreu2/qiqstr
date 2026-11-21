@@ -1,11 +1,11 @@
 import Foundation
 
-enum ContentPart: Hashable, Sendable {
+nonisolated enum ContentPart: Hashable, Sendable {
     case text(String)
     case mention(String)
 }
 
-struct ParsedContent: Hashable, Sendable {
+nonisolated struct ParsedContent: Hashable, Sendable {
     var parts: [ContentPart]
     var mediaUrls: [String]
     var linkUrls: [String]

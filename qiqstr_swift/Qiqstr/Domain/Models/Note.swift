@@ -73,6 +73,8 @@ nonisolated struct Note: Identifiable, Hashable, Sendable {
 
     var contentWarning: String? { Note.contentWarning(content: content, tags: tags) }
 
+    private static let nsfwRegex = try? NSRegularExpression(pattern: "(^|\\s)#nsfw(?![\\p{L}\\p{N}_])", options: [.caseInsensitive])
+
     static func contentWarning(content: String, tags: [[String]]) -> String? {
         for tag in tags where tag.first == "content-warning" {
             return tag.count > 1 ? tag[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
@@ -85,7 +87,11 @@ nonisolated struct Note: Identifiable, Hashable, Sendable {
         }
         if namespaced { return "" }
         let tagged = tags.contains { $0.count > 1 && $0[0] == "t" && $0[1].lowercased() == "nsfw" }
-        if tagged || content.range(of: "(^|\\s)#nsfw(?![\\p{L}\\p{N}_])", options: [.regularExpression, .caseInsensitive]) != nil { return "NSFW" }
+        if tagged { return "NSFW" }
+        if content.contains("#"), let nsfwRegex {
+            let ns = content as NSString
+            if nsfwRegex.firstMatch(in: content, range: NSRange(location: 0, length: ns.length)) != nil { return "NSFW" }
+        }
         return nil
     }
 }

@@ -192,7 +192,7 @@ enum NoteRepository {
         }
     }
 
-    static func parse(_ content: String) -> ParsedContent {
+    nonisolated static func parse(_ content: String) -> ParsedContent {
         ParsedContent(json: JSON.object(parseNoteContent(content: content)) ?? [:])
     }
 }
