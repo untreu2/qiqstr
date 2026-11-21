@@ -1,27 +1,23 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::sync::OnceLock;
+use std::path::Path;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use nostr_lmdb::NostrLMDB;
-use nostr_sdk::prelude::*;
+use nostr::prelude::*;
 use tokio::sync::RwLock;
 
-use crate::hybrid_database::HybridDatabase;
+use crate::pool::{
+    NostrClient, PublishOutput, RelayStatus, SubNotification, FLAG_READ, FLAG_WRITE,
+};
 use crate::sink::StreamSink;
+use crate::store::EventStore;
 
-static COUNTING_CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
-
-fn counting_client_lock() -> &'static RwLock<Option<Client>> {
-    COUNTING_CLIENT.get_or_init(|| RwLock::new(None))
-}
-
-static CLIENT: OnceLock<RwLock<Option<Client>>> = OnceLock::new();
+static CLIENT: OnceLock<RwLock<Option<NostrClient>>> = OnceLock::new();
 static USER_RELAYS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
 static DB_PATH: OnceLock<RwLock<Option<String>>> = OnceLock::new();
 
-fn state() -> &'static RwLock<Option<Client>> {
+fn state() -> &'static RwLock<Option<NostrClient>> {
     CLIENT.get_or_init(|| RwLock::new(None))
 }
 
@@ -33,193 +29,27 @@ pub(crate) fn db_path_state() -> &'static RwLock<Option<String>> {
     DB_PATH.get_or_init(|| RwLock::new(None))
 }
 
-async fn get_client() -> Result<Client> {
+async fn get_client() -> Result<NostrClient> {
     let lock = state().read().await;
     lock.as_ref()
         .cloned()
         .ok_or_else(|| anyhow!("Client not initialized"))
 }
 
-pub(crate) async fn get_client_pub() -> Result<Client> {
+pub(crate) async fn get_client_pub() -> Result<NostrClient> {
     get_client().await
 }
 
-const LMDB_MAP_SIZES: &[usize] = &[
-    2 * 1024 * 1024 * 1024, // 2 GB
-    1024 * 1024 * 1024,     // 1 GB
-    512 * 1024 * 1024,      // 512 MB
-    256 * 1024 * 1024,      // 256 MB
-];
-
-fn try_open_lmdb(path: &str) -> Result<NostrLMDB> {
-    let path_owned = path.to_string();
-
-    let mut last_error = String::new();
-    for &map_size in LMDB_MAP_SIZES {
-        let p = path_owned.clone();
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            NostrLMDB::builder(&p).map_size(map_size).build()
-        }));
-
-        match result {
-            Ok(Ok(db)) => return Ok(db),
-            Ok(Err(error)) => {
-                if last_error.is_empty() {
-                    last_error = error.to_string();
-                }
-            }
-            Err(_) => last_error = "LMDB initialization panicked".to_string(),
-        }
-    }
-
-    Err(anyhow!("LMDB open failed: {}", last_error))
-}
-
-const FETCH_GRACE_AFTER_RESULTS: Duration = Duration::from_millis(600);
-const FETCH_GRACE_AFTER_MAJORITY: Duration = Duration::from_millis(250);
-const FETCH_GRACE_AFTER_MAJORITY_WITH_RESULTS: Duration = Duration::from_millis(180);
-
-fn is_discovery_only_flags(flags: &AtomicRelayServiceFlags) -> bool {
-    flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-        && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-        && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All)
-}
-
-fn events_to_json(events: Events) -> Result<String> {
-    let list: Vec<Event> = events.into_iter().collect();
-    Ok(serde_json::to_string(&list)?)
-}
-
-async fn wait_for_relays_ready(client: &Client, timeout: Duration, prefer_count: usize) -> u32 {
-    let deadline = tokio::time::Instant::now() + timeout;
-    let mut first_connected_at: Option<tokio::time::Instant> = None;
-
-    loop {
-        let relays = client.relays().await;
-        let mut total = 0usize;
-        let mut connected = 0usize;
-        for (_, relay) in relays.iter() {
-            if is_discovery_only_flags(relay.flags()) {
-                continue;
-            }
-            total += 1;
-            if relay.status() == RelayStatus::Connected {
-                connected += 1;
-            }
-        }
-        if total == 0 || connected >= total || connected >= prefer_count {
-            return connected as u32;
-        }
-        let now = tokio::time::Instant::now();
-        if connected > 0 {
-            let first = *first_connected_at.get_or_insert(now);
-            if now.duration_since(first) >= Duration::from_millis(150) {
-                return connected as u32;
-            }
-        }
-        if now >= deadline {
-            return connected as u32;
-        }
-        let next_tick = (now + Duration::from_millis(20)).min(deadline);
-        tokio::time::sleep_until(next_tick).await;
-    }
+fn events_to_json(events: Vec<Event>) -> Result<String> {
+    Ok(serde_json::to_string(&events)?)
 }
 
 pub(crate) async fn quick_fetch(
-    client: &Client,
+    client: &NostrClient,
     filter: Filter,
     timeout: Duration,
-) -> Result<Events> {
-    use futures::stream::{FuturesUnordered, StreamExt};
-    let relays = client.relays().await;
-    let mut connected_urls: Vec<RelayUrl> = Vec::new();
-    let mut all_read_urls: Vec<RelayUrl> = Vec::new();
-    for (url, relay) in relays {
-        if !relay.flags().has_read() {
-            continue;
-        }
-        let status = relay.status();
-        if status == RelayStatus::Connected {
-            connected_urls.push(url.clone());
-        }
-        if !matches!(status, RelayStatus::Banned | RelayStatus::Terminated) {
-            all_read_urls.push(url);
-        }
-    }
-    let urls = if connected_urls.len() >= 2 {
-        connected_urls
-    } else if !all_read_urls.is_empty() {
-        all_read_urls
-    } else {
-        connected_urls
-    };
-
-    if urls.len() <= 1 {
-        return Ok(client.fetch_events(filter, timeout).await?);
-    }
-
-    let expected_ids = filter.ids.as_ref().map(|ids| ids.len()).filter(|&n| n > 0);
-    let single_id_lookup =
-        expected_ids == Some(1) || (expected_ids.is_some() && filter.limit == Some(1));
-
-    let total = urls.len();
-    let mut pending: FuturesUnordered<_> = urls
-        .into_iter()
-        .map(|url| {
-            let client = client.clone();
-            let filter = filter.clone();
-            async move { client.fetch_events_from([url], filter, timeout).await }
-        })
-        .collect();
-    let deadline = tokio::time::Instant::now() + timeout;
-    let mut events = Events::new(&filter);
-    let mut finished = 0usize;
-    let mut first_results: Option<tokio::time::Instant> = None;
-    let mut majority: Option<tokio::time::Instant> = None;
-    loop {
-        let mut wake = deadline;
-        if let Some(at) = first_results {
-            wake = wake.min(at + FETCH_GRACE_AFTER_RESULTS);
-        }
-        if let Some(at) = majority {
-            let grace = if first_results.is_some() {
-                FETCH_GRACE_AFTER_MAJORITY_WITH_RESULTS
-            } else {
-                FETCH_GRACE_AFTER_MAJORITY
-            };
-            wake = wake.min(at + grace);
-        }
-        tokio::select! {
-            next = pending.next() => match next {
-                Some(result) => {
-                    finished += 1;
-                    let now = tokio::time::Instant::now();
-                    if let Ok(found) = result {
-                        if !found.is_empty() && first_results.is_none() {
-                            first_results = Some(now);
-                        }
-                        for event in found {
-                            events.force_insert(event);
-                        }
-                    }
-                    if single_id_lookup && !events.is_empty() {
-                        break;
-                    }
-                    if let Some(target_count) = expected_ids {
-                        if events.len() >= target_count {
-                            break;
-                        }
-                    }
-                    if majority.is_none() && finished * 2 >= total {
-                        majority = Some(now);
-                    }
-                }
-                None => break,
-            },
-            _ = tokio::time::sleep_until(wake) => break,
-        }
-    }
-    Ok(events)
+) -> Result<Vec<Event>> {
+    client.quick_fetch(filter, timeout, true).await
 }
 
 pub async fn init_client(
@@ -232,37 +62,32 @@ pub async fn init_client(
     for url in relay_urls.iter().chain(&discovery_relays) {
         RelayUrl::parse(url)?;
     }
-    let mut builder = Client::builder();
 
-    if let Some(ref sk_hex) = private_key_hex {
-        let keys = Keys::parse(sk_hex)?;
-        builder = builder.signer(keys);
-    }
+    let signer = match private_key_hex {
+        Some(ref sk_hex) => Some(Keys::parse(sk_hex)?),
+        None => None,
+    };
 
-    if let Some(ref path) = db_path {
-        let lmdb = try_open_lmdb(path)?;
-        let database = HybridDatabase::new(lmdb);
-        let marker = std::path::Path::new(path).join("replaceables_verified_v1");
+    let store = if let Some(ref path) = db_path {
+        let store = EventStore::open(Path::new(path))?;
+        let marker = Path::new(path).join("replaceables_verified_v2");
         if !marker.exists() {
-            database.remove_invalid_replaceable_events().await?;
+            store.remove_invalid_replaceable_events()?;
             let _ = std::fs::write(&marker, b"1");
         }
-        builder = builder.database(database);
+        Arc::new(store)
+    } else {
+        Arc::new(EventStore::open_in_memory()?)
+    };
+
+    let client = NostrClient::new(store, signer);
+
+    for url in &relay_urls {
+        let _ = client.add_relay(url.as_str()).await;
     }
-
-    let client = builder.build();
-
-    let relay_futures: Vec<_> = relay_urls
-        .iter()
-        .map(|url| client.add_relay(url.as_str()))
-        .collect();
-    futures::future::join_all(relay_futures).await;
-
-    let discovery_futures: Vec<_> = discovery_relays
-        .iter()
-        .map(|url| client.add_discovery_relay(url.as_str()))
-        .collect();
-    futures::future::join_all(discovery_futures).await;
+    for url in &discovery_relays {
+        let _ = client.add_discovery_relay(url.as_str()).await;
+    }
 
     {
         let mut ur = user_relays_state().write().await;
@@ -272,9 +97,6 @@ pub async fn init_client(
     if let Some(old_client) = lock.take() {
         old_client.unset_signer().await;
         old_client.shutdown().await;
-    }
-    if let Some(counting_client) = counting_client_lock().write().await.take() {
-        counting_client.shutdown().await;
     }
     *db_path_state().write().await = db_path;
     *lock = Some(client);
@@ -291,7 +113,7 @@ pub async fn connect_relays() -> Result<()> {
 pub async fn wait_for_ready(timeout_secs: u32) -> Result<u32> {
     let client = get_client().await?;
     let timeout = Duration::from_secs(timeout_secs as u64);
-    Ok(wait_for_relays_ready(&client, timeout, 2).await)
+    Ok(client.wait_for_ready(timeout, 2).await)
 }
 
 pub async fn disconnect_relays() -> Result<()> {
@@ -304,9 +126,6 @@ pub async fn shutdown_client() -> Result<()> {
     let mut lock = state().write().await;
     if let Some(client) = lock.take() {
         client.unset_signer().await;
-        client.shutdown().await;
-    }
-    if let Some(client) = counting_client_lock().write().await.take() {
         client.shutdown().await;
     }
     *primal_ws_lock().lock().await = None;
@@ -344,23 +163,19 @@ pub async fn add_relay(url: String) -> Result<bool> {
 pub async fn add_relay_with_flags(url: String, read: bool, write: bool) -> Result<bool> {
     let client = get_client().await?;
     let relay_url = RelayUrl::parse(&url)?;
+    let mut flags = 0u8;
+    if read {
+        flags |= FLAG_READ;
+    }
+    if write {
+        flags |= FLAG_WRITE;
+    }
 
-    let added = client.add_relay(relay_url.as_str()).await.is_ok();
+    let added = client
+        .add_relay_with_flags(relay_url.as_str(), flags)
+        .await
+        .is_ok();
     if added {
-        let relays = client.relays().await;
-        if let Some(relay) = relays.get(&relay_url) {
-            let flags = relay.flags();
-            if read {
-                flags.add(RelayServiceFlags::READ);
-            } else {
-                flags.remove(RelayServiceFlags::READ);
-            }
-            if write {
-                flags.add(RelayServiceFlags::WRITE);
-            } else {
-                flags.remove(RelayServiceFlags::WRITE);
-            }
-        }
         let mut ur = user_relays_state().write().await;
         if !ur.contains(&url) {
             ur.push(url);
@@ -383,12 +198,7 @@ pub async fn get_relay_list() -> Result<Vec<String>> {
     let relays = client.relays().await;
     Ok(relays
         .iter()
-        .filter(|(_, r)| {
-            let flags = r.flags();
-            !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-                && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-                && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
-        })
+        .filter(|(_, r)| !r.is_discovery_only())
         .map(|(u, _)| u.to_string())
         .collect())
 }
@@ -396,17 +206,11 @@ pub async fn get_relay_list() -> Result<Vec<String>> {
 pub async fn get_connected_relay_count() -> Result<u32> {
     let client = get_client().await?;
     let relays = client.relays().await;
-    let mut count: u32 = 0;
-    for (_, relay) in relays.iter() {
-        let flags = relay.flags();
-        let is_discovery_only = flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-            && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-            && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All);
-        if !is_discovery_only && relay.status() == RelayStatus::Connected {
-            count += 1;
-        }
-    }
-    Ok(count)
+    let count = relays
+        .values()
+        .filter(|r| !r.is_discovery_only() && r.status() == RelayStatus::Connected)
+        .count();
+    Ok(count as u32)
 }
 
 pub async fn get_relay_status() -> Result<String> {
@@ -417,31 +221,17 @@ pub async fn get_relay_status() -> Result<String> {
     for (url, relay) in relays.iter() {
         let status = relay.status();
         let stats = relay.stats();
-        let flags = relay.flags();
-        let is_discovery = flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-            && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-            && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All);
-
-        let status_str = match status {
-            RelayStatus::Initialized => "initialized",
-            RelayStatus::Pending => "pending",
-            RelayStatus::Connecting => "connecting",
-            RelayStatus::Connected => "connected",
-            RelayStatus::Disconnected => "disconnected",
-            RelayStatus::Terminated => "terminated",
-            RelayStatus::Banned => "banned",
-            RelayStatus::Sleeping => "sleeping",
-        };
+        let is_discovery = relay.is_discovery_only();
 
         let relay_info = serde_json::json!({
             "url": url.to_string(),
-            "status": status_str,
+            "status": status.as_str(),
             "isDiscovery": is_discovery,
-            "attempts": stats.attempts(),
-            "success": stats.success(),
-            "bytesSent": stats.bytes_sent(),
-            "bytesReceived": stats.bytes_received(),
-            "connectedAt": stats.connected_at().as_secs(),
+            "attempts": stats.attempts.load(std::sync::atomic::Ordering::Relaxed),
+            "success": stats.success.load(std::sync::atomic::Ordering::Relaxed),
+            "bytesSent": stats.bytes_sent.load(std::sync::atomic::Ordering::Relaxed),
+            "bytesReceived": stats.bytes_received.load(std::sync::atomic::Ordering::Relaxed),
+            "connectedAt": stats.connected_at_secs.load(std::sync::atomic::Ordering::Relaxed),
         });
         relay_list.push(relay_info);
     }
@@ -479,38 +269,18 @@ pub async fn stream_relay_status(sink: StreamSink<String>) -> Result<()> {
             for (url, relay) in relays.iter() {
                 let status = relay.status();
                 let stats = relay.stats();
-                let flags = relay.flags();
-                let is_discovery = flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-                    && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-                    && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All);
-
-                let status_str = match status {
-                    RelayStatus::Initialized => "initialized",
-                    RelayStatus::Pending => "pending",
-                    RelayStatus::Connecting => "connecting",
-                    RelayStatus::Connected => "connected",
-                    RelayStatus::Disconnected => "disconnected",
-                    RelayStatus::Terminated => "terminated",
-                    RelayStatus::Banned => "banned",
-                    RelayStatus::Sleeping => "sleeping",
-                };
-
-                let latency_ms: u64 = relay
-                    .stats()
-                    .latency()
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
+                let is_discovery = relay.is_discovery_only();
 
                 let relay_info = serde_json::json!({
                     "url": url.to_string(),
-                    "status": status_str,
+                    "status": status.as_str(),
                     "isDiscovery": is_discovery,
-                    "attempts": stats.attempts(),
-                    "success": stats.success(),
-                    "bytesSent": stats.bytes_sent(),
-                    "bytesReceived": stats.bytes_received(),
-                    "connectedAt": stats.connected_at().as_secs(),
-                    "latencyMs": latency_ms,
+                    "attempts": stats.attempts.load(std::sync::atomic::Ordering::Relaxed),
+                    "success": stats.success.load(std::sync::atomic::Ordering::Relaxed),
+                    "bytesSent": stats.bytes_sent.load(std::sync::atomic::Ordering::Relaxed),
+                    "bytesReceived": stats.bytes_received.load(std::sync::atomic::Ordering::Relaxed),
+                    "connectedAt": stats.connected_at_secs.load(std::sync::atomic::Ordering::Relaxed),
+                    "latencyMs": stats.latency_ms(),
                 });
                 relay_list.push(relay_info);
             }
@@ -689,7 +459,7 @@ pub async fn discover_and_connect_outbox_relays(
             let (ref relay_url, is_outbox, is_inbox) = parsed_candidates[i];
             let relays = client.relays().await;
             if let Some(relay) = relays.get(relay_url) {
-                relay.flags().remove(RelayServiceFlags::WRITE);
+                relay.remove_flag(FLAG_WRITE);
             }
             let _ = (is_outbox, is_inbox);
             added_count += 1;
@@ -720,36 +490,26 @@ pub async fn discover_and_connect_outbox_relays(
 pub async fn sync_events(filter_json: String) -> Result<String> {
     let client = get_client().await?;
     let filter = Filter::from_json(&filter_json)?;
-    let opts = SyncOptions::default().initial_timeout(Duration::from_secs(5));
 
-    let sync_future = client.sync(filter, &opts);
-    let output = match tokio::time::timeout(Duration::from_secs(12), sync_future).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(_)) => {
-            return Ok(serde_json::json!({
-                "received": 0,
-                "sent": 0,
-                "local": 0,
-                "remote": 0,
-            })
-            .to_string());
-        }
-        Err(_) => {
-            return Ok(serde_json::json!({
-                "received": 0,
-                "sent": 0,
-                "local": 0,
-                "remote": 0,
-            })
-            .to_string());
-        }
-    };
+    let local_events = client.database().query(&filter).unwrap_or_default();
+    let local_ids: HashSet<EventId> = local_events.iter().map(|e| e.id).collect();
+    let local_count = local_ids.len();
+
+    let fetched = client
+        .quick_fetch(filter, Duration::from_secs(8), true)
+        .await
+        .unwrap_or_default();
+    let remote_count = fetched.len();
+    let received_count = fetched
+        .iter()
+        .filter(|e| !local_ids.contains(&e.id))
+        .count();
 
     let result = serde_json::json!({
-        "received": output.received.len(),
-        "sent": output.sent.len(),
-        "local": output.local.len(),
-        "remote": output.remote.len(),
+        "received": received_count,
+        "sent": 0,
+        "local": local_count,
+        "remote": remote_count,
     });
 
     Ok(result.to_string())
@@ -760,7 +520,7 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
     let filter = Filter::from_json(&filter_json)?;
     let timeout = Duration::from_secs(timeout_secs as u64);
 
-    let events: Events = quick_fetch(&client, filter, timeout)
+    let events = quick_fetch(&client, filter, timeout)
         .await
         .unwrap_or_default();
 
@@ -769,74 +529,49 @@ pub async fn fetch_events(filter_json: String, timeout_secs: u32) -> Result<Stri
 
 const MAX_COUNTING_RELAYS: usize = 8;
 
-async fn get_or_sync_counting_client(main_client: &Client) -> (Client, usize) {
-    let lock = counting_client_lock();
-    let client = {
-        let reader = lock.read().await;
-        reader.clone()
-    };
-    let client = match client {
-        Some(c) => c,
-        None => {
-            let mut writer = lock.write().await;
-            if let Some(ref c) = *writer {
-                c.clone()
-            } else {
-                let c = Client::builder()
-                    .database(MemoryDatabase::default())
-                    .build();
-                *writer = Some(c.clone());
-                c
-            }
-        }
-    };
-
+async fn select_counting_relays(main_client: &NostrClient) -> Vec<RelayUrl> {
     let main_relays = main_client.relays().await;
     let user_relays: HashSet<String> = user_relays_state().read().await.iter().cloned().collect();
 
-    let mut desired: Vec<RelayUrl> = Vec::new();
+    let mut connected_user: Vec<RelayUrl> = Vec::new();
+    let mut connected_other: Vec<RelayUrl> = Vec::new();
+    let mut all_candidates: Vec<RelayUrl> = Vec::new();
+
     for (url, relay) in &main_relays {
-        if relay.flags().has_read()
-            && !is_discovery_only_flags(relay.flags())
-            && user_relays.contains(url.as_str())
+        if !relay.has_flag(FLAG_READ) || relay.is_discovery_only() {
+            continue;
+        }
+        let is_user = user_relays.contains(url.as_str());
+        if relay.status() == RelayStatus::Connected {
+            if is_user {
+                connected_user.push(url.clone());
+            } else {
+                connected_other.push(url.clone());
+            }
+        }
+        if is_user {
+            all_candidates.push(url.clone());
+        }
+    }
+
+    let mut connected = connected_user;
+    connected.extend(connected_other);
+    if connected.len() >= 2 {
+        connected.truncate(MAX_COUNTING_RELAYS);
+        return connected;
+    }
+
+    for (url, relay) in &main_relays {
+        if all_candidates.len() >= MAX_COUNTING_RELAYS {
+            break;
+        }
+        if relay.has_flag(FLAG_READ) && !relay.is_discovery_only() && !all_candidates.contains(url)
         {
-            desired.push(url.clone());
+            all_candidates.push(url.clone());
         }
     }
-    if desired.len() < MAX_COUNTING_RELAYS {
-        for (url, relay) in &main_relays {
-            if desired.len() >= MAX_COUNTING_RELAYS {
-                break;
-            }
-            if relay.flags().has_read()
-                && !is_discovery_only_flags(relay.flags())
-                && !desired.contains(url)
-            {
-                desired.push(url.clone());
-            }
-        }
-    }
-
-    let existing: HashMap<RelayUrl, Relay> = client.relays().await;
-    let missing: Vec<&RelayUrl> = desired
-        .iter()
-        .filter(|u| !existing.contains_key(*u))
-        .collect();
-    let any_connected = existing
-        .values()
-        .any(|r| r.status() == RelayStatus::Connected);
-
-    if !missing.is_empty() {
-        futures::future::join_all(missing.iter().map(|url| client.add_relay(url.as_str()))).await;
-    }
-    if !missing.is_empty() || !any_connected {
-        client.connect().await;
-        if !any_connected {
-            wait_for_relays_ready(&client, Duration::from_secs(2), 2).await;
-        }
-    }
-    let relay_count = desired.len().max(existing.len());
-    (client, relay_count)
+    all_candidates.truncate(MAX_COUNTING_RELAYS);
+    all_candidates
 }
 
 pub async fn fetch_counts_from_relays(
@@ -858,7 +593,7 @@ pub async fn fetch_counts_from_relays(
         .as_ref()
         .and_then(|h| PublicKey::from_hex(h).ok());
 
-    let (client, _) = get_or_sync_counting_client(&main_client).await;
+    let counting_urls = select_counting_relays(&main_client).await;
 
     let filter = Filter::new()
         .kinds([
@@ -871,9 +606,17 @@ pub async fn fetch_counts_from_relays(
         .limit(500);
 
     let timeout = Duration::from_secs(5);
-    let events = quick_fetch(&client, filter, timeout)
-        .await
-        .unwrap_or_default();
+    let events = if counting_urls.is_empty() {
+        main_client
+            .quick_fetch(filter, timeout, false)
+            .await
+            .unwrap_or_default()
+    } else {
+        main_client
+            .fetch_events_from(&counting_urls, filter, timeout, false)
+            .await
+            .unwrap_or_default()
+    };
 
     let mut counts: HashMap<String, [usize; 4]> = HashMap::new();
     let mut user_reacted: HashMap<String, bool> = HashMap::new();
@@ -973,7 +716,12 @@ pub async fn stream_interaction_counts(
             .as_ref()
             .and_then(|h| PublicKey::from_hex(h).ok());
 
-        let (client, relay_count) = get_or_sync_counting_client(&main_client).await;
+        let counting_urls = select_counting_relays(&main_client).await;
+        let targets = if counting_urls.is_empty() {
+            None
+        } else {
+            Some(counting_urls.as_slice())
+        };
 
         let filter = Filter::new()
             .kinds([
@@ -984,9 +732,8 @@ pub async fn stream_interaction_counts(
             ])
             .events(ids);
 
-        let mut notifications = client.notifications();
-        let Output { val: sub_id, .. } = client
-            .subscribe(filter, None)
+        let (sub_id, mut notifications, relay_count) = main_client
+            .subscribe_on(filter, targets)
             .await
             .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
 
@@ -1009,20 +756,12 @@ pub async fn stream_interaction_counts(
             let recv = tokio::time::timeout(Duration::from_secs(3), notifications.recv()).await;
 
             match recv {
-                Ok(Ok(notification)) => match notification {
-                    RelayPoolNotification::Event {
-                        subscription_id,
-                        event,
-                        ..
-                    } => {
-                        if subscription_id != sub_id {
-                            continue;
-                        }
+                Ok(Some(notification)) => match notification {
+                    SubNotification::Event { event } => {
                         let event_id = event.id.to_hex();
-                        if seen_events.contains(&event_id) {
+                        if !seen_events.insert(event_id) {
                             continue;
                         }
-                        seen_events.insert(event_id);
 
                         let kind = event.kind;
                         let is_user = user_pk.as_ref().is_some_and(|pk| event.pubkey == *pk);
@@ -1089,20 +828,15 @@ pub async fn stream_interaction_counts(
                             last_emit = std::time::Instant::now();
                         }
                     }
-                    RelayPoolNotification::Message { message, .. } => {
-                        if let RelayMessage::EndOfStoredEvents(sid) = message {
-                            if *sid == sub_id {
-                                eose_count += 1;
-                                if eose_count >= relay_count {
-                                    break;
-                                }
-                            }
+                    SubNotification::Eose => {
+                        eose_count += 1;
+                        if eose_count >= relay_count {
+                            break;
                         }
                     }
-                    RelayPoolNotification::Shutdown => break,
+                    SubNotification::Closed => {}
                 },
-                Ok(Err(_)) => break,
-                Err(_) => break,
+                Ok(None) | Err(_) => break,
             }
         }
 
@@ -1111,7 +845,7 @@ pub async fn stream_interaction_counts(
             let _ = sink.add(json);
         }
 
-        let _ = client.unsubscribe(&sub_id).await;
+        main_client.unsubscribe(&sub_id).await;
         Ok(())
     }
     .await;
@@ -1152,9 +886,9 @@ pub async fn fetch_event_by_id(event_id: String, timeout_secs: u32) -> Result<Op
     let filter = Filter::new().id(id).limit(1);
     let timeout = Duration::from_secs(timeout_secs as u64);
 
-    let events: Events = quick_fetch(&client, filter, timeout).await?;
+    let events = quick_fetch(&client, filter, timeout).await?;
 
-    if let Some(event) = events.first_owned() {
+    if let Some(event) = events.into_iter().next() {
         Ok(Some(event.as_json()))
     } else {
         Ok(None)
@@ -1174,7 +908,7 @@ pub async fn fetch_events_by_ids(event_ids: Vec<String>, timeout_secs: u32) -> R
 
     let filter = Filter::new().ids(ids);
     let timeout = Duration::from_secs(timeout_secs as u64);
-    let events: Events = quick_fetch(&client, filter, timeout)
+    let events = quick_fetch(&client, filter, timeout)
         .await
         .unwrap_or_default();
 
@@ -1224,85 +958,14 @@ pub async fn fetch_events_multi_filter(filters_json: String, timeout_secs: u32) 
 }
 
 async fn publish_event(
-    client: &Client,
+    client: &NostrClient,
     event: &Event,
     targets: Option<&[RelayUrl]>,
-) -> Result<Output<EventId>> {
-    event.verify()?;
-    let relays = client.relays().await;
-    if let Some(targets) = targets {
-        if targets.iter().any(|url| !relays.contains_key(url)) {
-            return Err(anyhow!("Publication target is not a configured relay"));
-        }
-    }
-    let selected: Vec<_> = relays
-        .into_iter()
-        .filter(|(url, relay)| {
-            targets.map_or_else(
-                || relay.flags().has(RelayServiceFlags::WRITE, FlagCheck::All),
-                |targets| targets.contains(url),
-            )
-        })
-        .collect();
-    if selected.is_empty() {
-        return Err(anyhow!("No publication relays configured"));
-    }
-    let mut pending: futures::stream::FuturesUnordered<_> = selected
-        .into_iter()
-        .map(|(url, relay)| {
-            let event = event.clone();
-            async move {
-                let result =
-                    tokio::time::timeout(Duration::from_secs(12), relay.send_event(&event)).await;
-                let result = match result {
-                    Ok(result) => result.map(|_| ()).map_err(|error| error.to_string()),
-                    Err(_) => Err("Event dispatch timed out".to_string()),
-                };
-                (url, result)
-            }
-        })
-        .collect();
-    let mut output = Output {
-        val: event.id,
-        success: HashSet::new(),
-        failed: HashMap::new(),
-    };
-    let mut deadline: Option<tokio::time::Instant> = None;
-    loop {
-        let next = match deadline {
-            Some(at) => {
-                match tokio::time::timeout_at(at, futures::StreamExt::next(&mut pending)).await {
-                    Ok(next) => next,
-                    Err(_) => break,
-                }
-            }
-            None => futures::StreamExt::next(&mut pending).await,
-        };
-        let Some((url, result)) = next else { break };
-        match result {
-            Ok(()) => {
-                output.success.insert(url);
-                if deadline.is_none() {
-                    deadline = Some(tokio::time::Instant::now() + Duration::from_millis(1500));
-                }
-            }
-            Err(error) => {
-                output.failed.insert(url, error);
-            }
-        }
-    }
-    if !pending.is_empty() {
-        tokio::spawn(
-            async move { while futures::StreamExt::next(&mut pending).await.is_some() {} },
-        );
-    }
-    if !output.success.is_empty() {
-        client.database().save_event(event).await?;
-    }
-    Ok(output)
+) -> Result<PublishOutput> {
+    client.publish_event(event, targets).await
 }
 
-fn published_event_json(output: Output<EventId>) -> Result<String> {
+fn published_event_json(output: PublishOutput) -> Result<String> {
     if output.success.is_empty() {
         return Err(anyhow!("No relay accepted the event: {:?}", output.failed));
     }
@@ -1313,7 +976,7 @@ fn published_event_json(output: Output<EventId>) -> Result<String> {
         .map(|(url, error)| (url.to_string(), error.to_string()))
         .collect();
     Ok(
-        serde_json::json!({ "id": output.id().to_hex(), "success": success, "failed": failed })
+        serde_json::json!({ "id": output.id.to_hex(), "success": success, "failed": failed })
             .to_string(),
     )
 }
@@ -1327,29 +990,26 @@ pub async fn send_event(event_json: String) -> Result<String> {
 
 /// A short-lived client for relays outside the main pool. It signs with the account's key so
 /// relays that require NIP-42 auth (such as NIP-29 group relays) accept reads and writes.
-async fn temporary_client() -> Client {
+async fn temporary_client() -> NostrClient {
     let signer = match get_client().await {
         Ok(main) => main.signer().await.ok(),
         Err(_) => None,
     };
-    let client = match signer {
-        Some(signer) => Client::builder().signer(signer).build(),
-        None => Client::default(),
-    };
+    let client = NostrClient::in_memory(signer);
     client.automatic_authentication(true);
     client
 }
 
 struct TargetPool {
-    main: Client,
+    main: NostrClient,
     pooled: Vec<RelayUrl>,
-    extra: Option<(Client, Vec<RelayUrl>)>,
+    extra: Option<(NostrClient, Vec<RelayUrl>)>,
 }
 
 const MAX_TARGET_RELAYS: usize = 12;
 
 impl TargetPool {
-    async fn new(main: &Client, urls: &[RelayUrl]) -> TargetPool {
+    async fn new(main: &NostrClient, urls: &[RelayUrl]) -> TargetPool {
         let existing: HashSet<RelayUrl> = main.relays().await.into_keys().collect();
         let mut pooled = Vec::new();
         let mut fresh = Vec::new();
@@ -1364,9 +1024,12 @@ impl TargetPool {
             None
         } else {
             let temp = temporary_client().await;
-            futures::future::join_all(fresh.iter().map(|url| temp.add_relay(url.as_str()))).await;
+            for url in &fresh {
+                let _ = temp.add_relay(url.as_str()).await;
+            }
             temp.connect().await;
-            wait_for_relays_ready(&temp, Duration::from_secs(3), fresh.len().min(2)).await;
+            temp.wait_for_ready(Duration::from_secs(3), fresh.len().min(2))
+                .await;
             Some((temp, fresh))
         };
         TargetPool {
@@ -1376,9 +1039,9 @@ impl TargetPool {
         }
     }
 
-    async fn publish(&self, event: &Event) -> Result<Output<EventId>> {
-        let mut output = Output {
-            val: event.id,
+    async fn publish(&self, event: &Event) -> Result<PublishOutput> {
+        let mut output = PublishOutput {
+            id: event.id,
             success: HashSet::new(),
             failed: HashMap::new(),
         };
@@ -1398,7 +1061,7 @@ impl TargetPool {
             return Err(anyhow!("No publication relays configured"));
         }
         if !output.success.is_empty() {
-            let _ = self.main.database().save_event(event).await;
+            let _ = self.main.database().save_event(event);
         }
         Ok(output)
     }
@@ -1605,7 +1268,7 @@ pub async fn request_to_vanish(relay_urls: Vec<String>, reason: String) -> Resul
     let failed_count = output.failed.len();
 
     let result = serde_json::json!({
-        "id": output.id().to_hex(),
+        "id": output.id.to_hex(),
         "totalSuccess": success_count,
         "totalFailed": failed_count,
     });
@@ -1643,7 +1306,7 @@ pub async fn delete_events(event_ids: Vec<String>, reason: String) -> Result<Str
     let failed_count = output.failed.len();
 
     let result = serde_json::json!({
-        "id": output.id().to_hex(),
+        "id": output.id.to_hex(),
         "totalSuccess": success_count,
         "totalFailed": failed_count,
     });
@@ -1667,13 +1330,8 @@ pub async fn fetch_all_events_for_author(
             let relays = client.relays().await;
             relays
                 .iter()
-                .filter(|(_, r)| {
-                    let flags = r.flags();
-                    !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-                        && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-                        && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
-                })
-                .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
+                .filter(|(_, r)| !r.is_discovery_only())
+                .map(|(u, _)| u.clone())
                 .collect()
         };
 
@@ -1706,11 +1364,13 @@ pub async fn fetch_all_events_for_author(
                     filter = filter.until(Timestamp::from(ts));
                 }
 
-                // fetch_events_from hits the relay directly (no LMDB merge).
-                // It closes automatically on EOSE, returning exactly what that
-                // relay has for this filter page.
                 let events = match client
-                    .fetch_events_from(vec![relay_url.clone()], filter, Duration::from_secs(15))
+                    .fetch_events_from(
+                        std::slice::from_ref(relay_url),
+                        filter,
+                        Duration::from_secs(15),
+                        false,
+                    )
                     .await
                 {
                     Ok(e) => e,
@@ -1797,13 +1457,8 @@ pub async fn fetch_profile_events(
             let relays = client.relays().await;
             relays
                 .iter()
-                .filter(|(_, r)| {
-                    let flags = r.flags();
-                    !(flags.has(RelayServiceFlags::DISCOVERY, FlagCheck::All)
-                        && !flags.has(RelayServiceFlags::READ, FlagCheck::All)
-                        && !flags.has(RelayServiceFlags::WRITE, FlagCheck::All))
-                })
-                .filter_map(|(u, _)| RelayUrl::parse(u.as_str()).ok())
+                .filter(|(_, r)| !r.is_discovery_only())
+                .map(|(u, _)| u.clone())
                 .collect()
         };
 
@@ -1865,7 +1520,7 @@ pub async fn fetch_profile_events(
                     }
 
                     let events = match client
-                        .fetch_events_from(vec![relay_url], filter, Duration::from_secs(15))
+                        .fetch_events_from(&[relay_url], filter, Duration::from_secs(15), true)
                         .await
                     {
                         Ok(e) => e,
@@ -1895,8 +1550,6 @@ pub async fn fetch_profile_events(
                             None => ts,
                             Some(prev) => prev.min(ts),
                         });
-
-                        let _ = client.database().save_event(&event).await;
 
                         if sink.add(event.as_json()).is_err() {
                             sink_closed.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -1947,13 +1600,15 @@ pub async fn subscribe_to_events_on_relays(
         for url in &relay_urls {
             RelayUrl::parse(url)?;
         }
-        futures::future::join_all(relay_urls.iter().map(|url| client.add_relay(url.as_str())))
-            .await;
+        for url in &relay_urls {
+            let _ = client.add_relay(url.as_str()).await;
+        }
         client.connect().await;
-        wait_for_relays_ready(&client, Duration::from_secs(3), relay_urls.len().min(2)).await;
-        let mut notifications = client.notifications();
-        let Output { val: sub_id, .. } = client
-            .subscribe(filter, None)
+        client
+            .wait_for_ready(Duration::from_secs(3), relay_urls.len().min(2))
+            .await;
+        let (_sub_id, mut notifications, _) = client
+            .subscribe_on(filter, None)
             .await
             .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
         let mut liveness = tokio::time::interval(Duration::from_secs(2));
@@ -1968,17 +1623,12 @@ pub async fn subscribe_to_events_on_relays(
                 }
             };
             match received {
-                Ok(RelayPoolNotification::Event {
-                    subscription_id,
-                    event,
-                    ..
-                }) if subscription_id == sub_id => {
+                Some(SubNotification::Event { event }) => {
                     if sink.add(event.as_json()).is_err() {
                         break;
                     }
                 }
-                Ok(RelayPoolNotification::Shutdown)
-                | Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                None => break,
                 _ => continue,
             }
         }
@@ -1997,9 +1647,8 @@ pub async fn subscribe_to_events(filter_json: String, sink: StreamSink<String>) 
         let client = get_client().await?;
         let filter = Filter::from_json(&filter_json)?;
 
-        let mut notifications = client.notifications();
-        let Output { val: sub_id, .. } = client
-            .subscribe(filter, None)
+        let (sub_id, mut notifications, _) = client
+            .subscribe_on(filter, None)
             .await
             .map_err(|e| anyhow!("Subscribe failed: {}", e))?;
 
@@ -2015,29 +1664,18 @@ pub async fn subscribe_to_events(filter_json: String, sink: StreamSink<String>) 
                 }
             };
             match received {
-                Ok(notification) => {
-                    if let RelayPoolNotification::Event {
-                        subscription_id,
-                        event,
-                        ..
-                    } = notification
-                    {
-                        if subscription_id == sub_id {
-                            let _ = client.database().save_event(&event).await;
-                            if sink.add(event.as_json()).is_err() {
-                                break;
-                            }
-                        }
-                    } else if let RelayPoolNotification::Shutdown = notification {
+                Some(SubNotification::Event { event }) => {
+                    let _ = client.database().save_event(&event);
+                    if sink.add(event.as_json()).is_err() {
                         break;
                     }
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                None => break,
+                _ => continue,
             }
         }
 
-        let _ = client.unsubscribe(&sub_id).await;
+        client.unsubscribe(&sub_id).await;
 
         Ok(())
     }
@@ -2053,7 +1691,7 @@ pub async fn resolve_thread_root(note_id: String) -> Result<String> {
     resolve_thread_root_internal(&client, &note_id).await
 }
 
-async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<String> {
+async fn resolve_thread_root_internal(client: &NostrClient, note_id: &str) -> Result<String> {
     let mut current_id = note_id.to_string();
     let mut visited: HashSet<String> = HashSet::new();
 
@@ -2064,12 +1702,12 @@ async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<
         visited.insert(current_id.clone());
 
         let eid = EventId::from_hex(&current_id)?;
-        let mut event = client.database().event_by_id(&eid).await.ok().flatten();
+        let mut event = client.database().event_by_id(&eid).ok().flatten();
 
         if event.is_none() {
             let filter = Filter::new().id(eid).limit(1);
             let _ = quick_fetch(client, filter, Duration::from_secs(3)).await;
-            event = client.database().event_by_id(&eid).await.ok().flatten();
+            event = client.database().event_by_id(&eid).ok().flatten();
             if event.is_none() {
                 break;
             }
@@ -2085,7 +1723,6 @@ async fn resolve_thread_root_internal(client: &Client, note_id: &str) -> Result<
                 if client
                     .database()
                     .event_by_id(&root_eid)
-                    .await
                     .ok()
                     .flatten()
                     .is_none()
@@ -2127,7 +1764,7 @@ pub async fn sync_replies_recursive(note_id: String, max_depth: u32) -> Result<u
             .events(pending_ids.clone())
             .limit(200);
 
-        let events: Events = quick_fetch(&client, filter, Duration::from_secs(8)).await?;
+        let events = quick_fetch(&client, filter, Duration::from_secs(8)).await?;
 
         let mut new_ids: Vec<EventId> = Vec::new();
         for event in events.iter() {
@@ -2149,7 +1786,7 @@ pub async fn sync_replies_recursive(note_id: String, max_depth: u32) -> Result<u
         let mut pks = HashSet::new();
         for id_hex in &processed_ids {
             if let Ok(eid) = EventId::from_hex(id_hex) {
-                if let Ok(Some(ev)) = client.database().event_by_id(&eid).await {
+                if let Ok(Some(ev)) = client.database().event_by_id(&eid) {
                     pks.insert(ev.pubkey);
                 }
             }
@@ -2158,15 +1795,14 @@ pub async fn sync_replies_recursive(note_id: String, max_depth: u32) -> Result<u
     };
 
     if !all_pubkeys.is_empty() {
-        let existing_filter = Filter::new()
-            .authors(all_pubkeys.iter().cloned().collect::<Vec<_>>())
-            .kind(Kind::Metadata)
-            .limit(all_pubkeys.len());
-        let existing = client.database().query(existing_filter.clone()).await?;
-        let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
-        let missing: Vec<PublicKey> = all_pubkeys
+        let pk_list: Vec<PublicKey> = all_pubkeys.into_iter().collect();
+        let existing = client
+            .database()
+            .get_profiles_batch(&pk_list)
+            .unwrap_or_default();
+        let missing: Vec<PublicKey> = pk_list
             .into_iter()
-            .filter(|pk| !existing_pks.contains(pk))
+            .filter(|pk| !existing.contains_key(pk))
             .collect();
 
         if !missing.is_empty() {
@@ -2281,7 +1917,7 @@ pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
                 Err(_) => continue,
             };
 
-            let event = client.database().event_by_id(&eid).await.ok().flatten();
+            let event = client.database().event_by_id(&eid).ok().flatten();
             let event = match event {
                 Some(e) => e,
                 None => {
@@ -2308,8 +1944,7 @@ pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
 
             for ref_id in ref_ids {
                 if let Ok(ref_eid) = EventId::from_hex(&ref_id) {
-                    let status = client.database().check_id(&ref_eid).await;
-                    if !matches!(status, Ok(DatabaseEventStatus::Saved)) {
+                    if !client.database().has_event(&ref_eid).unwrap_or(false) {
                         ancestor_ids.insert(ref_id);
                     }
                 }
@@ -2340,19 +1975,14 @@ pub async fn fetch_thread_ancestors(event_ids: Vec<String>) -> Result<u32> {
             new_pubkeys.insert(ev.pubkey);
         }
         if !new_pubkeys.is_empty() {
-            let existing_filter = Filter::new()
-                .authors(new_pubkeys.iter().cloned().collect::<Vec<_>>())
-                .kind(Kind::Metadata)
-                .limit(new_pubkeys.len());
+            let pk_list: Vec<PublicKey> = new_pubkeys.into_iter().collect();
             let existing = client
                 .database()
-                .query(existing_filter)
-                .await
+                .get_profiles_batch(&pk_list)
                 .unwrap_or_default();
-            let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
-            let missing_pks: Vec<PublicKey> = new_pubkeys
+            let missing_pks: Vec<PublicKey> = pk_list
                 .into_iter()
-                .filter(|pk| !existing_pks.contains(pk))
+                .filter(|pk| !existing.contains_key(pk))
                 .collect();
             if !missing_pks.is_empty() {
                 let pf = Filter::new()
@@ -2380,7 +2010,7 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
             Ok(e) => e,
             Err(_) => continue,
         };
-        let event = match client.database().event_by_id(&eid).await {
+        let event = match client.database().event_by_id(&eid) {
             Ok(Some(e)) => e,
             _ => continue,
         };
@@ -2418,12 +2048,10 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
     if candidate_ids.is_empty() {
         return Ok(0);
     }
-    let existing = client
+    let existing_ids = client
         .database()
-        .query(Filter::new().ids(candidate_ids.clone()))
-        .await
+        .existing_ids(&candidate_ids)
         .unwrap_or_default();
-    let existing_ids: HashSet<EventId> = existing.iter().map(|e| e.id).collect();
     let mut missing_ids: Vec<EventId> = candidate_ids
         .into_iter()
         .filter(|id| !existing_ids.contains(id))
@@ -2438,7 +2066,7 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
     }
 
     let filter = Filter::new().ids(missing_ids).limit(30);
-    let fetched: Events = quick_fetch(&client, filter, Duration::from_secs(5)).await?;
+    let fetched = quick_fetch(&client, filter, Duration::from_secs(5)).await?;
 
     let fetched_count = fetched.len() as u32;
 
@@ -2451,17 +2079,11 @@ pub async fn fetch_missing_references(event_ids: Vec<String>) -> Result<u32> {
             .collect();
         let existing_profiles = client
             .database()
-            .query(
-                Filter::new()
-                    .authors(fetched_pks.clone())
-                    .kind(Kind::Metadata),
-            )
-            .await
+            .get_profiles_batch(&fetched_pks)
             .unwrap_or_default();
-        let existing_pks: HashSet<PublicKey> = existing_profiles.iter().map(|e| e.pubkey).collect();
         let missing_pks: Vec<PublicKey> = fetched_pks
             .into_iter()
-            .filter(|pk| !existing_pks.contains(pk))
+            .filter(|pk| !existing_profiles.contains_key(pk))
             .collect();
 
         if !missing_pks.is_empty() {
@@ -2507,13 +2129,13 @@ pub async fn merge_and_sort_notes(existing_json: String, incoming_json: String) 
     Ok(serde_json::to_string(&merged)?)
 }
 
-async fn resolve_repost_to_original(client: &Client, note_id: &str) -> String {
+async fn resolve_repost_to_original(client: &NostrClient, note_id: &str) -> String {
     let eid = match EventId::from_hex(note_id) {
         Ok(e) => e,
         Err(_) => return note_id.to_string(),
     };
 
-    let event = match client.database().event_by_id(&eid).await {
+    let event = match client.database().event_by_id(&eid) {
         Ok(Some(e)) => e,
         _ => {
             let filter = Filter::new().id(eid).limit(1);
@@ -2545,7 +2167,7 @@ async fn resolve_repost_to_original(client: &Client, note_id: &str) -> String {
 }
 
 /// DB-only version of fetch_full_thread — no network calls, returns instantly
-/// from local LMDB. Returns None if the root note is not in the DB yet.
+/// from local store. Returns None if the root note is not in the DB yet.
 pub async fn fetch_full_thread_local(
     note_id: String,
     current_user_pubkey_hex: Option<String>,
@@ -2555,30 +2177,18 @@ pub async fn fetch_full_thread_local(
     let client = get_client().await?;
 
     // Resolve repost without network.
-    let resolved_note_id = resolve_repost_to_original_local(&client, &note_id).await;
+    let resolved_note_id = resolve_repost_to_original_local(&client, &note_id);
 
     // Resolve root without network.
-    let mut root_id = resolve_thread_root_local(&client, &resolved_note_id).await?;
+    let mut root_id = resolve_thread_root_local(&client, &resolved_note_id)?;
 
     let root_eid = EventId::from_hex(&root_id)?;
-    let root_event = match client
-        .database()
-        .event_by_id(&root_eid)
-        .await
-        .ok()
-        .flatten()
-    {
+    let root_event = match client.database().event_by_id(&root_eid).ok().flatten() {
         Some(e) => e,
         None => {
             // Try the resolved id as root.
             let resolved_eid = EventId::from_hex(&resolved_note_id)?;
-            match client
-                .database()
-                .event_by_id(&resolved_eid)
-                .await
-                .ok()
-                .flatten()
-            {
+            match client.database().event_by_id(&resolved_eid).ok().flatten() {
                 Some(e) => {
                     root_id = resolved_note_id.clone();
                     e
@@ -2606,7 +2216,7 @@ pub async fn fetch_full_thread_local(
                 .kind(Kind::TextNote)
                 .events(pending_ids.clone())
                 .limit(200);
-            let events = client.database().query(filter).await.unwrap_or_default();
+            let events = client.database().query(&filter).unwrap_or_default();
             let mut new_ids: Vec<EventId> = Vec::new();
             for event in events.iter() {
                 let eid_hex = event.id.to_hex();
@@ -2632,11 +2242,7 @@ pub async fn fetch_full_thread_local(
         .kind(Kind::TextNote)
         .events(all_eids)
         .limit(500);
-    let reply_events = client
-        .database()
-        .query(reply_filter)
-        .await
-        .unwrap_or_default();
+    let reply_events = client.database().query(&reply_filter).unwrap_or_default();
 
     let mut all_events: Vec<Event> = Vec::with_capacity(1 + reply_events.len());
     all_events.push(root_event);
@@ -2666,12 +2272,12 @@ pub async fn fetch_full_thread_local(
 }
 
 /// Resolve repost to original without network.
-async fn resolve_repost_to_original_local(client: &Client, note_id: &str) -> String {
+fn resolve_repost_to_original_local(client: &NostrClient, note_id: &str) -> String {
     let eid = match EventId::from_hex(note_id) {
         Ok(e) => e,
         Err(_) => return note_id.to_string(),
     };
-    let event = match client.database().event_by_id(&eid).await.ok().flatten() {
+    let event = match client.database().event_by_id(&eid).ok().flatten() {
         Some(e) => e,
         None => return note_id.to_string(),
     };
@@ -2691,7 +2297,7 @@ async fn resolve_repost_to_original_local(client: &Client, note_id: &str) -> Str
 }
 
 /// Resolve thread root without any network calls — DB only.
-async fn resolve_thread_root_local(client: &Client, note_id: &str) -> Result<String> {
+fn resolve_thread_root_local(client: &NostrClient, note_id: &str) -> Result<String> {
     let mut current_id = note_id.to_string();
     let mut visited: HashSet<String> = HashSet::new();
 
@@ -2702,7 +2308,7 @@ async fn resolve_thread_root_local(client: &Client, note_id: &str) -> Result<Str
         visited.insert(current_id.clone());
 
         let eid = EventId::from_hex(&current_id)?;
-        let event = match client.database().event_by_id(&eid).await.ok().flatten() {
+        let event = match client.database().event_by_id(&eid).ok().flatten() {
             Some(e) => e,
             None => break,
         };
@@ -2919,11 +2525,11 @@ pub async fn fetch_full_thread(
             .kind(Kind::TextNote)
             .events(all_eids.clone())
             .limit(500);
-        let all_reply_events = client.database().query(reply_filter).await?;
+        let all_reply_events = client.database().query(&reply_filter)?;
 
         let mut all_pubkeys: HashSet<PublicKey> = HashSet::new();
         let root_eid = EventId::from_hex(&root_id)?;
-        if let Ok(Some(root_ev)) = client.database().event_by_id(&root_eid).await {
+        if let Ok(Some(root_ev)) = client.database().event_by_id(&root_eid) {
             all_pubkeys.insert(root_ev.pubkey);
         }
         for ev in all_reply_events.iter() {
@@ -2931,19 +2537,14 @@ pub async fn fetch_full_thread(
         }
 
         if !all_pubkeys.is_empty() {
-            let existing_filter = Filter::new()
-                .authors(all_pubkeys.iter().cloned().collect::<Vec<_>>())
-                .kind(Kind::Metadata)
-                .limit(all_pubkeys.len());
+            let pk_list: Vec<PublicKey> = all_pubkeys.into_iter().collect();
             let existing = client
                 .database()
-                .query(existing_filter)
-                .await
+                .get_profiles_batch(&pk_list)
                 .unwrap_or_default();
-            let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
-            let missing: Vec<PublicKey> = all_pubkeys
+            let missing: Vec<PublicKey> = pk_list
                 .into_iter()
-                .filter(|pk| !existing_pks.contains(pk))
+                .filter(|pk| !existing.contains_key(pk))
                 .collect();
 
             if !missing.is_empty() {
@@ -2957,11 +2558,11 @@ pub async fn fetch_full_thread(
     }
 
     let root_eid = EventId::from_hex(&root_id)?;
-    let root_event = match client.database().event_by_id(&root_eid).await? {
+    let root_event = match client.database().event_by_id(&root_eid)? {
         Some(e) => e,
         None => {
             let resolved_eid = EventId::from_hex(&resolved_note_id)?;
-            match client.database().event_by_id(&resolved_eid).await? {
+            match client.database().event_by_id(&resolved_eid)? {
                 Some(e) => {
                     root_id = resolved_note_id.clone();
                     e
@@ -2975,7 +2576,7 @@ pub async fn fetch_full_thread(
         .kind(Kind::TextNote)
         .events(all_eids)
         .limit(500);
-    let reply_events = client.database().query(reply_filter).await?;
+    let reply_events = client.database().query(&reply_filter)?;
 
     let mut all_events: Vec<Event> = Vec::with_capacity(1 + reply_events.len());
     all_events.push(root_event);
@@ -3005,19 +2606,18 @@ pub async fn fetch_full_thread(
 }
 
 pub async fn get_database_size_mb() -> Result<u64> {
+    if let Ok(client) = get_client().await {
+        return Ok(client.database().database_size_bytes() / (1024 * 1024));
+    }
     let db_path_lock = db_path_state().read().await;
-
     if let Some(path) = db_path_lock.as_ref() {
-        let data_file = format!("{}/data.mdb", path);
-
-        match fs::metadata(&data_file) {
-            Ok(metadata) => {
-                let size_bytes = metadata.len();
-                let size_mb = size_bytes / (1024 * 1024);
-                Ok(size_mb)
+        let mut size_bytes = 0u64;
+        for name in ["events.sqlite", "events.sqlite-wal", "data.mdb"] {
+            if let Ok(metadata) = std::fs::metadata(Path::new(path).join(name)) {
+                size_bytes += metadata.len();
             }
-            Err(_) => Ok(0),
         }
+        Ok(size_bytes / (1024 * 1024))
     } else {
         Ok(0)
     }
@@ -3057,19 +2657,13 @@ pub async fn fetch_missing_profiles_for_events(events_json: String) -> Result<u3
     }
 
     let pk_list: Vec<PublicKey> = pubkeys.into_iter().collect();
-    let existing_filter = Filter::new()
-        .authors(pk_list.clone())
-        .kind(Kind::Metadata)
-        .limit(pk_list.len());
     let existing = client
         .database()
-        .query(existing_filter)
-        .await
+        .get_profiles_batch(&pk_list)
         .unwrap_or_default();
-    let existing_pks: HashSet<PublicKey> = existing.iter().map(|e| e.pubkey).collect();
     let missing: Vec<PublicKey> = pk_list
         .into_iter()
-        .filter(|pk| !existing_pks.contains(pk))
+        .filter(|pk| !existing.contains_key(pk))
         .collect();
 
     if missing.is_empty() {
@@ -3103,12 +2697,10 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
     if candidate_ids.is_empty() {
         return Ok(0);
     }
-    let existing = client
+    let existing_ids = client
         .database()
-        .query(Filter::new().ids(candidate_ids.clone()))
-        .await
+        .existing_ids(&candidate_ids)
         .unwrap_or_default();
-    let existing_ids: HashSet<EventId> = existing.iter().map(|e| e.id).collect();
     let mut missing_ids: Vec<EventId> = candidate_ids
         .into_iter()
         .filter(|id| !existing_ids.contains(id))
@@ -3137,17 +2729,11 @@ pub async fn fetch_repost_originals(repost_event_ids_json: String) -> Result<u32
             .collect();
         let existing_profiles = client
             .database()
-            .query(
-                Filter::new()
-                    .authors(fetched_pks.clone())
-                    .kind(Kind::Metadata),
-            )
-            .await
+            .get_profiles_batch(&fetched_pks)
             .unwrap_or_default();
-        let existing_pks: HashSet<PublicKey> = existing_profiles.iter().map(|e| e.pubkey).collect();
         let missing_pks: Vec<PublicKey> = fetched_pks
             .into_iter()
-            .filter(|pk| !existing_pks.contains(pk))
+            .filter(|pk| !existing_profiles.contains_key(pk))
             .collect();
         if !missing_pks.is_empty() {
             let profile_filter = Filter::new()
@@ -3299,9 +2885,13 @@ pub async fn fetch_events_from_relays(
         RelayUrl::parse(url)?;
     }
     let client = temporary_client().await;
-    futures::future::join_all(relay_urls.iter().map(|url| client.add_relay(url.as_str()))).await;
+    for url in &relay_urls {
+        let _ = client.add_relay(url.as_str()).await;
+    }
     client.connect().await;
-    let events = quick_fetch(&client, filter, Duration::from_secs(timeout_secs as u64)).await;
+    let events = client
+        .quick_fetch(filter, Duration::from_secs(timeout_secs as u64), false)
+        .await;
     client.shutdown().await;
     events_to_json(events?)
 }
@@ -3359,11 +2949,11 @@ mod tests {
             .unwrap();
         let answering = fake_relay(Some(note.clone())).await;
         let silent = fake_relay(None).await;
-        let client = Client::default();
+        let client = NostrClient::in_memory(None);
         client.add_relay(&answering).await.unwrap();
         client.add_relay(&silent).await.unwrap();
         client.connect().await;
-        client.wait_for_connection(Duration::from_secs(3)).await;
+        client.wait_for_ready(Duration::from_secs(3), 2).await;
         let started = std::time::Instant::now();
         let events = quick_fetch(
             &client,
@@ -3387,8 +2977,8 @@ mod tests {
             .sign_with_keys(&Keys::generate())
             .unwrap();
         let url = RelayUrl::parse("wss://relay.example").unwrap();
-        let mut output = Output {
-            val: event.id,
+        let mut output = PublishOutput {
+            id: event.id,
             success: HashSet::new(),
             failed: HashMap::from([(url.clone(), "rejected".into())]),
         };
@@ -3437,17 +3027,10 @@ mod tests {
         });
         let path = std::env::temp_dir().join(format!("qiqstr-publish-{}", rand::random::<u64>()));
         std::fs::create_dir(&path).unwrap();
-        let client = Client::builder()
-            .database(HybridDatabase::new(
-                NostrLMDB::builder(&path)
-                    .map_size(16 * 1024 * 1024)
-                    .build()
-                    .unwrap(),
-            ))
-            .build();
+        let client = NostrClient::new(Arc::new(EventStore::open(&path).unwrap()), None);
         client.add_relay(url.as_str()).await.unwrap();
         client.connect().await;
-        client.wait_for_connection(Duration::from_secs(2)).await;
+        client.wait_for_ready(Duration::from_secs(2), 1).await;
         let targets = [url];
         let mut retained = Vec::new();
         for directed in [false, true] {
@@ -3469,20 +3052,19 @@ mod tests {
                     .custom_created_at(Timestamp::from(2))
                     .sign_with_keys(&owner)
                     .unwrap();
-                client.database().save_event(&previous).await.unwrap();
+                client.database().save_event(&previous).unwrap();
                 let output = publish_event(&client, &rejected, targets).await.unwrap();
                 assert!(published_event_json(output).is_err());
                 assert!(
                     client
                         .database()
                         .event_by_id(&rejected.id)
-                        .await
                         .unwrap()
                         .is_none(),
                     "rejected mutation was cached"
                 );
                 assert_eq!(
-                    client.database().event_by_id(&previous.id).await.unwrap(),
+                    client.database().event_by_id(&previous.id).unwrap(),
                     Some(previous.clone()),
                     "previous signed state was lost"
                 );
@@ -3497,7 +3079,7 @@ mod tests {
                 .custom_created_at(Timestamp::from(2))
                 .sign_with_keys(&owner)
                 .unwrap();
-            client.database().save_event(&previous).await.unwrap();
+            client.database().save_event(&previous).unwrap();
             assert!(published_event_json(
                 publish_event(&client, &accepted, targets).await.unwrap()
             )
@@ -3505,11 +3087,10 @@ mod tests {
             assert!(client
                 .database()
                 .event_by_id(&previous.id)
-                .await
                 .unwrap()
                 .is_none());
             assert_eq!(
-                client.database().event_by_id(&accepted.id).await.unwrap(),
+                client.database().event_by_id(&accepted.id).unwrap(),
                 Some(accepted.clone())
             );
             retained.push(accepted.id);
@@ -3524,7 +3105,6 @@ mod tests {
             assert!(client
                 .database()
                 .event_by_id(&rejected.id)
-                .await
                 .unwrap()
                 .is_none());
             let accepted = EventBuilder::text_note("accepted")
@@ -3535,7 +3115,7 @@ mod tests {
             )
             .is_ok());
             assert_eq!(
-                client.database().event_by_id(&accepted.id).await.unwrap(),
+                client.database().event_by_id(&accepted.id).unwrap(),
                 Some(accepted.clone())
             );
             retained.push(accepted.id);
@@ -3552,35 +3132,26 @@ mod tests {
             assert!(client
                 .database()
                 .event_by_id(&accepted.id)
-                .await
                 .unwrap()
                 .is_some());
         }
         client.shutdown().await;
         drop(client);
         server.await.unwrap();
-        let reopened = NostrLMDB::builder(&path)
-            .map_size(16 * 1024 * 1024)
-            .build()
-            .unwrap();
+        let reopened = EventStore::open(&path).unwrap();
         for id in retained {
-            assert!(reopened.event_by_id(&id).await.unwrap().is_some());
+            assert!(reopened.event_by_id(&id).unwrap().is_some());
         }
         drop(reopened);
         std::fs::remove_dir_all(path).unwrap();
     }
 
     #[tokio::test]
-    async fn client_reinitialization_clears_counting_relays_and_preserves_valid_configuration_on_error(
-    ) {
+    async fn client_reinitialization_preserves_valid_configuration_on_error() {
         init_client(vec![], None, None, vec![]).await.unwrap();
-        let counter = Client::default();
-        counter.add_relay("wss://old.example").await.unwrap();
-        *counting_client_lock().write().await = Some(counter);
         init_client(vec!["wss://new.example".into()], None, None, vec![])
             .await
             .unwrap();
-        assert!(counting_client_lock().read().await.is_none());
         assert_eq!(get_relay_list().await.unwrap(), ["wss://new.example"]);
         assert!(
             init_client(vec!["invalid relay".into()], None, None, vec![])
@@ -3597,8 +3168,8 @@ mod tests {
         let client = get_client().await.unwrap();
         let relays = client.relays().await;
         let relay = relays.values().next().unwrap();
-        assert!(relay.flags().has(RelayServiceFlags::READ, FlagCheck::All));
-        assert!(relay.flags().has(RelayServiceFlags::WRITE, FlagCheck::All));
+        assert!(relay.has_flag(FLAG_READ));
+        assert!(relay.has_flag(FLAG_WRITE));
         shutdown_client().await.unwrap();
         assert!(!is_client_initialized().await);
         assert!(get_client().await.is_err());

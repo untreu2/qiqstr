@@ -14,7 +14,7 @@ impl From<anyhow::Error> for QiqError {
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
-    static RT: once_cell::sync::Lazy<tokio::runtime::Runtime> = once_cell::sync::Lazy::new(|| {
+    static RT: std::sync::LazyLock<tokio::runtime::Runtime> = std::sync::LazyLock::new(|| {
         tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("qiqstr-core").build().expect("tokio runtime")
     });
     &RT

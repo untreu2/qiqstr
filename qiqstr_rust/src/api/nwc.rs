@@ -6,7 +6,8 @@ use nostr::nips::nip47::{
     Request, Response, TransactionState,
 };
 use nostr::prelude::*;
-use nostr_sdk::prelude::*;
+
+use crate::pool::{NostrClient, SubNotification};
 
 pub fn validate_nwc_uri(uri: String) -> bool {
     NostrWalletConnectURI::parse(&uri).is_ok_and(|parsed| parsed.public_key.xonly().is_ok())
@@ -40,27 +41,24 @@ async fn request_wallet(nwc_uri: &str, request: Request, timeout: Duration) -> R
         .author(uri.public_key)
         .kind(Kind::WalletConnectResponse)
         .event(event.id);
-    let client = Client::default();
+    let client = NostrClient::in_memory(None);
     let result = tokio::time::timeout(timeout, async {
         for relay in &uri.relays {
             client.add_relay(relay.as_str()).await?;
         }
         client.connect().await;
-        client.wait_for_connection(Duration::from_secs(10)).await;
-        let mut notifications = client.notifications();
-        let subscription = client.subscribe(filter.clone(), None).await?;
-        let published = client.send_event(&event).await?;
+        client
+            .wait_for_ready(Duration::from_secs(10), uri.relays.len().min(1))
+            .await;
+        let (_sub_id, mut notifications, _) = client.subscribe_on(filter.clone(), None).await?;
+        let published = client.publish_event(&event, None).await?;
         if published.success.is_empty() {
             return Err(anyhow!("No relay accepted the wallet request"));
         }
         loop {
             match notifications.recv().await {
-                Ok(RelayPoolNotification::Event {
-                    subscription_id,
-                    event: received,
-                    ..
-                }) if subscription_id == subscription.val
-                    && filter.match_event(&received, MatchEventOptions::default()) =>
+                Some(SubNotification::Event { event: received })
+                    if filter.match_event(&received, MatchEventOptions::default()) =>
                 {
                     received.verify()?;
                     let response = Response::from_event(&uri, &received)
@@ -70,12 +68,7 @@ async fn request_wallet(nwc_uri: &str, request: Request, timeout: Duration) -> R
                     }
                     return Ok(response);
                 }
-                Ok(RelayPoolNotification::Shutdown) => {
-                    return Err(anyhow!("NWC relay connection closed"))
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                    return Err(anyhow!("NWC notification channel closed"))
-                }
+                None => return Err(anyhow!("NWC relay connection closed")),
                 _ => {}
             }
         }

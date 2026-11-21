@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use futures::{SinkExt, StreamExt};
-use nostr_sdk::prelude::*;
+use nostr::prelude::*;
 use qiqstr::api::{database, relay};
 use tokio::net::TcpListener;
 use tokio_tungstenite::{accept_async, tungstenite::Message};

@@ -45,7 +45,7 @@ pub fn verify_event(event_json: String) -> bool {
 pub async fn verify_note_by_id(event_id_hex: String) -> Result<bool> {
     let client = crate::api::relay::get_client_pub().await?;
     let id = EventId::from_hex(&event_id_hex)?;
-    let event = client.database().event_by_id(&id).await?;
+    let event = client.database().event_by_id(&id)?;
 
     match event {
         Some(e) => Ok(e.verify().is_ok()),
@@ -57,7 +57,7 @@ pub async fn verify_profile_by_pubkey(pubkey_hex: String) -> Result<bool> {
     let client = crate::api::relay::get_client_pub().await?;
     let pk = PublicKey::from_hex(&pubkey_hex)?;
     let filter = Filter::new().author(pk).kind(Kind::Metadata).limit(1);
-    let events = client.database().query(filter).await?;
+    let events = client.database().query(&filter)?;
 
     match events.first() {
         Some(e) => Ok(e.verify().is_ok()),

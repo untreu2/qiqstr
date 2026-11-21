@@ -12,9 +12,7 @@ marmot = ["dep:mdk-core", "dep:mdk-sqlite-storage", "dep:mdk-storage-traits", "d
 
 [dependencies]
 nostr = { version = "0.44.8", default-features = false, features = ["std", "nip04", "nip06", "nip44", "nip47", "nip49", "nip59"] }
-nostr-sdk = { version = "0.44", default-features = false, features = ["nip06", "nip44", "nip59"] }
-nostr-database = "0.44"
-nostr-lmdb = "0.44"
+rusqlite = { version = "0.31", default-features = false }
 bip39 = { version = "2", features = ["rand"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
 serde_json = "1"
@@ -28,7 +26,6 @@ typenum = "1.17"
 rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
-regex = "1"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 cdk = { version = "0.16", default-features = false, features = ["wallet"] }
 cdk-sqlite = { version = "0.16", default-features = false, features = ["wallet"] }

@@ -7,7 +7,7 @@ out = ["use std::sync::Arc;", "use qiqstr::api;", "use qiqstr::sink::StreamSink;
 "pub enum QiqError {", "    #[error(\"{reason}\")]", "    Failed { reason: String },", "}", "",
 "impl From<anyhow::Error> for QiqError {", "    fn from(e: anyhow::Error) -> Self { QiqError::Failed { reason: format!(\"{e:#}\") } }", "}", "",
 "fn runtime() -> &'static tokio::runtime::Runtime {",
-"    static RT: once_cell::sync::Lazy<tokio::runtime::Runtime> = once_cell::sync::Lazy::new(|| {",
+"    static RT: std::sync::LazyLock<tokio::runtime::Runtime> = std::sync::LazyLock::new(|| {",
 "        tokio::runtime::Builder::new_multi_thread().enable_all().thread_name(\"qiqstr-core\").build().expect(\"tokio runtime\")",
 "    });", "    &RT", "}", "",
 "async fn on_rt<F, T>(fut: F) -> Result<T, QiqError> where F: std::future::Future<Output = anyhow::Result<T>> + Send + 'static, T: Send + 'static {",
