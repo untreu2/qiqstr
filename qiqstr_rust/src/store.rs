@@ -455,9 +455,24 @@ impl EventStore {
 
     pub fn open(dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(dir)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+        }
         let db_file = dir.join("events.sqlite");
         let conn = Connection::open(&db_file)?;
         configure_connection(&conn, true)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for name in ["events.sqlite", "events.sqlite-wal", "events.sqlite-shm"] {
+                let p = dir.join(name);
+                if p.exists() {
+                    let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+                }
+            }
+        }
 
         let mut hot = HotCache::new();
         {
@@ -1608,6 +1623,19 @@ mod tests {
             .unwrap();
         assert_eq!(db.save_event(&event).unwrap(), SaveStatus::Success);
         assert!(db.event_by_id(&event.id).unwrap().is_some());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir_mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            let db_mode = std::fs::metadata(path.join("events.sqlite"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(dir_mode, 0o700);
+            assert_eq!(db_mode, 0o600);
+        }
 
         drop(db);
         std::fs::remove_dir_all(path).unwrap();

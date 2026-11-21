@@ -12,6 +12,15 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use typenum::U16;
 
+pub(crate) fn wipe_string(s: String) {
+    let mut bytes = s.into_bytes();
+    for b in &mut bytes {
+        // SAFETY: `b` is a valid, aligned, uniquely-owned pointer into `bytes`.
+        unsafe { std::ptr::write_volatile(b, 0) };
+    }
+    std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+}
+
 pub fn generate_keypair() -> (String, String) {
     let keys = Keys::generate();
     (
@@ -21,14 +30,16 @@ pub fn generate_keypair() -> (String, String) {
 }
 
 pub fn get_public_key(private_key_hex: String) -> Result<String> {
-    let secret_key = SecretKey::parse(&private_key_hex)?;
-    let keys = Keys::new(secret_key);
+    let parsed = SecretKey::parse(&private_key_hex);
+    wipe_string(private_key_hex);
+    let keys = Keys::new(parsed?);
     Ok(keys.public_key().to_hex())
 }
 
 pub fn sign_event_id(event_id_hex: String, private_key_hex: String) -> Result<String> {
-    let secret_key = SecretKey::parse(&private_key_hex)?;
-    let keys = Keys::new(secret_key);
+    let parsed = SecretKey::parse(&private_key_hex);
+    wipe_string(private_key_hex);
+    let keys = Keys::new(parsed?);
     let event_id = EventId::parse(&event_id_hex)?;
     let message = Message::from_digest(*event_id.as_bytes());
     let sig = keys.sign_schnorr(&message);
@@ -75,7 +86,9 @@ pub fn validate_mnemonic(mnemonic: String) -> bool {
 }
 
 pub fn mnemonic_to_private_key(mnemonic: String) -> Result<String> {
-    let keys = Keys::from_mnemonic(mnemonic.as_str(), None)?;
+    let parsed = Keys::from_mnemonic(mnemonic.as_str(), None);
+    wipe_string(mnemonic);
+    let keys = parsed?;
     Ok(keys.secret_key().to_secret_hex())
 }
 
@@ -168,15 +181,32 @@ pub fn sha256_hash(data: Vec<u8>) -> String {
 }
 
 pub fn ncryptsec_encrypt(private_key_hex: String, password: String) -> Result<String> {
-    let sk = SecretKey::parse(&private_key_hex)?;
-    let encrypted = EncryptedSecretKey::new(&sk, &password, 16, KeySecurity::Medium)?;
-    Ok(encrypted.to_bech32()?)
+    let sk_res = SecretKey::parse(&private_key_hex);
+    wipe_string(private_key_hex);
+    let sk = match sk_res {
+        Ok(sk) => sk,
+        Err(e) => {
+            wipe_string(password);
+            return Err(e.into());
+        }
+    };
+    let enc_res = EncryptedSecretKey::new(&sk, &password, 16, KeySecurity::Medium);
+    wipe_string(password);
+    Ok(enc_res?.to_bech32()?)
 }
 
 pub fn ncryptsec_decrypt(ncryptsec: String, password: String) -> Result<String> {
-    let encrypted = EncryptedSecretKey::from_bech32(ncryptsec.trim())?;
-    let sk = encrypted.decrypt(&password)?;
-    Ok(sk.to_secret_hex())
+    let enc_res = EncryptedSecretKey::from_bech32(ncryptsec.trim());
+    let encrypted = match enc_res {
+        Ok(enc) => enc,
+        Err(e) => {
+            wipe_string(password);
+            return Err(e.into());
+        }
+    };
+    let sk_res = encrypted.decrypt(&password);
+    wipe_string(password);
+    Ok(sk_res?.to_secret_hex())
 }
 
 #[cfg(test)]

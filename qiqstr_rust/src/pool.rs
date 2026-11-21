@@ -8,9 +8,23 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use futures::SinkExt;
 use nostr::prelude::*;
 use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::store::EventStore;
+
+const MAX_WS_MESSAGE_SIZE: usize = 4 * 1024 * 1024;
+const MAX_WS_FRAME_SIZE: usize = 2 * 1024 * 1024;
+const MAX_FETCH_EVENTS_PER_RELAY: usize = 5_000;
+const MAX_AUTH_CHALLENGE_LEN: usize = 512;
+
+pub(crate) fn hardened_ws_config() -> WebSocketConfig {
+    WebSocketConfig {
+        max_message_size: Some(MAX_WS_MESSAGE_SIZE),
+        max_frame_size: Some(MAX_WS_FRAME_SIZE),
+        ..Default::default()
+    }
+}
 
 pub const FLAG_READ: u8 = 1 << 0;
 pub const FLAG_WRITE: u8 = 1 << 1;
@@ -223,6 +237,15 @@ fn now_secs() -> u64 {
 }
 
 fn build_auth_frame(keys: &Keys, challenge: &str, url: &RelayUrl) -> Option<String> {
+    if !url.as_str().starts_with("wss://") {
+        return None;
+    }
+    if challenge.is_empty()
+        || challenge.len() > MAX_AUTH_CHALLENGE_LEN
+        || challenge.bytes().any(|b| b.is_ascii_control())
+    {
+        return None;
+    }
     let event = EventBuilder::new(Kind::Authentication, "")
         .tags([
             Tag::custom(TagKind::Custom("relay".into()), vec![url.as_str()]),
@@ -366,12 +389,16 @@ async fn run_relay_actor(
             }
         }
 
-        // Attempt WebSocket connection with TCP_NODELAY enabled
+        // Attempt WebSocket connection with TCP_NODELAY enabled and bounded frame/message sizes
         status.store(RelayStatus::Connecting as u8, Ordering::Relaxed);
         stats.attempts.fetch_add(1, Ordering::Relaxed);
         let connect_start = Instant::now();
 
-        let connect_fut = tokio_tungstenite::connect_async_with_config(url.as_str(), None, true);
+        let connect_fut = tokio_tungstenite::connect_async_with_config(
+            url.as_str(),
+            Some(hardened_ws_config()),
+            true,
+        );
         tokio::pin!(connect_fut);
 
         let connect_timeout = tokio::time::sleep(Duration::from_secs(8));
@@ -541,9 +568,14 @@ async fn run_relay_actor(
                                         if in_fetch {
                                             let mut complete_now = false;
                                             if let Some(f) = active_fetches.get_mut(sub_id) {
-                                                if f.filter.match_event(&event, MatchEventOptions::new()) && f.seen.insert(event.id) {
+                                                let exact_ids = f.filter.ids.as_ref().map(|s| s.len()).filter(|&n| n > 0);
+                                                let verified_if_exact = exact_ids.is_none() || event.verify().is_ok();
+                                                if verified_if_exact
+                                                    && f.events.len() < MAX_FETCH_EVENTS_PER_RELAY
+                                                    && f.filter.match_event(&event, MatchEventOptions::new())
+                                                    && f.seen.insert(event.id)
+                                                {
                                                     f.events.push(event);
-                                                    let exact_ids = f.filter.ids.as_ref().map(|s| s.len()).filter(|&n| n > 0);
                                                     if exact_ids == Some(1)
                                                         || (exact_ids.is_some() && Some(f.events.len()) >= exact_ids)
                                                     {
@@ -953,6 +985,7 @@ impl NostrClient {
     }
 
     pub async fn shutdown(&self) {
+        self.unset_signer().await;
         let relays: Vec<Arc<RelayConn>> = {
             let mut map = self.inner.relays.write().await;
             map.drain().map(|(_, v)| v).collect()
@@ -1351,4 +1384,129 @@ pub fn verify_events_parallel(mut events: Vec<Event>) -> Vec<Event> {
         }
     });
     results.into_iter().flatten().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::accept_async;
+
+    #[test]
+    fn nip42_auth_refuses_plaintext_ws_and_invalid_challenges() {
+        let keys = Keys::generate();
+        let ws_url = RelayUrl::parse("ws://relay.example.com").unwrap();
+        let wss_url = RelayUrl::parse("wss://relay.example.com").unwrap();
+
+        assert!(build_auth_frame(&keys, "valid-challenge", &ws_url).is_none());
+        assert!(build_auth_frame(&keys, "", &wss_url).is_none());
+        assert!(
+            build_auth_frame(&keys, &"a".repeat(MAX_AUTH_CHALLENGE_LEN + 1), &wss_url).is_none()
+        );
+        assert!(build_auth_frame(&keys, "bad\nchallenge", &wss_url).is_none());
+
+        let ok = build_auth_frame(&keys, "valid-challenge-123", &wss_url);
+        assert!(ok.is_some());
+    }
+
+    #[tokio::test]
+    async fn shutdown_clears_signer() {
+        let client = NostrClient::in_memory(Some(Keys::generate()));
+        assert!(client.signer().await.is_ok());
+        client.shutdown().await;
+        assert!(client.signer().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn forged_event_does_not_censor_honest_relay_on_exact_id_fetch() {
+        let keys = Keys::generate();
+        let real_note = EventBuilder::text_note("authentic note")
+            .sign_with_keys(&keys)
+            .unwrap();
+        let mut forged_val: serde_json::Value = serde_json::from_str(&real_note.as_json()).unwrap();
+        forged_val["content"] = serde_json::json!("forged tampered content");
+
+        // Malicious relay responds immediately with matching id but invalid sig
+        let bad_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bad_url = format!("ws://{}", bad_listener.local_addr().unwrap());
+        let bad_payload = forged_val.clone();
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = bad_listener.accept().await {
+                let payload = bad_payload.clone();
+                tokio::spawn(async move {
+                    let Ok(mut ws) = accept_async(stream).await else {
+                        return;
+                    };
+                    while let Some(Ok(Message::Text(text))) = ws.next().await {
+                        let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+                            continue;
+                        };
+                        if v[0] == "REQ" {
+                            let sub = v[1].clone();
+                            let _ = ws
+                                .send(Message::Text(
+                                    serde_json::json!(["EVENT", sub, payload]).to_string(),
+                                ))
+                                .await;
+                            let _ = ws
+                                .send(Message::Text(serde_json::json!(["EOSE", sub]).to_string()))
+                                .await;
+                        }
+                    }
+                });
+            }
+        });
+
+        // Honest relay responds slightly slower with the authentic signed event
+        let good_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let good_url = format!("ws://{}", good_listener.local_addr().unwrap());
+        let good_payload: serde_json::Value = serde_json::from_str(&real_note.as_json()).unwrap();
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = good_listener.accept().await {
+                let payload = good_payload.clone();
+                tokio::spawn(async move {
+                    let Ok(mut ws) = accept_async(stream).await else {
+                        return;
+                    };
+                    while let Some(Ok(Message::Text(text))) = ws.next().await {
+                        let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+                            continue;
+                        };
+                        if v[0] == "REQ" {
+                            let sub = v[1].clone();
+                            tokio::time::sleep(Duration::from_millis(40)).await;
+                            let _ = ws
+                                .send(Message::Text(
+                                    serde_json::json!(["EVENT", sub, payload]).to_string(),
+                                ))
+                                .await;
+                            let _ = ws
+                                .send(Message::Text(serde_json::json!(["EOSE", sub]).to_string()))
+                                .await;
+                        }
+                    }
+                });
+            }
+        });
+
+        let client = NostrClient::in_memory(None);
+        client.add_relay(&bad_url).await.unwrap();
+        client.add_relay(&good_url).await.unwrap();
+        client.connect().await;
+        client.wait_for_ready(Duration::from_secs(3), 2).await;
+
+        let fetched = client
+            .quick_fetch(
+                Filter::new().id(real_note.id).limit(1),
+                Duration::from_secs(3),
+                true,
+            )
+            .await
+            .unwrap();
+        assert_eq!(fetched.len(), 1);
+        assert_eq!(fetched[0].id, real_note.id);
+        assert_eq!(fetched[0].content, "authentic note");
+
+        client.shutdown().await;
+    }
 }

@@ -64,7 +64,11 @@ pub async fn init_client(
     }
 
     let signer = match private_key_hex {
-        Some(ref sk_hex) => Some(Keys::parse(sk_hex)?),
+        Some(sk_hex) => {
+            let parsed = Keys::parse(&sk_hex);
+            super::crypto::wipe_string(sk_hex);
+            Some(parsed?)
+        }
         None => None,
     };
 
@@ -136,9 +140,16 @@ pub async fn shutdown_client() -> Result<()> {
 }
 
 pub async fn update_signer(private_key_hex: String) -> Result<()> {
-    let client = get_client().await?;
-    let keys = Keys::parse(&private_key_hex)?;
-    client.set_signer(keys).await;
+    let client = match get_client().await {
+        Ok(c) => c,
+        Err(e) => {
+            super::crypto::wipe_string(private_key_hex);
+            return Err(e);
+        }
+    };
+    let parsed = Keys::parse(&private_key_hex);
+    super::crypto::wipe_string(private_key_hex);
+    client.set_signer(parsed?).await;
     Ok(())
 }
 
@@ -2826,7 +2837,7 @@ async fn query_primal_follower_counts(
 }
 
 pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> {
-    use tokio_tungstenite::connect_async;
+    use tokio_tungstenite::connect_async_with_config;
 
     if pubkey_hexes.is_empty() {
         return Ok("{}".to_string());
@@ -2856,7 +2867,13 @@ pub async fn fetch_follower_counts(pubkey_hexes: Vec<String>) -> Result<String> 
     let mut guard = primal_ws_lock().lock().await;
     for attempt in 0..2 {
         if guard.is_none() {
-            match tokio::time::timeout(Duration::from_secs(5), connect_async(primal_url)).await {
+            let ws_cfg = crate::pool::hardened_ws_config();
+            match tokio::time::timeout(
+                Duration::from_secs(5),
+                connect_async_with_config(primal_url, Some(ws_cfg), true),
+            )
+            .await
+            {
                 Ok(Ok((stream, _))) => *guard = Some(stream),
                 _ => return Ok("{}".to_string()),
             }
